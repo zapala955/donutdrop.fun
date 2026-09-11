@@ -26,7 +26,9 @@ describe('Mineflayer security configuration', () => {
     assert.throws(() =>
       loadBotConfig({ ...base, BOT_WEBHOOK_SECRET: `${base.BOT_WEBHOOK_SECRET}!!!!` }),
     );
-    assert.throws(() => loadBotConfig({ ...base, NODE_ENV: 'production', MINECRAFT_AUTH: 'offline' }));
+    assert.throws(() =>
+      loadBotConfig({ ...base, NODE_ENV: 'production', MINECRAFT_AUTH: 'offline' }),
+    );
   });
 
   it('keeps the bundled transfer adapter incapable of accepting items', () => {

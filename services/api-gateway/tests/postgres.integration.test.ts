@@ -450,18 +450,34 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
       try {
         await assertAuditDatabaseRole(auditReader);
         await assert.doesNotReject(auditReader.query('SELECT count(*) FROM audit_log'));
-        for (const statement of [
-          'SELECT count(*) FROM users',
-          `INSERT INTO audit_log
-             (id, actor_user_id, action, target_type, target_id, details, previous_hash,
-              entry_hash, key_id, sequence_no, created_at)
-           VALUES ('10000000-0000-4000-8000-000000000001', NULL, 'test', 'test', 'test',
-                   '{}', NULL, repeat('a', 64), 'ci-v1', 1, now())`,
-        ]) {
-          await assert.rejects(
-            auditReader.query(statement),
-            (error: unknown) => (error as { code?: string }).code === '42501',
+
+        // default_transaction_read_only is defence in depth only: the audit login may clear it
+        // on its own session. Assert the default is active, then clear it deliberately so the
+        // statements below prove the grant-level confinement, which is the control that still
+        // holds once an attacker drives the session. Without this the read-only default masks
+        // the privilege check and reports 25006 instead of 42501.
+        const auditSession = await auditReader.connect();
+        try {
+          const readOnlyDefault = await auditSession.query<{ setting: string }>(
+            "SELECT current_setting('default_transaction_read_only') AS setting",
           );
+          assert.equal(readOnlyDefault.rows[0]?.setting, 'on');
+          await auditSession.query('SET default_transaction_read_only = off');
+          for (const statement of [
+            'SELECT count(*) FROM users',
+            `INSERT INTO audit_log
+               (id, actor_user_id, action, target_type, target_id, details, previous_hash,
+                entry_hash, key_id, sequence_no, created_at)
+             VALUES ('10000000-0000-4000-8000-000000000001', NULL, 'test', 'test', 'test',
+                     '{}', NULL, repeat('a', 64), 'ci-v1', 1, now())`,
+          ]) {
+            await assert.rejects(
+              auditSession.query(statement),
+              (error: unknown) => (error as { code?: string }).code === '42501',
+            );
+          }
+        } finally {
+          auditSession.release();
         }
       } finally {
         await auditReader.end();

@@ -24,6 +24,17 @@ void describe('gameplay security hardening', () => {
     );
   });
 
+  void it('keeps withdrawal cancellation to jobs no bot has ever claimed', async () => {
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../src/routes/transfers.ts'),
+      'utf8',
+    );
+    // Once a bot claims the job it has physical custody of the items, and it is the bot that
+    // reports whether the attempt was retryable. Permitting a cancel after a claim would let a
+    // compromised bot deliver the items and still have the same lots credited back.
+    assert.match(source, /AND j\.status = 'queued'\s+AND j\.attempts = 0/);
+  });
+
   void it('fails closed when a fixed item price no longer matches the request quote', () => {
     assert.doesNotThrow(() => assertExpectedPrice('12500', '12500', 'target'));
     assert.throws(

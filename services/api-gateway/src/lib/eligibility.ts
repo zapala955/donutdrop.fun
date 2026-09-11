@@ -31,10 +31,7 @@ export function isDepositEligible(
   ) {
     return false;
   }
-  if (
-    allowedCountries.size > 0 &&
-    !allowedCountries.has(state.country_code.trim().toLowerCase())
-  ) {
+  if (allowedCountries.size > 0 && !allowedCountries.has(state.country_code.trim().toLowerCase())) {
     return false;
   }
   return (

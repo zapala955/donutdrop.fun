@@ -9,16 +9,18 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 
-const catalogCreateSchema = z.object({
-  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  minecraftName: z.string().regex(/^[a-z0-9_.:-]{1,128}$/),
-  displayName: z.string().trim().min(1).max(128),
-  imageUrl: z.url().startsWith('https://').max(2048).nullable().default(null),
-  unitValueMinor: z.string().regex(/^[1-9]\d{0,15}$/),
-  enabled: z.boolean().default(false),
-  metadata: z.record(z.string(), z.unknown()).default({}),
-  reason: z.string().trim().min(3).max(256),
-}).strict();
+const catalogCreateSchema = z
+  .object({
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    minecraftName: z.string().regex(/^[a-z0-9_.:-]{1,128}$/),
+    displayName: z.string().trim().min(1).max(128),
+    imageUrl: z.url().startsWith('https://').max(2048).nullable().default(null),
+    unitValueMinor: z.string().regex(/^[1-9]\d{0,15}$/),
+    enabled: z.boolean().default(false),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    reason: z.string().trim().min(3).max(256),
+  })
+  .strict();
 const catalogUpdateSchema = z
   .object({
     displayName: z.string().trim().min(1).max(128).optional(),
@@ -33,28 +35,45 @@ const catalogUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
-const stockSchema = z.object({
-  catalogItemId: z.uuid(),
-  botId: z.uuid(),
-  quantity: z.number().int().min(1).max(100_000),
-  reason: z.string().trim().min(3).max(256),
-}).strict();
-const complianceSchema = z.object({
-  ageVerified: z.boolean(),
-  kycStatus: z.enum(['not_started', 'pending', 'verified', 'rejected']),
-  activate: z.boolean().default(false),
-  reason: z.string().trim().min(3).max(256),
-}).strict();
+const stockSchema = z
+  .object({
+    catalogItemId: z.uuid(),
+    botId: z.uuid(),
+    quantity: z.number().int().min(1).max(100_000),
+    reason: z.string().trim().min(3).max(256),
+  })
+  .strict();
+const complianceSchema = z
+  .object({
+    ageVerified: z.boolean(),
+    kycStatus: z.enum(['not_started', 'pending', 'verified', 'rejected']),
+    activate: z.boolean().default(false),
+    reason: z.string().trim().min(3).max(256),
+  })
+  .strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
-const botQuarantineSchema = z.object({
-  quarantined: z.boolean(),
-  reason: z.string().trim().min(3).max(256),
-}).strict();
-const adminListSchema = z.object({
-  search: z.string().trim().min(1).max(64).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).max(10_000).default(0),
-}).strict();
+const botQuarantineSchema = z
+  .object({
+    quarantined: z.boolean(),
+    reason: z.string().trim().min(3).max(256),
+  })
+  .strict();
+const adminListSchema = z
+  .object({
+    search: z.string().trim().min(1).max(64).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0),
+  })
+  .strict();
+
+/**
+ * Administrative routes return these rows to the caller whole. Declaring the columns as
+ * `unknown` keeps the response shape intact while preventing an untyped `any` from flowing
+ * into application logic, which is what `no-unsafe-assignment` is there to catch.
+ */
+interface AdminEntityRow {
+  [column: string]: unknown;
+}
 
 export async function registerAdminRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);
@@ -111,7 +130,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
             'A fresh matching snapshot and heartbeat are required before release',
           );
         }
-        const updated = await client.query(
+        const updated = await client.query<AdminEntityRow>(
           `UPDATE bot_accounts
               SET status = $2,
                   transfer_capable = false,
@@ -183,7 +202,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       const actor = requireActor(request.authUser?.id);
       const itemId = randomUUID();
       const result = await db.transaction(async (client) => {
-        const inserted = await client.query(
+        const inserted = await client.query<AdminEntityRow>(
           `INSERT INTO catalog_items
            (id, fingerprint, minecraft_name, display_name, image_url, unit_value_minor, enabled, metadata, price_updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
@@ -229,7 +248,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       );
       const old = current.rows[0];
       if (!old) throw new AppError(404, 'CATALOG_ITEM_NOT_FOUND', 'Catalog item was not found');
-      const updated = await client.query(
+      const updated = await client.query<AdminEntityRow>(
         `UPDATE catalog_items SET
            display_name = COALESCE($2, display_name),
            image_url = CASE WHEN $3::boolean THEN $4 ELSE image_url END,
@@ -427,7 +446,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           : user.status === 'active' && (!body.ageVerified || body.kycStatus !== 'verified')
             ? 'pending_compliance'
             : user.status;
-        const updated = await client.query(
+        const updated = await client.query<AdminEntityRow>(
           `UPDATE users SET age_verified_at = CASE WHEN $2 THEN COALESCE(age_verified_at, now()) ELSE NULL END,
                 kyc_status = $3, status = $4, updated_at = now()
           WHERE id = $1 RETURNING id, minecraft_username, status, age_verified_at, kyc_status`,

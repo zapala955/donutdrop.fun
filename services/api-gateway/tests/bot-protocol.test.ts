@@ -276,12 +276,7 @@ describe('internal bot protocol', () => {
       assert.equal(responseBody.lease.expiresAt, leaseExpiresAt.toISOString());
       assert.equal(
         responseBody.lease.leaseToken,
-        deriveDepositLeaseToken(
-          firstKey,
-          firstId,
-          requestBody.eventId.toLowerCase(),
-          depositId,
-        ),
+        deriveDepositLeaseToken(firstKey, firstId, requestBody.eventId.toLowerCase(), depositId),
       );
       assert.doesNotMatch(storedResponse, /leaseToken/);
       const responseTimestamp = response.headers['x-api-timestamp'];
@@ -459,10 +454,7 @@ describe('internal bot protocol', () => {
       });
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), { authorized: false, lease: null, duplicate: false });
-      assert.equal(
-        storedResponse,
-        JSON.stringify({ authorized: false, lease: null }),
-      );
+      assert.equal(storedResponse, JSON.stringify({ authorized: false, lease: null }));
     } finally {
       await app.close();
     }
@@ -830,8 +822,14 @@ describe('internal bot protocol', () => {
       assert.equal(response.statusCode, 200);
       assert.ok(queries.some((sql) => sql.includes("SET status = 'manual_review'")));
       assert.ok(queries.some((sql) => sql.includes("status = 'quarantined'")));
-      assert.equal(queries.some((sql) => sql.includes('INSERT INTO inventory_lots')), false);
-      assert.equal(queries.some((sql) => sql.includes('INSERT INTO custody_movements')), false);
+      assert.equal(
+        queries.some((sql) => sql.includes('INSERT INTO inventory_lots')),
+        false,
+      );
+      assert.equal(
+        queries.some((sql) => sql.includes('INSERT INTO custody_movements')),
+        false,
+      );
     } finally {
       await app.close();
     }

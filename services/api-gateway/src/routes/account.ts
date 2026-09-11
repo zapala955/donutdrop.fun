@@ -6,14 +6,16 @@ import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
 
-const accountSchema = z.object({
-  countryCode: z
-    .string()
-    .regex(/^[A-Za-z]{2}$/)
-    .transform((value) => value.toUpperCase()),
-  dateOfBirth: z.iso.date(),
-  acceptTerms: z.literal(true),
-}).strict();
+const accountSchema = z
+  .object({
+    countryCode: z
+      .string()
+      .regex(/^[A-Za-z]{2}$/)
+      .transform((value) => value.toUpperCase()),
+    dateOfBirth: z.iso.date(),
+    acceptTerms: z.literal(true),
+  })
+  .strict();
 const limitsSchema = z
   .object({
     dailyWagerLimitMinor: z.union([z.string().regex(/^[1-9]\d{0,15}$/), z.null()]).optional(),
@@ -29,6 +31,23 @@ const limitsSchema = z
 const exclusionSchema = z
   .object({ durationDays: z.number().int().min(1).max(3650).nullable() })
   .strict();
+
+interface AccountRow {
+  id: string;
+  minecraft_username: string;
+  status: string;
+  country_code: string | null;
+  date_of_birth: Date | string | null;
+  terms_accepted_at: Date | null;
+  age_verified_at: Date | null;
+  kyc_status: string;
+}
+
+interface LimitsRow {
+  daily_wager_limit_minor: string | null;
+  cooldown_until: Date | null;
+  self_excluded_until: Date | null;
+}
 
 export async function registerAccountRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);
@@ -63,7 +82,7 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
       throw new AppError(403, 'AGE_RESTRICTED', 'You must be at least 18 years old');
     }
     const result = await db.transaction(async (client) => {
-      const updated = await client.query(
+      const updated = await client.query<AccountRow>(
         `UPDATE users SET country_code = $2, date_of_birth = $3,
               age_verified_at = CASE
                 WHEN country_code IS DISTINCT FROM $2::char(2)
@@ -84,7 +103,7 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
                     terms_accepted_at, age_verified_at, kyc_status`,
         [request.authUser?.id, body.countryCode, body.dateOfBirth],
       );
-      if (updated.rows[0]?.['status'] !== 'active') {
+      if (updated.rows[0]?.status !== 'active') {
         await client.query(
           `UPDATE deposit_intents SET status = 'cancelled'
             WHERE user_id = $1 AND status = 'pending'`,
@@ -95,7 +114,7 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
     });
     return {
       account: result.rows[0],
-      requiresAgeVerification: !result.rows[0]?.['age_verified_at'],
+      requiresAgeVerification: !result.rows[0]?.age_verified_at,
     };
   });
 
@@ -125,7 +144,7 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
           'Limit increases require support and a cooling-off period',
         );
       }
-      const result = await client.query(
+      const result = await client.query<LimitsRow>(
         `UPDATE responsible_limits
             SET daily_wager_limit_minor = COALESCE($2::bigint, daily_wager_limit_minor),
                 cooldown_until = CASE WHEN $3::integer IS NULL THEN cooldown_until

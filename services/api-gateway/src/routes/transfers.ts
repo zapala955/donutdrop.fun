@@ -9,16 +9,18 @@ import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 
-const withdrawalSchema = z.object({
-  items: z
-    .array(
-      z
-        .object({ inventoryLotId: z.uuid(), quantity: z.number().int().min(1).max(2304) })
-        .strict(),
-    )
-    .min(1)
-    .max(20),
-}).strict();
+const withdrawalSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({ inventoryLotId: z.uuid(), quantity: z.number().int().min(1).max(2304) })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict();
 const depositSchema = z.object({}).strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
 
@@ -327,8 +329,14 @@ export async function registerTransferRoutes(
     const params = parseWith(idSchema, request.params);
     await db.transaction(async (client) => {
       const result = await client.query<{ id: string }>(
+        // j.attempts = 0 keeps cancellation to jobs no bot has ever held. A bot that claimed
+        // the job had physical custody of the items for that window, and it is the bot that
+        // reports whether the attempt was retryable. Allowing a cancel after a claim would let
+        // a compromised bot deliver the items, report a retryable failure, and have the API
+        // return the same lots to the player's inventory.
         `SELECT w.id FROM withdrawals w JOIN bot_jobs j ON j.reference_id = w.id AND j.kind = 'withdrawal'
           WHERE w.id = $1 AND w.user_id = $2 AND w.status = 'queued' AND j.status = 'queued'
+            AND j.attempts = 0
           FOR UPDATE OF w, j`,
         [params.id, request.authUser?.id],
       );

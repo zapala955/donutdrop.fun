@@ -4,6 +4,12 @@ export class AppError extends Error {
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    /**
+     * Diagnostic context that is logged but never serialized to the client. Schema validation
+     * failures carry the request contract's own field paths and messages, which would
+     * otherwise hand an unauthenticated caller a map of every accepted field.
+     */
+    readonly internalDetails?: unknown,
   ) {
     super(message);
     this.name = 'AppError';

@@ -85,7 +85,8 @@ export function canonicalJson(value: unknown): string {
       return JSON.stringify(current);
     }
     if (typeof current === 'number') {
-      if (!Number.isFinite(current)) throw new TypeError('Canonical JSON contains a non-finite number');
+      if (!Number.isFinite(current))
+        throw new TypeError('Canonical JSON contains a non-finite number');
       return JSON.stringify(current);
     }
     if (typeof current !== 'object') {
@@ -93,7 +94,7 @@ export function canonicalJson(value: unknown): string {
     }
     if (ancestors.has(current)) throw new TypeError('Canonical JSON contains a cycle');
 
-    const prototype = Object.getPrototypeOf(current);
+    const prototype: unknown = Object.getPrototypeOf(current);
     if (prototype !== Object.prototype && prototype !== null && !Array.isArray(current)) {
       throw new TypeError('Canonical JSON contains a non-plain object');
     }

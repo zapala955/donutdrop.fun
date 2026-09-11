@@ -274,11 +274,21 @@ export class ApiClient {
           signal: AbortSignal.timeout(8000),
         });
         const responseText = await readBoundedResponse(response);
+        let parsed: unknown = null;
+        if (responseText) {
+          try {
+            parsed = JSON.parse(responseText);
+          } catch {
+            throw new Error(`API ${response.status}: response body was not JSON`);
+          }
+        }
+        // Authenticate before acting on the status code. The API signs failures as well as
+        // successes, so a forged or truncated error can no longer steer the retry, quarantine,
+        // and job-failure paths that the bot drives from these responses.
+        this.verifyResponse(response, fullPath, requestTimestamp, body, parsed);
         if (!response.ok) {
           throw new Error(`API ${response.status}: ${responseText.slice(0, 300)}`);
         }
-        const parsed: unknown = responseText ? JSON.parse(responseText) : null;
-        this.verifyResponse(response, fullPath, requestTimestamp, body, parsed);
         return parsed;
       } catch (error) {
         lastError = error;

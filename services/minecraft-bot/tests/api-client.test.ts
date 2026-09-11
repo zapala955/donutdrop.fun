@@ -83,11 +83,7 @@ describe('authenticated API client', () => {
         duplicate: false,
       })),
       () =>
-        new ApiClient(config).authorizeDeposit(
-          'ABCDEFGHJKMN',
-          'PlayerOne',
-          `mc:${'a'.repeat(32)}`,
-        ),
+        new ApiClient(config).authorizeDeposit('ABCDEFGHJKMN', 'PlayerOne', `mc:${'a'.repeat(32)}`),
     );
 
     assert.equal(result?.depositId, lease.depositId);
@@ -112,11 +108,7 @@ describe('authenticated API client', () => {
 
     await assert.rejects(
       withFetch(signedFetch(config, responseBody), () =>
-        new ApiClient(config).authorizeDeposit(
-          'ABCDEFGHJKMN',
-          'PlayerOne',
-          `mc:${'a'.repeat(32)}`,
-        ),
+        new ApiClient(config).authorizeDeposit('ABCDEFGHJKMN', 'PlayerOne', `mc:${'a'.repeat(32)}`),
       ),
       /bound to another request/i,
     );

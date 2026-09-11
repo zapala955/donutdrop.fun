@@ -3,8 +3,7 @@ import type { AppConfig } from '../config.js';
 import { canonicalJson, hmacHex, safeEqualText } from './crypto.js';
 import { AppError } from './errors.js';
 
-const BOT_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BOT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UNKNOWN_BOT_DUMMY_KEY = Buffer.alloc(32);
 
 export interface AuthenticatedBot {
@@ -56,10 +55,7 @@ export function botResponseSignaturePayload(
   });
 }
 
-export function verifyBotSignature(
-  request: FastifyRequest,
-  config: AppConfig,
-): AuthenticatedBot {
+export function verifyBotSignature(request: FastifyRequest, config: AppConfig): AuthenticatedBot {
   const botIdHeader = request.headers['x-bot-id'];
   const timestampHeader = request.headers['x-bot-timestamp'];
   const signature = request.headers['x-bot-signature'];
@@ -107,7 +103,7 @@ export function verifyBotSignature(
   if (!provisioned || !safeEqualText(signature, expected)) {
     throw new AppError(401, 'INVALID_BOT_SIGNATURE', 'Bot signature is invalid');
   }
-  return {
+  const authenticated: AuthenticatedBot = {
     botId,
     secret: provisioned.secret,
     expectedServerHost: provisioned.serverHost,
@@ -116,15 +112,24 @@ export function verifyBotSignature(
     path,
     requestTimestamp: timestampHeader,
   };
+  // Recorded only after the signature verifies, so a reply to an unauthenticated caller is
+  // never signed with a secret we have not proved the caller already holds.
+  request.authenticatedBot = authenticated;
+  return authenticated;
 }
 
-export function sendAuthenticatedBotResponse(
+/**
+ * Authenticate a reply to a bot without sending it. Failures are signed as well as successes:
+ * an unsigned error would otherwise be the one API response a network attacker could forge,
+ * and the bot drives its retry and job-failure paths from exactly those responses.
+ */
+export function applyBotResponseSignature(
   reply: FastifyReply,
   authenticated: AuthenticatedBot,
   requestBody: unknown,
   responseBody: unknown,
-  statusCode = 200,
-): unknown {
+  statusCode: number,
+): void {
   const responseTimestamp = Date.now().toString();
   const signature = hmacHex(
     authenticated.secret,
@@ -138,6 +143,16 @@ export function sendAuthenticatedBotResponse(
   );
   reply.header('x-api-timestamp', responseTimestamp);
   reply.header('x-api-signature', signature);
+}
+
+export function sendAuthenticatedBotResponse(
+  reply: FastifyReply,
+  authenticated: AuthenticatedBot,
+  requestBody: unknown,
+  responseBody: unknown,
+  statusCode = 200,
+): unknown {
+  applyBotResponseSignature(reply, authenticated, requestBody, responseBody, statusCode);
   return reply.code(statusCode).send(responseBody);
 }
 

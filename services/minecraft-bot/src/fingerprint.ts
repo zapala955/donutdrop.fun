@@ -88,7 +88,7 @@ function normalizeItemData(value: unknown): TaggedItemData {
       ];
     }
 
-    const prototype = Object.getPrototypeOf(current);
+    const prototype: unknown = Object.getPrototypeOf(current);
     if (prototype !== Object.prototype && prototype !== null && !Array.isArray(current)) {
       throw new TypeError('Minecraft item data contains a non-plain object');
     }
@@ -109,9 +109,7 @@ function normalizeItemData(value: unknown): TaggedItemData {
       }
       if (
         Reflect.ownKeys(record).some((key) =>
-          typeof key === 'symbol'
-            ? true
-            : !Object.prototype.propertyIsEnumerable.call(record, key),
+          typeof key === 'symbol' ? true : !Object.prototype.propertyIsEnumerable.call(record, key),
         )
       ) {
         throw new TypeError('Minecraft item data contains hidden properties');

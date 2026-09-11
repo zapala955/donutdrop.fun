@@ -71,10 +71,7 @@ describe('Minecraft item fingerprint', () => {
   it('rejects cycles and oversized binary data', () => {
     const cycle: Record<string, unknown> = {};
     cycle['self'] = cycle;
-    assert.throws(
-      () => itemFingerprint({ name: 'stone', metadata: 0, nbt: cycle }),
-      /cycle/,
-    );
+    assert.throws(() => itemFingerprint({ name: 'stone', metadata: 0, nbt: cycle }), /cycle/);
     assert.throws(
       () =>
         itemFingerprint({

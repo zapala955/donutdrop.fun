@@ -15,8 +15,7 @@ const FILE_BACKED_SETTINGS = [
   'IP_HASH_KEY',
 ] as const;
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
 const MAX_FILE_BACKED_SETTING_BYTES = 256 * 1024;
 
@@ -99,7 +98,9 @@ function parseBotCredentials(value: string): ReadonlyMap<string, ProvisionedBotC
     throw new Error('BOT_CREDENTIALS_JSON must be valid JSON');
   }
   if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
-    throw new Error('BOT_CREDENTIALS_JSON must map bot UUIDs to provisioned identities and secrets');
+    throw new Error(
+      'BOT_CREDENTIALS_JSON must map bot UUIDs to provisioned identities and secrets',
+    );
   }
   const entries = Object.entries(parsed as Record<string, unknown>);
   if (entries.length < 1 || entries.length > 64) {
@@ -137,11 +138,9 @@ function parseBotCredentials(value: string): ReadonlyMap<string, ProvisionedBotC
     ) {
       throw new Error('Every bot credential requires a valid expected server host and username');
     }
-    if (credentials.has(botId)) throw new Error('BOT_CREDENTIALS_JSON contains a duplicate bot UUID');
-    credentials.set(
-      botId,
-      Object.freeze({ secret, serverHost, username: record['username'] }),
-    );
+    if (credentials.has(botId))
+      throw new Error('BOT_CREDENTIALS_JSON contains a duplicate bot UUID');
+    credentials.set(botId, Object.freeze({ secret, serverHost, username: record['username'] }));
   }
   return credentials;
 }
@@ -202,10 +201,7 @@ function hasOverlyBroadProxyCidr(value: string): boolean {
 }
 
 function looksLikePlaceholder(value: string): boolean {
-  return (
-    /replace|change[-_ ]?me|example|placeholder/i.test(value) ||
-    new Set(value).size < 12
-  );
+  return /replace|change[-_ ]?me|example|placeholder/i.test(value) || new Set(value).size < 12;
 }
 
 function isExactWebOrigin(value: string): boolean {
@@ -259,9 +255,12 @@ const environmentSchema = z
     DATABASE_SSL: booleanString,
     REDIS_URL: z
       .union([
-        z.string().url().refine((value) => /^rediss?:\/\//.test(value), {
-          message: 'must use redis:// or rediss://',
-        }),
+        z
+          .string()
+          .url()
+          .refine((value) => /^rediss?:\/\//.test(value), {
+            message: 'must use redis:// or rediss://',
+          }),
         z.literal(''),
       ])
       .default(''),
@@ -269,10 +268,12 @@ const environmentSchema = z
       message: 'must be an exact HTTP(S) origin without credentials, a path, query, or fragment',
     }),
     COOKIE_SECRET: z.string().min(32),
-    DATA_ENCRYPTION_KEY: z.string().refine(
-      (value) => decodeCanonicalKey(value) !== undefined,
-      'must be exactly 32 random bytes encoded as canonical base64',
-    ),
+    DATA_ENCRYPTION_KEY: z
+      .string()
+      .refine(
+        (value) => decodeCanonicalKey(value) !== undefined,
+        'must be exactly 32 random bytes encoded as canonical base64',
+      ),
     BOT_CREDENTIALS_JSON: z.string().min(1),
     ADMIN_TOTP_SECRETS_JSON: z.string().default('{}'),
     AUDIT_LOG_HMAC_KEY: z.string().min(32),
@@ -426,7 +427,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
       if (looksLikePlaceholder(value)) throw new Error(`${name} must be a strong generated secret`);
     }
     if (new Set(secrets.map(([, value]) => value)).size !== secrets.length) {
-      throw new Error('Database, Redis, cookie, encryption, audit, IP hashing, bot, and MFA secrets must all be distinct');
+      throw new Error(
+        'Database, Redis, cookie, encryption, audit, IP hashing, bot, and MFA secrets must all be distinct',
+      );
     }
   }
 

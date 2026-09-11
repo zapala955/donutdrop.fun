@@ -1,4 +1,5 @@
 import 'fastify';
+import type { AuthenticatedBot } from '../lib/bot-auth.js';
 
 export interface AuthUser {
   id: string;
@@ -13,5 +14,7 @@ export interface AuthUser {
 declare module 'fastify' {
   interface FastifyRequest {
     authUser?: AuthUser;
+    /** Set once a bot signature is verified, so error replies can be signed for that bot. */
+    authenticatedBot?: AuthenticatedBot;
   }
 }

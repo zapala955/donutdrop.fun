@@ -5,19 +5,21 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { parseWith } from '../lib/validation.js';
 
-const catalogQuery = z.object({
-  minValueMinor: z
-    .string()
-    .regex(/^\d{1,16}$/)
-    .optional(),
-  maxValueMinor: z
-    .string()
-    .regex(/^\d{1,16}$/)
-    .optional(),
-  search: z.string().trim().min(1).max(64).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).max(10_000).default(0),
-}).strict();
+const catalogQuery = z
+  .object({
+    minValueMinor: z
+      .string()
+      .regex(/^\d{1,16}$/)
+      .optional(),
+    maxValueMinor: z
+      .string()
+      .regex(/^\d{1,16}$/)
+      .optional(),
+    search: z.string().trim().min(1).max(64).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0),
+  })
+  .strict();
 
 export async function registerCatalogRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);

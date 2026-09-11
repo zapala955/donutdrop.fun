@@ -37,28 +37,36 @@ const clientSeedSchema = z
       }),
     'Must not contain control characters',
   );
-const inventorySelectionSchema = z.object({
-  inventoryLotId: z.uuid(),
-  quantity: z.number().int().min(1).max(2304),
-  expectedUnitValueMinor: fixedItemValueSchema,
-}).strict();
-const upgradeSchema = z.object({
-  clientSeed: clientSeedSchema,
-  serverSeedHash: z.string().regex(/^[a-f0-9]{64}$/),
-  targetCatalogItemId: z.uuid(),
-  targetQuantity: z.number().int().min(1).max(2304).default(1),
-  expectedTargetUnitValueMinor: fixedItemValueSchema,
-  stakes: z.array(inventorySelectionSchema).min(1).max(20),
-}).strict();
-const historyQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  before: z.iso.datetime({ offset: true }).optional(),
-}).strict();
-const verifySchema = z.object({
-  serverSeed: z.string().regex(/^[a-f0-9]{64}$/),
-  clientSeed: clientSeedSchema,
-  nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-}).strict();
+const inventorySelectionSchema = z
+  .object({
+    inventoryLotId: z.uuid(),
+    quantity: z.number().int().min(1).max(2304),
+    expectedUnitValueMinor: fixedItemValueSchema,
+  })
+  .strict();
+const upgradeSchema = z
+  .object({
+    clientSeed: clientSeedSchema,
+    serverSeedHash: z.string().regex(/^[a-f0-9]{64}$/),
+    targetCatalogItemId: z.uuid(),
+    targetQuantity: z.number().int().min(1).max(2304).default(1),
+    expectedTargetUnitValueMinor: fixedItemValueSchema,
+    stakes: z.array(inventorySelectionSchema).min(1).max(20),
+  })
+  .strict();
+const historyQuery = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(25),
+    before: z.iso.datetime({ offset: true }).optional(),
+  })
+  .strict();
+const verifySchema = z
+  .object({
+    serverSeed: z.string().regex(/^[a-f0-9]{64}$/),
+    clientSeed: clientSeedSchema,
+    nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
 
 interface FairnessRow {
   id: string;
@@ -73,6 +81,16 @@ interface StakeRow {
   bot_id: string;
   quantity: number;
   unit_value_minor: string;
+}
+
+/**
+ * upgrader_rounds rows are handed to the client whole, so only the column this route reads is
+ * named. The rest stay `unknown` rather than `any`, which keeps an unchecked value from
+ * silently flowing into application logic.
+ */
+interface UpgraderRoundRow {
+  request_hash: string;
+  [column: string]: unknown;
 }
 
 interface TargetStockRow {
@@ -131,12 +149,12 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8831))', [
           `${userId}:${idempotencyKey}`,
         ]);
-        const existing = await client.query(
+        const existing = await client.query<UpgraderRoundRow>(
           'SELECT * FROM upgrader_rounds WHERE user_id = $1 AND idempotency_key = $2',
           [userId, idempotencyKey],
         );
         if (existing.rows[0]) {
-          if (existing.rows[0]['request_hash'] !== requestHash) {
+          if (existing.rows[0].request_hash !== requestHash) {
             conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was used with a different request');
           }
           return existing.rows[0];
@@ -391,7 +409,10 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           fairness.id,
         ]);
         await insertFairnessSeed(client, config, userId);
-        const saved = await client.query('SELECT * FROM upgrader_rounds WHERE id = $1', [roundId]);
+        const saved = await client.query<UpgraderRoundRow>(
+          'SELECT * FROM upgrader_rounds WHERE id = $1',
+          [roundId],
+        );
         return saved.rows[0];
       });
       return reply.code(201).send({ round });

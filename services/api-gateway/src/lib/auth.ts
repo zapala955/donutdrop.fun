@@ -24,6 +24,18 @@ export function linkCookieName(config: AppConfig): string {
   return config.secureCookies ? '__Host-du_link' : 'du_link';
 }
 
+/**
+ * The CSRF cookie is deliberately readable by the browser application, which makes it the one
+ * cookie a sibling subdomain could otherwise overwrite for the parent domain. Overwriting it
+ * cannot forge a request, because requireCsrf compares the supplied header against the hash
+ * stored on the session row rather than against this cookie, but it would wedge the victim's
+ * session into permanent INVALID_CSRF. The __Host- prefix makes the cookie host-only and
+ * secure with path=/, which forbids that overwrite.
+ */
+export function csrfCookieName(config: AppConfig): string {
+  return config.secureCookies ? '__Host-du_csrf' : 'du_csrf';
+}
+
 export function sessionCookieOptions(config: AppConfig) {
   return {
     path: '/',
@@ -76,9 +88,7 @@ export function createAuthGuards(db: Database, config: AppConfig) {
         'Account privileges changed; authenticate again',
       );
     }
-    const configuredAdminTotp = config.adminTotpSecrets.get(
-      row.minecraft_identity.toLowerCase(),
-    );
+    const configuredAdminTotp = config.adminTotpSecrets.get(row.minecraft_identity.toLowerCase());
     const expectedMfaKeyFingerprint = configuredAdminTotp
       ? sha256Hex(configuredAdminTotp)
       : undefined;
@@ -132,7 +142,7 @@ export function createAuthGuards(db: Database, config: AppConfig) {
 
   function clearSession(reply: FastifyReply): void {
     reply.clearCookie(sessionCookieName(config), { path: '/' });
-    reply.clearCookie('du_csrf', { path: '/' });
+    reply.clearCookie(csrfCookieName(config), { path: '/' });
   }
 
   return { authenticate, requireCsrf, requireAdmin, clearSession };

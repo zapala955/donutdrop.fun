@@ -12,7 +12,10 @@ describe('initial catalog policy', () => {
   });
 
   it('does not insert catalog inventory from a database migration', async () => {
-    const migrationsDirectory = path.resolve(import.meta.dirname, '../../../packages/db/migrations');
+    const migrationsDirectory = path.resolve(
+      import.meta.dirname,
+      '../../../packages/db/migrations',
+    );
     const migrationNames = (await readdir(migrationsDirectory)).filter((name) =>
       name.endsWith('.sql'),
     );

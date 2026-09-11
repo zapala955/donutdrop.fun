@@ -159,12 +159,7 @@ services:
       DATABASE_SSL: '${DATABASE_SSL:-false}'
       MAINTENANCE_INTERVAL_SECONDS: '3600'
     secrets: [api_database_url]
-    command:
-      [
-        'node',
-        '--enable-source-maps',
-        'services/api-gateway/dist/scripts/maintenance.js',
-      ]
+    command: ['node', '--enable-source-maps', 'services/api-gateway/dist/scripts/maintenance.js']
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -194,11 +189,7 @@ services:
       - audit_verification_keys_json
       - audit_checkpoint_hmac_key
     command:
-      [
-        'node',
-        '--enable-source-maps',
-        'services/api-gateway/dist/scripts/audit-checkpoint.js',
-      ]
+      ['node', '--enable-source-maps', 'services/api-gateway/dist/scripts/audit-checkpoint.js']
     depends_on:
       migrate:
         condition: service_completed_successfully

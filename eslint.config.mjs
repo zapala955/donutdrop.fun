@@ -15,9 +15,11 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/require-await': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
+      // Left on: every external payload enters through zod, so an `any` reaching application
+      // code means a boundary was skipped. That is exactly the mistake worth failing the build.
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
     },
   },
 );

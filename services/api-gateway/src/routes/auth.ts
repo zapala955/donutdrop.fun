@@ -7,6 +7,7 @@ import { hmacHex, randomToken, safeEqualText, sha256, sha256Hex } from '../lib/c
 import { AppError, conflict } from '../lib/errors.js';
 import {
   createAuthGuards,
+  csrfCookieName,
   linkCookieName,
   sessionCookieName,
   sessionCookieOptions,
@@ -14,19 +15,25 @@ import {
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
 
-const startSchema = z.object({
-  minecraftUsername: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
-}).strict();
-const challengeStatusSchema = z.object({
-  challengeId: z.uuid(),
-}).strict();
-const challengeCompletionSchema = z.object({
-  challengeId: z.uuid(),
-  // The verifier enforces the exact eight-digit format. Keeping format validation
-  // inside the locked transaction ensures malformed codes consume the same
-  // per-challenge attempt budget as well-formed but incorrect codes.
-  adminTotpCode: z.string().max(64).optional(),
-}).strict();
+const startSchema = z
+  .object({
+    minecraftUsername: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  })
+  .strict();
+const challengeStatusSchema = z
+  .object({
+    challengeId: z.uuid(),
+  })
+  .strict();
+const challengeCompletionSchema = z
+  .object({
+    challengeId: z.uuid(),
+    // The verifier enforces the exact eight-digit format. Keeping format validation
+    // inside the locked transaction ensures malformed codes consume the same
+    // per-challenge attempt budget as well-formed but incorrect codes.
+    adminTotpCode: z.string().max(64).optional(),
+  })
+  .strict();
 
 const MAX_ADMIN_MFA_ATTEMPTS = 5;
 
@@ -49,9 +56,7 @@ interface LinkedUser {
   status: string;
 }
 
-type LinkCompletion =
-  | { ok: true; user: LinkedUser }
-  | { ok: false; error: AppError };
+type LinkCompletion = { ok: true; user: LinkedUser } | { ok: false; error: AppError };
 
 function generateLinkCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -143,11 +148,11 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         ? 'completed'
         : challenge.attempts >= MAX_ADMIN_MFA_ATTEMPTS
           ? 'locked'
-        : challenge.expired
-          ? 'expired'
-          : challenge.confirmed_at
-            ? 'confirmed'
-            : 'waiting',
+          : challenge.expired
+            ? 'expired'
+            : challenge.confirmed_at
+              ? 'confirmed'
+              : 'waiting',
       minecraftUsername: challenge.requested_username,
     };
   });
@@ -345,7 +350,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
       const user = completion.user;
 
       reply.setCookie(sessionCookieName(config), sessionToken, sessionCookieOptions(config));
-      reply.setCookie('du_csrf', csrfToken, {
+      reply.setCookie(csrfCookieName(config), csrfToken, {
         path: '/',
         httpOnly: false,
         secure: config.secureCookies,

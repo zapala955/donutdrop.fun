@@ -15,8 +15,14 @@ const eligible: DepositEligibilityState = {
 describe('deposit eligibility', () => {
   it('requires current compliance and an allowed country', () => {
     assert.equal(isDepositEligible(eligible, new Set(['pl']), 1_000), true);
-    assert.equal(isDepositEligible({ ...eligible, status: 'suspended' }, new Set(['pl']), 1_000), false);
-    assert.equal(isDepositEligible({ ...eligible, kyc_status: 'rejected' }, new Set(['pl']), 1_000), false);
+    assert.equal(
+      isDepositEligible({ ...eligible, status: 'suspended' }, new Set(['pl']), 1_000),
+      false,
+    );
+    assert.equal(
+      isDepositEligible({ ...eligible, kyc_status: 'rejected' }, new Set(['pl']), 1_000),
+      false,
+    );
     assert.equal(isDepositEligible(eligible, new Set(['de']), 1_000), false);
   });
 

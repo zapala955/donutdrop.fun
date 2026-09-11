@@ -151,12 +151,12 @@ export function loadBotConfig(environment: NodeJS.ProcessEnv = process.env) {
       if (!stats.isDirectory() || stats.isSymbolicLink()) {
         throw new Error('path is not a real directory');
       }
-      accessSync(
-        env.MINECRAFT_PROFILES_FOLDER,
-        constants.R_OK | constants.W_OK | constants.X_OK,
-      );
+      accessSync(env.MINECRAFT_PROFILES_FOLDER, constants.R_OK | constants.W_OK | constants.X_OK);
       if (process.platform !== 'win32') {
-        if (realpathSync(env.MINECRAFT_PROFILES_FOLDER) !== path.resolve(env.MINECRAFT_PROFILES_FOLDER)) {
+        if (
+          realpathSync(env.MINECRAFT_PROFILES_FOLDER) !==
+          path.resolve(env.MINECRAFT_PROFILES_FOLDER)
+        ) {
           throw new Error('path contains a symbolic link');
         }
         if (typeof process.getuid === 'function' && stats.uid !== process.getuid()) {

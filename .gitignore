@@ -6,6 +6,9 @@ coverage/
 !.env.example
 .secrets/
 *.log
+# Throwaway PostgreSQL clusters and other scratch data used by local validation runs.
+# These are real database directories; they must never enter version control.
+.tmp-*/
 .DS_Store
 .idea/
 .vscode/

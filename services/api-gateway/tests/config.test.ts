@@ -51,9 +51,7 @@ describe('configuration', () => {
   it('validates bot identities, proxy CIDRs, and bigint limits', () => {
     assert.throws(() => loadConfig({ ...base, BOT_CREDENTIALS_JSON: '{}' }));
     assert.throws(() => loadConfig({ ...base, TRUSTED_PROXY_CIDRS: 'true' }));
-    assert.throws(() =>
-      loadConfig({ ...base, MAX_DAILY_WAGER_MINOR: '9223372036854775808' }),
-    );
+    assert.throws(() => loadConfig({ ...base, MAX_DAILY_WAGER_MINOR: '9223372036854775808' }));
     assert.throws(() => loadConfig({ ...base, ADMIN_MINECRAFT_IDS: 'NotAUuid' }));
     assert.throws(() => loadConfig({ ...base, AUDIT_LOG_KEY_ID: 'legacy-v1' }));
     assert.throws(() => loadConfig({ ...base, REDIS_URL: 'https://redis.invalid' }));
@@ -107,21 +105,15 @@ describe('configuration', () => {
       ALLOWED_COUNTRIES: 'PL',
     };
     assert.doesNotThrow(() => loadConfig(production));
-    assert.throws(() =>
-      loadConfig({ ...production, IP_HASH_KEY: production.AUDIT_LOG_HMAC_KEY }),
-    );
+    assert.throws(() => loadConfig({ ...production, IP_HASH_KEY: production.AUDIT_LOG_HMAC_KEY }));
     assert.throws(() =>
       loadConfig({
         ...production,
         COOKIE_SECRET: 'strong-ci-password-7Vq9Lm4Xs2',
       }),
     );
-    assert.throws(() =>
-      loadConfig({ ...production, TRUSTED_PROXY_CIDRS: '0.0.0.0/0' }),
-    );
-    assert.throws(() =>
-      loadConfig({ ...production, MINECRAFT_TRANSFERS_ENABLED: 'true' }),
-    );
+    assert.throws(() => loadConfig({ ...production, TRUSTED_PROXY_CIDRS: '0.0.0.0/0' }));
+    assert.throws(() => loadConfig({ ...production, MINECRAFT_TRANSFERS_ENABLED: 'true' }));
     assert.throws(() => loadConfig({ ...production, ALLOWED_COUNTRIES: ',,,' }));
     assert.throws(() => loadConfig({ ...production, ALLOWED_COUNTRIES: 'PL,,DE' }));
   });

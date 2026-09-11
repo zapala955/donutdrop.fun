@@ -38,11 +38,13 @@ type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown
 
 function captureApp(): { app: FastifyInstance; handlers: Map<string, Handler> } {
   const handlers = new Map<string, Handler>();
-  const route = (method: string) => (...args: unknown[]) => {
-    const path = args[0] as string;
-    const handler = args.at(-1) as Handler;
-    handlers.set(`${method} ${path}`, handler);
-  };
+  const route =
+    (method: string) =>
+    (...args: unknown[]) => {
+      const path = args[0] as string;
+      const handler = args.at(-1) as Handler;
+      handlers.set(`${method} ${path}`, handler);
+    };
   return {
     app: {
       get: route('GET'),

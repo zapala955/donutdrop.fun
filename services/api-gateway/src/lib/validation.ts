@@ -4,7 +4,14 @@ import { AppError } from './errors.js';
 export function parseWith<T>(schema: ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new AppError(400, 'VALIDATION_ERROR', 'The request is invalid', result.error.flatten());
+    // The flattened issue list names every field the schema expects, so it stays server-side.
+    throw new AppError(
+      400,
+      'VALIDATION_ERROR',
+      'The request is invalid',
+      undefined,
+      result.error.flatten(),
+    );
   }
   return result.data;
 }

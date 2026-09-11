@@ -29,7 +29,7 @@ export function canonicalJson(value: unknown): string {
     }
     if (ancestors.has(current)) throw new TypeError('Canonical JSON contains a cycle');
 
-    const prototype = Object.getPrototypeOf(current);
+    const prototype: unknown = Object.getPrototypeOf(current);
     if (prototype !== Object.prototype && prototype !== null && !Array.isArray(current)) {
       throw new TypeError('Canonical JSON contains a non-plain object');
     }

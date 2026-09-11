@@ -6,6 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { Redis } from 'ioredis';
 import type { AppConfig } from './config.js';
+import { applyBotResponseSignature } from './lib/bot-auth.js';
 import { Database } from './lib/db.js';
 import { assertRuntimeDatabaseRole } from './lib/database-role.js';
 import { AppError } from './lib/errors.js';
@@ -113,15 +114,33 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
     reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Route not found' } }),
   );
   app.setErrorHandler(async (error, request, reply) => {
+    // A caller that already proved its bot signature receives authenticated failures as well as
+    // authenticated successes. The bot drives its retry, quarantine, and job-failure handling
+    // from these responses, so leaving them unsigned would leave exactly one forgeable channel.
+    const send = (statusCode: number, body: unknown) => {
+      const bot = request.authenticatedBot;
+      if (bot) applyBotResponseSignature(reply, bot, request.body, body, statusCode);
+      return reply.code(statusCode).send(body);
+    };
+    // An absent `details` is omitted rather than set to undefined. JSON.stringify drops an
+    // undefined value but canonicalJson counts the key, so keeping it would make the signature
+    // cover a structure the bot never receives, and every signed failure would fail to verify.
+    const errorBody = (code: string, message: string, details?: unknown) => ({
+      error: {
+        code,
+        message,
+        ...(details === undefined ? {} : { details }),
+        requestId: request.id,
+      },
+    });
     if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({
-        error: {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          requestId: request.id,
-        },
-      });
+      if (error.internalDetails !== undefined) {
+        request.log.warn(
+          { code: error.code, internalDetails: error.internalDetails },
+          'Request rejected before handling',
+        );
+      }
+      return send(error.statusCode, errorBody(error.code, error.message, error.details));
     }
     if (
       typeof error === 'object' &&
@@ -130,22 +149,13 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
       typeof error.statusCode === 'number' &&
       error.statusCode < 500
     ) {
-      return reply.code(error.statusCode).send({
-        error: {
-          code: 'REQUEST_ERROR',
-          message: error instanceof Error ? error.message : 'Invalid request',
-          requestId: request.id,
-        },
-      });
+      return send(
+        error.statusCode,
+        errorBody('REQUEST_ERROR', error instanceof Error ? error.message : 'Invalid request'),
+      );
     }
     request.log.error({ err: error }, 'Unhandled request error');
-    return reply.code(500).send({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'An internal error occurred',
-        requestId: request.id,
-      },
-    });
+    return send(500, errorBody('INTERNAL_ERROR', 'An internal error occurred'));
   });
 
   app.addHook('onClose', async () => {
