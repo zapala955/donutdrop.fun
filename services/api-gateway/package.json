@@ -1,0 +1,35 @@
+{
+  "name": "@donut/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/src/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node --enable-source-maps dist/src/server.js",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "test": "tsx --test tests/*.test.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "maintenance": "tsx scripts/maintenance.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "audit:checkpoint": "tsx scripts/audit-checkpoint.ts"
+  },
+  "dependencies": {
+    "@donut/provably-fair": "0.1.0",
+    "@fastify/cookie": "11.1.2",
+    "@fastify/cors": "11.3.0",
+    "@fastify/helmet": "13.1.1",
+    "@fastify/rate-limit": "10.3.0",
+    "fastify": "5.12.3",
+    "fastify-plugin": "5.1.0",
+    "ioredis": "5.11.1",
+    "pg": "8.23.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.13"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "donut-upgrader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Security-focused DonutSMP Minecraft item upgrader backend",
+  "workspaces": [
+    "packages/provably-fair",
+    "services/api-gateway",
+    "services/minecraft-bot"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @donut/api",
+    "start": "npm run start --workspace @donut/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint \"packages/**/src/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/scripts/**/*.ts\"",
+    "format:check": "prettier --check .",
+    "db:migrate": "npm run db:migrate --workspace @donut/api",
+    "db:seed": "npm run db:seed --workspace @donut/api",
+    "maintenance": "npm run maintenance --workspace @donut/api",
+    "admin:bootstrap": "npm run admin:bootstrap --workspace @donut/api --"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.1",
+    "eslint": "10.10.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  }
+}

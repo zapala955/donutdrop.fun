@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "composite": true,
+    "types": ["node"]
+  },
+  "references": [{ "path": "../../packages/provably-fair" }],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["dist", "tests/bot-protocol.test.ts"]
+}

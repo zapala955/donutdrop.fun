@@ -1,0 +1,9 @@
+node_modules
+.prettierignore
+dist
+coverage
+package-lock.json
+**/.gitkeep
+infra/docker/*.Dockerfile
+infra/nginx/*.conf
+packages/db/migrations/*.sql

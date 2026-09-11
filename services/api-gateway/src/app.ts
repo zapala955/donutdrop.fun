@@ -1,0 +1,156 @@
+import { randomUUID } from 'node:crypto';
+import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import Fastify from 'fastify';
+import { Redis } from 'ioredis';
+import type { AppConfig } from './config.js';
+import { Database } from './lib/db.js';
+import { assertRuntimeDatabaseRole } from './lib/database-role.js';
+import { AppError } from './lib/errors.js';
+import { registerAccountRoutes } from './routes/account.js';
+import { registerAdminRoutes } from './routes/admin.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerCatalogRoutes } from './routes/catalog.js';
+import { registerHealthRoutes } from './routes/health.js';
+import { registerMinecraftInternalRoutes } from './routes/minecraft-in.js';
+import { registerTransferRoutes } from './routes/transfers.js';
+import { registerUpgradeRoutes } from './routes/upgrades.js';
+
+export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
+  const app = Fastify({
+    // Only the dedicated edge subnet may supply forwarding headers. A boolean `true`
+    // here would let direct clients spoof their IP and bypass rate limits.
+    trustProxy: [...config.trustedProxyCidrs],
+    bodyLimit: 64 * 1024,
+    requestTimeout: 10_000,
+    connectionTimeout: 10_000,
+    keepAliveTimeout: 72_000,
+    maxRequestsPerSocket: 1000,
+    genReqId: () => randomUUID(),
+    logger: {
+      level: config.logLevel,
+      redact: {
+        paths: [
+          'req.headers.cookie',
+          'req.headers.authorization',
+          'req.headers.x-csrf-token',
+          'req.headers.x-bot-signature',
+          'req.body.adminTotpCode',
+          'req.body.leaseToken',
+          'res.headers.set-cookie',
+          'res.headers.x-api-signature',
+          '*.adminTotpCode',
+          '*.leaseToken',
+          '*.server_seed_ciphertext',
+          '*.delivery_code_ciphertext',
+        ],
+        censor: '[REDACTED]',
+      },
+    },
+  });
+  const db = suppliedDatabase ?? new Database(config);
+  if (!suppliedDatabase) await assertRuntimeDatabaseRole(db);
+  const redis = config.redisUrl
+    ? new Redis(config.redisUrl, {
+        lazyConnect: false,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+      })
+    : undefined;
+
+  await app.register(cookie, { secret: config.cookieSecret, hook: 'onRequest' });
+  await app.register(cors, {
+    origin: config.appOrigin,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'content-type',
+      'idempotency-key',
+      'x-csrf-token',
+      'x-bot-timestamp',
+      'x-bot-id',
+      'x-bot-signature',
+    ],
+    maxAge: 600,
+  });
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    hsts: config.secureCookies
+      ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+      : false,
+  });
+  await app.register(rateLimit, {
+    max: 120,
+    timeWindow: '1 minute',
+    redis,
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
+  });
+
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('cache-control', 'no-store');
+    reply.header('content-language', 'en');
+    reply.header('x-content-type-options', 'nosniff');
+  });
+
+  await registerHealthRoutes(app, db, redis);
+  await registerAuthRoutes(app, db, config);
+  await registerAccountRoutes(app, db, config);
+  await registerCatalogRoutes(app, db, config);
+  await registerTransferRoutes(app, db, config);
+  await registerUpgradeRoutes(app, db, config);
+  await registerAdminRoutes(app, db, config);
+  await registerMinecraftInternalRoutes(app, db, config);
+
+  app.setNotFoundHandler(async (_request, reply) =>
+    reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Route not found' } }),
+  );
+  app.setErrorHandler(async (error, request, reply) => {
+    if (error instanceof AppError) {
+      return reply.code(error.statusCode).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          requestId: request.id,
+        },
+      });
+    }
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'statusCode' in error &&
+      typeof error.statusCode === 'number' &&
+      error.statusCode < 500
+    ) {
+      return reply.code(error.statusCode).send({
+        error: {
+          code: 'REQUEST_ERROR',
+          message: error instanceof Error ? error.message : 'Invalid request',
+          requestId: request.id,
+        },
+      });
+    }
+    request.log.error({ err: error }, 'Unhandled request error');
+    return reply.code(500).send({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'An internal error occurred',
+        requestId: request.id,
+      },
+    });
+  });
+
+  app.addHook('onClose', async () => {
+    await db.close();
+    if (redis) await redis.quit();
+  });
+  return app;
+}

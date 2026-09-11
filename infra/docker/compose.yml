@@ -1,0 +1,350 @@
+name: donut-upgrader
+
+x-json-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+services:
+  postgres:
+    image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: donut_upgrader
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+    secrets:
+      - postgres_superuser_password
+      - postgres_migrator_password
+      - postgres_runtime_password
+      - postgres_audit_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/init-runtime-role.sh:/docker-entrypoint-initdb.d/010-runtime-role.sh:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test -f "$$PGDATA/.donut-security-bootstrap-v1" && pg_isready -U postgres -d donut_upgrader',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [database]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    logging: *json-logging
+
+  redis:
+    image: redis:8.2.9-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+    restart: unless-stopped
+    command: ['redis-server', '/run/secrets/redis_config', '--appendonly', 'yes']
+    secrets: [redis_config]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'REDISCLI_AUTH="$$(sed -n "s/^requirepass //p" /run/secrets/redis_config | head -n 1)" redis-cli ping | grep -qx PONG',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [cache]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+      target: build
+    environment:
+      DATABASE_URL_FILE: /run/secrets/migration_database_url
+    secrets: [migration_database_url]
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [database]
+    restart: 'no'
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_URL_FILE: /run/secrets/api_database_url
+      DATABASE_SSL: '${DATABASE_SSL:-false}'
+      REDIS_URL_FILE: /run/secrets/api_redis_url
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN to the English website HTTPS origin}
+      COOKIE_SECRET_FILE: /run/secrets/api_cookie_secret
+      DATA_ENCRYPTION_KEY_FILE: /run/secrets/api_data_encryption_key
+      BOT_CREDENTIALS_JSON_FILE: /run/secrets/api_bot_credentials_json
+      ADMIN_TOTP_SECRETS_JSON_FILE: /run/secrets/api_admin_totp_secrets_json
+      AUDIT_LOG_HMAC_KEY_FILE: /run/secrets/api_audit_hmac_key
+      AUDIT_LOG_KEY_ID: ${AUDIT_LOG_KEY_ID:?Set a unique audit key identifier}
+      IP_HASH_KEY_FILE: /run/secrets/api_ip_hash_key
+      ADMIN_MINECRAFT_IDS: '${ADMIN_MINECRAFT_IDS:-}'
+      ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:?Set an explicit ISO country allowlist}
+      SESSION_TTL_HOURS: '${SESSION_TTL_HOURS:-24}'
+      HOUSE_EDGE_BPS: '${HOUSE_EDGE_BPS:-500}'
+      MIN_MULTIPLIER_BPS: '${MIN_MULTIPLIER_BPS:-11000}'
+      MAX_MULTIPLIER_BPS: '${MAX_MULTIPLIER_BPS:-1000000}'
+      MAX_WIN_CHANCE_PPM: '${MAX_WIN_CHANCE_PPM:-750000}'
+      MAX_DAILY_WAGER_MINOR: '${MAX_DAILY_WAGER_MINOR:-10000000}'
+      MINECRAFT_TRANSFERS_ENABLED: 'false'
+      TRUSTED_PROXY_CIDRS: '${EDGE_NETWORK_CIDR:-172.30.0.0/24}'
+      LOG_LEVEL: '${LOG_LEVEL:-info}'
+    secrets:
+      - api_database_url
+      - api_redis_url
+      - api_cookie_secret
+      - api_data_encryption_key
+      - api_bot_credentials_json
+      - api_admin_totp_secrets_json
+      - api_audit_hmac_key
+      - api_ip_hash_key
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [edge, database, cache, bot-control]
+    mem_limit: 768m
+    cpus: 2
+    pids_limit: 256
+    logging: *json-logging
+
+  maintenance:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL_FILE: /run/secrets/api_database_url
+      DATABASE_SSL: '${DATABASE_SSL:-false}'
+      MAINTENANCE_INTERVAL_SECONDS: '3600'
+    secrets: [api_database_url]
+    command:
+      [
+        'node',
+        '--enable-source-maps',
+        'services/api-gateway/dist/scripts/maintenance.js',
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [database]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    logging: *json-logging
+
+  audit-checkpoint:
+    profiles: [ops]
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      DATABASE_URL_FILE: /run/secrets/audit_database_url
+      DATABASE_SSL: '${DATABASE_SSL:-false}'
+      AUDIT_VERIFICATION_KEYS_JSON_FILE: /run/secrets/audit_verification_keys_json
+      AUDIT_CHECKPOINT_HMAC_KEY_FILE: /run/secrets/audit_checkpoint_hmac_key
+      AUDIT_CHECKPOINT_KEY_ID: ${AUDIT_CHECKPOINT_KEY_ID:?Set a unique checkpoint key identifier}
+    secrets:
+      - audit_database_url
+      - audit_verification_keys_json
+      - audit_checkpoint_hmac_key
+    command:
+      [
+        'node',
+        '--enable-source-maps',
+        'services/api-gateway/dist/scripts/audit-checkpoint.js',
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [database]
+    restart: 'no'
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
+  minecraft-bot:
+    build:
+      context: ../..
+      dockerfile: infra/docker/bot.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:3001/internal/v1/minecraft
+      BOT_ID: ${BOT_ID:?Set the provisioned bot UUID}
+      BOT_WEBHOOK_SECRET_FILE: /run/secrets/bot_webhook_secret
+      BOT_POLL_INTERVAL_MS: '${BOT_POLL_INTERVAL_MS:-2000}'
+      BOT_TRANSFERS_ENABLED: 'false'
+      MINECRAFT_HOST: '${MINECRAFT_HOST:-donutsmp.net}'
+      MINECRAFT_PORT: '${MINECRAFT_PORT:-25565}'
+      MINECRAFT_VERSION: '${MINECRAFT_VERSION:-false}'
+      MINECRAFT_AUTH: microsoft
+      MINECRAFT_USERNAME: ${MINECRAFT_USERNAME:?Set the Microsoft account identifier}
+      MINECRAFT_EXPECTED_USERNAME: ${MINECRAFT_EXPECTED_USERNAME:?Set the exact in-game bot username}
+      MINECRAFT_PROFILES_FOLDER: /var/lib/donut-bot/auth
+      LOG_LEVEL: '${BOT_LOG_LEVEL:-info}'
+    secrets: [bot_webhook_secret]
+    volumes:
+      - type: bind
+        source: ${BOT_AUTH_DIRECTORY:?Set BOT_AUTH_DIRECTORY to an encrypted, access-restricted directory}
+        target: /var/lib/donut-bot/auth
+        bind:
+          create_host_path: false
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [bot-control, bot-egress]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    logging: *json-logging
+
+  nginx:
+    image: nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c
+    restart: unless-stopped
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - '127.0.0.1:8080:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+    user: '101:101'
+    entrypoint: []
+    command: ['nginx', '-g', 'daemon off;']
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=0700
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [public, edge]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
+secrets:
+  postgres_superuser_password:
+    file: ${POSTGRES_SUPERUSER_PASSWORD_FILE:?Set POSTGRES_SUPERUSER_PASSWORD_FILE}
+  postgres_migrator_password:
+    file: ${POSTGRES_MIGRATOR_PASSWORD_FILE:?Set POSTGRES_MIGRATOR_PASSWORD_FILE}
+  postgres_runtime_password:
+    file: ${POSTGRES_RUNTIME_PASSWORD_FILE:?Set POSTGRES_RUNTIME_PASSWORD_FILE}
+  postgres_audit_password:
+    file: ${POSTGRES_AUDIT_PASSWORD_FILE:?Set POSTGRES_AUDIT_PASSWORD_FILE}
+  migration_database_url:
+    file: ${MIGRATION_DATABASE_URL_FILE:?Set MIGRATION_DATABASE_URL_FILE}
+  api_database_url:
+    file: ${API_DATABASE_URL_FILE:?Set API_DATABASE_URL_FILE}
+  audit_database_url:
+    file: ${AUDIT_DATABASE_URL_FILE:?Set AUDIT_DATABASE_URL_FILE}
+  redis_config:
+    file: ${REDIS_CONFIG_FILE:?Set REDIS_CONFIG_FILE}
+  api_redis_url:
+    file: ${API_REDIS_URL_FILE:?Set API_REDIS_URL_FILE}
+  api_cookie_secret:
+    file: ${API_COOKIE_SECRET_FILE:?Set API_COOKIE_SECRET_FILE}
+  api_data_encryption_key:
+    file: ${API_DATA_ENCRYPTION_KEY_FILE:?Set API_DATA_ENCRYPTION_KEY_FILE}
+  api_bot_credentials_json:
+    file: ${API_BOT_CREDENTIALS_JSON_FILE:?Set API_BOT_CREDENTIALS_JSON_FILE}
+  api_admin_totp_secrets_json:
+    file: ${API_ADMIN_TOTP_SECRETS_JSON_FILE:?Set API_ADMIN_TOTP_SECRETS_JSON_FILE}
+  api_audit_hmac_key:
+    file: ${API_AUDIT_HMAC_KEY_FILE:?Set API_AUDIT_HMAC_KEY_FILE}
+  api_ip_hash_key:
+    file: ${API_IP_HASH_KEY_FILE:?Set API_IP_HASH_KEY_FILE}
+  audit_verification_keys_json:
+    file: ${AUDIT_VERIFICATION_KEYS_JSON_FILE:?Set AUDIT_VERIFICATION_KEYS_JSON_FILE}
+  audit_checkpoint_hmac_key:
+    file: ${AUDIT_CHECKPOINT_HMAC_KEY_FILE:?Set AUDIT_CHECKPOINT_HMAC_KEY_FILE}
+  bot_webhook_secret:
+    file: ${BOT_WEBHOOK_SECRET_FILE:?Set BOT_WEBHOOK_SECRET_FILE}
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  public:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+  edge:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${EDGE_NETWORK_CIDR:-172.30.0.0/24}
+  database:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${DATABASE_NETWORK_CIDR:-172.31.0.0/24}
+  cache:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${CACHE_NETWORK_CIDR:-172.34.0.0/24}
+  bot-control:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${BOT_CONTROL_NETWORK_CIDR:-172.32.0.0/24}
+  bot-egress:
+    ipam:
+      config:
+        - subnet: ${BOT_EGRESS_NETWORK_CIDR:-172.33.0.0/24}

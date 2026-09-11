@@ -1,0 +1,120 @@
+name: backend
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+        env:
+          POSTGRES_DB: donut_upgrader_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-owner-password-7f82d19a
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d donut_upgrader_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:ci-only-owner-password-7f82d19a@127.0.0.1:5432/donut_upgrader_test
+      TEST_DATABASE_URL: postgresql://postgres:ci-only-owner-password-7f82d19a@127.0.0.1:5432/donut_upgrader_test
+      APP_ORIGIN: https://upgrader.ci.invalid
+      AUDIT_LOG_KEY_ID: ci-audit-v1
+      AUDIT_CHECKPOINT_KEY_ID: ci-checkpoint-v1
+      MINECRAFT_USERNAME: bot-ci@example.invalid
+      MINECRAFT_EXPECTED_USERNAME: DonutBot
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.2
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Prepare Compose smoke-test secrets
+        run: |
+          mkdir -p .secrets/minecraft-auth
+          chmod 700 .secrets/minecraft-auth
+          printf '%s' 'CiSuperuserPassword_7f82d19a_Only' > .secrets/postgres-superuser-password
+          printf '%s' 'CiMigratorPassword_4c31a76f_Onlyxx' > .secrets/postgres-migrator-password
+          printf '%s' 'CiRuntimePassword_53ae91b8_Onlyxxxx' > .secrets/postgres-runtime-password
+          printf '%s' 'CiAuditPassword_91e8a642_Onlyxxxxxx' > .secrets/postgres-audit-password
+          printf '%s' 'postgresql://donut_migrator:CiMigratorPassword_4c31a76f_Onlyxx@postgres:5432/donut_upgrader' > .secrets/migration-database-url
+          printf '%s' 'postgresql://donut_api_login:CiRuntimePassword_53ae91b8_Onlyxxxx@postgres:5432/donut_upgrader' > .secrets/api-database-url
+          printf '%s' 'postgresql://donut_audit_login:CiAuditPassword_91e8a642_Onlyxxxxxx@postgres:5432/donut_upgrader' > .secrets/audit-database-url
+          printf '%s\n' 'bind 0.0.0.0' 'protected-mode yes' 'requirepass CiRedisPassword_f19a72c4_Onlyxxxx' 'maxmemory 256mb' 'maxmemory-policy noeviction' > .secrets/redis.conf
+          printf '%s' 'redis://:CiRedisPassword_f19a72c4_Onlyxxxx@redis:6379/0' > .secrets/api-redis-url
+          printf '%s' 'CiCookieSecret_f8a9137c_B7qP2vL5zN4x' > .secrets/api-cookie-secret
+          printf '%s' 'Q0lfRGF0YUtleV83eFFwNExtOVZzMktyOFdkNUpuMUE=' > .secrets/api-data-encryption-key
+          printf '%s' '{"00000000-0000-4000-8000-000000000001":{"secret":"Q0lfQm90S2V5Xzl2TG0zWHE3S3QyV3M4SnI1UGQ0WmE=","serverHost":"donutsmp.net","username":"DonutBot"}}' > .secrets/api-bot-credentials.json
+          printf '%s' '{}' > .secrets/api-admin-totp-secrets.json
+          printf '%s' 'CiAuditHmac_f81Cq3Lm7Vp2Xs9Kd5Jn4Rt6' > .secrets/api-audit-hmac-key
+          printf '%s' 'CiIpHashKey_a71Lm4Vq8Xs2Kn6Jp9Rt3Wd5' > .secrets/api-ip-hash-key
+          printf '%s' '{"ci-audit-v1":"CiAuditHmac_f81Cq3Lm7Vp2Xs9Kd5Jn4Rt6"}' > .secrets/audit-verification-keys.json
+          printf '%s' 'CiCheckpointKey_q92Vs5Lm8Xa3Kr7Jt4Wd6' > .secrets/audit-checkpoint-hmac-key
+          printf '%s' 'Q0lfQm90S2V5Xzl2TG0zWHE3S3QyV3M4SnI1UGQ0WmE=' > .secrets/bot-webhook-secret
+          chmod -R go-rwx .secrets
+      - name: Validate Compose configuration
+        run: |
+          docker compose --env-file .env.example -f infra/docker/compose.yml config --quiet
+      - name: Provision restricted host-test migration role
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+          await client.connect();
+          try {
+            await client.query(`
+              CREATE ROLE donut_migrator LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS
+                PASSWORD 'CiMigratorPassword_4c31a76f_Onlyxx';
+              CREATE ROLE donut_api_runtime NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+              CREATE ROLE donut_audit_reader NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+              ALTER DATABASE donut_upgrader_test OWNER TO donut_migrator;
+              ALTER SCHEMA public OWNER TO donut_migrator;
+              ALTER ROLE donut_migrator SET search_path = public;
+            `);
+          } finally {
+            await client.end();
+          }
+          NODE
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://donut_migrator:CiMigratorPassword_4c31a76f_Onlyxx@127.0.0.1:5432/donut_upgrader_test
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://donut_migrator:CiMigratorPassword_4c31a76f_Onlyxx@127.0.0.1:5432/donut_upgrader_test
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Build final runtime images
+        run: |
+          docker build --file infra/docker/api.Dockerfile .
+          docker build --file infra/docker/bot.Dockerfile .
+      - name: Smoke-test hardened Compose deployment
+        run: |
+          docker compose --env-file .env.example -f infra/docker/compose.yml up -d --build postgres redis api maintenance nginx
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/health/ready >/dev/null; then break; fi
+            if [ "$attempt" = 30 ]; then docker compose --env-file .env.example -f infra/docker/compose.yml logs; exit 1; fi
+            sleep 2
+          done
+          docker compose --env-file .env.example -f infra/docker/compose.yml up -d --force-recreate --no-deps api
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/health/ready >/dev/null; then break; fi
+            if [ "$attempt" = 30 ]; then docker compose --env-file .env.example -f infra/docker/compose.yml logs; exit 1; fi
+            sleep 2
+          done
+          docker compose --env-file .env.example -f infra/docker/compose.yml --profile ops run --rm audit-checkpoint | tail -n 1 | jq -e '.signatureAlgorithm == "hmac-sha256"'
+      - name: Tear down Compose smoke test
+        if: always()
+        run: docker compose --env-file .env.example -f infra/docker/compose.yml down --volumes --remove-orphans
