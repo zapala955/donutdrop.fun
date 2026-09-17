@@ -31,6 +31,7 @@ describe('frontend/backend contract', () => {
     assert.match(app, /completionPending = false;\s*button\.disabled = false;/);
     assert.doesNotMatch(store, /completeLogin\(challengeId,\s*adminTotpCode/);
     assert.match(store, /Post-login data refresh failed/);
+    assert.match(store, /Authenticated data refresh failed/);
   });
 
   it('routes every core economic action to the backend', async () => {

@@ -229,7 +229,15 @@ export async function bootstrap() {
   try {
     state.user = await api.get('/v1/auth/me');
     state.authenticated = true;
-    await refreshPrivate(false);
+    try {
+      await refreshPrivate(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) throw error;
+      // /auth/me already proved this session is valid. Keep the player signed in when one
+      // secondary dashboard endpoint is unavailable and allow the normal refresh cycle to retry.
+      state.lastError = error;
+      console.warn('Authenticated data refresh failed', error);
+    }
   } catch (error) {
     if (!(error instanceof ApiError && error.status === 401)) {
       state.online = false;
