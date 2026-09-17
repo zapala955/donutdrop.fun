@@ -13,3 +13,13 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+
+# Live Microsoft/Xbox auth tokens for the bot account. Committing these is account takeover.
+.minecraft-auth/
+
+# AI assistant tooling. Not part of the product, and 730 files of it buries the code that is.
+# Kept on disk, out of the repository.
+.claude/
+.agent/
+.gemini/
+skills-lock.json

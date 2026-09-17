@@ -1,6 +1,6 @@
 # Frontend applications (not implemented)
 
-These directories are placeholders only. This backend task intentionally added no frontend source.
+The integrated standalone frontend currently lives in `../DONUTDROP FRONTEND/Donut Drop`.
 
 Future clients should use the `/v1` API for Minecraft account linking, the fixed-price item catalog,
 custody inventory, deposits and withdrawals, upgrade history, responsible-play controls, and the

@@ -1,0 +1,599 @@
+/* pages.css — the eight secondary routes.
+ *
+ * Rakeback, daily rewards, Discord, race, creator programme, leaderboard and statistics. They
+ * share one file because they share one vocabulary: a metric card, a progress track, a data
+ * table and a status pill, repeated. Splitting them per route would mean seven copies of the same
+ * table styling drifting apart.
+ *
+ * Every colour here is a token from matte.css. Nothing in this file hard-codes a hex, so the
+ * palette stays steerable from one place — which is the mistake the earlier pass made by leaving
+ * literals scattered through platform.css.
+ *
+ * Loaded after matte.css, so the tokens it defines are already in scope.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   SHARED: data table
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Used by the race board, both leaderboards, the rakeback history and the favourite-crates panel.
+   Numeric columns are tabular-figure monospace so ranks and money line up down the column instead
+   of wobbling with the glyph widths.
+*/
+.dtable { width: 100%; border-collapse: collapse; font-size: .75rem; }
+.dtable th {
+  padding: 8px 10px; text-align: left;
+  font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--faint); border-bottom: 1px solid var(--line);
+}
+.dtable td { padding: 9px 10px; border-bottom: 1px solid var(--line); color: var(--text); }
+.dtable tbody tr:last-child td { border-bottom: none; }
+.dtable tbody tr:hover td { background: rgba(255, 255, 255, .02); }
+.dtable__num { text-align: right; font-variant-numeric: tabular-nums; }
+.dtable__rank { width: 1%; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dtable__dim { color: var(--muted); }
+.dtable__prize { color: var(--gold-deep); }
+.dtable__empty { text-align: center; color: var(--faint); padding: 22px 10px; }
+.dtable__player { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dtable__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtable__avatar {
+  flex: none; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--panel3); border: 1px solid var(--line2);
+  font: 800 .66rem/1 var(--body); color: var(--muted);
+}
+/* The viewer's own row, so a player can find themselves in fifty without reading every name. */
+.dtable tbody tr[data-you="1"] td {
+  background: rgba(255, 170, 0, .06);
+  border-bottom-color: rgba(255, 170, 0, .2);
+}
+.dtable tbody tr[data-you="1"] .dtable__name { color: var(--gold-bright); font-weight: 800; }
+/* The podium, and only the podium. Below third the rank number carries itself. */
+.dtable tbody tr[data-podium="1"] .dtable__rank { color: var(--gold-bright); }
+.dtable tbody tr[data-podium="2"] .dtable__rank { color: #b9bcc4; }
+.dtable tbody tr[data-podium="3"] .dtable__rank { color: #b07a3c; }
+
+/* Tables are the one thing allowed to scroll sideways; the page body never does. */
+.race__tablewrap, .board__tablewrap { overflow-x: auto; }
+.race__tablewrap, .board__tablewrap, .rake__history, .stats__panel {
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+}
+.race__tablewrap, .board__tablewrap { padding: 4px 6px; }
+
+/* Shared empty / disabled state. Every one of these routes can be switched off per deployment,
+   and a disabled feature should read as "not on" rather than as a page that failed. */
+.rake__notice, .daily__notice, .dsync__notice, .race__notice, .creator__notice,
+.board__notice, .stats__notice {
+  padding: 22px 18px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.rake__notice p, .daily__notice p, .dsync__notice p, .race__notice p, .creator__notice p,
+.board__notice p, .stats__notice p {
+  margin: 0; font-size: .75rem; color: var(--faint);
+}
+
+/* Shared small-caps key used above every figure on these pages. */
+.rake__sumk, .rake__label, .daily__statk, .dsync__label, .race__statk,
+.creator__statk, .stats__k, .stats__label {
+  font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   RAKEBACK
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.rake { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rake__summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;
+}
+.rake__sumcell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.rake__sumv { font: 800 1.1rem/1.1 var(--disp); color: var(--text); }
+.rake__sumv--gold { color: var(--gold-bright); }
+
+.rake__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); gap: 8px; }
+.rake__card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 15px; border-radius: var(--r);
+  /* Glass: a translucent panel over the page ground, held by a hairline. The blur is what makes
+     it read as a pane rather than as a flat swatch, and it stays cheap because these are four
+     small boxes and not a full-screen overlay. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012));
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  border: 1px solid var(--line2);
+}
+/* A tier with money waiting is the only one that lights up. Three dark cards and one gold one is
+   a page a player can read from across the room. */
+.rake__card[data-armed="1"] {
+  border-color: rgba(255, 170, 0, .4);
+  background: linear-gradient(180deg, rgba(255, 170, 0, .085), rgba(255, 170, 0, .02));
+}
+.rake__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rake__name { font: 800 .88rem/1 var(--body); color: var(--text); }
+.rake__rate {
+  padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2);
+  font: 800 .64rem/1.4 var(--mono); color: var(--gold-deep);
+}
+.rake__card[data-armed="1"] .rake__rate {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .42);
+}
+.rake__figure {
+  font: 800 1.42rem/1.05 var(--disp); color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.rake__card[data-armed="1"] .rake__figure { color: var(--gold-bright); }
+.rake__meter { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rake__clock { font-size: .625rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rake__life { font-size: .625rem; color: var(--faint); }
+.rake__claim { width: 100%; justify-content: center; letter-spacing: .06em; }
+
+.rake__history { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   DAILY REWARDS
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.daily { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.daily__head { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; }
+.daily__stat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.daily__statv { font: 800 1.1rem/1.1 var(--disp); color: var(--text); font-variant-numeric: tabular-nums; }
+.daily__statv--gold { color: var(--gold-bright); }
+
+/* Seven across on a desktop, wrapping down to two on a phone. auto-fit rather than a fixed seven,
+   so the row never forces a horizontal scroll at narrow widths. */
+.daily__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+.daily__day {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 10px; border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--panel);
+  text-align: center;
+}
+/* Three states, three treatments. Claimed recedes, today is the only gold cell, locked is plain
+   furniture — a future day is not a warning and must not look like one. */
+.daily__day[data-state="claimed"] { opacity: .55; }
+.daily__day[data-state="today"] {
+  border-color: rgba(255, 170, 0, .45);
+  background: linear-gradient(180deg, rgba(255, 170, 0, .1), rgba(255, 170, 0, .02));
+}
+.daily__day[data-mega="1"] { border-color: var(--line2); }
+.daily__day[data-mega="1"][data-state="today"] { border-color: rgba(255, 170, 0, .6); }
+.daily__num { font: 800 .6rem/1 var(--mono); letter-spacing: .1em; color: var(--faint); }
+.daily__art { font-size: 1.25rem; line-height: 1; filter: saturate(.8); }
+.daily__reward {
+  font: 800 .9rem/1 var(--disp); color: var(--text); font-variant-numeric: tabular-nums;
+}
+.daily__day[data-state="today"] .daily__reward { color: var(--gold-bright); }
+.daily__badge {
+  padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2);
+  font: 800 .56rem/1.5 var(--mono); letter-spacing: .06em; color: var(--faint);
+}
+.daily__day[data-state="today"] .daily__badge {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .42); background: rgba(255, 170, 0, .1);
+}
+.daily__mega {
+  font: 800 .54rem/1 var(--mono); letter-spacing: .12em; color: var(--gold-deep);
+}
+
+.daily__claim {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 15px; border: 1px solid var(--line2); border-radius: var(--r); background: var(--panel);
+}
+.daily__claimfig { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.daily__claimv { font: 800 1.3rem/1.05 var(--disp); color: var(--gold-bright); }
+.daily__go { flex: 0 1 260px; justify-content: center; letter-spacing: .06em; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   DISCORD
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.dsync { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dsync__card, .dsync__unlock {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+}
+.dsync__card[data-on="1"] { border-color: rgba(255, 170, 0, .32); }
+.dsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dsync__badge {
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2);
+  font: 800 .66rem/1.4 var(--mono); letter-spacing: .08em; color: var(--faint);
+}
+.dsync__badge[data-on="1"] {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .45); background: rgba(255, 170, 0, .1);
+}
+.dsync__handle { font-size: .875rem; color: var(--text); }
+.dsync__go { justify-content: center; letter-spacing: .04em; }
+.dsync__prize { font: 800 1.2rem/1 var(--disp); color: var(--gold-bright); }
+
+.dsync__conds { display: flex; flex-direction: column; gap: 8px; }
+.dsync__cond {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-s);
+  background: var(--panel2);
+}
+.dsync__cond[data-met="1"] { border-color: rgba(255, 170, 0, .3); background: rgba(255, 170, 0, .05); }
+.dsync__tick {
+  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--line2); font: 800 .7rem/1 var(--body); color: var(--faint);
+}
+.dsync__cond[data-met="1"] .dsync__tick {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .5);
+}
+.dsync__condname { font-size: .75rem; color: var(--text); }
+.dsync__condval { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dsync__track {
+  grid-column: 1 / -1; height: 4px; border-radius: 999px; overflow: hidden; background: var(--panel3);
+}
+.dsync__fill {
+  height: 100%; border-radius: 999px; transform-origin: left center;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
+  transition: transform .5s cubic-bezier(.22, .61, .36, 1);
+}
+.dsync__payee { font-size: .75rem; color: var(--gold-deep); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   WAGER RACE
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.race { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.race__tabs, .board__tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.race__tab, .board__tab {
+  padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
+  font: 600 .74rem/1 var(--body); cursor: pointer;
+  transition: color .14s, border-color .14s, background-color .14s;
+}
+.race__tab:hover, .board__tab:hover { color: var(--text); border-color: var(--line2); }
+.race__tab[data-on="1"], .board__tab[data-on="1"] {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .45); background: rgba(255, 170, 0, .09);
+}
+.race__tab:focus-visible, .board__tab:focus-visible {
+  outline: 2px solid var(--gold-deep); outline-offset: 2px;
+}
+.race__head { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.race__stat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.race__statv { font: 800 1.12rem/1.1 var(--disp); color: var(--text); font-variant-numeric: tabular-nums; }
+.race__statv--gold { color: var(--gold-bright); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   CREATOR & MEDIA
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.creator { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.creator__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.creator__stat, .creator__ratecell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.creator__statv { font: 800 1.1rem/1.1 var(--disp); color: var(--text); }
+.creator__statv--gold { color: var(--gold-bright); }
+.creator__rate { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.creator__ratev { font: 800 1.2rem/1 var(--disp); color: var(--text); }
+.creator__ratev--gold { color: var(--gold-bright); }
+
+.creator__apply {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; border: 1px solid var(--line2); border-radius: var(--r); background: var(--panel);
+}
+.creator__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.creator__badge {
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2);
+  font: 800 .6rem/1.5 var(--mono); letter-spacing: .07em; color: var(--faint);
+}
+.creator__badge[data-status="approved"] {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .45); background: rgba(255, 170, 0, .1);
+}
+.creator__badge[data-status="rejected"] { color: var(--crimson); border-color: rgba(192, 57, 43, .4); }
+.creator__note { margin: 0; font-size: .75rem; line-height: 1.55; color: var(--muted); }
+.creator__go { justify-content: center; letter-spacing: .05em; }
+
+/* The application form, inside the shared modal. */
+.cform { display: flex; flex-direction: column; gap: 12px; }
+.cform__field { display: flex; flex-direction: column; gap: 4px; }
+.cform__field > span {
+  font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+}
+.cform__in {
+  width: 100%; padding: 10px 12px; border-radius: var(--r-s);
+  background: var(--bg); border: 1px solid var(--line2); color: var(--text);
+  font-size: .875rem; outline: none;
+}
+.cform__in:focus { border-color: var(--gold-bright); }
+.cform__hint { font-size: .75rem; color: var(--faint); min-height: 1em; }
+.cform__hint[data-bad="1"] { color: var(--crimson); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   LEADERBOARD & STATISTICS
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+.board, .stats { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.stats__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(166px, 1fr)); gap: 8px; }
+.stats__card {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+}
+.stats__v {
+  font: 800 1.24rem/1.1 var(--disp); color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+/* A player's own result is the one figure on the site allowed to be red, because up and down are
+   the only thing this number means. */
+.stats__card[data-tone="up"] .stats__v { color: var(--cyan); }
+.stats__card[data-tone="down"] .stats__v { color: var(--crimson); }
+.stats__card[data-tone="gold"] .stats__v { color: var(--gold-bright); }
+
+.stats__panel { display: flex; flex-direction: column; gap: 8px; padding: 15px; }
+.stats__facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.stats__facts > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: var(--r-s); background: var(--panel2);
+}
+.stats__facts dt { font-size: .75rem; color: var(--faint); }
+.stats__facts dd {
+  margin: 0; font-size: .75rem; color: var(--text); font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsync__fill { transition: none; }
+}
+@media (max-width: 560px) {
+  .daily__claim { flex-direction: column; align-items: stretch; }
+  .daily__go { flex: 1 1 auto; }
+  .rake__grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ACCOUNT SURFACES — profile, wallet, history, settings, support, terms
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Six routes sharing one vocabulary, same as the eight above: a metric card, a fact list, a data
+   table. They reuse .dtable wholesale, so only the wrapper and the fact list are new here.
+*/
+.acct { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.acct__notice {
+  padding: 22px 18px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.acct__notice p { margin: 0; font-size: .75rem; color: var(--faint); }
+
+.acct__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 8px; }
+.acct__stat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 13px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.acct__k, .acct__label {
+  font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--faint);
+}
+.acct__v {
+  font: 800 1.12rem/1.15 var(--disp); color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+/* Up is cyan and down is crimson, the same pairing the statistics page uses. Gold stays reserved
+   for the figure that is the page's subject rather than for a direction. */
+.acct__stat[data-tone="up"] .acct__v { color: var(--cyan); }
+.acct__stat[data-tone="down"] .acct__v { color: var(--crimson); }
+.acct__stat[data-tone="gold"] .acct__v { color: var(--gold-bright); }
+
+.acct__panel {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 15px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.acct__facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.acct__facts > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 9px 11px; border-radius: var(--r-s); background: var(--panel2);
+}
+.acct__facts dt { font-size: .75rem; color: var(--faint); white-space: nowrap; }
+.acct__facts dd {
+  margin: 0; font-size: .75rem; color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; text-align: right;
+}
+.acct__facts > div[data-tone="up"] dd { color: var(--cyan); }
+.acct__facts > div[data-tone="down"] dd { color: var(--crimson); }
+
+.acct__tablewrap { overflow-x: auto; }
+/* Signed money in a ledger. The direction is carried by colour AND by the sign, never by colour
+   alone — the sign survives a colour-blind reader and a greyscale screenshot. */
+.dtable td[data-dir="up"] { color: var(--cyan); }
+.dtable td[data-dir="down"] { color: var(--crimson); }
+.dtable tbody tr[data-outcome="win"] .dtable__name { color: var(--text); }
+.dtable tbody tr[data-outcome="lose"] .dtable__name { color: var(--muted); }
+
+.acct__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.acct__actions .btn { flex: 1 1 180px; justify-content: center; letter-spacing: .05em; }
+/* Self-exclusion is the one irreversible control on the site, so it is the one button allowed to
+   wear the loss colour. It is a border, not a fill: a red slab reads as an error state rather
+   than as a deliberate choice the player is making. */
+.acct__danger { color: var(--crimson); border-color: rgba(192, 57, 43, .45); }
+.acct__danger:hover:not(:disabled) {
+  color: var(--crimson); border-color: var(--crimson); background: rgba(192, 57, 43, .08);
+}
+.acct__warn {
+  margin: 0 0 4px; font: .76rem/1.5 var(--body); color: var(--crimson);
+}
+
+.info__links { display: flex; flex-wrap: wrap; gap: 8px; }
+.info__link {
+  padding: 8px 13px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2); color: var(--muted);
+  font: 600 .74rem/1 var(--body); text-decoration: none;
+  transition: color .14s, border-color .14s, background-color .14s;
+}
+.info__link:hover {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .42); background: rgba(255, 170, 0, .08);
+}
+.info__link:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: 2px; }
+
+@media (max-width: 560px) {
+  .acct__actions .btn { flex: 1 1 auto; }
+  .acct__facts { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   VIP — 30 levels, six tiers
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Each tier carries one accent, set as a custom property on a [data-tier] element and inherited by
+   everything inside it. One declaration per tier rather than six variants of every rule: the
+   badge, the bar, the matrix row and the navbar pill all read --vip.
+
+   The six accents are the specified ones, held down to the site's matte range. Bronze, silver and
+   platinum are metals rather than saturated hues and sit quietly; gold is the house accent; the
+   two top tiers are the only ones permitted a gradient, because they are the two a player will
+   almost never see and the rarity is the point.
+*/
+[data-tier="bronze"]      { --vip: #a77044; --vip-soft: rgba(167, 112, 68, .14); }
+[data-tier="silver"]      { --vip: #c0c0c0; --vip-soft: rgba(192, 192, 192, .12); }
+[data-tier="gold"]        { --vip: var(--gold-bright); --vip-soft: rgba(255, 170, 0, .12); }
+[data-tier="platinum"]    { --vip: #e5e4e2; --vip-soft: rgba(229, 228, 226, .1); }
+[data-tier="diamond"]     { --vip: #ffe89a; --vip-soft: rgba(255, 232, 154, .12); }
+[data-tier="high_roller"] { --vip: var(--gold-bright); --vip-soft: rgba(255, 170, 0, .16); }
+
+.vip { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.vip__notice {
+  padding: 22px 18px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.vip__notice p { margin: 0; font-size: .75rem; color: var(--faint); }
+
+/* ── the headline ── */
+.vip__hero {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 17px; border-radius: var(--r);
+  border: 1px solid var(--line2); background: var(--panel);
+}
+.vip__hero[data-tier] { border-color: color-mix(in srgb, var(--vip) 38%, transparent); }
+.vip__herotop { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vip__badge {
+  padding: 6px 13px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--vip) 50%, transparent);
+  background: var(--vip-soft); color: var(--vip);
+  font: 800 .78rem/1.3 var(--body); letter-spacing: .09em;
+}
+/* High Roller is the one badge that animates, and it animates a border sheen rather than a glow —
+   the perimeter moves, the element does not emit light. */
+.vip__badge[data-tier="high_roller"] {
+  background-image: linear-gradient(135deg, rgba(255, 170, 0, .18), rgba(255, 215, 0, .28), rgba(255, 170, 0, .18));
+  background-size: 220% 100%;
+  animation: vipsheen 5.5s linear infinite;
+}
+@keyframes vipsheen {
+  0% { background-position: 0% 0; }
+  100% { background-position: 220% 0; }
+}
+.vip__rate {
+  font: 800 .92rem/1 var(--disp); color: var(--vip, var(--gold-bright));
+  letter-spacing: .04em; white-space: nowrap;
+}
+.vip__track { height: 7px; border-radius: 999px; overflow: hidden; background: var(--panel3); }
+.vip__fill {
+  height: 100%; border-radius: 999px; transform-origin: left center;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--vip) 55%, transparent), var(--vip));
+  transition: transform .55s cubic-bezier(.22, .61, .36, 1);
+}
+.vip__herofoot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vip__frac { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vip__target { font-size: .75rem; color: var(--vip, var(--gold-deep)); letter-spacing: .04em; }
+
+/* ── stat cards ── */
+.vip__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.vip__stat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 13px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.vip__k {
+  font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+}
+.vip__v {
+  font: 800 1.12rem/1.15 var(--disp); color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.vip__stat[data-tone="gold"] .vip__v { color: var(--gold-bright); }
+
+/* ── the 30-level matrix ── */
+.vip__matrix { display: flex; flex-direction: column; gap: 8px; }
+.vip__tier {
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+  overflow: hidden;
+}
+.vip__tierhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--vip-soft);
+}
+.vip__tiername {
+  font: 800 .8rem/1 var(--body); letter-spacing: .06em; color: var(--vip);
+  text-transform: uppercase;
+}
+.vip__tierspan { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.vip__rows { display: flex; flex-direction: column; }
+.vip__row {
+  display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  gap: 8px; align-items: center;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.vip__rows .vip__row:last-child { border-bottom: none; }
+/* Three states. Complete recedes, active is the only lit row on the page, locked is plain
+   furniture — a level you have not reached yet is the normal case, not a warning. */
+.vip__row[data-state="complete"] { opacity: .5; }
+.vip__row[data-state="active"] {
+  background: var(--vip-soft);
+  box-shadow: inset 2px 0 0 var(--vip);
+}
+.vip__sub {
+  font: 800 .72rem/1 var(--mono); color: var(--faint); letter-spacing: .06em;
+}
+.vip__row[data-state="active"] .vip__sub { color: var(--vip); }
+.vip__threshold {
+  font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.vip__chip {
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--line2); background: var(--panel2);
+  font: 800 .66rem/1.4 var(--mono); color: var(--text); white-space: nowrap;
+}
+.vip__row[data-state="active"] .vip__chip {
+  color: var(--vip); border-color: color-mix(in srgb, var(--vip) 45%, transparent);
+}
+.vip__state {
+  min-width: 52px; text-align: right;
+  font: 800 .58rem/1.5 var(--mono); letter-spacing: .07em; color: var(--faint);
+}
+.vip__row[data-state="active"] .vip__state { color: var(--vip); }
+.vip__row[data-state="complete"] .vip__state { color: var(--cyan); }
+
+/* ── the navbar pill ── */
+.lvl[data-tier] .lvl__n { color: var(--vip); }
+.lvl[data-tier] { border-color: color-mix(in srgb, var(--vip) 34%, transparent); }
+.lvl[data-tier] .lvl__bar > i { background: var(--vip); }
+.lvl__n { white-space: nowrap; letter-spacing: .05em; }
+/* The pill's tooltip sits outside the button, because a tooltip host nested inside a button is a
+   button inside a button and neither is then reachable by keyboard. */
+.lvl__tip { margin-left: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vip__fill { transition: none; }
+  .vip__badge[data-tier="high_roller"] { animation: none; }
+}
+@media (max-width: 560px) {
+  .vip__row { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .vip__state { grid-column: 1 / -1; text-align: left; }
+}

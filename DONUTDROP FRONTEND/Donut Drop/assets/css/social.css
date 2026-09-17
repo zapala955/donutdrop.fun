@@ -1,0 +1,364 @@
+/* social.css — the chat rail's new furniture, the vault jackpot, and the tip sheet.
+ *
+ * Loaded after obsidian.css and slither.css, so the finish layer's tokens are already in scope and
+ * this sheet spends them rather than restating them: --ob-line for every hairline, --ob-gap for
+ * every gap, --r-crisp / --r-panel for every corner, --gold-bright / --gold-body for every accent.
+ * Nothing here invents a colour, a radius or a spacing step.
+ *
+ * The rail itself is NOT restyled here. It was already docked left by app.css's shell grid; what
+ * this adds is the collapse, the drop card, the decoration on a line, and the two overlays.
+ */
+
+/* ═════════════════════════ the dock ═════════════════════════ */
+
+/* The handle sits on the rail's inner edge, not inside its padding, so it stays reachable when the
+   column collapses to nothing. */
+.chat__dock {
+  position: absolute; top: 50%; right: -13px;
+  transform: translateY(-50%);
+  width: 14px; height: 54px;
+  display: grid; place-items: center;
+  border: 1px solid var(--ob-line);
+  border-left: none;
+  border-radius: 0 var(--r-crisp) var(--r-crisp) 0;
+  background: var(--panel);
+  color: var(--gold-bright);
+  font-size: .75rem; line-height: 1;
+  z-index: 3;
+}
+.chat__dock:hover { border-color: var(--ob-line-hi); background: var(--panel2); }
+
+/* Collapsing is a shell-grid concern: hiding the panel without closing its column leaves a hole
+   exactly as wide as the chat used to be. */
+body[data-chat-collapsed="1"] .shell { grid-template-columns: 0 minmax(0, 1fr); }
+body[data-chat-collapsed="1"] .chat {
+  width: 0;
+  padding: 0;
+  border-right-width: 0;
+  overflow: visible;   /* the handle has to survive the collapse */
+}
+body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
+
+/* ── mobile: a drawer, not a column ──
+   Below the shell's breakpoint the rail leaves the grid entirely and slides in over the page. */
+@media (max-width: 900px) {
+  .shell,
+  body[data-chat-collapsed="1"] .shell { grid-template-columns: minmax(0, 1fr); }
+  .chat {
+    position: fixed; top: var(--top-h); bottom: 0; left: 0;
+    width: min(320px, 86vw);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform .26s var(--ob-ease);
+    box-shadow: 18px 0 44px -30px rgba(0, 0, 0, 1);
+  }
+  body[data-chat-collapsed="0"] .chat { transform: translateX(0); }
+  body[data-chat-collapsed="1"] .chat { width: min(320px, 86vw); padding: initial; }
+  body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: revert; }
+  .chat__dock { right: -15px; height: 66px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat { transition: none; }
+}
+
+/* ═════════════════════════ the drop card ═════════════════════════ */
+
+.chat__rainfig { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.chat__rainfig b { color: var(--gold-bright); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.chat__rainfig span {
+  font-size: .625rem; letter-spacing: .12em; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A live pot is worth looking at; a closed one is not on screen at all. */
+.chat__rain:not([hidden]) {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 170, 0, .14), transparent 64%),
+    var(--panel);
+  border-bottom: 1px solid var(--ob-line);
+}
+
+/* ═════════════════════════ a chat line ═════════════════════════ */
+
+.msg__av {
+  width: var(--av, 22px); height: var(--av, 22px);
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--panel3);
+  cursor: pointer;
+}
+.msg__av img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+/* The fallback when mc-heads is blocked or down: the same initials treatment the duel screen uses. */
+.msg__av i {
+  font-style: normal; font-size: .5625rem; font-weight: 800;
+  color: var(--gold-bright); letter-spacing: .02em;
+}
+
+.msg__badge {
+  font-style: normal;
+  font-size: .5rem; font-weight: 800; letter-spacing: .1em;
+  padding: 1px 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, .06);
+  color: var(--muted);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* Six tiers, six treatments. The ladder is only legible if the badges are not all the same grey. */
+.msg__badge[data-tier="bronze"]   { color: #c08457; background: rgba(192, 132, 87, .12); }
+.msg__badge[data-tier="silver"]   { color: #b6c2c9; background: rgba(182, 194, 201, .12); }
+.msg__badge[data-tier="gold"]     { color: var(--gold-body); background: rgba(255, 170, 0, .14); }
+.msg__badge[data-tier="platinum"] { color: #d8ecff; background: rgba(216, 236, 255, .12); }
+.msg__badge[data-tier="diamond"]  { color: #7fd8ff; background: rgba(127, 216, 255, .14); }
+.msg__badge[data-tier="high_roller"] {
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-body));
+}
+.msg__badge--staff {
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, #ff9d4d, #ff6a00);
+}
+.msg__badge--flex { color: var(--gold-bright); background: rgba(255, 170, 0, .16); }
+.msg__badge--tip  { color: #7fd8ff; background: rgba(127, 216, 255, .14); }
+
+/* ── the high roller ──
+   The top tier's name glows and carries a slow aura. It is the loudest thing in the rail and it is
+   deliberately reserved for the one tier almost nobody reaches. */
+.msg[data-whale="1"] .msg__who {
+  color: var(--gold-bright);
+  text-shadow: 0 0 8px rgba(255, 215, 0, .65), 0 0 18px rgba(255, 170, 0, .35);
+  animation: whaleGlow 2.8s var(--ob-ease) infinite;
+}
+.msg[data-whale="1"] {
+  background: linear-gradient(90deg, rgba(255, 170, 0, .07), transparent 62%);
+  border-radius: var(--r-crisp);
+}
+@keyframes whaleGlow {
+  0%, 100% { text-shadow: 0 0 7px rgba(255, 215, 0, .5), 0 0 16px rgba(255, 170, 0, .26); }
+  50%      { text-shadow: 0 0 12px rgba(255, 215, 0, .9), 0 0 26px rgba(255, 170, 0, .5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg[data-whale="1"] .msg__who { animation: none; }
+}
+
+.msg__replay {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: .5rem; font-weight: 800; letter-spacing: .14em;
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--ob-line);
+  background: transparent;
+  color: var(--gold-bright);
+}
+.msg__replay:hover { border-color: var(--ob-line-hi); background: rgba(255, 170, 0, .08); }
+
+.msg--tip { background: linear-gradient(90deg, rgba(127, 216, 255, .07), transparent 62%); }
+
+/* ═════════════════════════ moderation menu ═════════════════════════ */
+
+.modmenu {
+  position: fixed; z-index: 90;
+  min-width: 170px;
+  display: flex; flex-direction: column;
+  padding: 6px;
+  border-radius: var(--r-panel);
+  background: rgba(10, 10, 12, .96);
+  border: 1px solid var(--ob-line-hi);
+  box-shadow: 0 22px 50px -26px rgba(0, 0, 0, 1);
+}
+.modmenu__who {
+  font-size: .5625rem; letter-spacing: .18em; color: var(--faint);
+  padding: 4px 8px 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.modmenu__row {
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: var(--r-crisp);
+  background: transparent;
+  color: var(--text);
+  font-size: .75rem;
+}
+.modmenu__row:hover { background: rgba(255, 170, 0, .1); color: var(--gold-bright); }
+
+/* ═════════════════════════ the tip sheet ═════════════════════════ */
+
+.tipsheet { display: flex; flex-direction: column; gap: var(--ob-gap); align-items: stretch; }
+.tipsheet__who {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-panel);
+  background: rgba(18, 18, 22, .8);
+  border: 1px solid var(--ob-line);
+}
+.tipsheet__who b { font-size: .9375rem; }
+.tipsheet__amt {
+  text-align: center;
+  font-size: 1.75rem; font-weight: 800; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(255, 170, 0, .35);
+}
+.tipsheet__input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--r-crisp);
+  background: rgba(10, 10, 12, .9);
+  border: 1px solid var(--ob-line);
+  color: var(--text); font-size: 1rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tipsheet__input:focus { outline: none; border-color: var(--gold-bright); }
+.tipsheet__go { width: 100%; justify-content: center; }
+
+/* ═════════════════════════ the vault jackpot bar ═════════════════════════ */
+
+/* Anchored directly below the navbar and deliberately thin: it is a background fact the eye should
+   catch on its own, not a banner competing with the page. */
+.vjp {
+  position: sticky; top: var(--top-h);
+  z-index: 25;
+  display: flex; flex-direction: column;
+  background: rgba(10, 10, 12, .92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--ob-line);
+}
+.vjp[hidden] { display: none; }
+
+.vjp__bar { height: 3px; width: 100%; background: rgba(255, 255, 255, .05); overflow: hidden; }
+.vjp__fill {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-body), var(--gold-bright));
+  transition: width .6s var(--ob-ease);
+}
+.vjp__label {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  padding: 3px 12px 4px;
+}
+.vjp__cap { font-size: .5rem; letter-spacing: .26em; color: var(--faint); }
+.vjp__amt {
+  font-size: .75rem; font-weight: 800; color: var(--gold-body);
+  font-variant-numeric: tabular-nums;
+}
+/* Past the last payout, the bar stops being scenery. */
+.vjp[data-hot="1"] .vjp__amt {
+  color: var(--gold-bright);
+  text-shadow: 0 0 14px rgba(255, 215, 0, .5);
+}
+.vjp[data-hot="1"] .vjp__fill { box-shadow: 0 0 12px rgba(255, 170, 0, .8); }
+.vjp__amt.pop { animation: vjpPop .42s var(--ob-ease); }
+@keyframes vjpPop {
+  0%   { transform: translateY(0) scale(1); }
+  40%  { transform: translateY(-2px) scale(1.1); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vjp__fill { transition: none; }
+  .vjp__amt.pop { animation: none; }
+}
+
+/* ═════════════════════════ the jackpot flare ═════════════════════════ */
+
+.vjpflare {
+  position: fixed; inset: 0; z-index: 120;
+  display: grid; place-items: center;
+  /* Obsidian glass: dark enough that the gold is the only thing in the room. */
+  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .88), rgba(6, 7, 10, .97));
+  backdrop-filter: blur(6px);
+  animation: flareIn .3s var(--ob-ease) both;
+}
+.vjpflare__coins { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.vjpflare__card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 34px clamp(26px, 6vw, 60px);
+  border-radius: var(--r-panel);
+  background: rgba(18, 18, 22, .84);
+  border: 1px solid rgba(255, 215, 0, .3);
+  box-shadow: 0 0 80px -20px rgba(255, 170, 0, .55), 0 30px 70px -40px rgba(0, 0, 0, 1);
+}
+.vjpflare__kicker { font-size: .6875rem; letter-spacing: .38em; color: var(--gold-body); }
+.vjpflare__fig {
+  font-size: clamp(2.25rem, 9vw, 4rem); font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 50px rgba(255, 170, 0, .6);
+}
+.vjpflare__go { min-width: 220px; justify-content: center; }
+
+@keyframes flareIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vjpflare { animation: none; }
+}
+
+/* ═════════════════════════ spectator side bets ═════════════════════════ */
+
+/* Floats over the arena's bottom-left, opposite the leaderboard, so neither overlay ever covers the
+   other and the middle of the pit — where the game is — stays clear. */
+.sbet {
+  position: absolute; left: 12px; bottom: 90px;
+  width: min(250px, 46vw);
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: auto;
+  z-index: 4;
+}
+.sbet__cap { font-size: .5rem; letter-spacing: .26em; color: var(--faint); padding-left: 2px; }
+.sbet__card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 9px;
+  border-radius: var(--r-panel);
+  background: rgba(6, 7, 10, .68);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 215, 0, .14);
+  box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 1);
+}
+.sbet__card[data-locked="1"] { opacity: .62; }
+.sbet__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sbet__pool {
+  color: var(--gold-bright); font-size: .8125rem; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.sbet__clock { font-size: .625rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.sbet__sides { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sbet__side {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 7px 4px;
+  border-radius: var(--r-crisp);
+  border: 1px solid var(--ob-line);
+  background: rgba(18, 18, 22, .8);
+  color: var(--text);
+  transition: border-color var(--ob-quick), background var(--ob-quick);
+}
+.sbet__side b { font-size: .5625rem; letter-spacing: .12em; font-weight: 800; }
+/* The multiplier is the number a spectator acts on, so it is the biggest thing on the chip. There
+   is deliberately no rate, no percentage and no split anywhere near it. */
+.sbet__side i {
+  font-style: normal; font-size: .875rem; font-weight: 800;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.sbet__side:hover:not(:disabled) { border-color: var(--ob-line-hi); background: rgba(255, 170, 0, .1); }
+.sbet__side:disabled { opacity: .55; }
+.sbet__side[data-mine="1"] { border-color: var(--gold-bright); background: rgba(255, 170, 0, .12); }
+.sbet__mine { font-size: .5625rem; letter-spacing: .1em; color: var(--muted); text-align: center; }
+
+.sbetsheet { display: flex; flex-direction: column; gap: var(--ob-gap); align-items: stretch; }
+.sbetsheet__amt {
+  text-align: center;
+  font-size: 1.75rem; font-weight: 800; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.sbetsheet__out {
+  text-align: center;
+  font-size: .625rem; letter-spacing: .18em; color: var(--muted);
+}
+.sbetsheet__go { width: 100%; justify-content: center; }
+
+@media (max-width: 720px) {
+  .sbet { left: 10px; bottom: 96px; width: min(190px, 52vw); }
+}

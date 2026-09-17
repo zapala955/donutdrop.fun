@@ -1,9 +1,13 @@
-# Donut Upgrader backend
+# Donut Drop cases and upgrader
 
-Backend-only implementation for a DonutSMP Minecraft-item upgrader. There is no frontend code, no
-cash wallet, and no CS2/Steam inventory integration. The repository intentionally ships with an
-empty catalog, so no item can be deposited, wagered, or awarded until an administrator explicitly
-adds an observed Minecraft fingerprint and fixed price through the API.
+Security-focused DonutSMP case and Minecraft-item upgrader backend, integrated with the standalone
+vanilla frontend in `DONUTDROP FRONTEND/Donut Drop`. The backend owns account sessions, the on-site
+balance ledger, custody inventory, case weights and draws, upgrader probabilities and rolls, sales,
+withdrawals, and recent activity.
+
+The repository intentionally ships with an empty catalog and no enabled cases. An administrator
+must add server-observed Minecraft fingerprints and fixed values, allocate reconciled physical
+stock, and configure case pools through authenticated, audited API routes before gameplay is live.
 
 Players prove account control in game. Once the separately reviewed transfer adapter is available,
 allowlisted physical items can be held by a Mineflayer custody bot, wagered as inventory lots, and
@@ -13,11 +17,14 @@ the server; clients must bind each request to the exact current price.
 ## Services
 
 - `services/api-gateway` - English Fastify REST API, authentication, compliance controls, fixed
-  catalog, custody accounting, idempotent transfers, admin operations, and atomic upgrades.
+  catalog, wallet ledger, cases, custody accounting, idempotent transfers, admin operations, and
+  atomic upgrades.
 - `services/minecraft-bot` - isolated Mineflayer worker for in-game identity proof, exact item
   fingerprints, inventory reconciliation, and durable transfer jobs.
 - `packages/provably-fair` - HMAC-SHA256 commitments, deterministic rolls, and integer-only odds.
-- `packages/db/migrations` - PostgreSQL schema and append-only custody, game, event, and audit data.
+- `packages/db/migrations` - PostgreSQL schema and append-only wallet, custody, game, event, and
+  audit data.
+- `DONUTDROP FRONTEND/Donut Drop` - static HTML/CSS/ES-module frontend using the REST API.
 
 ## Security properties
 
@@ -34,6 +41,9 @@ the server; clients must bind each request to the exact current price.
   Unknown physical inventory or count mismatches quarantine the custody bot.
 - Serializable transactions and row locks atomically consume stakes, reserve real target stock,
   record custody movement, resolve the roll, and rotate the committed seed.
+- Case opens lock the wallet, complete published pool, reconciled house stock, and fairness seed in
+  one serializable transaction. Item sales atomically transfer custody to the house and credit an
+  append-only wallet transaction.
 - Server seeds are encrypted with AES-256-GCM. Commitments are available before play, while the
   seed, digest, and roll are stored in the immutable resolved round.
 - Active status, allowed country, adult/age review, verified KYC, terms, cooldown, self-exclusion,
@@ -54,8 +64,10 @@ npm run build
 ```
 
 Copy `.env.example` to `.env` only for local development and replace its deterministic sample
-values. Run `npm run db:migrate` with a migration-owner database URL, then `npm run dev`. The API and
-bot are separate processes and must never share a secret file or database credential.
+values. Run `npm run db:migrate` with a migration-owner database URL, then `npm run dev`. Serve
+`DONUTDROP FRONTEND/Donut Drop` at the exact `APP_ORIGIN` (the checked-in development value is
+`http://localhost:3000`). The API and bot are separate processes and must never share a secret file
+or database credential.
 
 `npm run db:seed` confirms that the checked-in catalog is empty and refuses non-empty direct seeds,
 because catalog changes must go through the authenticated, audited admin API.

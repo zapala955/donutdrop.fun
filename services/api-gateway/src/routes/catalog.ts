@@ -30,7 +30,12 @@ export async function registerCatalogRoutes(app: FastifyInstance, db: Database, 
     const result = await db.query(
       `SELECT c.id, c.minecraft_name, c.display_name, c.image_url, c.unit_value_minor,
               c.price_updated_at,
-              c.metadata, COALESCE(sum(i.quantity), 0)::bigint AS available_quantity
+              c.metadata,
+              -- Nothing can run out when stock is unlimited, and nothing is taken from stock at
+              -- all in cash-only play. Reporting the real (often zero) figure in either mode would
+              -- make the client hide payouts the server would happily award.
+              CASE WHEN $7::boolean THEN 1000000000::bigint
+                   ELSE COALESCE(sum(i.quantity), 0)::bigint END AS available_quantity
          FROM catalog_items c
          LEFT JOIN inventory_lots i ON i.catalog_item_id = c.id
           AND i.owner_user_id IS NULL AND i.state = 'available'
@@ -56,6 +61,7 @@ export async function registerCatalogRoutes(app: FastifyInstance, db: Database, 
         query.limit,
         query.offset,
         provisionedBotIds,
+        config.houseStockUnlimited || config.cashOnlyPlay,
       ],
     );
     return { items: result.rows, limit: query.limit, offset: query.offset };
@@ -65,11 +71,13 @@ export async function registerCatalogRoutes(app: FastifyInstance, db: Database, 
     const result = await db.query(
       `SELECT i.id, i.quantity, i.state, i.created_at, c.id AS catalog_item_id,
               c.minecraft_name, c.display_name, c.image_url, c.unit_value_minor,
+              ((c.unit_value_minor::numeric * $2::integer) / 10000)::bigint AS sell_value_minor,
+              $2::integer AS sell_rate_bps,
               c.price_updated_at, c.metadata
          FROM inventory_lots i JOIN catalog_items c ON c.id = i.catalog_item_id
         WHERE i.owner_user_id = $1 AND i.state IN ('available', 'withdrawal_pending')
         ORDER BY i.created_at, i.id`,
-      [request.authUser?.id],
+      [request.authUser?.id, config.itemSellRateBps],
     );
     return { items: result.rows };
   });

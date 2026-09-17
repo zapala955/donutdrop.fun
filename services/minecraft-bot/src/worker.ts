@@ -5,6 +5,7 @@ import type { BotConfig } from './config.js';
 import type { ApiClient, BotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
+import { parsePaymentMessage } from './payment-chat.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
@@ -83,6 +84,9 @@ export class MinecraftWorker {
         bot.quit('Bot identity mismatch');
         return;
       }
+      // Mineflayer installs the inventory plugin during connection setup. Accessing
+      // `bot.inventory` immediately after createBot can race that initialization.
+      bot.inventory.on('updateSlot', () => this.markInventoryDirty());
       // A snapshot from an earlier network session can never authorize custody operations on a
       // respawned session, even if no inventory event was observed during the disconnect.
       this.invalidateSnapshotState();
@@ -95,7 +99,6 @@ export class MinecraftWorker {
         this.schedule(() => this.run(this.pollJobs(), 'job poll'), this.config.pollIntervalMs);
       }
     });
-    bot.inventory.on('updateSlot', () => this.markInventoryDirty());
     bot.on('windowOpen', () => this.markInventoryDirty());
     bot._client.on('playerChat', (packet: unknown) => {
       const chat = parseVerifiedPlayerChat(packet);
@@ -114,6 +117,16 @@ export class MinecraftWorker {
         this.handleVerifiedPlayerCommand(player.username, chat.identity, chat.message),
         'verified player command',
       );
+    });
+    // Login by payment. This is system chat, so it says who the server claims paid and how
+    // much, and proves neither. The API reports the bot's real balance, and that is what the
+    // gateway checks before it credits anyone; reporting here only starts that check.
+    bot._client.on('packet', (data: unknown, meta: unknown) => {
+      if (packetName(meta) !== 'system_chat') return;
+      const payment = parsePaymentMessage(data);
+      if (!payment) return;
+      if (payment.payer.toLowerCase() === bot.username.toLowerCase()) return;
+      this.run(this.reportPayment(payment.payer, payment.amount), 'payment observation');
     });
     bot.on('windowClose', () => this.markInventoryDirty());
     bot.on('kicked', (reason) =>
@@ -165,6 +178,11 @@ export class MinecraftWorker {
   private invalidateSnapshotState(): void {
     this.inventoryRevision += 1;
     this.snapshotHealthy = false;
+  }
+
+  private async reportPayment(payer: string, amount: number): Promise<void> {
+    this.log.info({ payer, amount }, 'Observed in-game payment');
+    await this.api.reportPayment(payer, amount);
   }
 
   private async handleVerifiedPlayerCommand(
@@ -550,4 +568,11 @@ export class MinecraftWorker {
     this.invalidateSnapshotState();
     await this.snapshot();
   }
+}
+
+/** Packet metadata is untyped at this boundary, so the name is read defensively. */
+function packetName(meta: unknown): string {
+  if (meta === null || typeof meta !== 'object') return '';
+  const name = (meta as Record<string, unknown>)['name'];
+  return typeof name === 'string' ? name : '';
 }

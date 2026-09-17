@@ -8,22 +8,23 @@ import { canonicalJson, safeEqualText, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { safeText } from '../lib/sanitize.js';
 
 const catalogCreateSchema = z
   .object({
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     minecraftName: z.string().regex(/^[a-z0-9_.:-]{1,128}$/),
-    displayName: z.string().trim().min(1).max(128),
+    displayName: safeText(1, 128),
     imageUrl: z.url().startsWith('https://').max(2048).nullable().default(null),
     unitValueMinor: z.string().regex(/^[1-9]\d{0,15}$/),
     enabled: z.boolean().default(false),
     metadata: z.record(z.string(), z.unknown()).default({}),
-    reason: z.string().trim().min(3).max(256),
+    reason: safeText(3, 256),
   })
   .strict();
 const catalogUpdateSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(128).optional(),
+    displayName: safeText(1, 128).optional(),
     imageUrl: z.url().startsWith('https://').max(2048).nullable().optional(),
     unitValueMinor: z
       .string()
@@ -31,7 +32,7 @@ const catalogUpdateSchema = z
       .optional(),
     enabled: z.boolean().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
-    reason: z.string().trim().min(3).max(256),
+    reason: safeText(3, 256),
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
@@ -40,7 +41,7 @@ const stockSchema = z
     catalogItemId: z.uuid(),
     botId: z.uuid(),
     quantity: z.number().int().min(1).max(100_000),
-    reason: z.string().trim().min(3).max(256),
+    reason: safeText(3, 256),
   })
   .strict();
 const complianceSchema = z
@@ -48,19 +49,19 @@ const complianceSchema = z
     ageVerified: z.boolean(),
     kycStatus: z.enum(['not_started', 'pending', 'verified', 'rejected']),
     activate: z.boolean().default(false),
-    reason: z.string().trim().min(3).max(256),
+    reason: safeText(3, 256),
   })
   .strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
 const botQuarantineSchema = z
   .object({
     quarantined: z.boolean(),
-    reason: z.string().trim().min(3).max(256),
+    reason: safeText(3, 256),
   })
   .strict();
 const adminListSchema = z
   .object({
-    search: z.string().trim().min(1).max(64).optional(),
+    search: safeText(1, 64).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
     offset: z.coerce.number().int().min(0).max(10_000).default(0),
   })

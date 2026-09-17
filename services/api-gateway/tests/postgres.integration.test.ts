@@ -361,6 +361,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
           '005_bot_telemetry_retention.sql',
           '006_admin_mfa_key_binding.sql',
           '007_deposit_authorization_leases.sql',
+          '008_cases_wallets_and_sales.sql',
         ],
       );
 
@@ -379,10 +380,14 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
              ('audit_log', 'sequence_no'),
              ('sessions', 'admin_mfa_key_fingerprint'),
              ('deposit_authorization_leases', 'authorization_event_id'),
-             ('deposit_authorization_leases', 'token_hash')
+             ('deposit_authorization_leases', 'token_hash'),
+             ('user_wallets', 'balance_minor'),
+             ('case_rounds', 'pool_snapshot'),
+             ('case_rounds', 'awarded_weight'),
+             ('inventory_sales', 'proceeds_minor')
            )`,
       );
-      assert.equal(columns.rowCount, 11);
+      assert.equal(columns.rowCount, 15);
 
       const ownership = await owner.query<{ tableowner: string }>(
         `SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public'`,
@@ -415,7 +420,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await assertRuntimeDatabaseRole(runtime);
         await assert.doesNotReject(runtime.query('SELECT count(*) FROM audit_log'));
         const readiness = await runtime.query<{ ready: boolean }>(
-          'SELECT public.donut_schema_ready_v7() AS ready',
+          'SELECT public.donut_schema_ready_v19() AS ready',
         );
         assert.equal(readiness.rows[0]?.ready, true);
 
@@ -425,6 +430,9 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
           'DELETE FROM custody_movements WHERE false',
           'DELETE FROM inbound_bot_events WHERE false',
           'DELETE FROM bot_inventory_snapshots WHERE false',
+          'DELETE FROM wallet_transactions WHERE false',
+          'UPDATE case_rounds SET price_minor = price_minor WHERE false',
+          'DELETE FROM inventory_sales WHERE false',
           'UPDATE deposit_authorization_leases SET expires_at = expires_at WHERE false',
           'DELETE FROM deposit_authorization_leases WHERE false',
           'SELECT * FROM schema_migration_checksums',

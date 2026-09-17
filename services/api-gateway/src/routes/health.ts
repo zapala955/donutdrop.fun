@@ -14,7 +14,7 @@ export async function registerHealthRoutes(
   app.get('/health/ready', async (_request, reply) => {
     try {
       const [schema, cacheResponse] = await Promise.all([
-        db.query<{ ready: boolean }>('SELECT public.donut_schema_ready_v7() AS ready'),
+        db.query<{ ready: boolean }>('SELECT public.donut_schema_ready_v19() AS ready'),
         cache ? cache.ping() : Promise.resolve('PONG'),
       ]);
       if (schema.rows[0]?.ready !== true || cacheResponse !== 'PONG') {

@@ -1,0 +1,71 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "assets/css/surface.css"
+        ],
+        "createdAt": "2026-09-12T12:56:48.909Z",
+        "reason": "Neon rail and border glows requested by name: 'high-performance neon track with smooth gradient pulses' and 'dynamic border glows'. Scoped to surface.css so app.css keeps full coverage."
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "assets/css/app.css"
+        ],
+        "createdAt": "2026-09-12T12:56:49.099Z",
+        "reason": "Live-drops ticker: the feed IS changing content, which is the carve-out the rule names. Product feature, predates this work."
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-09-12T12:56:57.937Z",
+        "reason": "Neon rail and dynamic border glows requested by name in the brief: 'high-performance neon track with smooth gradient pulses' and 'dynamic border glows'. Lives in surface.css, confined to the level rail, totals share bars and card hover rings."
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-09-12T12:56:58.111Z",
+        "reason": "Live-drops ticker: the feed IS changing content, the carve-out the rule itself names. Product feature, predates this work."
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "assets/css/surface.css"
+        ],
+        "createdAt": "2026-09-12T13:22:47.161Z",
+        "reason": "The Minecraft pixel grid, requested by name: 'subtle pixel-grid textures'. A 4px repeating hairline at .016 alpha, used as block texture on panels, not as decorative stripes. Scoped to surface.css."
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-09-12T13:22:55.008Z",
+        "reason": "The Minecraft pixel grid, requested by name: 'subtle pixel-grid textures'. A 4px repeating hairline at .016 alpha used as block texture on panels, not as decorative stripes."
+      },
+      {
+        "rule": "gpt-thin-border-wide-shadow",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-09-12T14:46:42.272Z",
+        "reason": "The Withdraw button. A glowing withdraw control was requested by name ('a high-contrast glowing Withdraw Button'), and on a gambling site the cash-out action being the loudest thing in the nav is deliberate. The other two instances the rule caught were real and were fixed: the FX button now commits to a rose edge, and the glass Log in button to a contact shadow."
+      }
+    ]
+  }
+}

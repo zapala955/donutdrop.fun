@@ -4,6 +4,7 @@ import pg from 'pg';
 import { readOneLineSetting } from '../src/lib/audit-checkpoint-config.js';
 import { assertRuntimeDatabaseRole } from '../src/lib/database-role.js';
 import { maintainDepositIntents } from '../src/lib/deposit-maintenance.js';
+import { sweepDiscordControl } from '../src/lib/discord-control.js';
 
 interface MaintenanceResult {
   status: 'completed' | 'skipped';
@@ -14,6 +15,9 @@ interface MaintenanceResult {
   challengesRemoved?: number;
   inboundEventsRemoved?: string;
   inventorySnapshotsRemoved?: string;
+  discordLinksRemoved?: number;
+  discordConfirmationsRemoved?: number;
+  discordBudgetsRemoved?: number;
 }
 
 function maintenanceIntervalSeconds(): number {
@@ -69,6 +73,10 @@ async function runMaintenance(pool: pg.Pool): Promise<MaintenanceResult> {
       inventory_snapshots_deleted: string;
     }>('SELECT * FROM public.donut_prune_bot_telemetry()');
     const telemetryCounts = telemetry.rows[0];
+    /* Expired links, spent confirmations and stale budget windows are reconstructible noise. The
+     * Discord COMMAND LOG is deliberately not swept: it has no DELETE grant at all, because it is
+     * the record of who asked for what. */
+    const discord = await sweepDiscordControl(client);
     await client.query('COMMIT');
     transactionOpen = false;
     return {
@@ -80,6 +88,9 @@ async function runMaintenance(pool: pg.Pool): Promise<MaintenanceResult> {
       challengesRemoved: challenges.rowCount ?? 0,
       inboundEventsRemoved: telemetryCounts?.inbound_events_deleted ?? '0',
       inventorySnapshotsRemoved: telemetryCounts?.inventory_snapshots_deleted ?? '0',
+      discordLinksRemoved: discord.linksRemoved,
+      discordConfirmationsRemoved: discord.confirmationsRemoved,
+      discordBudgetsRemoved: discord.budgetsRemoved,
     };
   } catch (error) {
     if (transactionOpen) await client.query('ROLLBACK').catch(() => undefined);

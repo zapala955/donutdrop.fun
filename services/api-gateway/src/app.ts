@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
+import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
+import { createHash } from 'node:crypto';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
@@ -8,18 +10,45 @@ import { Redis } from 'ioredis';
 import type { AppConfig } from './config.js';
 import { applyBotResponseSignature } from './lib/bot-auth.js';
 import { Database } from './lib/db.js';
+import { sessionCookieName } from './lib/auth.js';
 import { assertRuntimeDatabaseRole } from './lib/database-role.js';
 import { AppError } from './lib/errors.js';
 import { registerAccountRoutes } from './routes/account.js';
+import { registerActivityRoutes } from './routes/activity.js';
+import { registerBattleRoutes } from './routes/battles.js';
+import { registerCommunityRoutes } from './routes/community.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerPayLoginRoutes } from './routes/auth-pay.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
+import { registerChatRoutes } from './routes/chat.js';
+import { registerDevRoutes } from './routes/dev.js';
+import { registerDiscordControlRoutes } from './routes/discord-control.js';
+import { registerEngagementRoutes } from './routes/engagement.js';
+import { registerCaseRoutes } from './routes/cases.js';
+import { registerDuelRoutes } from './routes/duels.js';
+import { registerEconomyRoutes } from './routes/economy.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMinecraftInternalRoutes } from './routes/minecraft-in.js';
+import { registerInsightRoutes } from './routes/insights.js';
+import { registerReferralRoutes } from './routes/referrals.js';
+import { registerSlitherRoutes } from './routes/slither.js';
+import { registerSideBetRoutes } from './routes/sidebets.js';
+import { registerSocialRoutes } from './routes/social.js';
+import { registerRewardRoutes } from './routes/rewards.js';
+import { registerVipRoutes } from './routes/vip.js';
+import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
 import { registerUpgradeRoutes } from './routes/upgrades.js';
+import { registerVaultRoutes } from './routes/vault.js';
 
 export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
+  /* Before anything is served. The VIP ceiling, the four tier rakebacks and the referral share are
+   * all drawn from the same house margin, and nothing else adds them up — each is individually
+   * sane and the combination is what can be insolvent. Refusing to boot is the only version of
+   * this check that cannot be ignored. */
+  assertVipSolvency(config);
+
   const app = Fastify({
     // Only the dedicated edge subnet may supply forwarding headers. A boolean `true`
     // here would let direct clients spoof their IP and bypass rate limits.
@@ -77,16 +106,58 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
     maxAge: 600,
   });
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    /* This service returns JSON and nothing else, so the policy forbids everything. If a response
+     * is ever rendered as a document — by a browser sniffing an error page, or by a future
+     * endpoint that serves HTML by mistake — there is nothing it is permitted to load or execute.
+     * The frontend ships its own, separate policy; this one is not it. */
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        'default-src': ["'none'"],
+        'base-uri': ["'none'"],
+        'form-action': ["'none'"],
+        'frame-ancestors': ["'none'"],
+        sandbox: [],
+      },
+    },
     crossOriginResourcePolicy: { policy: 'same-site' },
     hsts: config.secureCookies
       ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
       : false,
   });
+  /* WebSockets, for Case Battles.
+   *
+   * Registered with a small frame cap: this socket carries watch/unwatch and a ping, nothing
+   * larger, and every action that moves money is a CSRF-guarded REST call. A generous frame
+   * limit on a socket that never needs one is free memory pressure for anyone who asks. */
+  await app.register(websocket, {
+    options: { maxPayload: 8 * 1024, clientTracking: false },
+  });
+
   await app.register(rateLimit, {
     max: 120,
     timeWindow: '1 minute',
     redis,
+    /* Layered: per authenticated user first, per IP otherwise.
+     *
+     * Keying on IP alone is wrong in both directions. Behind a carrier NAT or a university proxy
+     * thousands of players share one address, so one abuser throttles everybody around them; and
+     * a single account rotating through addresses is never limited at all. The session cookie is
+     * the stable identity, so it is the key whenever there is one.
+     *
+     * The cookie is read raw rather than through the auth guard because rate limiting runs before
+     * authentication — the point is to bound the work an attacker can make the server do, and a
+     * limiter that must first verify a session has already done the expensive part. It is only an
+     * identity hint, never an authorisation decision.
+     */
+    keyGenerator(request) {
+      const raw = request.cookies?.[sessionCookieName(config)];
+      if (typeof raw === 'string' && raw.length > 0) {
+        // Hashed so a session token never lands in a Redis key or a rate-limit log line.
+        return 'u:' + createHash('sha256').update(raw).digest('hex').slice(0, 32);
+      }
+      return 'ip:' + request.ip;
+    },
     addHeaders: {
       'x-ratelimit-limit': true,
       'x-ratelimit-remaining': true,
@@ -103,11 +174,35 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
 
   await registerHealthRoutes(app, db, redis);
   await registerAuthRoutes(app, db, config);
+  await registerPayLoginRoutes(app, db, config);
   await registerAccountRoutes(app, db, config);
+  await registerActivityRoutes(app, db, config);
+  await registerCaseRoutes(app, db, config);
   await registerCatalogRoutes(app, db, config);
+  await registerChatRoutes(app, db, config);
+  await registerBattleRoutes(app, db, config);
+  await registerDuelRoutes(app, db, config);
+  await registerSlitherRoutes(app, db, config);
+  await registerSocialRoutes(app, db, config);
+  await registerSideBetRoutes(app, db, config);
+  await registerCommunityRoutes(app, db, config);
+  await registerEconomyRoutes(app, db, config);
   await registerTransferRoutes(app, db, config);
   await registerUpgradeRoutes(app, db, config);
+  await registerVaultRoutes(app, db, config);
+  await registerEngagementRoutes(app, db, config);
+  await registerReferralRoutes(app, db, config);
+  await registerRewardRoutes(app, db, config);
+  await registerInsightRoutes(app, db, config);
+  await registerVipRoutes(app, db, config);
+  // Registers nothing unless DEV_LOGIN_ENABLED is on, and config refuses to boot with it on
+  // in production. See routes/dev.ts for the full fencing.
+  await registerDevRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
+  /* Registers nothing at all unless DISCORD_CONTROL_ENABLED is on — see the note in the module.
+   * Sits next to the admin routes because that is what it is: a second, narrower door into the
+   * same privileges, and the two belong where a reader finds them together. */
+  await registerDiscordControlRoutes(app, db, config);
   await registerMinecraftInternalRoutes(app, db, config);
 
   app.setNotFoundHandler(async (_request, reply) =>

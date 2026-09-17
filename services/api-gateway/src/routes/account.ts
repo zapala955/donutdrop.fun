@@ -16,18 +16,17 @@ const accountSchema = z
     acceptTerms: z.literal(true),
   })
   .strict();
+/* Cooldown only. The self-set daily wager limit was removed along with the platform-wide cap, so
+ * the one remaining control here is the one that pauses play outright. */
 const limitsSchema = z
   .object({
-    dailyWagerLimitMinor: z.union([z.string().regex(/^[1-9]\d{0,15}$/), z.null()]).optional(),
     cooldownHours: z
       .number()
       .int()
       .min(1)
-      .max(24 * 30)
-      .optional(),
+      .max(24 * 30),
   })
-  .strict()
-  .refine((value) => value.dailyWagerLimitMinor !== undefined || value.cooldownHours !== undefined);
+  .strict();
 const exclusionSchema = z
   .object({ durationDays: z.number().int().min(1).max(3650).nullable() })
   .strict();
@@ -44,7 +43,6 @@ interface AccountRow {
 }
 
 interface LimitsRow {
-  daily_wager_limit_minor: string | null;
   cooldown_until: Date | null;
   self_excluded_until: Date | null;
 }
@@ -56,7 +54,7 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
     const result = await db.query(
       `SELECT u.id, u.minecraft_identity, u.minecraft_username, u.role, u.status, u.country_code,
               u.date_of_birth, u.terms_accepted_at, u.age_verified_at, u.kyc_status,
-              r.daily_wager_limit_minor, r.cooldown_until, r.self_excluded_until
+              r.cooldown_until, r.self_excluded_until
          FROM users u JOIN responsible_limits r ON r.user_id = u.id WHERE u.id = $1`,
       [request.authUser?.id],
     );
@@ -121,41 +119,20 @@ export async function registerAccountRoutes(app: FastifyInstance, db: Database, 
   app.put('/v1/account/limits', { preHandler: guards.requireCsrf }, async (request) => {
     const body = parseWith(limitsSchema, request.body);
     return db.transaction(async (client) => {
-      const current = await client.query<{ daily_wager_limit_minor: string | null }>(
-        'SELECT daily_wager_limit_minor FROM responsible_limits WHERE user_id = $1 FOR UPDATE',
-        [request.authUser?.id],
-      );
-      const existing = current.rows[0]?.daily_wager_limit_minor;
-      if (body.dailyWagerLimitMinor === null && existing !== null && existing !== undefined) {
-        throw new AppError(
-          409,
-          'LIMIT_RELAXATION_REQUIRES_SUPPORT',
-          'Contact support to remove a limit',
-        );
-      }
-      if (
-        typeof body.dailyWagerLimitMinor === 'string' &&
-        existing &&
-        BigInt(body.dailyWagerLimitMinor) > BigInt(existing)
-      ) {
-        throw new AppError(
-          409,
-          'LIMIT_INCREASE_REQUIRES_COOLING_OFF',
-          'Limit increases require support and a cooling-off period',
-        );
-      }
+      /* GREATEST, so a cooldown only ever moves forward. Calling this with a shorter window than
+       * the one already running does not shorten it — which is the whole point of a cooldown, and
+       * is why the two relaxation guards that used to sit here are not needed for this field.
+       * Those guards protected the self-set wager limit, which no longer exists. */
       const result = await client.query<LimitsRow>(
         `UPDATE responsible_limits
-            SET daily_wager_limit_minor = COALESCE($2::bigint, daily_wager_limit_minor),
-                cooldown_until = CASE WHEN $3::integer IS NULL THEN cooldown_until
-                                      ELSE GREATEST(
-                                        COALESCE(cooldown_until, '-infinity'::timestamptz),
-                                        now() + ($3 * interval '1 hour')
-                                      ) END,
+            SET cooldown_until = GREATEST(
+                  COALESCE(cooldown_until, '-infinity'::timestamptz),
+                  now() + ($2 * interval '1 hour')
+                ),
                 updated_at = now()
           WHERE user_id = $1
-          RETURNING daily_wager_limit_minor, cooldown_until, self_excluded_until`,
-        [request.authUser?.id, body.dailyWagerLimitMinor ?? null, body.cooldownHours ?? null],
+          RETURNING cooldown_until, self_excluded_until`,
+        [request.authUser?.id, body.cooldownHours],
       );
       return { limits: result.rows[0] };
     });

@@ -414,17 +414,8 @@ describe('identity and compliance hardening', () => {
         work({
           query: async (sql: string) => {
             statements.push(sql);
-            if (sql.includes('SELECT daily_wager_limit_minor')) {
-              return result([{ daily_wager_limit_minor: null }]);
-            }
-            if (sql.includes('RETURNING daily_wager_limit_minor')) {
-              return result([
-                {
-                  daily_wager_limit_minor: null,
-                  cooldown_until: new Date(),
-                  self_excluded_until: null,
-                },
-              ]);
+            if (sql.includes('RETURNING cooldown_until')) {
+              return result([{ cooldown_until: new Date(), self_excluded_until: null }]);
             }
             return result([]);
           },

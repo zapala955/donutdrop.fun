@@ -1,0 +1,2565 @@
+/* ═══════════════════════════════════════════════════════════════
+   platform.css — crates, quests, war room, fair hub, ticker, amounts
+   ═══════════════════════════════════════════════════════════════
+   Obsidian and gunmetal underneath, gradient gold on top, glass where a
+   surface needs to float. Zero purple, and nothing in the 250-335 hue wedge.
+
+   THE CONTAINMENT RULE
+   --------------------
+   Every box in this file is built so text cannot escape it. That means, without
+   exception:
+
+     - grid and flex children get `min-width: 0`, because the default `auto`
+       minimum refuses to shrink below content and is the single most common
+       cause of a blown-out row;
+     - anything holding a name, a player, or a server-supplied string gets
+       `overflow-wrap: anywhere` so one long unbroken token cannot widen its
+       parent;
+     - numbers that must stay on one line get `white-space: nowrap` AND a
+       `flex: none`, so they win the space fight instead of being clipped;
+     - nothing uses a fixed height to hold text. Heights come from content and
+       padding, so a longer translation or a bigger font grows the box.
+
+   Tables and the ticker are the only horizontal scrollers, and each owns its
+   own overflow container.                                                   */
+
+.crates, .piggy, .quests, .war, .fair {
+  --p-obsidian: #0a0a0c;
+  --p-charcoal: #14120c;
+  --p-panel:    #17140d;
+
+  --p-gold:        #ffaa00;
+  --p-gold-bright: var(--gold-bright);
+  --p-gold-deep:   #a35f00;
+  --p-cyan:        #ffd700;
+  /* Success is cyan, not green: gold is the brand and would erase the
+     win/loss signal if it also meant "this went up". */
+  --p-win:         #ffd700;
+
+  --p-crimson:     #ff2222;
+
+  --p-ramp: linear-gradient(135deg, var(--p-gold-deep) 0%, var(--p-gold) 45%, var(--p-gold-bright) 100%);
+  --p-ease: cubic-bezier(.22, 1, .36, 1);
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ── shared glass surface ── */
+.glass {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(38, 33, 20, .55), rgba(12, 11, 8, .72));
+  /* A flat border is the fallback; the gradient stroke is painted by ::before below.
+     Declaring both means an engine without mask-composite still gets a defined edge
+     rather than none at all. */
+  border: 1px solid rgba(255, 170, 0, .18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 150, .14),
+    inset 0 -1px 0 rgba(0, 0, 0, .7),
+    0 18px 50px -28px rgba(0, 0, 0, .95);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--p-gold) 30%, var(--p-gold-bright) 50%, var(--p-gold) 70%, transparent);
+  opacity: .75;
+}
+
+/* The gradient stroke.
+ *
+ * A border cannot itself take a gradient, so this is a 1px inset ring: a padding-box mask
+ * subtracted from a border-box one leaves exactly the border area, and the gradient shows through
+ * only there. Bright at the top-left where a light would catch it, almost gone at the far corner.
+ *
+ * Behind @supports because mask-composite is the part with patchy support; without it the flat
+ * border above stands on its own and nothing looks broken. */
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  .glass { border-color: transparent; }
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(255, 170, 0, .18), rgba(255, 170, 0, .06));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  /* The stroke is absolutely positioned, so anything that must sit over it needs a stacking
+     context of its own. */
+  .glass > * { position: relative; z-index: 1; }
+}
+
+.empty {
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: .875rem;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+/* ════════════════════ live feed ════════════════════
+   A table, not a marquee. Rows are scannable and comparable, which is the only reason anyone
+   looks at a feed like this; a scroller is unreadable the moment you want to compare two lines.
+
+   IN THE FLOW, NOT OVER IT
+   ------------------------
+   This was `position: fixed; bottom: 12px; max-height: 46vh; z-index: 40` — a floating panel
+   welded over the bottom of every route, covering the hero and roughly half the viewport, with a
+   Hide button to get it out of the way. A feed is ambient information, and ambient information
+   does not get to occupy the foreground of every page and make the player dismiss it before they
+   can read what they came for. It is now an ordinary section at the foot of the main column. It
+   scrolls past like everything else; the rows get their own internal scroller so a long feed
+   cannot push the page down a screen.                                                         */
+.feedwrap {
+  margin-top: 22px;
+  min-width: 0;
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  /* Obsidian glass: a dark pane with a lit top edge, over a blur of whatever is behind it. */
+  background: linear-gradient(180deg, rgba(28, 24, 16, .82), rgba(10, 10, 12, .94));
+  border: 1px solid rgba(255, 170, 0, .14);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .1), 0 20px 46px -34px rgba(0, 0, 0, .95);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.feed__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, .05);
+}
+.feed__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--p-gold);
+  box-shadow: 0 0 10px var(--p-gold);
+  animation: feedpulse 2s ease-in-out infinite;
+}
+@keyframes feedpulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .45; transform: scale(.78); }
+}
+.feed__title {
+  flex: none;
+  margin: 0;
+  font-size: .875rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: var(--text);
+}
+.feed__sub {
+  min-width: 0;
+  font-size: .625rem;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One grid definition, shared by the header strip and every row, so the columns cannot drift
+   apart. Changing the track list in one place moves both. */
+.feed__cols,
+.feedrow {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.15fr)   /* game            */
+    minmax(0, 1fr)      /* masked player   */
+    minmax(0, 58px)     /* timestamp       */
+    minmax(0, 104px)    /* wager           */
+    minmax(0, 72px)     /* multiple        */
+    minmax(0, 116px);   /* result          */
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.feed__cols {
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.feed__cols > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed__cols > span:nth-child(n+4) { text-align: right; }
+
+.feed__rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Its own scroller. The feed is as long as the server sends and the page must not grow with it. */
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 170, 0, .3) transparent;
+}
+.feed__rows::-webkit-scrollbar { width: 8px; }
+.feed__rows::-webkit-scrollbar-track { background: transparent; }
+.feed__rows::-webkit-scrollbar-thumb {
+  background: rgba(255, 170, 0, .26);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.feedrow {
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, .035);
+  /* The gold bleed marks a winning round without adding a colour to the type. */
+  background-image: linear-gradient(90deg, transparent, transparent);
+  transition: background-color .16s ease;
+}
+.feedrow:last-child { border-bottom: 0; }
+.feedrow:hover { background-color: rgba(255, 255, 255, .03); }
+.feedrow[data-won="1"] {
+  background-image: linear-gradient(90deg, rgba(255, 170, 0, .07), transparent 42%);
+}
+
+.feedrow__game {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.feedrow__who {
+  min-width: 0;
+  font-size: .75rem;
+  color: var(--muted);
+  letter-spacing: .06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Crisp grey, and never the thing that gets squeezed. */
+.feedrow__t {
+  flex: none;
+  min-width: 0;
+  text-align: right;
+  font-size: .625rem;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.feedrow__stake,
+.feedrow__mult,
+.feedrow__delta {
+  min-width: 0;
+  text-align: right;
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--faint);
+}
+.feedrow__stake,
+.feedrow__delta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.feedrow__stake { color: var(--text); }
+
+.feedrow__coin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffe89a, #ffaa00 58%, #a35f00);
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, .35);
+}
+
+/* Cyan only when the round actually returned more than it cost. Everything at or below 1x stays
+   grey: a 0.99x is a loss and colouring it as a win would be a lie told in CSS. Cyan rather than
+   gold, because gold is the brand — it is the CTA, the nav pill and the coin on every row, so
+   using it for "this went up" would erase the one signal the column exists to carry. */
+.feedrow__mult[data-up="1"] { color: var(--p-win); font-weight: 800; }
+.feedrow__delta[data-up="1"] { color: var(--p-win); font-weight: 800; }
+.feedrow__delta[data-up="0"] { color: var(--p-crimson); }
+
+/* ── team contributions ── */
+.feedrow--team { --team: var(--p-gold); }
+.feedrow--team .feedrow__game { color: var(--muted); }
+.feedrow__team {
+  flex: none;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--team);
+  background: color-mix(in srgb, var(--team) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--team) 38%, transparent);
+}
+.feedrow__na { color: var(--faint); opacity: .7; font-size: .625rem; }
+
+.feed__empty {
+  margin: 0;
+  padding: 22px 16px;
+  text-align: center;
+  font-size: .75rem;
+  color: var(--faint);
+}
+
+@media (max-width: 860px) {
+  /* The game column is the first thing to go: every row on a phone is still legible without it,
+     and the figures are not. */
+  .feed__cols,
+  .feedrow {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 50px) minmax(0, 88px) minmax(0, 62px) minmax(0, 96px);
+    gap: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .feed__cols > span:first-child,
+  .feedrow__game { display: none; }
+  .feed__sub { display: none; }
+  .feed__rows { max-height: 340px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed__dot { animation: none; }
+  .feedrow { transition: none; }
+}
+
+/* ════════════════════ the crate bench ════════════════════
+   Three regions, fixed in place:
+
+     .bench__rail   what is selected, how many, what it costs, the one button that spends money.
+                    Sticky, so the commitment never scrolls away while the wall is browsed.
+     .bench__wall   search, sort, the two range filters, the grid.
+     .drawer        the drop table of whatever is selected — always open, never behind a modal.
+
+   Every child of a grid or flex row here carries min-width: 0. Crate names are server-supplied
+   and some of them are long; without it a single card widens the whole wall.                  */
+
+/* Visible to a screen reader, to nothing else. Labels the layout otherwise says with position. */
+.sronly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The coin that precedes every figure on this page. A drawn disc rather than a currency symbol,
+   because the amounts are in-game and a dollar sign would claim otherwise. */
+.coin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffe89a, #ffaa00 58%, #a35f00);
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, .35);
+}
+
+.bench {
+  display: grid;
+  grid-template-columns: minmax(0, 296px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+.bench__rail { min-width: 0; position: sticky; top: 82px; }
+.bench__wall { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* ── the rail ── */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(34, 29, 18, .72), rgba(11, 10, 8, .92));
+  border: 1px solid rgba(255, 170, 0, .16);
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, .9);
+}
+.rail__sec { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rail__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rail__empty { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rail__empty p {
+  margin: 0;
+  font-size: .75rem;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.rail__pick {
+  --risk: var(--p-gold);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--risk) 16%, transparent), transparent 62%),
+    rgba(0, 0, 0, .42);
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-left: 2px solid var(--risk);
+}
+.rail__pick img {
+  flex: none;
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .6));
+}
+.rail__pickmeta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rail__name {
+  font-size: .875rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rail__price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 100%;
+  font-size: .875rem;
+  color: var(--p-gold-bright);
+  white-space: nowrap;
+}
+
+/* Quantity. Five fixed choices rather than a free field: each one is a separate paid round, and a
+   number box invites typing 500 into something that would fire five hundred requests. */
+.qty { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; min-width: 0; }
+.qty__b {
+  min-width: 0;
+  padding: 9px 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: .875rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color .18s var(--p-ease), border-color .18s var(--p-ease), background-color .18s var(--p-ease);
+}
+.qty__b:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
+.qty__b[aria-pressed="true"] {
+  color: #0a0a0c;
+  background-image: var(--p-ramp);
+  border-color: transparent;
+  box-shadow: 0 0 18px -6px var(--p-gold);
+}
+
+.quick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .38);
+  border: 1px solid rgba(255, 255, 255, .07);
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .18s var(--p-ease), border-color .18s var(--p-ease);
+}
+.quick svg { flex: none; width: 14px; height: 14px; fill: currentColor; }
+.quick > span { flex: 1 1 auto; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.quick__sw {
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 17px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  transition: background .2s var(--p-ease);
+}
+.quick__sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #6b7280;
+  transition: transform .2s var(--p-ease), background .2s var(--p-ease);
+}
+.quick[aria-checked="true"] { color: var(--text); border-color: rgba(255, 170, 0, .5); }
+.quick[aria-checked="true"] .quick__sw { background: color-mix(in srgb, var(--p-gold) 45%, transparent); }
+.quick[aria-checked="true"] .quick__sw::after { transform: translateX(15px); background: var(--p-gold-bright); }
+
+.rail__cost {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 170, 0, .12);
+}
+.rail__total {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--p-gold-bright);
+  white-space: nowrap;
+}
+.rail__go { width: 100%; text-align: center; }
+.rail__note {
+  margin: 0;
+  text-align: center;
+  font-size: .625rem;
+  line-height: 1.5;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+/* ── the wall bar ── */
+.wallbar { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.wallbar__search { position: relative; flex: 1 1 240px; min-width: 0; display: flex; }
+.wallbar__search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--faint);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.wallbar__search input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px 10px 34px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: .75rem;
+  outline: none;
+  transition: border-color .18s var(--p-ease);
+}
+.wallbar__search input::placeholder { color: var(--faint); }
+.wallbar__sort { flex: 0 1 200px; min-width: 0; display: flex; }
+.wallbar__sort select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: .75rem;
+  outline: none;
+  cursor: pointer;
+}
+.wallbar__sort option { background: #14120c; color: var(--text); }
+.wallbar__search input:focus,
+.wallbar__sort select:focus { border-color: var(--p-gold); }
+
+/* ── the two range filters ──
+   Each is a pair of native range inputs stacked on one track. The inputs are transparent and
+   ignore pointer events; only their thumbs are hittable, so a click on the track cannot silently
+   drag whichever input happens to be painted on top. */
+.ranges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  padding: 12px 14px 6px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(31, 26, 16, .6), rgba(12, 11, 8, .82));
+  border: 1px solid rgba(255, 255, 255, .06);
+}
+.range__label {
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.range__pill {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--text);
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .07);
+}
+.range__pill--hi { color: var(--p-gold-bright); border-color: rgba(255, 170, 0, .22); }
+.range__track {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 30px;
+  min-width: 0;
+}
+.range__rail,
+.range__fill {
+  position: absolute;
+  top: 50%;
+  height: 5px;
+  border-radius: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+/* The risk rail IS the scale: ice at the calm end, crimson at the wild one. Reading it left to
+   right says what the thumbs mean before either one is touched. */
+.range__rail { left: 0; right: 0; opacity: .3; }
+.range__rail--risk { background-image: linear-gradient(90deg, #ffe89a, var(--gold-bright) 38%, #ffaa00 62%, #ff6a00 82%, #ff2222); }
+.range__rail--price { background-image: linear-gradient(90deg, #a35f00, #ffaa00 55%, var(--gold-bright)); }
+.range__fill { background-image: var(--p-ramp); box-shadow: 0 0 14px -4px var(--p-gold); }
+
+.range__track input[type="range"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+.range__track input[type="range"]::-webkit-slider-runnable-track { height: 100%; background: none; border: 0; }
+.range__track input[type="range"]::-moz-range-track { height: 100%; background: none; border: 0; }
+.range__track input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background-image: linear-gradient(180deg, #ffe89a, #ffaa00);
+  border: 2px solid #0a0a0c;
+  box-shadow: 0 0 0 1px rgba(255, 170, 0, .5), 0 4px 10px -3px rgba(0, 0, 0, .9);
+  cursor: grab;
+}
+.range__track input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-image: linear-gradient(180deg, #ffe89a, #ffaa00);
+  border: 2px solid #0a0a0c;
+  box-shadow: 0 0 0 1px rgba(255, 170, 0, .5), 0 4px 10px -3px rgba(0, 0, 0, .9);
+  cursor: grab;
+}
+.range__track input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(255, 170, 0, .55); }
+.range__track input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px rgba(255, 170, 0, .55); }
+
+.wallcount {
+  margin: 0;
+  font-size: .625rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── the wall ── */
+.cratewall {
+  display: grid;
+  gap: 8px;
+  /* min() floor, so one card can never force the grid wider than the viewport */
+  grid-template-columns: repeat(auto-fill, minmax(min(164px, 100%), 1fr));
+  min-width: 0;
+}
+.cratecard {
+  --risk: var(--p-gold);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 26px 10px 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(100% 70% at 50% 0%, color-mix(in srgb, var(--risk) 10%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9));
+  border: 1px solid rgba(255, 170, 0, .1);
+  cursor: pointer;
+  text-align: center;
+  transition: transform .22s var(--p-ease), border-color .22s var(--p-ease), box-shadow .22s var(--p-ease);
+}
+.cratecard:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--risk) 45%, transparent); }
+.cratecard:focus-visible { outline: 2px solid var(--p-gold); outline-offset: 2px; }
+.cratecard[data-on="1"] {
+  border-color: var(--risk);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--risk) 55%, transparent),
+    0 0 26px -10px var(--risk);
+}
+.cratecard__risk {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--risk);
+  background: color-mix(in srgb, var(--risk) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--risk) 34%, transparent);
+}
+.cratecard__art {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .65));
+  transition: transform .22s var(--p-ease);
+}
+.cratecard:hover .cratecard__art { transform: translateY(-3px) scale(1.07); }
+.cratecard__name {
+  min-width: 0;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  /* two lines then ellipsis, so a long name cannot make one card taller than its row */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cratecard__price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 100%;
+  font-size: .875rem;
+  font-weight: 800;
+  color: var(--p-gold-bright);
+  white-space: nowrap;
+}
+.cratecard__top {
+  flex: none;
+  max-width: 100%;
+  font-size: .625rem;
+  letter-spacing: .06em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ── the drawer ──
+   Pinned to the bottom of the viewport with position: sticky, so the drop table of the selected
+   crate is on screen while the wall above it is being scrolled. It was an ordinary block at the
+   foot of the page: picking a crate near the top of a fifty-card grid put its odds several
+   screens away, which meant the numbers that decide whether a crate is worth opening were only
+   visible once you had stopped looking at the crates.
+
+   Sticky, NOT fixed. It stays in the document flow and cannot cover anything below it — which is
+   the failure the Live Plays drawer had, where a fixed panel sat over every route and had to be
+   dismissed before the page underneath could be read. This one belongs to the crates view, ends
+   with it, and is only ever over the crate grid it describes. */
+.drawer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 11px 14px calc(11px + env(safe-area-inset-bottom, 0px));
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(180deg, rgba(30, 26, 16, .93), rgba(9, 9, 7, .98));
+  border: 1px solid rgba(255, 170, 0, .18);
+  border-bottom: 0;
+  box-shadow: 0 -18px 40px -26px rgba(0, 0, 0, .95);
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+}
+.drawer__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-width: 0;
+}
+.drawer__title {
+  min-width: 0;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--p-gold-bright);
+  overflow-wrap: anywhere;
+}
+.drawer__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-width: 0;
+  font-size: .625rem;
+  color: var(--faint);
+}
+.drawer__facts b { color: var(--text); font-weight: 800; }
+.drawer__count { color: var(--muted); }
+/* One row, scrolled sideways.
+   A wrapping grid grew to four rows on a big crate and ate half the screen while pinned. A single
+   strip keeps the drawer a fixed, predictable height whatever the crate holds, and the drop table
+   is the one place on this page where a horizontal scroller is the right shape: the tiles are
+   ordered by value, so reading along the row IS reading down the table. */
+.drawer__rows {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 170, 0, .3) transparent;
+  overscroll-behavior-x: contain;
+}
+.drawer__rows::-webkit-scrollbar { height: 7px; }
+.drawer__rows::-webkit-scrollbar-track { background: transparent; }
+.drawer__rows::-webkit-scrollbar-thumb {
+  background: rgba(255, 170, 0, .28);
+  border-radius: 999px;
+}
+.droptile {
+  --rar: var(--p-gold);
+  /* Fixed width and no shrinking: in a horizontal strip the default would squeeze forty tiles
+     into the visible width and leave forty unreadable slivers instead of a scrollable row. */
+  flex: 0 0 auto;
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .05);
+  border-bottom: 2px solid var(--rar);
+}
+.droptile img { width: 34px; height: 34px; object-fit: contain; image-rendering: pixelated; }
+.droptile__val {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 100%;
+  font-size: .75rem;
+  font-weight: 800;
+  color: var(--p-cyan);
+  white-space: nowrap;
+}
+.droptile__odds { flex: none; max-width: 100%; font-size: .625rem; font-weight: 800; color: var(--rar); white-space: nowrap; }
+.droptile__name {
+  min-width: 0;
+  font-size: .625rem;
+  line-height: 1.35;
+  color: var(--faint);
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .bench__rail { position: static; }
+  .cratewall { grid-template-columns: repeat(auto-fill, minmax(min(138px, 100%), 1fr)); }
+}
+
+/* ════════════════════ amount input ════════════════════ */
+.amountbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 13px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .08);
+  transition: border-color .2s var(--p-ease);
+}
+.amountbox:focus-within { border-color: var(--p-gold); }
+.amountbox__cur { flex: none; font-family: var(--mono); font-size: 1rem; font-weight: 800; color: var(--p-gold); }
+.amountbox__in {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: none;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.ucard__hint, .piggy__hint {
+  font-size: .625rem;
+  color: var(--faint);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.ucard__hint[data-bad], .piggy__hint[data-bad] { color: var(--p-crimson); }
+
+/* ════════════════════ quests and streak ════════════════════ */
+.streak {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 22px;
+  min-width: 0;
+}
+.streak__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 200px; }
+.streak__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.streak__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--disp);
+  font-weight: 900;
+  font-size: clamp(1.9rem, 4.5vw, 2.9rem);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+  background: var(--p-ramp);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.streak__figure em {
+  font-style: normal;
+  font-family: var(--body);
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  -webkit-text-fill-color: var(--faint);
+}
+.streak__sub { font-size: .75rem; color: #9ca3af; overflow-wrap: anywhere; }
+.streak__pips { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.pip {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+.pip[data-on="1"] { background: var(--p-ramp); border-color: transparent; box-shadow: 0 0 10px -2px var(--p-gold); }
+.pip[data-cap="1"] { border-radius: 50%; }
+.streak__claim { flex: none; white-space: nowrap; }
+
+.questlist { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.quest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 13px 15px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(28, 24, 15, .7), rgba(12, 11, 8, .86));
+  border: 1px solid rgba(255, 255, 255, .05);
+  border-left: 3px solid rgba(255, 255, 255, .1);
+}
+.quest[data-state="ready"] { border-left-color: var(--p-gold); }
+.quest[data-state="claimed"] { border-left-color: var(--p-win); opacity: .62; }
+.quest__body { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.quest__name { margin: 0; font-size: .875rem; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.quest__desc { margin: 0; font-size: .75rem; color: #9ca3af; overflow-wrap: anywhere; }
+.quest__bar { height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.quest__bar i { display: block; height: 100%; border-radius: 4px; background: var(--p-ramp); transition: width .4s var(--p-ease); }
+.quest__progress { font-size: .625rem; color: var(--faint); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.quest__side { display: flex; align-items: center; gap: 8px; flex: none; min-width: 0; }
+.quest__reward {
+  flex: none;
+  font-size: .875rem;
+  font-weight: 800;
+  color: var(--p-gold-bright);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.quest__claim { flex: none; white-space: nowrap; }
+
+/* ════════════════════ faction war ════════════════════ */
+.warhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 22px;
+  min-width: 0;
+}
+.warhead__main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0; }
+.warhead__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.warhead__pool {
+  font-family: var(--disp);
+  font-weight: 900;
+  font-size: clamp(1.9rem, 5vw, 3.1rem);
+  line-height: 1.04;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+  background: var(--p-ramp);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 18px rgba(255, 150, 0, .4));
+}
+.warhead__sub { font-size: .75rem; color: #9ca3af; max-width: 52ch; overflow-wrap: anywhere; }
+.warhead__clock { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; flex: none; min-width: 0; }
+.warhead__clocklabel {
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.warhead__clock b { flex: none; font-size: 1.25rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.warhead__total { flex: none; font-size: .625rem; color: var(--faint); white-space: nowrap; }
+
+.factions {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  min-width: 0;
+}
+.faction {
+  --team: var(--p-gold);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(31, 26, 16, .72), rgba(13, 12, 9, .88));
+  border: 1px solid rgba(255, 170, 0, .12);
+  border-top: 3px solid var(--team);
+}
+.faction[data-mine="1"] {
+  border-color: color-mix(in srgb, var(--team) 45%, transparent);
+  box-shadow: 0 0 28px -14px var(--team);
+}
+.faction__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.faction__name { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.faction__badge {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  white-space: nowrap;
+  color: #1a1206;
+  background: var(--team);
+}
+.faction__blurb { margin: 0; font-size: .75rem; color: #9ca3af; min-width: 0; overflow-wrap: anywhere; }
+.faction__bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.faction__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 55%, #000), var(--team));
+  box-shadow: 0 0 14px -3px var(--team);
+  transition: width .6s var(--p-ease);
+}
+.faction__figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.faction__fig { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.faction__fig i {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.faction__fig b { font-size: .75rem; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.faction__join { flex: none; margin-top: auto; white-space: nowrap; }
+
+.board { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.boardrow {
+  --team: var(--p-gold);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .022);
+  border-left: 2px solid var(--team);
+}
+.boardrow[data-you="1"] { background: rgba(255, 170, 0, .08); }
+.boardrow__rank { font-size: .75rem; color: var(--faint); text-align: center; font-variant-numeric: tabular-nums; }
+.boardrow__who {
+  min-width: 0;
+  font-size: .75rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.boardrow__who em { font-style: normal; color: var(--p-gold-bright); font-size: .625rem; margin-left: 6px; }
+.boardrow__amt { font-size: .75rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ════════════════════ provably fair ════════════════════ */
+.fairhead { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 22px; min-width: 0; }
+.fairhead__main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 280px; min-width: 0; }
+.fairhead__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+/* A 64-character hash must wrap rather than widen the card. */
+.fairhead__hash {
+  font-size: .75rem;
+  color: var(--p-gold-bright);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.fairhead__sub { font-size: .75rem; color: #9ca3af; overflow-wrap: anywhere; }
+.fairhead__facts { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; flex: none; }
+.fairhead__facts > div {
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .38);
+  border: 1px solid rgba(255, 255, 255, .05);
+}
+.fairhead__facts dt { font-size: .625rem; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.fairhead__facts dd { margin: 2px 0 0; font-size: .75rem; color: var(--text); overflow-wrap: anywhere; }
+
+.fairsteps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.fairsteps li { font-size: .75rem; line-height: 1.6; color: #d1d5db; overflow-wrap: anywhere; }
+.fairsteps code {
+  font-family: var(--mono);
+  font-size: .75rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .5);
+  color: var(--p-gold-bright);
+  overflow-wrap: anywhere;
+}
+
+.verify { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 8px; min-width: 0; }
+.verify__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.verify__field--short { max-width: 180px; }
+.verify__field > span {
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.verify__field input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text);
+  font-size: .75rem;
+  outline: none;
+  text-overflow: ellipsis;
+}
+.verify__field input:focus { border-color: var(--p-gold); }
+.verify__go { grid-column: 1 / -1; justify-self: start; white-space: nowrap; }
+.verify__out {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(0, 0, 0, .35);
+  min-width: 0;
+}
+.verify__out[data-verdict="good"] { border-color: rgba(255, 215, 0, .4); }
+.verify__out[data-verdict="bad"] { border-color: rgba(255, 34, 34, .45); }
+.verify__verdict { display: block; font-size: .875rem; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.verify__out[data-verdict="good"] .verify__verdict { color: var(--p-win); }
+.verify__out[data-verdict="bad"] .verify__verdict { color: var(--p-crimson); }
+.verify__rows { margin: 10px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.verify__rows > div { display: flex; gap: 8px; justify-content: space-between; min-width: 0; }
+.verify__rows dt { flex: none; font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.verify__rows dd { margin: 0; min-width: 0; font-size: .75rem; color: var(--text); text-align: right; overflow-wrap: anywhere; word-break: break-all; }
+
+.roundlist { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; min-width: 0; }
+.roundrow {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) minmax(0, auto) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .022);
+}
+.roundrow__out {
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 4px;
+}
+.roundrow[data-outcome="win"] .roundrow__out { color: var(--p-win); background: rgba(255, 215, 0, .12); }
+.roundrow[data-outcome="lose"] .roundrow__out { color: var(--p-crimson); background: rgba(255, 34, 34, .12); }
+.roundrow__meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.roundrow__meta b { font-size: .75rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roundrow__meta em { font-style: normal; font-size: .625rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roundrow__val { font-size: .75rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.roundrow__use { white-space: nowrap; }
+
+/* ════════════════════ piggy bank head ════════════════════ */
+.piggyhead { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 22px; min-width: 0; }
+.piggyhead__main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; min-width: 0; }
+.piggyhead__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.piggyhead__figure {
+  font-family: var(--disp);
+  font-weight: 900;
+  font-size: clamp(1.8rem, 4.4vw, 2.8rem);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+  background: var(--p-ramp);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.piggyhead__sub { font-size: .75rem; color: #9ca3af; overflow-wrap: anywhere; }
+.piggyhead__side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; min-width: 0; }
+.piggyhead__avail { font-family: var(--mono); font-size: .625rem; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
+.piggyhead__side b { flex: none; font-size: 1.25rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ════════════════════ narrow ════════════════════ */
+@media (max-width: 720px) {
+  .ticker { height: 30px; padding: 0 8px; }
+  .tickitem { font-size: .625rem; }
+  .wallbar { flex-direction: column; }
+  .wallbar__search, .wallbar__sort { flex: 1 1 auto; width: 100%; }
+  .rail__cost { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .streak__claim, .verify__go { width: 100%; }
+  .warhead__clock { align-items: flex-start; }
+  .quest__side { width: 100%; justify-content: space-between; }
+  .droptile { width: 74px; }
+  .roundrow { grid-template-columns: 50px minmax(0, 1fr) auto; }
+  .roundrow__val { grid-column: 2 / -1; text-align: right; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cratecard, .cratecard__art, .qty__b, .quick__sw, .quick__sw::after,
+  .faction__bar i, .quest__bar i { transition: none; }
+  .cratecard:hover { transform: none; }
+  .cratecard:hover .cratecard__art { transform: none; }
+}
+
+/* ════════════════════ chat ════════════════════ */
+/* A big hit and a typed message share the log, so they have to be distinguishable at a glance
+   without the hits shouting over the conversation. The hit gets a gold edge and its item art;
+   the message gets nothing but its author. */
+.msg--hit {
+  border-left: 2px solid var(--sk, #ffaa00);
+  padding-left: 7px;
+}
+.msg--hit .msg__body span { color: var(--text); }
+.msg--hit .msg__body img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  flex: none;
+}
+.msg[data-staff="1"] .msg__who { color: var(--gold-bright); }
+.msg[data-staff="1"] .msg__who::after {
+  content: "STAFF";
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  color: #241a02;
+  background: linear-gradient(180deg, var(--gold-bright), #ffaa00);
+  vertical-align: middle;
+}
+
+/* The composer. Disabled until there is a session to post under, so it never accepts typing it
+   is going to refuse. */
+.chat__send input:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.chat__send input:disabled::placeholder { color: var(--faint); }
+
+/* The gutter the fixed feed needs, so the foot of a page is never stranded underneath it. The
+   value tracks the collapsed header height; the expanded table scrolls within its own box. */
+body { padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 860px) { body { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ════════════════════ the mystery slot, in the drop table ════════════════════
+   The  tile. The REVEAL itself has no styles here at all: it is reel.js and cutscene.js, the
+   same two-stage film the dev animation bench plays as preset 2, and both own their own canvas
+   and their own CSS. An earlier version of this section carried a whole parallel overlay — veil,
+   breathing glyph, embers, glass card — which has been deleted rather than left sitting unused,
+   because dead CSS for a second implementation of something is how the two drift apart.
+
+   The tile is deliberately NOT an item tile with the art blanked out. It is a different shape of
+   thing — no sprite, a drawn glyph, its own gold — because a player scanning a drop table has to
+   be able to tell at a glance that this row is not an item they could look up.              */
+.droptile--myst {
+  --rar: var(--p-gold-bright);
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(255, 170, 0, .16), transparent 70%),
+    rgba(0, 0, 0, .48);
+  border-color: rgba(255, 170, 0, .3);
+}
+.droptile__q {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  /* Matches the 34px sprite beside it, but as a floor rather than a fixed box, so a larger font
+     setting grows the glyph instead of clipping it. */
+  min-height: 34px;
+  font-family: var(--disp);
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--gold-bright);
+  text-shadow: 0 0 7px rgba(255, 170, 0, .22), 0 0 15px rgba(255, 170, 0, .22);
+  animation: qbreathe 2.6s ease-in-out infinite;
+}
+@keyframes qbreathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.09); opacity: .82; }
+}
+.droptile--myst .droptile__val { color: var(--p-gold-bright); }
+
+@media (prefers-reduced-motion: reduce) {
+  .droptile__q { animation: none; }
+}
+
+/* ════════════════════ text containment, enforced ════════════════════
+   The last line of defence against a layout broken by its own content.
+
+   A 240-character run of "x" with no space in it has no break opportunity, so the default
+   `overflow-wrap: normal` refuses to break it and the box grows to fit — pushing its parent wider,
+   then the grid, then the page, until the whole layout scrolls sideways. Anything that holds a
+   string somebody else typed, or a name that arrived over the network, is listed here.
+
+   `overflow-wrap: anywhere` is the rule that does the work: unlike `break-word` it is also
+   considered when calculating the element's min-content size, which is the part that actually
+   stops a flex or grid track from being widened. `word-break: break-word` is kept alongside it
+   for older WebKit, where it is the only one of the two that is honoured.
+
+   min-width: 0 is on every one of these too, because in a flex or grid child the default `auto`
+   minimum refuses to shrink below the content and defeats any wrapping rule set on it.          */
+.msg,
+.msg__body,
+.msg__body span,
+.msg__who,
+.chat__log,
+.feedrow__game,
+.cratecard__name,
+.rail__name,
+.droptile__name,
+.drawer__title,
+.toast b,
+.toast span,
+.quest__name,
+.faction__name,
+.piggy__row b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* The chat rail is a fixed-width column beside a fluid one. Without this the column itself can be
+   widened by a single unbroken message, which moves the entire page. */
+.chat,
+.chat__log,
+.chat__send { min-width: 0; max-width: 100%; }
+.chat__send input { min-width: 0; }
+
+/* Nothing in the document may scroll sideways. Individual tables, the drop drawer and the feed
+   each own an overflow-x container of their own; the page does not get one.
+
+   `clip`, NOT `hidden`. Setting overflow-x: hidden here forces overflow-y to compute to auto,
+   which turns the document into a scroll container — and every position: sticky descendant then
+   resolves against that box instead of the viewport and silently stops sticking. That is exactly
+   what happened to the crate drop drawer: it was declared sticky, computed sticky, and still hung
+   off the bottom of the page. overflow-x: clip cuts the overflow without creating a scroll
+   container, so sideways scrolling is still impossible and sticky still works. */
+html, body { overflow-x: clip; }
+
+/* The real mystery odds, printed beside the crate name for the whole spin.
+   The strip is padded with decorative question marks, so this line is what stops the decoration
+   from reading as the rate. It is deliberately not styled down into a disclaimer: same weight and
+   same family as the crate name beside it. */
+.reel__odds {
+  flex: none;
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--gold-bright);
+  background: rgba(255, 170, 0, .1);
+  border: 1px solid rgba(255, 170, 0, .28);
+}
+.reel__odds:empty { display: none; }
+
+/* ── the drop strip as a scroller ──
+   The row holds more tiles than fit, so it needs to LOOK scrollable, not merely be scrollable.
+   Three things do that: a scrollbar that is always visible rather than overlay-hidden, a fade at
+   whichever end has more content, and scroll-snap so a flick lands on a tile edge instead of
+   halfway through one. */
+.drawer__rows {
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 14px;
+  /* The fades. Each is switched off by the data flags the painter sets, so an unscrollable strip
+     and a fully-scrolled one do not advertise a direction that does not exist. */
+  --fade-left: transparent;
+  --fade-right: transparent;
+  -webkit-mask-image: linear-gradient(90deg, var(--fade-left) 0, #000 34px,
+                      #000 calc(100% - 34px), var(--fade-right) 100%);
+  mask-image: linear-gradient(90deg, var(--fade-left) 0, #000 34px,
+              #000 calc(100% - 34px), var(--fade-right) 100%);
+}
+.drawer__rows[data-more="1"][data-at-start="0"] { --fade-left: rgba(0, 0, 0, 0); }
+.drawer__rows[data-more="1"][data-at-end="0"] { --fade-right: rgba(0, 0, 0, 0); }
+.drawer__rows:focus-visible { outline: 2px solid var(--p-gold); outline-offset: 2px; }
+.droptile { scroll-snap-align: start; }
+
+/* The one mystery tile carries the whole slot, so it is allowed to be wider than an item tile and
+   is pinned to the head of the strip — the slot stays readable however far the row is scrolled.
+
+   Pinning requires an OPAQUE background. The shared .droptile fill is rgba(0,0,0,.48), and at 48%
+   the tiles sliding underneath showed straight through it: "Enchanted Book" read across the face
+   of the question mark. A sticky element has to occlude what passes behind it or it is not
+   pinned, it is just in the way. */
+.droptile--myst {
+  width: 96px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(255, 170, 0, .16), transparent 70%),
+    linear-gradient(180deg, #171208, #0b0a07);
+  /* A hard edge plus a short shadow, so it reads as sitting above the strip rather than as a gap. */
+  box-shadow: 8px 0 14px -8px rgba(0, 0, 0, .95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer__rows { scroll-behavior: auto; }
+}
+
+/* ════════════════════ case battles ════════════════════
+   Obsidian containers, a hairline of gold, and nothing that is not gold, cyan or crimson.
+   Team colour is deliberately NOT hue-coded per team: with up to four teams a hue palette would
+   have to reach into the purged green and violet wedges to stay distinguishable. Teams are told
+   apart by position and by a gold weight instead, which also survives colour blindness. */
+.battles, .studiowrap {
+  --b-obsidian: #0a0a0c;
+  --b-panel:    #14120c;
+  --b-line:     rgba(255, 170, 0, .18);
+  --b-gold:     #ffaa00;
+  --b-gold-hi:  var(--gold-bright);
+  --b-text:     #d1d5db;
+  --b-ramp: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.btl {
+  display: grid;
+  grid-template-columns: minmax(0, 330px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ── the host panel ── */
+.btl__make {
+  position: sticky;
+  top: 82px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(10, 10, 12, .94));
+  border: 1px solid var(--b-line);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .08), 0 18px 40px -30px rgba(0, 0, 0, .95);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+.btl__make h2 { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); }
+.btl__field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.btl__label {
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.btl__label b { color: var(--b-gold-hi); font-weight: 800; }
+.btl__chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.btl__chip {
+  min-width: 0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.btl__chip:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
+.btl__chip[aria-pressed="true"] {
+  color: #0a0a0c;
+  background-image: var(--b-ramp);
+  border-color: transparent;
+  box-shadow: 0 0 18px -6px var(--b-gold);
+}
+
+.btl__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .4);
+  border: 1px solid rgba(255, 255, 255, .07);
+  color: var(--muted);
+  font-size: .75rem;
+  cursor: pointer;
+}
+.btl__toggle span { min-width: 0; overflow-wrap: anywhere; }
+.btl__sw {
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 17px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  transition: background .2s ease;
+}
+.btl__sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #6b7280;
+  transition: transform .2s ease, background .2s ease;
+}
+.btl__toggle[aria-checked="true"] { color: var(--text); border-color: rgba(255, 170, 0, .5); }
+.btl__toggle[aria-checked="true"] .btl__sw { background: rgba(255, 170, 0, .45); }
+.btl__toggle[aria-checked="true"] .btl__sw::after {
+  transform: translateX(15px);
+  background: var(--b-gold-hi);
+}
+
+.btl__picked, .btl__pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.btl__pool {
+  max-height: 176px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .34);
+  border: 1px solid rgba(255, 255, 255, .05);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 170, 0, .3) transparent;
+}
+.btl__crate {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 170, 0, .16);
+  cursor: pointer;
+}
+.btl__crate:hover { border-color: var(--b-gold); }
+.btl__crate:disabled { opacity: .35; cursor: not-allowed; }
+.btl__crate img { width: 34px; height: 34px; object-fit: contain; image-rendering: pixelated; }
+.btl__cratecost { font-size: .625rem; color: var(--faint); white-space: nowrap; }
+
+.btl__cost {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid var(--b-line);
+}
+.btl__cost b { flex: none; font-size: 1rem; font-weight: 800; color: var(--b-gold-hi); }
+.btl__go { width: 100%; text-align: center; }
+.btl__note {
+  margin: 0;
+  font-size: .625rem;
+  line-height: 1.5;
+  color: var(--faint);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* ── the lobby list ── */
+.btl__list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.btl__listhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.btl__listhead h2 { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); }
+.btl__count { font-size: .625rem; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.btl__rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.btlcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 24, 15, .7), rgba(11, 10, 8, .92));
+  border: 1px solid var(--b-line);
+}
+.btlcard[data-mode="crazy"] { border-color: rgba(255, 59, 31, .34); }
+.btlcard__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.btlcard__fmt {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #0a0a0c;
+  background-image: var(--b-ramp);
+}
+.btlcard__crazy {
+  min-width: 0;
+  font-size: .625rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btlcard[data-mode="crazy"] .btlcard__crazy { color: #ff6a4a; }
+.btlcard__crates { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.btlcard__crates img {
+  width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated;
+  padding: 3px; border-radius: 8px;
+  background: rgba(0, 0, 0, .4); border: 1px solid rgba(255, 255, 255, .05);
+}
+.btlcard__seats { display: flex; gap: 4px; min-width: 0; }
+.btlcard__pip {
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .09);
+}
+.btlcard__pip[data-filled="1"] { background-image: var(--b-ramp); }
+.btlcard__foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.btlcard__cost {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: .875rem; font-weight: 800; color: var(--b-gold-hi); white-space: nowrap;
+}
+.btlcard__host {
+  flex: 1 1 auto; min-width: 0; font-size: .625rem; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.btlcard__join { flex: none; padding: 7px 16px; }
+
+/* ── the arena ── */
+.arena { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.arena__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 24, 15, .7), rgba(11, 10, 8, .92));
+  border: 1px solid var(--b-line);
+}
+.arena__back { flex: none; }
+.arena__title { flex: 1 1 auto; min-width: 0; }
+.arena__title h2 { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.arena__code { font-size: .625rem; letter-spacing: .2em; color: var(--b-gold); }
+.arena__tools { display: flex; gap: 4px; flex: none; }
+.arena__fast[aria-checked="true"] {
+  color: #0a0a0c; background-image: var(--b-ramp); border-color: transparent;
+}
+
+.arena__strip { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.arena__round {
+  padding: 4px; border-radius: 8px;
+  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .05);
+  transition: border-color .2s ease, transform .2s ease;
+}
+.arena__round img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; display: block; }
+.arena__round[data-active="1"] {
+  border-color: var(--b-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 0 18px -6px var(--b-gold);
+}
+
+.arena__waiting {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;
+  padding: 11px 14px; border-radius: 8px;
+  background: rgba(255, 170, 0, .07); border: 1px solid var(--b-line);
+  font-size: .75rem; color: var(--b-text);
+}
+.arena__waiting span { flex: 1 1 auto; min-width: 0; }
+
+.arena__board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.arena__board[data-seats="2"] { grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); }
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(26, 23, 15, .78), rgba(10, 10, 12, .95));
+  border: 1px solid rgba(255, 255, 255, .06);
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+.seat[data-you="1"] { border-color: rgba(255, 170, 0, .42); }
+.seat[data-won="1"] {
+  border-color: var(--b-gold);
+  box-shadow: inset 0 0 0 1px rgba(255, 170, 0, .3), 0 0 30px -12px var(--b-gold);
+}
+.seat--empty { align-items: center; justify-content: center; gap: 8px; min-height: 180px; border-style: dashed; }
+.seat__waiting { margin: 0; font-size: .75rem; color: var(--faint); }
+
+.seat__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.seat__name {
+  flex: 1 1 auto; min-width: 0; font-size: .875rem; font-weight: 800; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.seat__team { flex: none; font-size: .625rem; letter-spacing: .14em; color: var(--faint); }
+.seat__bot {
+  flex: none; padding: 1px 6px; border-radius: 999px;
+  font-size: .625rem; font-weight: 800; letter-spacing: .12em;
+  color: var(--faint); border: 1px solid rgba(255, 255, 255, .12);
+}
+
+.seat__reel {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  height: 104px;
+  border-radius: 8px;
+  background: var(--b-obsidian);
+  border: 1px solid rgba(255, 255, 255, .05);
+}
+.seat__track { display: flex; gap: 8px; height: 100%; padding: 6px; will-change: transform; }
+.seat__tile {
+  position: relative;
+  flex: 0 0 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .05);
+}
+.seat__tile[data-win="1"] {
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(255, 170, 0, .2), transparent 70%),
+    rgba(0, 0, 0, .5);
+  border-color: rgba(255, 170, 0, .45);
+}
+.seat__tile img { width: 44px; height: 44px; object-fit: contain; image-rendering: pixelated; }
+.seat__tileval { font-size: .625rem; color: var(--b-gold-hi); white-space: nowrap; }
+.seat__marker {
+  position: absolute;
+  top: 0; bottom: 0; left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background-image: linear-gradient(180deg, transparent, var(--b-gold) 18%, var(--b-gold) 82%, transparent);
+  box-shadow: 0 0 12px var(--b-gold);
+  pointer-events: none;
+}
+
+.seat__total {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: 1rem; font-weight: 800; color: var(--b-gold-hi); white-space: nowrap;
+}
+.seat__won { min-height: 1em; font-size: .75rem; font-weight: 800; color: var(--p-win, #ffd700); }
+
+.arena__fair {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  padding: 14px 16px; border-radius: 14px;
+  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .05);
+}
+.arena__fairhead { margin: 0; font-size: .75rem; font-weight: 800; color: var(--text); }
+.arena__fairnote { margin: 0; font-size: .625rem; line-height: 1.55; color: var(--faint); overflow-wrap: anywhere; }
+.arena__fairlist {
+  display: grid; grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
+  gap: 4px 12px; margin: 4px 0 0; min-width: 0;
+}
+.arena__fairlist dt { font-size: .625rem; color: var(--faint); overflow-wrap: anywhere; }
+.arena__fairlist dd {
+  margin: 0; font-size: .625rem; color: var(--b-text); overflow-wrap: anywhere; word-break: break-all;
+}
+
+@media (max-width: 900px) {
+  .btl { grid-template-columns: minmax(0, 1fr); }
+  .btl__make { position: static; }
+  .arena__fairlist { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat__track { transition: none; }
+  .arena__round, .btl__chip, .btl__sw, .btl__sw::after { transition: none; }
+}
+
+/* ════════════════════ community crates: studio + marketplace ════════════════════ */
+.studio { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.studio__tabs { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.studio__tab {
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.studio__tab:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
+.studio__tab[aria-pressed="true"] {
+  color: #0a0a0c;
+  background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
+  border-color: transparent;
+}
+.studio__body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* ── marketplace ── */
+.market__bar { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.market__search { flex: 1 1 260px; min-width: 0; display: flex; }
+.market__search input, .market__sort select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: .75rem;
+  outline: none;
+}
+.market__search input:focus, .market__sort select:focus { border-color: #ffaa00; }
+.market__sort { flex: 0 1 220px; min-width: 0; display: flex; }
+.market__sort option { background: #14120c; color: var(--text); }
+
+.market__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(226px, 100%), 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.mktcard {
+  --risk: #ffaa00;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 28px 12px 14px;
+  border-radius: 14px;
+  text-align: center;
+  background:
+    radial-gradient(100% 70% at 50% 0%, color-mix(in srgb, var(--risk) 11%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(28, 24, 15, .74), rgba(11, 10, 8, .93));
+  border: 1px solid rgba(255, 170, 0, .18);
+}
+.mktcard__risk {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  max-width: calc(100% - 18px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--risk);
+  background: color-mix(in srgb, var(--risk) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--risk) 34%, transparent);
+}
+.mktcard__art {
+  width: 66px; height: 66px; object-fit: contain; image-rendering: pixelated;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .65));
+}
+.mktcard__name {
+  margin: 0; min-width: 0; font-size: .875rem; font-weight: 800; color: var(--text);
+  overflow-wrap: anywhere; word-break: break-word;
+}
+.mktcard__by {
+  margin: 0; display: flex; align-items: center; gap: 4px; min-width: 0;
+  font-size: .625rem; color: var(--faint); overflow-wrap: anywhere;
+}
+.mktcard__verified { font-style: normal; color: var(--gold-bright); }
+.mktcard__price {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: .875rem; font-weight: 800; color: var(--gold-bright); white-space: nowrap;
+}
+.mktcard__stats {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px 8px; margin: 0; width: 100%; min-width: 0;
+}
+.mktcard__stats dt {
+  font-size: .625rem; letter-spacing: .12em; text-transform: uppercase; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mktcard__stats dd {
+  margin: 0; font-size: .625rem; color: var(--text); text-align: right;
+  overflow-wrap: anywhere;
+}
+.mktcard__open { width: 100%; margin-top: 4px; text-align: center; }
+
+/* ── the builder ── */
+.build {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+.build__left, .build__right {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  padding: 16px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(10, 10, 12, .94));
+  border: 1px solid rgba(255, 170, 0, .18);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+.build__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.build__label {
+  font-family: var(--mono); font-size: .625rem; font-weight: 800;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--faint);
+}
+.build__label b { color: var(--gold-bright); }
+.build__input {
+  width: 100%; min-width: 0; padding: 10px 12px; border-radius: 8px;
+  background: rgba(0, 0, 0, .45); border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text); font: inherit; font-size: .75rem; outline: none;
+}
+.build__input:focus { border-color: #ffaa00; }
+.build__hint { margin: 0; font-size: .625rem; line-height: 1.55; color: var(--faint); overflow-wrap: anywhere; }
+.build__bad { margin: 0; font-size: .75rem; line-height: 1.5; color: #ff6a4a; overflow-wrap: anywhere; }
+
+.build__decals { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.build__decal {
+  flex: none; padding: 5px; border-radius: 8px; cursor: pointer;
+  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .07);
+}
+.build__decal img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; display: block; }
+.build__decal[aria-pressed="true"] {
+  border-color: var(--gold-bright); box-shadow: 0 0 16px -6px #ffaa00;
+}
+
+.build__range { width: 100%; accent-color: #ffaa00; }
+
+.build__econ {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  padding: 12px; border-radius: 8px;
+  background: rgba(0, 0, 0, .46); border: 1px solid rgba(255, 170, 0, .18);
+}
+.build__pricehead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0;
+}
+.build__price { flex: none; font-size: 1.25rem; font-weight: 800; color: var(--gold-bright); white-space: nowrap; }
+.build__stats {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: 3px 10px; margin: 0; min-width: 0;
+}
+.build__stats dt { font-size: .625rem; color: var(--faint); overflow-wrap: anywhere; }
+.build__stats dd { margin: 0; font-size: .625rem; color: var(--text); text-align: right; white-space: nowrap; }
+.build__publish { width: 100%; text-align: center; }
+
+.build__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.build__head h3, .build__palettehead { margin: 0; font-size: .875rem; font-weight: 800; color: var(--text); }
+.build__count { font-size: .625rem; letter-spacing: .12em; color: var(--faint); }
+
+.build__drops { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.droprow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 120px) minmax(0, 56px) 26px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .4);
+  border: 1px solid rgba(255, 255, 255, .05);
+}
+.droprow img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
+.droprow__meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.droprow__name {
+  font-size: .75rem; color: var(--text); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.droprow__value { font-size: .625rem; color: var(--gold-bright); white-space: nowrap; }
+.droprow__slider { width: 100%; min-width: 0; accent-color: #ffaa00; }
+.droprow__chance { font-size: .625rem; color: var(--gold-bright); text-align: right; white-space: nowrap; }
+.droprow__x {
+  width: 24px; height: 24px; border-radius: 4px; cursor: pointer;
+  background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .09);
+  color: var(--faint); font-size: .75rem; line-height: 1;
+}
+.droprow__x:hover { color: #ff6a4a; border-color: rgba(255, 106, 74, .5); }
+
+.build__palette {
+  display: flex; flex-wrap: wrap; gap: 4px; min-width: 0;
+  max-height: 260px; overflow-y: auto; padding: 6px;
+  border-radius: 8px; background: rgba(0, 0, 0, .34);
+  border: 1px solid rgba(255, 255, 255, .05);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 170, 0, .3) transparent;
+}
+.build__item {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 5px 6px; border-radius: 8px; cursor: pointer;
+  background: rgba(0, 0, 0, .45); border: 1px solid rgba(255, 255, 255, .06);
+}
+.build__item:hover { border-color: #ffaa00; }
+.build__item:disabled { opacity: .3; cursor: not-allowed; }
+.build__item img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
+.build__itemval { font-size: .625rem; color: var(--faint); white-space: nowrap; }
+
+/* ── my crates ── */
+.mine__earn {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0;
+  padding: 14px 16px; border-radius: 14px;
+  background: rgba(255, 170, 0, .07); border: 1px solid rgba(255, 170, 0, .18);
+}
+.mine__earn b { flex: none; font-size: 1.25rem; font-weight: 800; color: var(--gold-bright); }
+.mine__count { font-size: .625rem; color: var(--faint); }
+
+@media (max-width: 900px) {
+  .build { grid-template-columns: minmax(0, 1fr); }
+  .droprow { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 52px) 24px; }
+  .droprow__slider { grid-column: 1 / -1; }
+}
+
+/* ════════════════════ navigation ════════════════════
+   Four entries and one call to action. Piggy Bank, Quests, War and Fair left this bar; they are
+   still live routes and now sit in the account menu under "Play". */
+
+/* ── the Cases disclosure ── */
+.tabdrop { position: relative; display: flex; }
+.tabdrop__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: var(--r-s);
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: .875rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .14s, background .14s;
+}
+.tabdrop__btn:hover { color: var(--text); background: var(--panel2); }
+/* Current whenever ANY route it owns is live, so the parent never goes dark while you are on
+   Battles or Community. */
+.tabdrop__btn[data-on="1"] {
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, rgba(255, 170, 0, .16), rgba(255, 170, 0, .06));
+  box-shadow: inset 0 -2px 0 #ffaa00;
+  font-weight: 600;
+}
+.tabdrop__chev {
+  width: 13px; height: 13px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .18s ease;
+}
+.tabdrop__btn[aria-expanded="true"] .tabdrop__chev { transform: rotate(180deg); }
+
+/* Positioned by initCasesMenu() after being moved to <body>. `fixed`, not `absolute`: the nav
+   bar it used to live in scrolls sideways on a phone and therefore clips its own absolutely
+   positioned children. See the comment on initCasesMenu for the whole story. */
+.tabdrop__menu {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  padding: 6px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(26, 22, 14, .97), rgba(10, 10, 12, .99));
+  border: 1px solid rgba(255, 170, 0, .25);
+  box-shadow: 0 24px 50px -20px rgba(0, 0, 0, .95);
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+}
+.tabdrop__menu[hidden] { display: none; }
+.tabdrop__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+.tabdrop__row:hover { background: rgba(255, 170, 0, .1); }
+.tabdrop__row img {
+  width: 26px; height: 26px; flex: none;
+  object-fit: contain; image-rendering: pixelated;
+}
+.tabdrop__row span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tabdrop__row b { font-size: .875rem; font-weight: 800; color: var(--text); }
+.tabdrop__row i {
+  font-style: normal; font-size: .625rem; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabdrop__row[aria-current="page"] b { color: var(--gold-bright); }
+
+/* ── the placeholder ── */
+.tabsoon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--r-s);
+  background: none;
+  border: 0;
+  color: var(--faint);
+  font: inherit;
+  font-size: .875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tabsoon:hover { color: var(--muted); background: var(--panel2); }
+.tabsoon__pill {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  color: var(--gold-bright);
+  background: rgba(255, 170, 0, .12);
+  border: 1px solid rgba(255, 170, 0, .3);
+}
+
+/* ── the referral call to action ──
+   The one gold surface in the bar. It sits where the secondary links were, so the space that used
+   to hold four medium-priority destinations now holds one high-priority action. */
+/* Scoped to .tabs to match the specificity of `.tabs a`, which otherwise wins on the count and
+   repaints this in muted grey with a 3px radius — the badge rendered as an ordinary nav link. */
+.tabs .navref {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: #0a0a0c;
+  text-decoration: none;
+  white-space: nowrap;
+  background-color: #ffaa00;
+  background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
+  box-shadow: 0 0 9px rgba(255, 170, 0, .22);
+  animation: refpulse 2.8s ease-in-out infinite;
+}
+.tabs .navref:hover { filter: brightness(1.06); }
+.tabs .navref__ico { font-size: .875rem; line-height: 1; }
+.tabs .navref__txt { font-size: .75rem; font-weight: 800; letter-spacing: .01em; }
+.tabs .navref__txt b { font-weight: 900; }
+@keyframes refpulse {
+  0%, 100% { box-shadow: 0 0 9px rgba(255, 170, 0, .22); }
+  50%      { box-shadow: 0 0 13px rgba(255, 170, 0, .22); }
+}
+
+/* ════════════════════ the balance widget ════════════════════
+   Obsidian glass, a gold hairline, a drawn coin and the one number a player reads most often. */
+.cashpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 7px 13px;
+  border-radius: 8px;
+  background: rgba(18, 18, 22, .75);
+  border: 1px solid rgba(255, 170, 0, .25);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .08);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  /* Fixed, not minimum. A min-width still grows past its floor, and it did: measured across
+     $0 / $50.0K / $1.76B / $999.9M / $1.2T the pill moved 104px -> 114px, shifting every control
+     to its right each time the balance crossed a magnitude. 120px clears the widest of those
+     ($999.9M) with room for the coin and the padding, so the box is now genuinely constant and
+     the number scales inside it. */
+  width: 120px;
+  justify-content: center;
+}
+.cashpill__coin {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, #fff3c4, var(--gold-bright) 42%, #ffaa00 68%, #a35f00 100%);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, .45), 0 0 6px rgba(255, 170, 0, .22);
+}
+.cashpill__n {
+  font-size: .875rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  /* Tabular figures, so every digit is the same width and the number cannot jitter as it counts.
+     This is what keeps the pop below from reading as a layout shift. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  /* The scale applies to this inline-block, never to the pill, so the container box never changes
+     and nothing around it moves. A centre origin keeps it from clipping either padding edge. */
+  display: inline-block;
+  transform-origin: center;
+}
+/* Only transform and colour animate. Animating font-size or width here would reflow the header on
+   every balance change, which is the defect this replaces. */
+.cashpill__n.pop { animation: cashpop .42s cubic-bezier(.22, 1, .36, 1); }
+@keyframes cashpop {
+  0%   { transform: scale(1); color: var(--gold-bright); }
+  38%  { transform: scale(1.14); color: #fff3c4; }
+  100% { transform: scale(1); color: var(--gold-bright); }
+}
+
+/* ════════════════════ referrals page ════════════════════ */
+.refer { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.refer__hero {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  min-width: 0; padding: 26px 18px; border-radius: 14px; text-align: center;
+  background:
+    radial-gradient(90% 120% at 50% 0%, rgba(255, 170, 0, .16), transparent 68%),
+    linear-gradient(180deg, rgba(28, 24, 15, .78), rgba(10, 10, 12, .94));
+  border: 1px solid rgba(255, 170, 0, .25);
+}
+.refer__badge {
+  padding: 10px 22px; border-radius: 999px;
+  color: #0a0a0c; font-size: 1.25rem; font-weight: 900; letter-spacing: .01em;
+  background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
+  box-shadow: 0 0 13px rgba(255, 170, 0, .22);
+  text-transform: uppercase;
+}
+.refer__cap {
+  margin: 0; max-width: 54ch; font-size: .75rem; line-height: 1.6;
+  color: var(--muted); overflow-wrap: anywhere;
+}
+
+.refer__terms, .refer__link, .refer__status {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  padding: 16px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(26, 23, 15, .7), rgba(10, 10, 12, .92));
+  border: 1px solid rgba(255, 170, 0, .18);
+}
+.refer__terms h2 { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); }
+.refer__list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.refer__list li {
+  font-size: .75rem; line-height: 1.6; color: #d1d5db;
+  overflow-wrap: anywhere;
+}
+.refer__label {
+  font-family: var(--mono); font-size: .625rem; font-weight: 800;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--faint);
+}
+.refer__row { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.refer__field {
+  flex: 1 1 260px; min-width: 0; padding: 11px 13px; border-radius: 8px;
+  background: rgba(0, 0, 0, .5); border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--gold-bright); font-size: .75rem; outline: none;
+}
+.refer__field:focus { border-color: #ffaa00; }
+.refer__copy { flex: none; }
+.refer__gate { margin: 0; font-size: .75rem; color: var(--faint); }
+
+/* The honest status. Deliberately not styled as an error — nothing is broken, it is simply not
+   switched on, and dressing that as a failure would be its own kind of misleading. */
+.refer__status { border-color: rgba(255, 170, 0, .32); background: rgba(255, 170, 0, .07); }
+.refer__status h3 { margin: 0; font-size: .875rem; font-weight: 800; color: var(--gold-bright); }
+.refer__status p {
+  margin: 0; font-size: .75rem; line-height: 1.6; color: #d1d5db;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 860px) {
+  .navref__txt b { display: none; }
+  .cashpill { width: 104px; padding: 6px 10px; }
+  .tabdrop__menu { min-width: 220px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabs .navref { animation: none; }
+  .cashpill__n.pop { animation: none; }
+  .tabdrop__chev { transition: none; }
+}
+
+/* ── the marketplace inspector ──
+   Grid on the left, the selected crate on the right. The card used to carry an Open button that
+   sent you to another page with a toast telling you to search for the crate by name; a
+   marketplace has to let you buy what is in it. */
+.market__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 330px);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+.mktcard { cursor: pointer; transition: border-color .2s ease, box-shadow .2s ease; }
+.mktcard:hover { border-color: color-mix(in srgb, var(--risk) 45%, transparent); }
+.mktcard:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.mktcard[data-on="1"] {
+  border-color: var(--risk);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--risk) 50%, transparent),
+              0 0 26px -10px var(--risk);
+}
+
+.inspect {
+  position: sticky;
+  top: 82px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(30, 26, 16, .74), rgba(10, 10, 12, .94));
+  border: 1px solid rgba(255, 170, 0, .18);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+.inspect__empty { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.inspect__empty p { margin: 0; font-size: .75rem; line-height: 1.6; color: var(--muted); }
+.inspect__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.inspect__head img {
+  width: 48px; height: 48px; flex: none;
+  object-fit: contain; image-rendering: pixelated;
+}
+.inspect__meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.inspect__name { font-size: .875rem; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.inspect__by { font-size: .625rem; color: var(--faint); overflow-wrap: anywhere; }
+.inspect__blurb {
+  margin: 0; font-size: .75rem; line-height: 1.55; color: var(--muted); overflow-wrap: anywhere;
+}
+.inspect__stats {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: 3px 10px; margin: 0; min-width: 0;
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .05);
+}
+.inspect__stats dt { font-size: .625rem; color: var(--faint); overflow-wrap: anywhere; }
+.inspect__stats dd {
+  margin: 0; font-size: .75rem; color: var(--gold-bright); text-align: right; white-space: nowrap;
+}
+.inspect__open { width: 100%; text-align: center; }
+
+.inspect__drops {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  max-height: 300px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 170, 0, .3) transparent;
+}
+.inspect__drop {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) minmax(0, auto) minmax(0, 54px);
+  gap: 8px; align-items: center; min-width: 0;
+  padding: 6px 8px; border-radius: 8px;
+  background: rgba(255, 255, 255, .022);
+}
+.inspect__drop img { width: 22px; height: 22px; object-fit: contain; image-rendering: pixelated; }
+.inspect__dropname {
+  font-size: .75rem; color: var(--text); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.inspect__dropval { font-size: .625rem; color: var(--gold-bright); white-space: nowrap; }
+.inspect__dropodds { font-size: .625rem; color: var(--gold-bright); text-align: right; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .market__split { grid-template-columns: minmax(0, 1fr); }
+  .inspect { position: static; }
+}

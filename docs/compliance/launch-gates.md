@@ -4,7 +4,7 @@ This repository provides technical controls, not a determination that operating 
 service is lawful or permitted. Do not enable wagering in production until counsel and the server
 operator have reviewed the exact business and custody model.
 
-The current build is backend-only and English-only. It contains no frontend, cash wallet, CS2/Steam
+The current build is English-only and includes a server-ledger frontend. It contains no CS2/Steam
 integration, or catalog items. Both transfer feature flags are forced off and the placeholder
 adapter refuses every handoff.
 

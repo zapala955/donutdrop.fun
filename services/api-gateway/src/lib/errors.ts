@@ -23,7 +23,3 @@ export function conflict(code: string, message: string): never {
 export function forbidden(code: string, message: string): never {
   throw new AppError(403, code, message);
 }
-
-export function notFound(code: string, message: string): never {
-  throw new AppError(404, code, message);
-}

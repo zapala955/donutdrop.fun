@@ -26,6 +26,7 @@ describe('configuration', () => {
   it('loads strict typed values', () => {
     const config = loadConfig(base);
     assert.equal(config.houseEdgeBps, 500);
+    assert.equal(config.itemSellRateBps, 9000);
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
@@ -51,10 +52,10 @@ describe('configuration', () => {
   it('validates bot identities, proxy CIDRs, and bigint limits', () => {
     assert.throws(() => loadConfig({ ...base, BOT_CREDENTIALS_JSON: '{}' }));
     assert.throws(() => loadConfig({ ...base, TRUSTED_PROXY_CIDRS: 'true' }));
-    assert.throws(() => loadConfig({ ...base, MAX_DAILY_WAGER_MINOR: '9223372036854775808' }));
     assert.throws(() => loadConfig({ ...base, ADMIN_MINECRAFT_IDS: 'NotAUuid' }));
     assert.throws(() => loadConfig({ ...base, AUDIT_LOG_KEY_ID: 'legacy-v1' }));
     assert.throws(() => loadConfig({ ...base, REDIS_URL: 'https://redis.invalid' }));
+    assert.throws(() => loadConfig({ ...base, ITEM_SELL_RATE_BPS: '0' }));
     assert.throws(() => loadConfig({ ...base, APP_ORIGIN: 'http://localhost:3000/path' }));
     assert.throws(() => loadConfig({ ...base, APP_ORIGIN: 'http://user@localhost:3000' }));
   });

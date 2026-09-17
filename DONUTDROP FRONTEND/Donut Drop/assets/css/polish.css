@@ -1,0 +1,564 @@
+/* polish.css — the finish pass.
+ *
+ * Loaded last of every sheet, which is the whole point: it is the layer that settles arguments the
+ * six sheets above it were having with each other. Three surfaces had grown their own idea of what
+ * a container looks like — a raw grey box in the chat, a flat yellow slab in the header, a bare
+ * dark rectangle behind the hero — and none of them agreed with the obsidian-and-gold the rest of
+ * the platform is built in.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * ONE MATERIAL, THREE WEIGHTS
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * Everything here is the same material at a different weight, rather than a new treatment per
+ * component:
+ *
+ *   glass    rgba(18, 18, 22, .6) + blur(8px) + a gold hairline   — rows, chips, cards
+ *   plate    rgba(10, 10, 12, .82) + blur(14px) + a brighter rim  — things that float over content
+ *   ember    a gold glow, never a gold fill                        — anything that wants attention
+ *
+ * The rule that keeps it coherent: GOLD IS LIGHT, NOT PAINT. A solid yellow slab reads as a
+ * warning on a dark interface, which is why the header buttons were the loudest thing on a page
+ * whose actual subject is money. Gold appears as a border, a glow or a glyph; the fill stays
+ * obsidian. The one exception is the primary in-page call to action, which is allowed to be solid
+ * precisely because nothing around it is.
+ */
+
+/* ═════════════════════════ tokens this sheet adds ═════════════════════════ */
+
+:root {
+  --glass:      rgba(18, 18, 22, .6);
+  --glass-hi:   rgba(26, 26, 32, .72);
+  --plate:      rgba(10, 10, 12, .82);
+  --gold-edge:  rgba(255, 170, 0, .3);
+  --gold-edge-hi: rgba(255, 170, 0, .55);
+  --ember:      0 0 20px rgba(255, 170, 0, .2);
+  --ember-hi:   0 0 28px rgba(255, 170, 0, .38);
+  --lift:       translateY(-3px);
+}
+
+/* ═════════════════════════ 1 · the chat rail ═════════════════════════ */
+
+/* ── the counter ──
+   It was rendering the word LIVE because the old build wrote a status string into the slot the
+   number now owns. The badge is a dot, a figure and a label, on one baseline, in a tabular font so
+   a three-digit count changing cannot nudge the label sideways. */
+.chat__online {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--ob-line);
+  font-size: .625rem;
+}
+.chat__online i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #35d07f;
+  box-shadow: 0 0 8px rgba(53, 208, 127, .9);
+  animation: pulseDot 2.4s ease-in-out infinite;
+  flex: 0 0 auto;
+}
+.chat__online b {
+  color: var(--text); font-weight: 800; font-size: .75rem;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.chat__online em {
+  font-style: normal; letter-spacing: .16em; color: var(--faint); font-size: .5625rem;
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .45; }
+}
+
+.chat__head {
+  background: linear-gradient(180deg, rgba(18, 18, 22, .9), rgba(10, 10, 12, .7));
+  border-bottom: 1px solid var(--ob-line);
+}
+
+/* ── the log ──
+   The first row used to sit flush against the header and get visually clipped by it. The padding
+   is asymmetric on purpose: more at the top than the bottom, because the top edge is the one under
+   a sticky header and the bottom is against an input the eye already treats as a boundary. */
+.chat__log {
+  padding: 12px 10px 10px;
+  gap: 7px;
+  scroll-padding-top: 12px;
+  overscroll-behavior: contain;
+}
+
+/* ── a message ──
+   Was `background: var(--panel)`: an opaque grey block, the same grey as every panel on the site,
+   stacked sixty deep. Glass instead, so the rail reads as one surface with rows on it rather than
+   a column of unrelated boxes. */
+.msg {
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, .04);
+  border-radius: var(--r-crisp);
+  padding: 8px 10px;
+  transition: border-color var(--ob-quick), background var(--ob-quick);
+}
+.msg:hover { border-color: var(--ob-line); background: var(--glass-hi); }
+.msg__top { gap: 6px; margin-bottom: 4px; }
+.msg__who { color: var(--text); font-size: .8125rem; }
+.msg__body { color: #d1d5db; line-height: 1.45; }
+.msg__t { font-size: .625rem; }
+
+/* Staff and whales get an edge, not a fill. */
+.msg[data-staff="1"] { border-color: rgba(255, 122, 0, .3); }
+.msg[data-whale="1"] { border-color: rgba(255, 215, 0, .26); }
+
+/* ── the win flex card ──
+   The payout is the reason the row exists, so it is the biggest thing in it. */
+.msg--hit {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 170, 0, .12), transparent 62%),
+    var(--glass);
+  border-color: var(--gold-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .07);
+}
+.flexwin { display: flex; align-items: center; gap: 10px; }
+.flexwin__art {
+  width: 34px; height: 34px; flex: 0 0 auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 8px rgba(255, 170, 0, .45));
+}
+.flexwin__stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.flexwin__tag {
+  font-size: 1.0625rem; font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px rgba(255, 170, 0, .5);
+}
+.flexwin__from {
+  font-size: .625rem; letter-spacing: .1em; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flexwin .msg__replay { margin: 0 0 0 auto; align-self: center; flex: 0 0 auto; }
+
+/* ═════════════════════════ 2 · header ═════════════════════════ */
+
+/* Vertical alignment first: the wallet strip mixed 28px pills with 34px buttons on a baseline,
+   which is what made the borders look like they were bleeding into each other. */
+.top .wallet { align-items: center; }
+.top .wallet > * { align-self: center; }
+
+/* ── the buttons ──
+   Solid high-saturation yellow, twice, in the busiest strip on the page. On a dark interface a
+   filled yellow rectangle is the shape of a warning, and these two were shouting over the balance
+   — which is the number a player is actually there to read.
+
+   Obsidian fill, gold hairline, gold text. Scoped to `.top` so in-page calls to action keep their
+   weight: the rule is that gold fill is rare, not that it is banned. */
+.top .btn--go,
+.top .btn--withdraw,
+.top .navref {
+  background: var(--panel);
+  border: 1px solid var(--gold-edge);
+  color: var(--gold-bright);
+  box-shadow: none;
+  transition:
+    border-color var(--ob-quick),
+    box-shadow var(--ob-quick),
+    transform var(--ob-quick);
+}
+.top .btn--go:hover,
+.top .btn--withdraw:hover,
+.top .navref:hover {
+  border-color: var(--gold-edge-hi);
+  box-shadow: var(--ember);
+  transform: translateY(-1px);
+  background: var(--panel2);
+}
+.top .btn--go .btn__ico,
+.top .btn--withdraw .btn__ico { stroke: var(--gold-bright); }
+
+/* The referral pill keeps its gift glyph in colour and drops the slab. */
+.top .navref__txt { color: var(--gold-bright); }
+.top .navref__txt b { color: var(--text); }
+
+/* The vault bar is styled once, in section 4. It used to be defined here too and the two blocks
+   were overriding each other property by property, which is exactly the kind of argument this
+   sheet exists to end. */
+
+/* ═════════════════════════ 3 · hero ═════════════════════════ */
+
+/* ── the canvas ──
+   A matte obsidian field with a faint grid and a warm pool of light behind the headline. The grid
+   is two repeating gradients rather than an image: it scales to any viewport, costs no request,
+   and cannot go blurry on a high-density screen. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  padding: clamp(18px, 3vw, 34px);
+  background:
+    radial-gradient(52% 62% at 22% 42%, rgba(255, 170, 0, .11), transparent 70%),
+    linear-gradient(180deg, #0c0c10, var(--bg));
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  z-index: -1;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .028) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .028) 0 1px, transparent 1px 64px);
+  /* Faded at the edges so the grid never collides with the card's own border. */
+  mask-image: radial-gradient(76% 76% at 50% 45%, #000 40%, transparent 100%);
+}
+/* Embers. Four of them, drifting upward on different clocks — enough to make the field feel warm
+   and few enough that nobody counts them. */
+.hero::after {
+  content: '';
+  position: absolute; inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 18% 78%, rgba(255, 215, 0, .8), transparent 60%),
+    radial-gradient(1.6px 1.6px at 62% 88%, rgba(255, 170, 0, .7), transparent 60%),
+    radial-gradient(2.4px 2.4px at 41% 94%, rgba(255, 215, 0, .55), transparent 60%),
+    radial-gradient(1.4px 1.4px at 84% 82%, rgba(255, 170, 0, .6), transparent 60%);
+  animation: embers 14s linear infinite;
+}
+@keyframes embers {
+  from { transform: translateY(0); opacity: .0; }
+  15%  { opacity: .85; }
+  85%  { opacity: .5; }
+  to   { transform: translateY(-230px); opacity: 0; }
+}
+
+/* Ambient light behind the headline, so the text sits IN the scene rather than on top of it. */
+.hero__copy { position: relative; }
+.hero__copy::before {
+  content: '';
+  position: absolute;
+  left: -14%; top: -22%;
+  width: 128%; height: 150%;
+  z-index: -1;
+  background: radial-gradient(52% 50% at 38% 42%, rgba(255, 170, 0, .16), transparent 72%);
+  pointer-events: none;
+}
+
+/* ── the item showcase ──
+   It was floating on the page background with nothing under it, so the orbit read as clip art
+   pasted over the hero. A glass plate with a gold perimeter gives it somewhere to be. */
+.hero__art {
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(70% 70% at 50% 45%, rgba(255, 170, 0, .09), transparent 72%),
+    var(--plate);
+  border: 1px solid var(--gold-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 225, 160, .07),
+    var(--ember),
+    0 26px 60px -40px rgba(0, 0, 0, 1);
+  overflow: hidden;
+}
+
+/* ═════════════════════════ 3b · feature cards ═════════════════════════ */
+
+/* Equal rows, so four cards with different amounts of content are still four cards the same
+   height — `stretch` alone is not enough when the grid is auto-flowing. */
+.promos { align-items: stretch; }
+.promo {
+  padding: 16px;
+  min-height: 0;
+  height: 100%;
+  gap: 10px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(255, 170, 0, .07), transparent 58%),
+    var(--glass);
+  backdrop-filter: blur(8px);
+  transition:
+    transform .18s var(--ob-ease),
+    border-color .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease);
+}
+.promo:hover {
+  transform: var(--lift);
+  border-color: var(--gold-edge);
+  box-shadow: var(--ember), 0 22px 50px -38px rgba(0, 0, 0, 1);
+}
+.promo:hover .promo__art { opacity: .72; transform: translateY(-50%) scale(1.04); }
+.promo__art { transition: opacity .18s var(--ob-ease), transform .18s var(--ob-ease); }
+.promo h3 { margin: 0; }
+
+/* ── the stat pills ──
+   Same pill, every card, every route: obsidian fill, crisp gold border, value over label. They had
+   drifted into three different treatments across the four cards. */
+.statstrip { gap: 6px; }
+.statstrip > div {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  flex: 1 1 0; min-width: 0;
+  padding: 6px 6px;
+  border-radius: var(--r-crisp);
+  background: rgba(10, 10, 12, .72);
+  border: 1px solid var(--gold-edge);
+}
+.statstrip__v {
+  font-size: .75rem; font-weight: 800; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.statstrip__k {
+  margin: 0;
+  font-size: .5rem; letter-spacing: .14em; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+
+/* ═════════════════════════ motion ═════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::after,
+  .vjp__fill,
+  .chat__online i { animation: none; }
+  .promo,
+  .top .btn--go,
+  .top .btn--withdraw,
+  .top .navref { transition: none; }
+  .promo:hover { transform: none; }
+}
+
+/* ═════════════════════════ 4 · the vault widget ═════════════════════════ */
+
+/* A radiant bar rather than a line of text. The fill is a moving gradient, so the seam reads as
+   energy travelling along it rather than a static bar that happens to be gold. */
+.vjp {
+  background: linear-gradient(180deg, rgba(18, 18, 22, .96), rgba(10, 10, 12, .86));
+  border-bottom: 1px solid var(--gold-edge);
+  box-shadow: 0 0 15px rgba(255, 170, 0, .25);
+}
+.vjp__bar { height: 3px; }
+.vjp__fill {
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-body) 45%, var(--gold-bright));
+  background-size: 220% 100%;
+  box-shadow: 0 0 12px rgba(255, 170, 0, .8), 0 0 24px rgba(255, 170, 0, .35);
+  animation: vjpFlow 2.8s linear infinite;
+}
+@keyframes vjpFlow {
+  from { background-position: 0% 0; }
+  to   { background-position: 220% 0; }
+}
+.vjp[data-hot="1"] .vjp__fill { animation-duration: 1.3s; }
+
+.vjp__label { align-items: center; gap: 8px; padding: 5px 12px 6px; }
+/* The coin is a gradient disc with a rim, not an emoji: an emoji renders differently on every OS
+   and would be the one glyph on the bar the platform does not control. */
+.vjp__coin {
+  width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto;
+  background: radial-gradient(circle at 34% 30%, #ffe9a3, var(--gold-body) 58%, var(--gold-deep));
+  box-shadow: 0 0 9px rgba(255, 170, 0, .8), inset 0 -1px 1px rgba(0, 0, 0, .45);
+}
+.vjp__amt {
+  font-size: .9375rem; font-weight: 900; color: var(--gold-bright);
+  text-shadow: 0 0 16px rgba(255, 170, 0, .55);
+  /* Tabular, so the odometer's rolling digits cannot shuffle the label beside them. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═════════════════════════ 5 · biggest pulls ═════════════════════════ */
+
+.drops { display: flex; flex-direction: column; gap: 7px; padding: 0; margin: 0; list-style: none; }
+.drops li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center; gap: 10px;
+  padding: 9px 11px;
+  border-radius: var(--r-crisp);
+  background: rgba(18, 18, 22, .7);
+  backdrop-filter: blur(8px);
+  /* The rarity is a left edge and an inner wash, so a Netherite pull and a Spawner pull are
+     different objects at a glance rather than two identical rows with different coloured dots. */
+  border: 1px solid color-mix(in srgb, var(--rar) 26%, transparent);
+  border-left: 2px solid var(--rar);
+  box-shadow: inset 0 0 22px -12px var(--rar);
+  transition: transform var(--ob-quick), border-color var(--ob-quick), box-shadow var(--ob-quick);
+}
+.drops li:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--rar) 52%, transparent);
+  box-shadow: inset 0 0 26px -10px var(--rar), 0 0 18px -8px var(--rar);
+}
+.drops li img {
+  width: 30px; height: 30px; object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--rar) 60%, transparent));
+}
+.drops__stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.drops .what {
+  font-size: .8125rem; font-weight: 700; color: #d1d5db;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drops .who {
+  font-size: .625rem; letter-spacing: .06em; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drops .amt {
+  font-size: .8125rem; font-weight: 800;
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-body));
+  padding: 3px 9px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 14px rgba(255, 170, 0, .35);
+  white-space: nowrap;
+}
+.drops__empty { color: var(--faint); font-size: .8125rem; padding: 10px 2px; }
+
+/* ═════════════════════════ 6 · how the odds work ═════════════════════════ */
+
+.oddsgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: var(--ob-gap);
+}
+.oddscard {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 12px;
+  border-radius: var(--r-crisp);
+  background: rgba(18, 18, 22, .7);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--ob-line);
+  transition: border-color var(--ob-quick), box-shadow var(--ob-quick);
+}
+.oddscard:hover { border-color: var(--gold-edge); box-shadow: var(--ember); }
+.oddscard__tag {
+  font-size: .5rem; letter-spacing: .18em; font-weight: 800;
+  color: var(--gold-body);
+}
+.oddscard__v {
+  font-size: .8125rem; font-weight: 800; color: #d1d5db; letter-spacing: .02em;
+}
+.oddscard__k { font-size: .625rem; color: var(--faint); line-height: 1.35; }
+/* The live pill. Monospace because it is a hash, truncated because it is 64 characters. */
+.oddscard__hash {
+  margin-top: 4px;
+  font-size: .5625rem; color: var(--gold-bright);
+  background: rgba(10, 10, 12, .8);
+  border: 1px solid var(--gold-edge);
+  border-radius: 999px;
+  padding: 3px 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .oddsgrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ═════════════════════════ 7 · the live feed ═════════════════════════ */
+
+.feed {
+  background: rgba(18, 18, 22, .72);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--ob-line);
+  border-radius: var(--r-panel);
+  overflow: hidden;
+}
+.feed__cols {
+  background: rgba(10, 10, 12, .7);
+  border-bottom: 1px solid var(--gold-edge);
+}
+.feed__cols span {
+  font-size: .5rem; letter-spacing: .2em; color: var(--faint); text-transform: uppercase;
+}
+.feedrow {
+  border-bottom: 1px solid rgba(255, 170, 0, .07);
+  transition: background var(--ob-quick);
+}
+.feedrow:last-child { border-bottom: none; }
+.feedrow:hover { background: rgba(255, 170, 0, .045); }
+
+/* ── the game badge ── */
+.gamechip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(10, 10, 12, .74);
+  border: 1px solid var(--ob-line);
+  font-size: .625rem; font-weight: 700; color: #d1d5db;
+  white-space: nowrap;
+}
+.gamechip__ico { font-style: normal; font-size: .6875rem; line-height: 1; }
+.gamechip[data-kind="case"]    { border-color: rgba(255, 170, 0, .26); }
+.gamechip[data-kind="upgrade"] { border-color: rgba(255, 215, 0, .3); }
+
+/* ── the player head ── */
+.feedrow__who { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.feedav {
+  width: 20px; height: 20px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 3px; overflow: hidden;
+  background: var(--panel3);
+}
+.feedav img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.feedav i {
+  font-style: normal; font-size: .5625rem; font-weight: 800; color: var(--gold-bright);
+}
+.feedrow__who span {
+  font-size: .75rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── the wager chip ── */
+.coinchip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(10, 10, 12, .74);
+  border: 1px solid rgba(255, 170, 0, .2);
+  white-space: nowrap;
+}
+.coinchip__coin {
+  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: radial-gradient(circle at 34% 30%, #ffe9a3, var(--gold-body) 58%, var(--gold-deep));
+  box-shadow: 0 0 6px rgba(255, 170, 0, .6);
+}
+.coinchip b {
+  font-size: .75rem; font-weight: 800; color: var(--gold-body);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the multiple, in three bands ──
+   Two was not enough. A round that returned less than its stake is a loss even when it paid
+   something, and a big multiple deserves to be visible from across the page. */
+.feedrow__mult { font-weight: 800; font-variant-numeric: tabular-nums; }
+.feedrow__mult[data-band="down"] { color: #c0392b; }
+.feedrow__mult[data-band="flat"] { color: var(--muted); }
+.feedrow__mult[data-band="hot"] {
+  color: var(--gold-bright);
+  text-shadow: 0 0 12px rgba(255, 170, 0, .6);
+}
+
+/* ── the result chip ──
+   Green for a profit, muted grey for a loss. The loss is deliberately NOT a bright red: this is a
+   public feed of other people's rounds, and a wall of alarm-red is both hard to read and a poor
+   thing to put in front of somebody deciding whether to play. */
+.feedrow__delta {
+  justify-self: end;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: .75rem; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.feedrow__delta[data-up="1"] {
+  color: #35d07f;
+  background: rgba(53, 208, 127, .1);
+  border: 1px solid rgba(53, 208, 127, .28);
+}
+.feedrow__delta[data-up="0"] {
+  color: #8b8e96;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .07);
+}
+.feedrow__delta.feedrow__na,
+.feedrow__mult.feedrow__na {
+  background: none; border: none; color: var(--faint); font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vjp__fill { animation: none; }
+  .drops li { transition: none; }
+  .drops li:hover { transform: none; }
+}

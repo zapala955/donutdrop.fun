@@ -1,0 +1,1027 @@
+/* obsidian.css — the finish layer.
+ *
+ * Loaded last, after pages.css. Nothing here introduces a component; everything here is the final
+ * pass over components the six sheets before it already built. It exists because the polish it
+ * carries is cross-cutting — a scrollbar rule, a stacking order, a hover contract — and the
+ * alternative was the same three declarations repeated across six files that disagree about them.
+ *
+ * Four jobs, in order:
+ *
+ *   1. ONE STACKING ORDER. Six sheets each picked a z-index in isolation and the numbers stopped
+ *      describing an order. They are tokens now, declared once, and every layer reads from them.
+ *   2. ONE SCROLLBAR. The native bar is a light-grey slab on a near-black page and it was the
+ *      loudest thing on several screens.
+ *   3. ONE HOVER CONTRACT. Cards lifted 2px, 3px or 4px depending on which sheet built them.
+ *   4. ONE MEASURE FOR MONEY. Currency is tabular, non-wrapping and given a box it cannot escape,
+ *      because a balance that reflows the header when it crosses a magnitude is a layout bug that
+ *      only shows up on the players who have the most money.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   1. THE STACKING ORDER
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   The defect this fixes is specific and it only appeared under 1080px.
+
+   `.top` carried `z-index: 80` and `backdrop-filter`, either of which alone makes it a stacking
+   context. Everything inside it — the account menu at 90, the header tooltips at 60 — is therefore
+   capped at 80 relative to the root, no matter what number it declares for itself. The mobile chat
+   drawer is a sibling at the root with `z-index: 90`. So the drawer won, and on a phone the account
+   menu and every header tooltip opened UNDERNEATH the chat rail while appearing to be on top of
+   everything else in the header.
+
+   Raising the numbers inside `.top` could never have fixed it; the cap is the context, not the
+   child. The header itself has to outrank the drawer, and then its children inherit that win.
+
+   The scale below is deliberately sparse. Gaps are room to insert a layer without renumbering. */
+:root {
+  --z-bg:        -1;   /* the fixed page backdrop                                */
+  --z-base:       1;   /* .shell and ordinary flow                               */
+  --z-chat:      70;   /* the chat drawer, when it is a drawer                   */
+  --z-tabbar:    75;   /* the mobile tab bar                                     */
+  --z-top:      100;   /* the header — ABOVE the drawer, so its menus are too    */
+  --z-portal:   120;   /* menus re-parented to <body>: the Cases disclosure      */
+  --z-overlay:  160;   /* reel, cutscene, reveal — the full-screen films         */
+  --z-toast:    200;   /* level-up and every other announcement                  */
+  --z-dev:      210;   /* the developer bench, over its own overlays             */
+  --z-skip:     300;   /* the skip link, which must beat literally everything    */
+
+  /* The finish tokens the rest of this sheet spends. */
+  --ob-line:     rgba(255, 215, 0, .15);   /* the 1px gold hairline, at rest     */
+  --ob-line-hi:  rgba(255, 215, 0, .34);   /* the same hairline, lit             */
+  --ob-glow:     0 0 15px rgba(255, 170, 0, .25);
+  --ob-lift:     translateY(-2px);
+  --ob-ease:     cubic-bezier(.22, 1, .36, 1);
+  --ob-quick:    150ms ease-in-out;
+  --ob-gap:      12px;   /* inside a component  */
+  --ob-gap-lg:   16px;   /* between components  */
+  --ob-track:    #121216;
+  --ob-thumb:    #2a2a32;
+  --ob-thumb-hi: #3a3a45;
+
+  /* ── the radius scale ──
+   *
+   * Eight distinct corner radii were live at once — 3, 5, 7, 8, 14, 20, 50% and both 999px and
+   * 9999px, which are the same pill spelled two ways. 3 against 5 against 7 is not a distinction
+   * anybody can see; it is just three components disagreeing.
+   *
+   * app.css argues for a crisp small corner and it is right — "square corners are what the game
+   * does", and 3px keeps that crispness without reading as a forgotten property. That decision is
+   * preserved; what changes is that the crisp tier is now ONE value instead of three. 4px is the
+   * same corner to the eye and it sits on the scale, so the tier stops drifting.
+   *
+   * Three steps, and the two shapes: crisp control, softer inner surface, glass panel. */
+  --r-crisp: 4px;
+  --r-soft:  8px;
+  --r-panel: 14px;
+}
+
+/* Repointed rather than edited at the definition, so the reasoning app.css and surface.css each
+   wrote for their own value stays readable next to the value it explains. */
+:root {
+  --r:    var(--r-crisp);
+  --r-s:  var(--r-crisp);
+  --r-lg: var(--r-soft);
+}
+
+.bg                       { z-index: var(--z-bg); }
+.shell                    { z-index: var(--z-base); }
+.top                      { z-index: var(--z-top); }
+.tabdrop__menu            { z-index: var(--z-portal); }
+.rvl, .reel, .cut         { z-index: var(--z-overlay); }
+.toasts                   { z-index: var(--z-toast); }
+#devRoot                  { z-index: var(--z-dev); }
+.skip                     { z-index: var(--z-skip); }
+
+@media (max-width: 1080px) {
+  .chat { z-index: var(--z-chat); }
+  .tabs { z-index: var(--z-tabbar); }
+}
+
+/* Inside the header the numbers are now free to mean what they say, because the context they sit
+   in outranks everything they used to lose to. */
+.acct .menu    { z-index: 20; }
+.ihint::after  { z-index: 30; }
+
+/* The film overlays live at the document root, not inside `.shell`, but nothing enforced that and
+   a stray `transform` on an ancestor would turn one of them into a containing block and clip a
+   full-screen overlay to a column. `position: fixed` plus an explicit inset states the intent; the
+   isolation keeps each film's internal layers out of everybody else's order. */
+.rvl, .reel, .cut { isolation: isolate; }
+
+/* `<dialog>` opened with showModal() renders in the browser's top layer, which is above every
+   z-index on the page by definition — so the account-link sheet needs nothing from this scale.
+   Its backdrop does need to be dark enough to actually separate it from an obsidian page. */
+.modal::backdrop {
+  background: rgba(4, 4, 6, .82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.modal {
+  border-color: var(--ob-line);
+  box-shadow: 0 32px 80px -24px rgba(0, 0, 0, .96), 0 0 0 1px rgba(0, 0, 0, .6);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   2. THE SCROLLBAR
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Firefox gets the two-property standard version; Chromium and Safari get the -webkit- pseudos,
+   which are the only way to round a thumb. Both describe the same bar, so a page does not change
+   character between engines.
+
+   Scoped to the elements that scroll rather than declared on `*`: a universal selector here makes
+   the engine evaluate the pseudo against every element on the page for no gain. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ob-thumb) var(--ob-track);
+}
+::-webkit-scrollbar              { width: 8px; height: 8px; }
+::-webkit-scrollbar-track        { background: var(--ob-track); }
+::-webkit-scrollbar-thumb        { background: var(--ob-thumb); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover  { background: var(--ob-thumb-hi); }
+::-webkit-scrollbar-corner       { background: var(--ob-track); }
+
+/* A scroller inside a panel is thinner still, because at 8px it competes with the panel's own
+   edge for the same few pixels. */
+.chat__log,
+.feed__rows,
+.drawer__rows,
+.modal,
+.modal__body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ob-thumb) transparent;
+}
+.chat__log::-webkit-scrollbar,
+.feed__rows::-webkit-scrollbar,
+.drawer__rows::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.modal__body::-webkit-scrollbar { width: 6px; height: 6px; }
+.chat__log::-webkit-scrollbar-track,
+.feed__rows::-webkit-scrollbar-track,
+.drawer__rows::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.modal__body::-webkit-scrollbar-track { background: transparent; }
+.chat__log::-webkit-scrollbar-thumb,
+.feed__rows::-webkit-scrollbar-thumb,
+.drawer__rows::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.modal__body::-webkit-scrollbar-thumb { background: var(--ob-thumb); border-radius: 999px; }
+
+/* The horizontal rails stay hidden. They scroll by drag and by snap, and a visible bar under a row
+   of tabs reads as a divider that moved. */
+.tabs::-webkit-scrollbar,
+.subnav::-webkit-scrollbar { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   3. GLASS, AND THE LIGHT ON IT
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Every large surface already sits on one of three treatments. What was missing was agreement
+   about the edge: some carried a flat grey border, some a gold one at .18, some nothing at all, so
+   two panels side by side looked like two materials. One hairline, one blur, one shadow. */
+.glass,
+.feed,
+.card,
+.modal,
+.tabdrop__menu,
+.acct .menu {
+  border-radius: 14px;
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(22, 22, 27, .82), rgba(10, 10, 12, .92));
+  border: 1px solid var(--ob-line);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 225, 160, .07),
+    0 18px 44px -30px rgba(0, 0, 0, .95);
+}
+
+/* The lit top edge. A 1px gradient that is brightest at the middle and gone at both corners, which
+   is what a rim light on a curved dark surface actually does. `inset: 0 0 auto` pins it to the top
+   without also stretching it down the box. */
+.card::before,
+.acct .menu::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent, rgba(255, 170, 0, .5) 30%, rgba(255, 215, 0, .8) 50%, rgba(255, 170, 0, .5) 70%, transparent);
+  opacity: .6;
+}
+/* Inset past the corner radius rather than clipped to it. `overflow: hidden` would have done the
+   same job and would also have clipped any tooltip bubble that opens inside a card. */
+.card::before, .acct .menu::before { inset: 0 14px auto; }
+/* Only .card needs this. The account menu is already `position: absolute`, which is itself a
+   positioned ancestor for the rim light — and giving it `relative` instead put an 814px menu into
+   the header's flow, which stretched .acct to 862px and squeezed the nav down to 259px. */
+.card { position: relative; }
+
+/* ── the ambient low-glow ──
+   Applied to the four surfaces that are the subject of their screen. Deliberately not applied to
+   every panel: a glow on everything is a glow on nothing, and it is also four more composited
+   layers per frame. */
+.hero,
+.glass,
+.upg .wheel__ring,
+.refer__hero {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 225, 160, .08),
+    0 24px 60px -34px rgba(0, 0, 0, .96),
+    0 0 34px -12px rgba(255, 170, 0, .12);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   4. THE HOVER CONTRACT
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   One lift, one glow, one duration, for every card a player can click. The sheets before this used
+   -2px, -3px and -4px on three card families that appear on the same screen, so the page moved by
+   different amounts depending on which card the pointer happened to be over.
+
+   Only `transform` and `box-shadow` animate. Both are compositor properties: they do not touch
+   layout and they do not invalidate paint on anything around them, which is what makes a grid of
+   forty crate cards survive a mouse being dragged across it. */
+.gamecard,
+.promo,
+.mode,
+.crate,
+.cratecard,
+.ucard,
+.btlcard,
+.vip__row,
+.mktcard {
+  /* No `will-change` here on purpose. These selectors match a fifty-card crate grid, and the hint
+     would promote fifty layers for the entire life of the page to save a few milliseconds on the
+     one the pointer is actually over. transform and box-shadow are composited either way. */
+  transition:
+    transform .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease),
+    border-color .18s var(--ob-ease);
+}
+.gamecard:hover,
+.promo:hover,
+.mode:hover,
+.crate:hover,
+.cratecard:hover,
+.ucard:hover,
+.btlcard:hover,
+.mktcard:hover {
+  transform: var(--ob-lift);
+  box-shadow: var(--ob-glow), 0 18px 40px -26px rgba(0, 0, 0, .9);
+  border-color: var(--ob-line-hi);
+}
+/* A card that is not a destination does not pretend to be one. */
+.gamecard--soon:hover,
+.mode--soon:hover,
+.crate--soon:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--line);
+}
+/* Keyboard reaches the same state the pointer does, and the focus ring is drawn outside the box so
+   it never sits under a neighbour. */
+.gamecard:focus-visible,
+.promo:focus-visible,
+.crate:focus-visible,
+.cratecard:focus-visible,
+.ucard:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+  transform: var(--ob-lift);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   5. THE GRID RHYTHM
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Two gaps on the whole site: 12px inside a component, 16px between components. What was here was
+   2, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 22 and 26px, chosen per block, which is why nothing lined
+   up across two panels that happened to sit in the same row. */
+.promos,
+.games,
+.crates,
+.battles,
+.modes,
+.cols,
+.quests,
+.vip,
+.rake,
+.daily,
+.race,
+.board,
+.stats,
+.refer,
+.war       { gap: var(--ob-gap); }
+
+.cols,
+.hero__cta { gap: var(--ob-gap-lg); }
+
+/* Rows of buttons and chips: one gap, and they wrap rather than overflowing. The quick-bet row
+   (+$100K / +$1M / MAX) and the stat chips are the two that were measurably off — both were laid
+   out with `gap: 6px` against a 12px grid, so the row read as a different component. */
+.chips,
+.stakes,
+.modal__row,
+.filters,
+.statstrip { display: flex; flex-wrap: wrap; gap: var(--ob-gap); align-items: stretch; }
+
+/* ── the quick-bet row ──
+ *
+ * Six chips — +$100K, +$1M, +$10M, ½x, 2x, MAX — laid out as a wrapping flex row where every chip
+ * carried `flex: 1 1 auto`. On the last line that grow factor has only two chips to share the full
+ * width between, so the row rendered as four normal chips above two stretched ones, and no two
+ * lines had the same rhythm.
+ *
+ * A three-column grid is the fix rather than a tighter flex-basis, because six items in three
+ * columns is exactly two even rows: every chip is the same width, at every container width, with
+ * no line that can be short. */
+.qchips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ob-gap);
+  width: 100%;
+  margin-top: 10px;
+}
+.qchip {
+  flex: none;            /* the grid owns the sizing now */
+  min-width: 0;          /* so a long label ellipses instead of widening its column */
+  padding: 8px 6px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--ob-line);
+  border-radius: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qchip:hover:not(:disabled) { border-color: var(--ob-line-hi); }
+/* MAX commits the whole balance, so it keeps the accent it earned — but as a full-width chip on
+   its own row it reads as a different control from its neighbours. It stays in the grid. */
+.qchip--max { color: var(--gold-bright); border-color: rgba(255, 215, 0, .38); }
+
+/* Every chip in those rows is the same height whatever is inside it. `align-items: stretch` above
+   does the work; this states the floor so a one-character chip is not shorter than a six-character
+   one when the row is allowed to wrap onto two lines. */
+.chips > *,
+.stakes > * {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   6. MONEY, AND THE BOX IT LIVES IN
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Three rules, applied everywhere a figure is rendered.
+
+   `tabular-nums` is the one that matters most: proportional digits are different widths, so a
+   counter animating from $1.7B to $1.8B physically changes width mid-count and drags its
+   neighbours with it. Tabular figures make every digit the same advance, and the number becomes a
+   fixed-width object that happens to change what it says. */
+.mono,
+.cashpill__n,
+.wallet__pill b,
+.statstrip__v,
+.track__v,
+.stats__v,
+.acct__v,
+.vip__threshold,
+.feed__val,
+.droprow__value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+/* A figure in a flex or grid cell needs `min-width: 0` before `text-overflow` can do anything:
+   without it the cell's automatic minimum size is the full text and the box just grows instead of
+   clipping, which is the overflow half of the same bug. */
+.kv span,
+.facts dd,
+.track__r > *,
+.log .o,
+.msg__who,
+.reflist__n,
+.feed__cell,
+.droprow > * { min-width: 0; }
+
+/* The balance widget. Its width is fixed so the controls to its right never move — but a fixed box
+   plus a number that can reach $1,234.5B is a clipping bug waiting for the player who gets there.
+   A container query unit scales the glyphs down inside the box instead, so the figure shrinks and
+   the box does not move. */
+.cashpill {
+  container-type: inline-size;
+  overflow: hidden;
+  border-color: var(--ob-line-hi);
+}
+.cashpill__n { font-size: clamp(.72rem, 11cqw, .92rem); }
+@supports not (width: 1cqw) {
+  /* No container queries: fall back to a smaller fixed size that clears the widest realistic
+     figure rather than to one that clips it. */
+  .cashpill__n { font-size: .875rem; }
+}
+@media (max-width: 1080px) {
+  /* 104px was too tight for $999.9M once the coin and the padding are subtracted. */
+  .cashpill { width: 112px; padding: 6px 9px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   7. THE HEADER
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.top {
+  background: linear-gradient(180deg, rgba(10, 10, 12, .96), rgba(10, 10, 12, .88));
+  border-bottom: 1px solid var(--ob-line);
+}
+/* The blur is desktop-only, and that is not a taste decision.
+ *
+ * `backdrop-filter` makes an element a containing block for every `position: fixed` descendant it
+ * has. Under 1080px `.tabs` becomes a fixed bar at the foot of the viewport — and a fixed child of
+ * a containing block resolves against that block, so the blur would pin the tab bar inside the
+ * 62px header instead. app.css already sets `backdrop-filter: none` at this breakpoint for this
+ * exact reason; re-declaring it unconditionally here quietly undid that. */
+@media (min-width: 1081px) {
+  .top {
+    backdrop-filter: blur(12px) saturate(1.1);
+    -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  }
+}
+
+/* ── the invite badge ──
+   It pulses again. It was switched off in matte.css, and the reason was sound: the version before
+   that animated its own box-shadow spread, and a spreading shadow on an inline-flex item inside a
+   scrolling flex row makes the row re-evaluate its overflow every frame — which is the shake.
+
+   This pulses a pseudo-element instead. The glow is painted by ::after, absolutely positioned and
+   `pointer-events: none`, so it is outside the flex row's layout entirely: it can grow to any size
+   without the row knowing it exists. The badge itself never changes size, and neither does the gap
+   to the nav link beside it. */
+.tabs .navref {
+  position: relative;
+  isolation: isolate;
+  animation: none;                 /* the old box-shadow pulse stays dead */
+  box-shadow: 0 0 10px rgba(255, 170, 0, .2);
+}
+.tabs .navref::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 170, 0, .55), transparent 72%);
+  opacity: .34;
+  animation: navref-breathe 2.8s ease-in-out infinite;
+}
+@keyframes navref-breathe {
+  0%, 100% { opacity: .28; transform: scale(1);    }
+  50%      { opacity: .62; transform: scale(1.06); }
+}
+.tabs .navref {
+  flex: none;          /* never shrink below the text: this is the bar's one call to action */
+}
+.tabs .navref__txt {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── the 1v1 Skill entry ──
+ *
+ * This replaced a disabled placeholder carrying a SOON pill. The pill is LIVE now and it pulses,
+ * and it pulses the same way the invite badge does and for the same reason: the glow is painted by
+ * an absolutely positioned ::after that is outside the flex row's layout, so it can breathe to any
+ * size without the nav row re-measuring and nudging the links beside it.
+ *
+ * The naive version — animating the pill's own box-shadow spread — reflows a scrolling flex row
+ * every frame, and the visible symptom is the whole navbar shivering. */
+.tabs .navlive {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 7px 12px;
+  border-radius: var(--r-crisp);
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: .875rem;
+  transition: color var(--ob-quick), background var(--ob-quick);
+}
+.tabs .navlive:hover { color: var(--text); background: var(--panel2); }
+.tabs .navlive[aria-current="page"] {
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, rgba(255, 170, 0, .16), rgba(255, 170, 0, .06));
+  box-shadow: inset 0 -2px 0 #ffaa00;
+  font-weight: 600;
+}
+.navlive__pill {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: .5rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  color: #0a0a0c;
+  background: linear-gradient(135deg, #ffd700, #ffaa00);
+}
+.navlive__pill::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 215, 0, .7), transparent 72%);
+  animation: navlive-breathe 2.2s ease-in-out infinite;
+}
+@keyframes navlive-breathe {
+  0%, 100% { opacity: .25; transform: scale(1);    }
+  50%      { opacity: .75; transform: scale(1.12); }
+}
+
+.duelwrap { min-width: 0; }
+
+/* ── the Cases disclosure ──
+   150ms ease-in-out, opening and closing, on opacity and a 4px rise. It is re-parented to <body>
+   and toggled with the `hidden` attribute, so the transition needs a state it can run between:
+   `hidden` is overridden to keep the box laid out but unpainted and untouchable, and the attribute
+   removal is what starts the run. */
+.tabdrop__menu {
+  transition:
+    opacity var(--ob-quick),
+    transform var(--ob-quick),
+    visibility 0s linear 0ms;
+  opacity: 1;
+  transform: translateY(0);
+  border-color: var(--ob-line-hi);
+}
+.tabdrop__menu[hidden] {
+  display: flex;                    /* beats the [hidden]{display:none} in platform.css */
+  opacity: 0;
+  transform: translateY(-4px);
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: 0s, 0s, var(--ob-quick);
+}
+.tabdrop__row { transition: background var(--ob-quick), color var(--ob-quick); }
+.tabdrop__chev { transition: transform var(--ob-quick); }
+
+/* The account menu gets the same motion, for the same reason. */
+.acct .menu {
+  transition: opacity var(--ob-quick), transform var(--ob-quick), visibility 0s linear 0ms;
+  opacity: 1;
+  transform: translateY(0);
+  border: 1px solid var(--ob-line);
+}
+.acct .menu[hidden] {
+  display: block;
+  opacity: 0;
+  transform: translateY(-4px);
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: 0s, 0s, var(--ob-quick);
+}
+
+/* ── the VIP indicator ──
+   Thirty sub-levels, 0.1% to 2.00%, and the bar is the only place the player sees where they are
+   between two of them. It sits left of the balance because progress is context for the number, not
+   the other way round. */
+.lvl {
+  background: linear-gradient(180deg, rgba(22, 22, 27, .8), rgba(12, 12, 16, .9));
+  border: 1px solid var(--ob-line);
+  transition: border-color var(--ob-quick), box-shadow var(--ob-quick);
+}
+.lvl:hover { border-color: var(--ob-line-hi); box-shadow: var(--ob-glow); }
+.lvl__n { color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.lvl__bar {
+  width: 58px;
+  height: 5px;
+  border-radius: 999px;
+  background: #0a0a0c;
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 0, .1);
+  overflow: hidden;
+}
+.lvl__bar i {
+  background: linear-gradient(90deg, #ffaa00, #ffd700);
+  box-shadow: 0 0 8px rgba(255, 170, 0, .5);
+  border-radius: inherit;
+}
+
+/* ── `hidden` has to actually hide ──
+ *
+ * `.lvl { display: flex }` is an author declaration, and an author `display` beats the user-agent
+ * sheet's `[hidden] { display: none }` on cascade origin — so `#lvlPill`, which ships with the
+ * `hidden` attribute and is only unhidden by vip.js once there is a real standing to show, was
+ * visible to every logged-out visitor as a placeholder reading "LVL —" beside an empty bar.
+ * `#lvlTip` sat next to it for the same reason.
+ *
+ * Scoped to the widgets with the defect rather than declared globally: a blanket
+ * `[hidden] { display: none !important }` would also override the two dropdowns above, which
+ * deliberately stay laid out while hidden so they have a state to animate out of. */
+.lvl[hidden],
+.ihint[hidden],
+.wallet [hidden],
+.tabs [hidden] { display: none !important; }
+
+/* ── the header at phone width ──
+ *
+ * At 390px the control row measured 439px against a 390px viewport: the Withdraw button — the one
+ * control a gambling site must never make hard to reach — was 49px off the right edge and
+ * unclickable. app.css already sheds the brand text, the Log in button and both button labels at
+ * 560px; that was sized before the level pill and the balance widget arrived, and three more
+ * controls have to give.
+ *
+ * What survives is the rule app.css states and is right about: the balance, both money actions,
+ * and the account menu. Progression and the mute toggle both have a permanent home one tap away
+ * inside that menu, so neither loses a route by leaving the bar. */
+@media (max-width: 560px) {
+  .lvl, .lvl__tip { display: none; }
+  .mute { display: none; }
+  /* Back to the 104px app.css sized for this width — the 112px above is for tablets, where there
+     is room for it, and inheriting it down here is what put the row over the edge. */
+  .cashpill { width: 104px; padding: 6px 8px; }
+  .wallet { gap: 4px; }
+  .top { gap: 8px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   8. THE HERO
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   The flat asset background is replaced by two drawn layers: a dark grid, and embers.
+
+   Both are pseudo-elements on `.hero`, so there is no new markup and no new request. The grid is
+   two repeating-linear-gradients at 1px, masked to fade out toward the edges so it reads as depth
+   rather than as graph paper. The embers are a static set of radial-gradients drifting on one
+   transform — one composited layer for the whole field, not one element per ember. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 90% at 18% 0%, rgba(255, 170, 0, .09), transparent 62%),
+    linear-gradient(100deg, #121216 40%, #0a0a0c);
+  border: 1px solid var(--ob-line);
+  overflow: hidden;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(0deg,   rgba(255, 215, 0, .05) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg,  rgba(255, 215, 0, .05) 0 1px, transparent 1px 44px);
+  -webkit-mask-image: radial-gradient(120% 90% at 30% 20%, #000 20%, transparent 78%);
+  mask-image: radial-gradient(120% 90% at 30% 20%, #000 20%, transparent 78%);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: -10% -4%;
+  z-index: -1;
+  pointer-events: none;
+  /* Nine embers. Fixed positions and fixed sizes, because a field that is generated per-frame is a
+     field the compositor has to repaint per-frame; this one is painted once and then moved. */
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 78%, #ffd700, transparent 60%),
+    radial-gradient(1.2px 1.2px at 26% 42%, #ffaa00, transparent 60%),
+    radial-gradient(2px   2px   at 38% 88%, #ffd700, transparent 60%),
+    radial-gradient(1.2px 1.2px at 52% 30%, #ffaa00, transparent 60%),
+    radial-gradient(1.6px 1.6px at 64% 66%, #ffd700, transparent 60%),
+    radial-gradient(1px   1px   at 73% 18%, #ffd700, transparent 60%),
+    radial-gradient(1.8px 1.8px at 84% 54%, #ffaa00, transparent 60%),
+    radial-gradient(1.2px 1.2px at 91% 82%, #ffd700, transparent 60%),
+    radial-gradient(1.4px 1.4px at 46% 12%, #ffaa00, transparent 60%);
+  opacity: .55;
+  animation: ember-drift 18s ease-in-out infinite alternate;
+}
+@keyframes ember-drift {
+  from { transform: translate3d(0, 0, 0)       scale(1);    opacity: .38; }
+  to   { transform: translate3d(0, -26px, 0)   scale(1.04); opacity: .72; }
+}
+/* The static glow behind the chest was a cyan disc. It is the same gold as everything else now,
+   and it is the light source the floating items are lit by. */
+.hero__glow {
+  background: radial-gradient(circle, rgba(255, 170, 0, .22), rgba(255, 215, 0, .07) 42%, transparent 68%);
+  filter: blur(2px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   9. STAT BADGES
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   What replaced the paragraphs. Three shapes, one material: a figure in mono over a label in
+   letterspaced caps, so the eye lands on the number first and reads the unit second. */
+
+/* The hero's three guarantees. */
+.herostats {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ob-gap);
+}
+.herostats li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  /* A chip is never allowed to be wider than the column it sits in: below that it wraps its own
+     label rather than pushing the hero sideways. */
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(18, 18, 22, .72);
+  border: 1px solid var(--ob-line);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .06);
+}
+.herostats b    { color: var(--gold-bright); font-size: .875rem; font-weight: 800; letter-spacing: .04em; }
+.herostats span { color: var(--muted); font-size: .75rem; }
+
+/* The promo cards' three-slot strip. */
+.statstrip {
+  margin: 10px 0 0;
+  padding: 0;
+  max-width: 78%;
+}
+.statstrip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: rgba(10, 10, 12, .55);
+  border: 1px solid rgba(255, 215, 0, .1);
+}
+.statstrip__v {
+  margin: 0;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ac, var(--gold-bright));
+  white-space: nowrap;
+}
+.statstrip__k {
+  margin: 0;
+  font-size: .625rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* The game grid's single badge. */
+.gamecard__badge {
+  position: relative;
+  z-index: 1;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  color: var(--ac, var(--gold-bright));
+  background: rgba(10, 10, 12, .62);
+  border: 1px solid color-mix(in srgb, var(--ac, #ffd700) 28%, transparent);
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   10. THE REEL CENTRELINE
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   The marker is the only thing on that screen a player is actually looking at during the last
+   second of a spin, and its whole job is to be unambiguous about where "centre" is.
+
+   It was 2px wide. A 2px line has no single centre pixel, so on the frame the strip locks the eye
+   cannot tell which of two pixel columns the tile stopped against, and the lock reads as
+   approximate. It is a 1px hairline now, with the weight moved into a separate bloom behind it —
+   the line stays razor-sharp and the glow does the work of being visible. */
+.reel__marker {
+  width: 1px;
+  background: linear-gradient(180deg, #ffaa00, #fff 46%, #fff 54%, #ffaa00);
+  box-shadow:
+    0 0 0 1px rgba(255, 215, 0, .55),
+    0 0 10px 1px rgba(255, 215, 0, .8),
+    0 0 30px 6px rgba(255, 170, 0, .4),
+    0 0 70px 14px rgba(255, 170, 0, .16);
+}
+/* The nocks: smaller, sharper, and pointing at the line rather than sitting beside it. */
+.reel__marker::before { border-left-width: 5px; border-right-width: 5px; border-top: 8px solid #ffd700; filter: drop-shadow(0 0 5px rgba(255, 215, 0, .9)); }
+.reel__marker::after  { border-left-width: 5px; border-right-width: 5px; border-bottom: 8px solid #ffd700; filter: drop-shadow(0 0 5px rgba(255, 215, 0, .9)); }
+
+/* The gold rail the strip runs in, so the centreline has a frame to be central to. */
+.reel__stage {
+  border-top: 1px solid var(--ob-line-hi);
+  border-bottom: 1px solid var(--ob-line-hi);
+  box-shadow:
+    inset 0  1px 0 rgba(255, 215, 0, .12),
+    inset 0 -1px 0 rgba(255, 215, 0, .12),
+    0 0 44px -18px rgba(255, 170, 0, .5);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   11. THE UPGRADER DIAL
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   The arc is the win chance and the disc behind it is everything else. They were 7.5px of gradient
+   on a #221d14 track over a brown-black disc, which put roughly one stop of separation between the
+   thing being measured and the thing it is measured against.
+
+   The face goes properly black and the track goes with it; the arc keeps its full gold ramp and
+   gains weight and a hard edge. Same geometry, four times the contrast. */
+.upg .wheel__ring {
+  background:
+    radial-gradient(closest-side, #0a0a0c 66%, #121216 69%, #0a0a0c 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--ob-line),
+    inset 0 0 40px -10px #000,
+    0 24px 64px -30px rgba(0, 0, 0, .96);
+}
+.upg .wheel__track {
+  stroke: #1c1c22;
+  stroke-width: 8;
+}
+.upg .wheel__arc {
+  stroke-width: 8;
+  filter:
+    drop-shadow(0 0 4px rgba(255, 215, 0, .9))
+    drop-shadow(0 0 14px rgba(255, 170, 0, .5));
+}
+.upg .wheel__ticks .tick    { stroke: #24242b; }
+.upg .wheel__ticks .tick.on { stroke: #ffd700; }
+/* The pointer reads against the black face now, so it can be a hairline too. */
+.upg .wheel__needle i {
+  border-left-width: 6px;
+  border-right-width: 6px;
+  border-bottom: 12px solid #ffd700;
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, .95));
+}
+.upg .wheel__pct { color: #ffd700; text-shadow: 0 0 22px rgba(255, 170, 0, .45); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   12. CLIPPING, AND THE THINGS THAT CAUSE IT
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* A grid or flex child's automatic minimum size is its content, which is why a long username or a
+   twelve-digit figure pushes a column wider instead of ellipsing inside it. Declared on the
+   containers that hold text of unknown length. */
+.main,
+.view,
+.card,
+.glass,
+.feed__row,
+.msg,
+.log li,
+.track__r,
+.kv { min-width: 0; }
+
+/* A dropdown must never be taller than the space under it. These are re-parented to <body> and
+   positioned from script, so the only thing CSS can do is cap them and let them scroll. */
+.tabdrop__menu,
+.acct .menu {
+  max-height: calc(100dvh - var(--top-h) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Headings wrap rather than overflowing their column, and long unbroken strings (a seed hash, a
+   wallet address) break rather than forcing a horizontal scrollbar onto the page. */
+h1, h2, h3, .phead h1, .card__h { overflow-wrap: break-word; }
+.mono, .kv span, .facts dd      { overflow-wrap: anywhere; }
+/* …except money, which is never long enough to need it and looks wrong broken. */
+.cashpill__n, .statstrip__v, .lvl__n, .wallet__pill b { overflow-wrap: normal; }
+
+/* Nothing on this site scrolls sideways at the document level.
+ *
+ * `overflow-x: hidden` is the obvious spelling and it is the wrong one: setting it computes
+ * `overflow-y` to `auto`, which turns <body> into a scroll container — and `position: sticky`
+ * resolves against its nearest scroll container, so the header would stop sticking to the
+ * viewport and start sticking to a box that never scrolls. `clip` clips without establishing a
+ * scroll container, which is exactly and only what is wanted here. */
+@supports (overflow: clip) {
+  body { overflow-x: clip; }
+}
+
+/* ── containers with nothing in them ──
+ *
+ * The crate drop drawer is built empty and filled when a crate is selected, and an empty one still
+ * painted its own chrome: a 23px strip of border, gradient and gold glow sitting between the grid
+ * and the live feed, describing a panel with no content in it.
+ *
+ * `:empty` is the right tool and not a hack — it stops matching the moment the first child is
+ * appended, so the drawer needs no class toggle from script and cannot get stuck hidden. */
+#crateDrawer:empty,
+#promos:empty,
+#gameGrid:empty,
+.drawer:empty,
+.statstrip:empty {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   12b. COMPOSITION
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── the account strip ──
+ *
+ * `.track` carried `margin-top` and nothing else, so the row inside it — "ACCOUNT · Link your
+ * Minecraft identity to load your balance" — floated between two card grids with no container of
+ * its own, reading as a caption that had come loose from something. It is a panel like everything
+ * else around it now. */
+.track {
+  margin-top: var(--ob-gap-lg);
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(22, 22, 27, .72), rgba(10, 10, 12, .86));
+  border: 1px solid var(--ob-line);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .05);
+}
+.track__lead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.track__lv {
+  font-size: .625rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  color: var(--gold-bright);
+  flex: none;
+}
+.track__lead > span:not(.track__lv) { color: var(--muted); font-size: .875rem; min-width: 0; }
+
+/* ── the chat rail, with nothing in it ──
+ *
+ * 292px of horizontal space — a fifth of a 1440px viewport — sat as flat black on every route
+ * before the first message arrived, which reads as a broken panel rather than a quiet one. An
+ * empty state costs nothing and says which of the two it is.
+ *
+ * `:empty` again, so the message disappears the moment chat.js appends a node; nothing has to
+ * remember to clear it. */
+.chat__log:empty {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+.chat__log:empty::after {
+  content: "No messages yet";
+  font-size: .75rem;
+  letter-spacing: .1em;
+  color: var(--faint);
+  text-align: center;
+}
+
+/* ── the hero art ──
+ *
+ * Six sprites were scattered to the corners of a 300px box at up to 48px each, which made the
+ * hero's right half read as loose props rather than as one composed image. They orbit the chest
+ * now: pulled inward, sized down, and ranked so the chest stays the subject and they stay
+ * atmosphere. */
+.hero__f      { width: 32px; height: 32px; opacity: .75; }
+.hero__f--1   { top: 14%; left: 22%; }
+.hero__f--2   { top: 22%; right: 20%; width: 28px; height: 28px; }
+.hero__f--3   { bottom: 20%; left: 18%; width: 30px; height: 30px; }
+.hero__f--4   { bottom: 16%; right: 22%; width: 34px; height: 34px; }
+.hero__f--5   { top: 48%; left: 12%; width: 24px; height: 24px; }
+.hero__f--6   { top: 44%; right: 11%; width: 26px; height: 26px; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   13. MOTION
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Everything above that moves, stops. The embers and the badge glow are ambient — they are the
+   first things that should go for somebody who asked the OS not to animate things. */
+@media (prefers-reduced-motion: reduce) {
+  .hero::after,
+  .tabs .navref::after,
+  .navlive__pill::after { animation: none; }
+  .tabs .navref::after { opacity: .4; }
+  .navlive__pill::after { opacity: .4; }
+
+  .gamecard, .promo, .mode, .crate, .cratecard, .ucard, .btlcard, .mktcard,
+  .tabdrop__menu, .acct .menu, .lvl {
+    transition: none;
+  }
+  .gamecard:hover, .promo:hover, .mode:hover, .crate:hover,
+  .cratecard:hover, .ucard:hover, .btlcard:hover, .mktcard:hover {
+    transform: none;
+  }
+}

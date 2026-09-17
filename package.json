@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/provably-fair",
     "services/api-gateway",
-    "services/minecraft-bot"
+    "services/minecraft-bot",
+    "services/discord-bot"
   ],
   "engines": {
     "node": ">=22.0.0"
@@ -22,7 +23,11 @@
     "db:migrate": "npm run db:migrate --workspace @donut/api",
     "db:seed": "npm run db:seed --workspace @donut/api",
     "maintenance": "npm run maintenance --workspace @donut/api",
-    "admin:bootstrap": "npm run admin:bootstrap --workspace @donut/api --"
+    "admin:bootstrap": "npm run admin:bootstrap --workspace @donut/api --",
+    "db:dev-seed": "npm run db:dev-seed --workspace @donut/api",
+    "discord:start": "npm run start --workspace @donut/discord-bot",
+    "discord:dev": "npm run dev --workspace @donut/discord-bot",
+    "discord:commands": "npm run commands:register --workspace @donut/discord-bot"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

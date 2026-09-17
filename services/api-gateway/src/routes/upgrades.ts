@@ -12,6 +12,10 @@ import { createAuthGuards } from '../lib/auth.js';
 import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { creditWallet, recordQuestProgress, recordWager } from '../lib/cash-settlement.js';
+import { announceWin } from '../lib/discord-flex.js';
+import type { WagerOutcome } from '../lib/cash-settlement.js';
+import { assertGameEligible } from '../lib/game-eligibility.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 
 export const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
@@ -44,6 +48,15 @@ const inventorySelectionSchema = z
     expectedUnitValueMinor: fixedItemValueSchema,
   })
   .strict();
+/* A cash stake reuses the fixed-value string shape: a positive integer of minor units inside the
+ * database's bigint range. It is not an item, so it carries no expected price to re-check — the
+ * amount the client sent IS the amount the wallet is debited, and the wallet's own balance check
+ * is the only authority that matters. */
+const balanceSelectionSchema = z
+  .object({
+    balanceMinor: fixedItemValueSchema,
+  })
+  .strict();
 const upgradeSchema = z
   .object({
     clientSeed: clientSeedSchema,
@@ -51,9 +64,17 @@ const upgradeSchema = z
     targetCatalogItemId: z.uuid(),
     targetQuantity: z.number().int().min(1).max(2304).default(1),
     expectedTargetUnitValueMinor: fixedItemValueSchema,
-    stakes: z.array(inventorySelectionSchema).min(1).max(20),
+    stakes: z.array(inventorySelectionSchema).min(1).max(20).optional(),
+    balanceStake: balanceSelectionSchema.optional(),
   })
-  .strict();
+  .strict()
+  /* Exactly one source of value per round. Both would mean two different debits racing for one
+   * chance figure; neither would mean a free roll. The shape is rejected before anything is
+   * locked so neither case can reach the transaction. */
+  .refine((body) => (body.stakes === undefined) !== (body.balanceStake === undefined), {
+    message: 'Provide either stakes or balanceStake, not both',
+    path: ['stakes'],
+  });
 const historyQuery = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -111,6 +132,9 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
     maxWinChancePpm: config.maxWinChancePpm,
     currency: null,
     itemValuesAreFixed: true,
+    // The upgrader takes either a custody lot or cash off the wallet. The client needs to know
+    // the cash route exists before it offers it, rather than discovering it from a rejection.
+    balanceStakesEnabled: true,
   }));
 
   app.get('/v1/fairness/current', { preHandler: guards.authenticate }, async (request) => {
@@ -123,11 +147,19 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
     };
   });
 
-  app.post('/v1/fairness/verify', async (request) => {
-    const body = parseWith(verifySchema, request.body);
-    const roll = createFairRoll(body.serverSeed, body.clientSeed, body.nonce);
-    return { serverSeedHash: hashServerSeed(body.serverSeed), ...roll };
-  });
+  /* Public by design — anyone must be able to replay a roll without an account, or the
+   * verification is not independent. It is still bounded: the handler does HMAC work per call,
+   * which makes an unlimited endpoint a free CPU amplifier, and an unthrottled oracle is a gift
+   * to anyone probing the construction. */
+  app.post(
+    '/v1/fairness/verify',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request) => {
+      const body = parseWith(verifySchema, request.body);
+      const roll = createFairRoll(body.serverSeed, body.clientSeed, body.nonce);
+      return { serverSeedHash: hashServerSeed(body.serverSeed), ...roll };
+    },
+  );
 
   app.post(
     '/v1/upgrades',
@@ -139,13 +171,20 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
       const body = parseWith(upgradeSchema, request.body);
       const idempotencyKey = requireIdempotencyKey(request.headers['idempotency-key']);
       const userId = requireUserId(request.authUser?.id);
-      const stakeIds = body.stakes.map((stake) => stake.inventoryLotId);
+      const itemStakes = body.stakes;
+      const stakeIds = itemStakes?.map((stake) => stake.inventoryLotId) ?? [];
       if (new Set(stakeIds).size !== stakeIds.length) {
         throw new AppError(400, 'DUPLICATE_STAKE', 'Each inventory lot may only appear once');
       }
       const requestHash = sha256Hex(canonicalJson(body));
 
-      const round = await db.transaction(async (client) => {
+      const settled = await db.transaction<{
+        round: UpgraderRoundRow | undefined;
+        /* Null on an idempotent replay: that round's wager was recorded the first time, and a
+         * replay must not re-announce a win the feed already carries. */
+        wager: WagerOutcome | null;
+        stakeValue: bigint;
+      }>(async (client) => {
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8831))', [
           `${userId}:${idempotencyKey}`,
         ]);
@@ -157,10 +196,10 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           if (existing.rows[0].request_hash !== requestHash) {
             conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was used with a different request');
           }
-          return existing.rows[0];
+          return { round: existing.rows[0], wager: null, stakeValue: 0n };
         }
 
-        const dailyWagerRemaining = await assertEligible(client, config, userId);
+        await assertGameEligible(client, config, userId);
 
         const fairnessResult = await client.query<FairnessRow>(
           `SELECT id, server_seed_ciphertext, server_seed_hash, nonce
@@ -182,44 +221,67 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           );
         }
 
-        const stakesResult = await client.query<StakeRow>(
-          `SELECT i.id, i.catalog_item_id, i.bot_id, i.quantity, c.unit_value_minor
-             FROM inventory_lots i
-             JOIN catalog_items c ON c.id = i.catalog_item_id
-             JOIN bot_accounts b ON b.id = i.bot_id
-            WHERE i.owner_user_id = $1 AND i.id = ANY($2::uuid[]) AND i.state = 'available'
-              AND c.enabled AND b.status = 'online' AND b.reconciliation_status = 'matched'
-              AND b.id = ANY($3::uuid[])
-              AND b.last_heartbeat_at > now() - interval '45 seconds'
-              AND b.last_snapshot_at > now() - interval '45 seconds'
-              AND b.transfer_capable
-            ORDER BY i.id FOR UPDATE OF i, c FOR SHARE OF b`,
-          [userId, stakeIds, provisionedBotIds],
-        );
-        if (stakesResult.rows.length !== stakeIds.length) {
-          conflict('STAKE_UNAVAILABLE', 'One or more stake items are unavailable or unreconciled');
-        }
-        const stakeById = new Map(stakesResult.rows.map((row) => [row.id, row]));
+        /* Where the wagered value comes from. Both branches produce one figure — stakeValue —
+         * and everything downstream (multiplier bounds, daily limit, chance, the recorded round)
+         * reads only that, so the two stake shapes cannot diverge in how they are priced.
+         *
+         * The wallet is locked here, in the slot the lot lock occupies for an item round, so a
+         * user only ever holds one of the two. Both paths already hold this user's fairness seed
+         * row, which serializes a cash upgrade against a concurrent case open, so taking the
+         * wallet before the target stock cannot deadlock against that route's opposite order. */
+        const stakeById = new Map<string, StakeRow>();
         let stakeValue = 0n;
-        for (const selected of body.stakes) {
-          const row = stakeById.get(selected.inventoryLotId);
-          if (!row || selected.quantity > row.quantity)
-            conflict('STAKE_QUANTITY_INVALID', 'Stake quantity exceeds inventory');
-          assertExpectedPrice(row.unit_value_minor, selected.expectedUnitValueMinor, 'stake');
-          stakeValue = checkedItemValue(
-            stakeValue,
-            BigInt(row.unit_value_minor),
-            selected.quantity,
-          );
-        }
-        if (stakeValue > dailyWagerRemaining) {
-          throw new AppError(
-            403,
-            'DAILY_LIMIT_EXCEEDED',
-            'This upgrade would exceed the daily wager limit',
-          );
-        }
+        let balanceAfterMinor: string | null = null;
 
+        if (body.balanceStake) {
+          stakeValue = BigInt(body.balanceStake.balanceMinor);
+          await client.query(
+            `INSERT INTO user_wallets(user_id, balance_minor) VALUES ($1, 0)
+             ON CONFLICT (user_id) DO NOTHING`,
+            [userId],
+          );
+          const wallet = await client.query<{ balance_minor: string }>(
+            'SELECT balance_minor FROM user_wallets WHERE user_id = $1 FOR UPDATE',
+            [userId],
+          );
+          if (BigInt(wallet.rows[0]?.balance_minor ?? '0') < stakeValue) {
+            throw new AppError(409, 'INSUFFICIENT_BALANCE', 'Balance is too low for this stake');
+          }
+        } else {
+          if (!itemStakes) throw new Error('Upgrade passed validation with no stake');
+          const stakesResult = await client.query<StakeRow>(
+            `SELECT i.id, i.catalog_item_id, i.bot_id, i.quantity, c.unit_value_minor
+               FROM inventory_lots i
+               JOIN catalog_items c ON c.id = i.catalog_item_id
+               JOIN bot_accounts b ON b.id = i.bot_id
+              WHERE i.owner_user_id = $1 AND i.id = ANY($2::uuid[]) AND i.state = 'available'
+                AND c.enabled AND b.status = 'online' AND b.reconciliation_status = 'matched'
+                AND b.id = ANY($3::uuid[])
+                AND b.last_heartbeat_at > now() - interval '45 seconds'
+                AND b.last_snapshot_at > now() - interval '45 seconds'
+                AND b.transfer_capable
+              ORDER BY i.id FOR UPDATE OF i, c FOR SHARE OF b`,
+            [userId, stakeIds, provisionedBotIds],
+          );
+          if (stakesResult.rows.length !== stakeIds.length) {
+            conflict(
+              'STAKE_UNAVAILABLE',
+              'One or more stake items are unavailable or unreconciled',
+            );
+          }
+          for (const row of stakesResult.rows) stakeById.set(row.id, row);
+          for (const selected of itemStakes) {
+            const row = stakeById.get(selected.inventoryLotId);
+            if (!row || selected.quantity > row.quantity)
+              conflict('STAKE_QUANTITY_INVALID', 'Stake quantity exceeds inventory');
+            assertExpectedPrice(row.unit_value_minor, selected.expectedUnitValueMinor, 'stake');
+            stakeValue = checkedItemValue(
+              stakeValue,
+              BigInt(row.unit_value_minor),
+              selected.quantity,
+            );
+          }
+        }
         const catalog = await client.query<{ id: string; unit_value_minor: string }>(
           'SELECT id, unit_value_minor FROM catalog_items WHERE id = $1 AND enabled FOR SHARE',
           [body.targetCatalogItemId],
@@ -255,11 +317,37 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
              ORDER BY i.bot_id, i.created_at, i.id FOR UPDATE OF i FOR SHARE OF b`,
           [body.targetCatalogItemId, provisionedBotIds],
         );
-        if (
-          stock.rows.reduce((sum, row) => sum + BigInt(row.quantity), 0n) <
-          BigInt(body.targetQuantity)
-        ) {
-          conflict('TARGET_OUT_OF_STOCK', 'Target item is out of stock');
+        /* Cash-only play awards no lot at all: the prize is credited to the wallet and nothing
+         * leaves custody. There is therefore no stock to check and no bot for an award to hang
+         * off, so the whole gate is skipped.
+         *
+         * It previously was not, and the live-bot fallback below rejected rounds with
+         * TARGET_OUT_OF_STOCK whenever the bot's heartbeat aged past 45 seconds — which, with no
+         * bot process actually running, is most of the time. The prize had nothing to do with a
+         * bot; the check was inherited from the item era and nobody had removed it. */
+        if (config.cashOnlyPlay) {
+          // nothing to reserve
+        } else if (!config.houseStockUnlimited) {
+          if (
+            stock.rows.reduce((sum, row) => sum + BigInt(row.quantity), 0n) <
+            BigInt(body.targetQuantity)
+          ) {
+            conflict('TARGET_OUT_OF_STOCK', 'Target item is out of stock');
+          }
+        } else if (!stock.rows.length) {
+          const liveBot = await client.query<{ id: string }>(
+            `SELECT b.id FROM bot_accounts b
+              WHERE b.status = 'online' AND b.reconciliation_status = 'matched'
+                AND b.id = ANY($1::uuid[])
+                AND b.last_heartbeat_at > now() - interval '45 seconds'
+                AND b.last_snapshot_at > now() - interval '45 seconds'
+                AND b.transfer_capable
+              ORDER BY b.id LIMIT 1`,
+            [provisionedBotIds],
+          );
+          const fallbackBot = liveBot.rows[0];
+          if (!fallbackBot) conflict('TARGET_OUT_OF_STOCK', 'No custody bot is available');
+          else stock.rows.push({ id: '', bot_id: fallbackBot.id, quantity: body.targetQuantity });
         }
 
         const chancePpm = calculateWinChancePpm(
@@ -281,13 +369,49 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
         const fairRoll = createFairRoll(serverSeed, body.clientSeed, fairness.nonce);
         const outcome = fairRoll.rollPpm < chancePpm ? 'win' : 'lose';
         const roundId = randomUUID();
-        const firstAwardId = outcome === 'win' ? randomUUID() : null;
+        /* In cash-only play the item is the prize's identity, not the prize. No lot is awarded,
+         * so there is no award id to reserve and nothing to draw out of house stock. */
+        const firstAwardId = outcome === 'win' && !config.cashOnlyPlay ? randomUUID() : null;
+        let cashPayoutMinor: bigint | null = null;
+        let payoutBalanceAfterMinor: string | null = null;
+        if (outcome === 'win' && config.cashOnlyPlay) {
+          /* Settled at the target's FULL value. targetValue is exactly the figure the win chance
+           * was priced from a few lines above, so paying anything less here would quietly widen
+           * the edge beyond the one the player was shown. */
+          cashPayoutMinor = targetValue;
+          payoutBalanceAfterMinor = await creditWallet(
+            client,
+            userId,
+            cashPayoutMinor,
+            'upgrade_win',
+            roundId,
+          );
+        }
+
+        /* The debit lands last, once every reason to reject the round is behind us. The wallet
+         * row has been held FOR UPDATE since the stake was priced, so the balance checked above
+         * is still the balance being spent here. */
+        if (body.balanceStake) {
+          const debited = await client.query<{ balance_minor: string }>(
+            `UPDATE user_wallets
+                SET balance_minor = balance_minor - $2, updated_at = now()
+              WHERE user_id = $1
+              RETURNING balance_minor`,
+            [userId, stakeValue.toString()],
+          );
+          const balanceAfter = debited.rows[0]?.balance_minor;
+          if (balanceAfter === undefined) throw new Error('Wallet debit returned no balance');
+          balanceAfterMinor = balanceAfter;
+        }
+
         await client.query(
           `INSERT INTO upgrader_rounds
              (id, user_id, idempotency_key, request_hash, target_catalog_item_id, target_inventory_lot_id, target_quantity,
               stake_value_minor, target_value_minor, house_edge_bps, chance_ppm, roll_ppm, outcome,
-              server_seed_hash, server_seed_reveal, client_seed, nonce, rng_digest)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+              server_seed_hash, server_seed_reveal, client_seed, nonce, rng_digest,
+              stake_kind, stake_balance_minor, balance_after_minor,
+              payout_minor, payout_balance_after_minor)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
           [
             roundId,
             userId,
@@ -307,10 +431,18 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
             body.clientSeed,
             fairness.nonce,
             fairRoll.digest,
+            body.balanceStake ? 'balance' : 'item',
+            body.balanceStake ? stakeValue.toString() : '0',
+            balanceAfterMinor,
+            cashPayoutMinor?.toString() ?? null,
+            payoutBalanceAfterMinor,
           ],
         );
 
-        for (const selected of body.stakes) {
+        /* A cash round consumes no lot, so there is nothing to move into house custody and no
+         * upgrader_stakes row to write. Its record of what was taken is the wallet transaction
+         * below; the loop is for item rounds only. */
+        for (const selected of itemStakes ?? []) {
           const source = stakeById.get(selected.inventoryLotId);
           if (!source) throw new Error('Locked stake disappeared');
           await client.query(
@@ -357,22 +489,26 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           );
         }
 
-        if (outcome === 'win') {
+        if (outcome === 'win' && !config.cashOnlyPlay) {
           let remaining = body.targetQuantity;
           let first = true;
           for (const source of stock.rows) {
             if (remaining === 0) break;
             const quantity = Math.min(source.quantity, remaining);
-            if (quantity === source.quantity) {
-              await client.query(
-                "UPDATE inventory_lots SET state = 'consumed', updated_at = now() WHERE id = $1",
-                [source.id],
-              );
-            } else {
-              await client.query(
-                'UPDATE inventory_lots SET quantity = quantity - $2, updated_at = now() WHERE id = $1',
-                [source.id, quantity],
-              );
+            /* Unlimited stock mints the award instead of drawing it down, so the house lot — if
+             * there even is one — is left exactly as it was. */
+            if (!config.houseStockUnlimited) {
+              if (quantity === source.quantity) {
+                await client.query(
+                  "UPDATE inventory_lots SET state = 'consumed', updated_at = now() WHERE id = $1",
+                  [source.id],
+                );
+              } else {
+                await client.query(
+                  'UPDATE inventory_lots SET quantity = quantity - $2, updated_at = now() WHERE id = $1',
+                  [source.id, quantity],
+                );
+              }
             }
             const awardId = first && firstAwardId ? firstAwardId : randomUUID();
             first = false;
@@ -388,7 +524,7 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
                VALUES ($1, $2, $3, $4, $5, $6)`,
               [
                 roundId,
-                source.id,
+                source.id || awardId,
                 awardId,
                 body.targetCatalogItemId,
                 quantity,
@@ -405,6 +541,23 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           }
         }
 
+        if (body.balanceStake) {
+          await client.query(
+            `INSERT INTO wallet_transactions
+               (id, user_id, amount_minor, balance_after_minor, kind, reference_id)
+             VALUES ($1, $2, $3, $4, 'upgrade_stake', $5)`,
+            [randomUUID(), userId, (-stakeValue).toString(), balanceAfterMinor, roundId],
+          );
+        }
+
+        const wager = await recordWager(client, config, userId, stakeValue, 'upgrader', roundId, [
+          'upgrader_rolls',
+          'wagered_minor',
+        ]);
+        if (outcome === 'win') {
+          await recordQuestProgress(client, userId, 'upgrader_wins', 1n);
+        }
+
         await client.query('UPDATE fairness_seeds SET used_at = now() WHERE id = $1', [
           fairness.id,
         ]);
@@ -413,8 +566,50 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           'SELECT * FROM upgrader_rounds WHERE id = $1',
           [roundId],
         );
-        return saved.rows[0];
+        return { round: saved.rows[0], wager, stakeValue };
       });
+      const round = settled.round;
+
+      /* AFTER the commit, never inside it. A webhook is a network call to a third party, and a
+       * third party being slow is not a reason a player's payout is slow — nor is it a reason a
+       * settled round rolls back. `announceWin` throws nothing and is deliberately not awaited. */
+      const username = request.authUser?.minecraftUsername ?? 'Player';
+      if (settled.wager && round?.['outcome'] === 'win') {
+        /* The row is typed with an index signature of `unknown`, so the column is narrowed rather
+         * than stringified: String() on an unexpected object would silently produce
+         * "[object Object]" and BigInt would then throw inside a settled round's response. */
+        const rawPayout = round['target_value_minor'];
+        const payout = typeof rawPayout === 'string' || typeof rawPayout === 'number'
+          ? BigInt(rawPayout)
+          : 0n;
+        const stake = settled.stakeValue;
+        void announceWin(
+          config,
+          {
+            username,
+            amountMinor: payout,
+            mode: 'Upgrader',
+            ...(stake > 0n ? { multiplier: Number(payout) / Number(stake) } : {}),
+            path: '#/upgrader',
+          },
+          app.log,
+        );
+      }
+      /* A jackpot draw that hit is announced on its own terms: it carries no multiplier, because it
+       * is not a multiple of anything the player staked. */
+      const jackpotWin = settled.wager?.jackpot.win ?? null;
+      if (jackpotWin) {
+        void announceWin(
+          config,
+          {
+            username,
+            amountMinor: jackpotWin.amountMinor,
+            mode: 'Vault Jackpot',
+            path: '#/upgrader',
+          },
+          app.log,
+        );
+      }
       return reply.code(201).send({ round });
     },
   );
@@ -443,69 +638,6 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
     );
     return { wins: result.rows };
   });
-}
-
-async function assertEligible(
-  client: DbClient,
-  config: AppConfig,
-  userId: string,
-): Promise<bigint> {
-  const result = await client.query<{
-    status: string;
-    country_code: string | null;
-    terms_accepted_at: Date | null;
-    age_verified_at: Date | null;
-    kyc_status: string;
-    daily_wager_limit_minor: string | null;
-    cooldown_until: Date | null;
-    self_excluded_until: Date | null;
-  }>(
-    `SELECT u.status, u.country_code, u.terms_accepted_at, u.age_verified_at, u.kyc_status,
-            r.daily_wager_limit_minor, r.cooldown_until, r.self_excluded_until
-       FROM users u JOIN responsible_limits r ON r.user_id = u.id
-      WHERE u.id = $1 FOR UPDATE OF u, r`,
-    [userId],
-  );
-  const user = result.rows[0];
-  if (!user || user.status !== 'active')
-    throw new AppError(403, 'ACCOUNT_NOT_ACTIVE', 'Account is not active');
-  if (!user.terms_accepted_at || !user.age_verified_at || !user.country_code) {
-    throw new AppError(
-      403,
-      'COMPLIANCE_INCOMPLETE',
-      'Age, location, and terms verification are required',
-    );
-  }
-  if (user.kyc_status !== 'verified') {
-    throw new AppError(403, 'KYC_REQUIRED', 'Identity verification is required');
-  }
-  if (
-    config.allowedCountries.size &&
-    !config.allowedCountries.has(user.country_code.toLowerCase())
-  ) {
-    throw new AppError(403, 'COUNTRY_NOT_ALLOWED', 'Service is not available in this country');
-  }
-  if (user.cooldown_until && user.cooldown_until > new Date()) {
-    throw new AppError(403, 'COOLDOWN_ACTIVE', 'Account cooldown is active');
-  }
-  if (user.self_excluded_until && user.self_excluded_until > new Date()) {
-    throw new AppError(403, 'SELF_EXCLUDED', 'Account is self-excluded');
-  }
-  const wagered = await client.query<{ total: string }>(
-    `SELECT COALESCE(sum(stake_value_minor), 0)::numeric AS total FROM upgrader_rounds
-      WHERE user_id = $1 AND created_at >= date_trunc('day', now())`,
-    [userId],
-  );
-  const limit = user.daily_wager_limit_minor
-    ? BigInt(user.daily_wager_limit_minor) < config.maxDailyWagerMinor
-      ? BigInt(user.daily_wager_limit_minor)
-      : config.maxDailyWagerMinor
-    : config.maxDailyWagerMinor;
-  // The requested stake is checked by the caller after item locks; this check blocks users already at the limit.
-  if (BigInt(wagered.rows[0]?.total ?? '0') >= limit) {
-    throw new AppError(403, 'DAILY_LIMIT_REACHED', 'Daily wager limit reached');
-  }
-  return limit - BigInt(wagered.rows[0]?.total ?? '0');
 }
 
 export function checkedItemValue(total: bigint, unitValue: bigint, quantity: number): bigint {

@@ -14,6 +14,8 @@ separate launch review.
 | ------ | ----------------------------------- | ----------------------------------------- |
 | GET    | `/health/live`                      | Process liveness                          |
 | GET    | `/health/ready`                     | Schema, PostgreSQL, and Redis readiness   |
+| GET    | `/v1/cases`                         | Enabled cases and exact weighted pools    |
+| GET    | `/v1/activity/recent`               | Redacted case and upgrader wins           |
 | POST   | `/v1/auth/link/start`               | Create in-game proof instruction          |
 | GET    | `/v1/auth/link/status?challengeId=` | Poll proof state from the same browser    |
 | POST   | `/v1/auth/link/complete`            | Consume confirmed proof and issue session |
@@ -30,7 +32,12 @@ separate launch review.
 | POST      | `/v1/account/self-exclusion` | Timed or indefinite exclusion                    |
 | GET       | `/v1/catalog/items`          | Enabled fixed-price targets and reconciled stock |
 | GET       | `/v1/inventory`              | User custody lots                                |
+| POST      | `/v1/inventory/:id/sell`     | Sell a custody lot at the locked server quote    |
+| GET       | `/v1/balance`                | Current server wallet balance                    |
+| GET       | `/v1/balance/transactions`   | Append-only private wallet history               |
 | GET       | `/v1/fairness/current`       | Pre-round commitment                             |
+| POST      | `/v1/cases/:id/open`         | Atomic server-weighted case open; idempotent     |
+| GET       | `/v1/cases/history`          | Private case history and fairness evidence       |
 | GET       | `/v1/upgrades/config`        | Immutable algorithm and configured odds limits   |
 | POST      | `/v1/fairness/verify`        | Public verifier                                  |
 | POST      | `/v1/upgrades`               | Atomic item-only upgrade; idempotency required   |
@@ -57,6 +64,9 @@ review confirmation.
 | ------ | -------------------------------- | ----------------------------------------------------- |
 | POST   | `/v1/admin/catalog-items`        | Add an exact fingerprint and fixed value              |
 | PATCH  | `/v1/admin/catalog-items/:id`    | Change fixed value, metadata, or enabled state        |
+| GET    | `/v1/admin/cases`                | List all case configurations and pools                |
+| POST   | `/v1/admin/cases`                | Create an audited case and weighted pool               |
+| PATCH  | `/v1/admin/cases/:id`            | Update case metadata, price, state, or pool            |
 | GET    | `/v1/admin/observed-items`       | Discover exact fingerprints reported by bot inventory |
 | GET    | `/v1/admin/bots`                 | Inspect bot heartbeat and reconciliation status       |
 | PATCH  | `/v1/admin/bots/:id/quarantine`  | Quarantine or explicitly release a reconciled bot     |
@@ -94,3 +104,16 @@ An upgrade request supplies `expectedUnitValueMinor` for every stake selection a
 `expectedTargetUnitValueMinor` for the target. They are quote bindings, not prices chosen by the
 client; the API returns `409 PRICE_CHANGED` unless each string exactly matches the fixed catalog
 value locked by the transaction.
+
+A case-open request similarly binds `expectedPriceMinor`, the active `serverSeedHash`, and a client
+seed. The server locks the enabled pool and verifies that every published outcome has enough fresh,
+reconciled, transfer-capable house stock before deducting balance. It maps the full 256-bit HMAC
+digest into the integer sum of server-configured weights, records an immutable pool snapshot and
+fairness proof, transfers the selected custody lot, writes the wallet debit, and rotates the seed in
+one serializable transaction. A stock failure rolls the entire operation back.
+
+Item sale requests bind both the current catalog value (`expectedUnitValueMinor`) and the displayed
+sell-rate quote (`expectedSellRateBps`), but never submit proceeds. The server applies its own
+`ITEM_SELL_RATE_BPS`, moves the selected custody quantity to house ownership, credits the wallet,
+and records both append-only custody and wallet entries atomically. There is intentionally no player
+endpoint that sets a balance directly.

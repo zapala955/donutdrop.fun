@@ -11,6 +11,10 @@ const depositLeaseMigrationPath = path.resolve(
   import.meta.dirname,
   '../../../packages/db/migrations/007_deposit_authorization_leases.sql',
 );
+const economyMigrationPath = path.resolve(
+  import.meta.dirname,
+  '../../../packages/db/migrations/008_cases_wallets_and_sales.sql',
+);
 
 describe('database safety invariants', () => {
   it('keeps critical records append-only and idempotent', async () => {
@@ -23,10 +27,18 @@ describe('database safety invariants', () => {
     assert.match(sql, /DEFERRABLE INITIALLY DEFERRED/);
   });
 
-  it('has no currency wallet or client-priced stake table', async () => {
-    const sql = await readFile(migrationPath, 'utf8');
-    assert.doesNotMatch(sql, /CREATE TABLE (wallet|balances|payments)/i);
-    assert.match(sql, /unit_value_minor bigint NOT NULL CHECK \(unit_value_minor > 0\)/);
+  it('keeps item values server-priced and wallet changes ledger-backed', async () => {
+    const initialSql = await readFile(migrationPath, 'utf8');
+    const economySql = await readFile(economyMigrationPath, 'utf8');
+    assert.match(initialSql, /unit_value_minor bigint NOT NULL CHECK \(unit_value_minor > 0\)/);
+    assert.match(economySql, /CREATE TABLE user_wallets/);
+    assert.match(economySql, /balance_minor bigint NOT NULL DEFAULT 0 CHECK \(balance_minor >= 0\)/);
+    assert.match(economySql, /CREATE TABLE wallet_transactions/);
+    assert.match(economySql, /CREATE TRIGGER wallet_transactions_append_only/);
+    assert.match(economySql, /CREATE TRIGGER case_rounds_append_only/);
+    assert.match(economySql, /CREATE TRIGGER inventory_sales_append_only/);
+    assert.match(economySql, /UNIQUE \(user_id, idempotency_key\)/);
+    assert.match(economySql, /CREATE FUNCTION donut_schema_ready_v8\(\) RETURNS boolean/);
   });
 
   it('makes deposit authorization a short-lived append-only capability', async () => {

@@ -1,0 +1,314 @@
+/* matte.css — the restraint layer.
+ *
+ * Two things live here, and they arrived together because they are the same decision.
+ *
+ * The first is a palette retune, applied as a token override rather than as several hundred edits
+ * at the call sites. Every surface on the site already reads its colour from one of these
+ * variables, so repointing them here moves the whole product at once and leaves one place to look
+ * when somebody asks why a panel is the colour it is.
+ *
+ * The second is the small set of controls that replaced the explanatory copy stripped out of the
+ * game components: the info hint, the quick-action chips, and the referral dashboard's rows. They
+ * belong beside the palette because they exist for the same reason — a screen that says less has
+ * to show more, and what it shows has to be legible without a caption.
+ *
+ * Loaded last, so the token block below wins on cascade order at equal specificity.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   MATTE OBSIDIAN
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Three things change, and nothing else.
+
+     1. The grounds go flatter and slightly cooler. The old obsidian carried a green cast that
+        showed up as a tint wherever two panels overlapped.
+     2. Gold loses saturation. The bright stop was #ffd700 at full chroma on the loudest surfaces,
+        which on an OLED panel in a dark room is genuinely uncomfortable to sit in front of — and
+        a colour that loud everywhere cannot also mean "this is the active thing", because
+        everything is already wearing it. The range is now #ffaa00 down to #d4a303, and the bright
+        end is reserved for one state at a time.
+     3. Body text comes off pure white onto an off-white. Pure white on near-black is the highest
+        contrast a screen can produce, and this needs less than that.
+*/
+:root {
+  --bg:       #0a0a0c;
+  --bg2:      #0e0e11;
+  --panel:    #121216;
+  --panel2:   #16161b;
+  --panel3:   #1c1c22;
+  --line:     #24242b;
+  --line2:    #2f2f38;
+
+  /* The bright stop is no longer a different colour from the body — it is the same metal catching
+     light — so an active state reads as emphasis instead of as a second hue. */
+  --gold-bright: #ffd700;
+  --gold-body:   #ffaa00;
+  --gold-deep:   #d4a303;
+  --gold-ink:    #221802;
+
+  --amber:    #ffaa00;
+  --amber2:   #d98800;
+  /* Information and loss keep their hues but come down off full saturation, so they sit on a
+     matte ground without haloing against it. */
+  --cyan:     #ffd700;
+  --cyan2:    #d4a303;
+  --crimson:  #c0392b;
+
+  --text:     #d1d5db;
+  --muted:    #9096a0;
+  --faint:    #757b85;
+
+  --win-lo:   #221802;
+  --green-lo: #221802;
+
+  /* Bevels come down with everything else. At the old alphas a card edge read as a light source
+     rather than as an edge. */
+  --bev-hi: rgba(255, 255, 255, .06);
+  --bev-lo: rgba(0, 0, 0, .55);
+}
+
+.inspect__dropval { color: var(--cyan); }
+.inspect__dropodds { color: var(--gold-deep); }
+
+/* ── the invite page ──
+   The loudest surface on the site, and the one the token override could not reach: every colour
+   in its block is a literal. The badge was a filled #ffaa00→#ffd700 pill under a 26px gold glow,
+   which is a light source, not a component — and the info icon sitting inside it was gold on gold
+   and effectively invisible.
+
+   It becomes what every other accent here is: gold on obsidian, held by a border. The figure
+   still reads as the biggest thing on the page because of its size and weight, which is how it
+   should have been carrying that emphasis in the first place. */
+.refer__hero {
+  padding: 22px 18px; border-radius: var(--r);
+  background: var(--panel);
+  border: 1px solid var(--line2);
+}
+.refer__badge {
+  display: inline-flex; align-items: center;
+  padding: 9px 18px; border-radius: 999px;
+  color: var(--gold-bright);
+  background: rgba(255, 170, 0, .07);
+  background-image: none;
+  border: 1px solid rgba(255, 170, 0, .38);
+  box-shadow: none;
+  font-size: 1rem; font-weight: 800;
+}
+/* On a dark pill the hint reads at the same weight as it does everywhere else. */
+.refer__badge .ihint { margin-left: 9px; }
+
+.refer__terms, .refer__link, .refer__status {
+  border-radius: var(--r);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.refer__terms h2 { color: var(--text); }
+.refer__list li { color: var(--text); }
+.refer__field {
+  border-radius: var(--r-s);
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  color: var(--gold-deep);
+}
+.refer__field:focus { border-color: var(--gold-bright); }
+.refer__status { border-color: rgba(224, 162, 10, .26); background: rgba(224, 162, 10, .05); }
+.refer__status h3 { color: var(--gold-bright); }
+.refer__status p { color: var(--text); }
+
+/* The invite badge in the nav pulsed its glow on a 2.8s infinite loop, on every page, forever.
+   That is the one animation on the site that a player cannot get away from, and a permanently
+   breathing element in the chrome is exactly what "no excessive glow animations" is about. The
+   badge keeps its gold; it simply stops moving. */
+.tabs .navref { animation: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   INFO HINT
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   The replacement for every explanatory paragraph that used to sit inside a game component.
+
+   The rule it enforces: a mechanic that genuinely needs a sentence gets exactly one sentence, and
+   that sentence is not on screen until somebody asks for it. What stays visible is the number the
+   player is actually reading.
+
+   Hover OR keyboard focus opens it, because a control that only answers to a mouse is one a
+   keyboard user cannot ask at all. The bubble is clamped to the viewport on small screens rather
+   than being allowed to push the page sideways.
+*/
+.ihint {
+  display: inline-grid; place-items: center; position: relative;
+  width: 15px; height: 15px; padding: 0; margin-left: 7px;
+  vertical-align: middle;
+  border: 1px solid var(--gold-deep); border-radius: 50%;
+  background: transparent; color: var(--gold-deep);
+  font: italic 700 9px/1 var(--body); cursor: help;
+  transition: color .14s, border-color .14s, background-color .14s;
+}
+.ihint::before { content: "i"; }
+.ihint:hover, .ihint:focus-visible {
+  color: var(--gold-bright); border-color: var(--gold-bright);
+  background: rgba(255, 170, 0, .09); outline: none;
+}
+.ihint::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  width: max-content; max-width: min(268px, 72vw);
+  padding: 7px 10px;
+  border: 1px solid var(--line2); border-radius: 4px;
+  background: var(--tip-bg); color: var(--tip-txt);
+  font: 400 .7rem/1.45 var(--body); font-style: normal;
+  letter-spacing: 0; text-align: left; text-transform: none; white-space: normal;
+  opacity: 0; pointer-events: none; z-index: 60;
+  transition: opacity .14s, transform .14s;
+}
+.ihint:hover::after, .ihint:focus-visible::after {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+/* Against the left edge of the column a centred bubble would clip off-screen, so a hint in a page
+   heading anchors to its own left instead. */
+.phead .ihint::after { left: 0; transform: translateX(-8px) translateY(3px); }
+.phead .ihint:hover::after, .phead .ihint:focus-visible::after {
+  transform: translateX(-8px) translateY(0);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   QUICK-ACTION CHIPS
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   What replaced the "type 1m, 250k, or 1000000" hint under every amount box. That instruction was
+   there because the field accepted a shorthand nobody could guess. Buttons that apply the amounts
+   directly make the shorthand optional rather than something to be taught: the field still parses
+   everything it always did, so an exact figure is still typed, but the common amounts are one
+   press and the row itself is the documentation.
+*/
+.qchips { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; margin-top: 8px; }
+.qchip {
+  flex: 1 1 auto; min-width: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: var(--r-s);
+  background: var(--panel2); color: var(--muted);
+  font: 600 .68rem/1 var(--mono); letter-spacing: .02em;
+  white-space: nowrap; cursor: pointer;
+  transition: color .14s, border-color .14s, background-color .14s, transform .08s;
+}
+.qchip:hover:not(:disabled) {
+  color: var(--text); border-color: var(--line2); background: var(--panel3);
+}
+.qchip:active:not(:disabled) { transform: translateY(1px); }
+.qchip:focus-visible { outline: 1px solid var(--gold-deep); outline-offset: 1px; }
+.qchip:disabled { opacity: .4; cursor: default; }
+/* The one that commits the whole balance carries the accent, because it is the one worth a second
+   look before pressing. */
+.qchip--max { color: var(--gold-deep); border-color: rgba(212, 163, 3, .38); }
+.qchip--max:hover:not(:disabled) {
+  color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(255, 170, 0, .08);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   REFERRAL DASHBOARD
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   One row per invite, answering the only two questions a referrer has: is this person verified,
+   and how far along are they. Both render as state rather than as prose — a pill for Discord, a
+   bar and a fraction for the wager — so the page scans in a glance and carries no sentences.
+*/
+.refer__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; }
+.refer__stat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.refer__statk {
+  font: 600 .62rem/1 var(--body); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--faint);
+}
+.refer__statv { font: 800 1.05rem/1.1 var(--disp); color: var(--text); }
+.refer__statv--gold { color: var(--gold-bright); }
+
+.refer__invites { display: flex; flex-direction: column; gap: 8px; }
+.refer__invite {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px 12px; align-items: center;
+  padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+/* An invite that has paid its bonus is the one state worth lighting up, so it is the only row
+   that takes the accent. */
+.refer__invite[data-unlocked="1"] {
+  border-color: rgba(255, 170, 0, .34); background: rgba(255, 170, 0, .045);
+}
+.refer__who {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  font: 800 .82rem/1 var(--body); color: var(--text);
+}
+.refer__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refer__pays { font: 800 .8rem/1 var(--mono); color: var(--gold-deep); white-space: nowrap; }
+
+/* The two milestone conditions, as pills. Met is gold; pending is furniture — an unmet condition
+   on a brand-new invite is the normal state, and painting it red would make it look broken. */
+.refer__pill {
+  flex: none;
+  padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--line2);
+  font: 800 .6rem/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--faint); background: var(--panel2);
+}
+.refer__pill[data-on="1"] {
+  color: var(--gold-bright); border-color: rgba(255, 170, 0, .42);
+  background: rgba(255, 170, 0, .09);
+}
+
+.refer__bar {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center;
+}
+.refer__track { height: 5px; border-radius: 999px; overflow: hidden; background: var(--panel3); }
+.refer__fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
+  transform-origin: left center;
+  transition: transform .5s cubic-bezier(.22, .61, .36, 1);
+}
+.refer__frac { font: 600 .68rem/1 var(--mono); color: var(--muted); white-space: nowrap; }
+.refer__empty { margin: 0; font: .78rem/1.5 var(--body); color: var(--faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .refer__fill { transition: none; }
+}
+@media (max-width: 560px) {
+  .refer__invite { grid-template-columns: minmax(0, 1fr); }
+  .refer__pays { justify-self: start; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   HOSTS FOR THE NEW ICONS
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   Three places where an info hint now sits beside something that was laid out assuming it would
+   be alone. Kept here with the icon rather than scattered across the files it lands in, so the
+   whole restraint pass reverts as one change.
+*/
+
+/* A page heading and its icon share a baseline. The heading is display type at a much larger
+   size, so the icon needs to stop stretching to the line box. */
+.phead h1 { display: flex; align-items: center; flex-wrap: wrap; }
+.phead h1 .ihint { align-self: center; }
+
+/* The card heading keeps its right-hand meta span, so the icon goes in as a third item rather
+   than pushing that span out of position. */
+.card__h .ihint { align-self: center; }
+
+/* The piggy bank's commit row: the button owns the width, the icon rides beside it. Previously a
+   paragraph under the button carried this, which put the one warning that matters below the
+   control it warns about. */
+.piggy__commit { display: flex; align-items: center; gap: 8px; }
+.piggy__commit .btn { flex: 1 1 auto; }
+
+/* The community-crate price head is a label-and-figure pair on one row; the icon joins the label
+   end of it rather than the figure. */
+.build__pricehead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.build__pricehead .build__price { margin-left: auto; }

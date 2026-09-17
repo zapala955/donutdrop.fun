@@ -1,0 +1,800 @@
+/* ═══════════════════════════════════════════════════════════════
+   surface.css — obsidian, gunmetal, and four ores
+   ═══════════════════════════════════════════════════════════════
+   Loaded after app.css, and it owns every large surface on the site.
+
+   app.css had grown four unrelated treatments — a flat --panel fill, a linear
+   gradient, a hard 2px bevel and a plain 1px border — combined ad hoc per
+   component, so nothing on the page agreed about where the light came from.
+
+   THE PALETTE
+   -----------
+   Obsidian and gunmetal carry the room. Four ores are the ONLY saturated
+   colours on the site, and each one means exactly one thing:
+
+     amber    #ffaa00   nether lava gold — value, stakes, legendary
+     (no green)         success reads cyan; gold is the brand and cannot mean both
+     gold-hi  #ffd700   information, fairness, rare
+     crimson  #ff2222   redstone — losses, burns, epic
+
+   There is no violet anywhere in this file, by rule. The previous revision was
+   built on nether-obsidian purple and it has been torn out end to end: the
+   panel gradients, the edges, the ambient pools, the glows, the rarity ramp and
+   the particle palettes. The ender chest's own violet end-particles are baked
+   into Mojang's PNG, so those are rotated to amber at load time in fx.js — CSS
+   cannot reach inside an image, and leaving them would have let the one asset
+   on the site set a hue the palette does not contain.
+
+   Light comes from above and slightly in front. Glass carries the depth on big
+   surfaces; the hard Minecraft bevel survives, at a hairline, on things you
+   press. Pixel art and pixel type are untouched, and every panel carries a real
+   pixel grid — blocks stay blocks, which is the half of the fusion that must
+   not be sanded off.                                                           */
+
+:root {
+  /* The rose stops and the ores are declared in app.css; this sheet consumes
+     them. --ac is the per-component accent and defaults to rose everywhere. */
+  --ac-default: var(--rose-mid);
+
+  /* The metal itself. A rose-gold finish is not a colour, it is a gradient with
+     a specular band in it — shadow side, body, a narrow bright face, back to
+     shadow. Used on borders and rules, never as a fill, because a full surface
+     of it reads as plastic. */
+  --rose-metal: linear-gradient(135deg,
+    var(--rose-deep) 0%, var(--rose-mid) 34%, var(--rose) 50%,
+    var(--rose-mid) 66%, var(--rose-deep) 100%);
+
+  /* ── the four surface materials ──
+     Each is obsidian with one ore bled into its top edge, so a panel reads as
+     the same rock under a different light rather than as a different object. */
+  /* Obsidian with GOLD bled into its lit edge — the panel reads as dark rock under a warm key
+     light. It used to be rose: rgba(46,36,41) sits at hue 330, which is the magenta edge of the
+     purged violet wedge, and because this is the default material it was the single most widely
+     painted colour on the site — every card, every panel, the hero, the game tiles. One token,
+     several hundred surfaces, all of them faintly purple on a page whose brief says zero purple.
+     The lit stop is now hue 43, the same family as the lava gold everything else is lit with. */
+  --mat-obsidian: linear-gradient(168deg,
+    rgba(46,39,28,.95) 0%, rgba(24,22,17,.95) 38%, rgba(11,10,9,.97) 100%);
+  /* Rose stays: it is the withdraw identity, it is hue 345, and it is neither green nor violet.
+     It is used on one control and its hairlines, never as a page-wide surface. */
+  --mat-rose: linear-gradient(168deg,
+    rgba(84,48,60,.95) 0%, rgba(46,27,34,.95) 44%, rgba(18,11,14,.97) 100%);
+  /* --mat-emerald was a green surface material, kept only because a class name referenced it.
+     The name survives as an alias so any stale markup still resolves to a defined material; the
+     green is gone. */
+  --mat-emerald: var(--mat-lava);
+  --mat-diamond: linear-gradient(168deg,
+    rgba(10,54,72,.94) 0%, rgba(8,34,47,.95) 44%, rgba(4,16,23,.97) 100%);
+  /* Declared last, resolved at use time by the alias above. */
+  --mat-lava: linear-gradient(168deg,
+    rgba(74,44,6,.94) 0%, rgba(46,26,4,.95) 44%, rgba(20,11,2,.97) 100%);
+
+  /* the default surface, and the sunken one cut into it */
+  --gl-1: var(--mat-obsidian);
+  --gl-2: linear-gradient(168deg, rgba(26,33,39,.86) 0%, rgba(13,17,21,.93) 100%);
+  --gl-sunk: linear-gradient(180deg, rgba(2,3,4,.78), rgba(7,10,13,.55));
+
+  /* obsidian edges: cold gunmetal, with a lit top and a dark underside */
+  --gl-line: rgba(224,137,155,.17);      /* rose, at a hairline */
+  --gl-hi:   rgba(255,214,224,.14);      /* the lit top edge, warm */
+  --gl-lo:   rgba(0,0,0,.66);
+
+  /* Elevation: two shadows each — a tight contact shadow and a wide ambient
+     one. A single shadow is what makes a dark card on a dark page read as a
+     flat patch rather than as something sitting above it. */
+  --el-1: 0 1px 2px rgba(0,0,0,.45), 0 8px 24px -12px rgba(0,0,0,.78);
+  --el-2: 0 2px 6px rgba(0,0,0,.5),  0 18px 46px -18px rgba(0,0,0,.88);
+  --el-3: 0 6px 14px rgba(0,0,0,.58), 0 40px 80px -30px rgba(0,0,0,.94);
+
+  /* The pixel grid. A 4px repeating hairline in both axes, at an alpha low
+     enough to read as texture rather than as a table. It is a gradient and not
+     an image on purpose: no request, no decode, and it scales with the element
+     instead of tiling out of register at odd sizes. */
+  --grid: repeating-linear-gradient(0deg,  rgba(255,255,255,.017) 0 1px, transparent 1px 4px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,.017) 0 1px, transparent 1px 4px);
+
+  --r-lg: 5px;
+  --ease:    cubic-bezier(.22,1,.36,1);    /* the house arrival curve */
+  --ease-io: cubic-bezier(.62,.03,.20,1);  /* weighted, in and out */
+}
+
+/* ═════════ the ground ═════════
+   The page was near-black end to end, so every backdrop-filter on it was
+   blurring nothing and the cards came out flat. This is what they sit on: a
+   deep obsidian gradient with four wide pools of ore light over it, fixed to
+   the viewport so they never move with scroll and never repaint. */
+body {
+  /* obsidian, warmed a shade toward the rose at the top where the key light is */
+  background: linear-gradient(178deg, #131013 0%, #0a0a0c 46%, #08080a 100%) fixed;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(60% 44% at 16% -6%,  rgba(224,137,155,.16), transparent 64%),
+    radial-gradient(48% 38% at 86% 0%,   rgba(185,104,126,.12), transparent 62%),
+    radial-gradient(42% 30% at 96% 70%,  rgba(255,170,0,.05),   transparent 62%),
+    radial-gradient(52% 38% at 44% 108%, rgba(255,170,0,.045),  transparent 66%);
+}
+/* the grid over the whole page, faint enough to read as a surface not a mesh */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: var(--grid);
+  opacity: .5;
+}
+.shell { position: relative; z-index: 1; }
+
+/* ═════════ the glass recipe ═════════ */
+.card, .promo, .gamecard, .stage, .queue, .lvl, .board__r, .faq__i,
+.strk, .menu, .how li, .track__r, .tiers__r, .crate, .totals__one {
+  background-image: var(--grid), var(--gl-1);
+  background-color: transparent;
+  border: 1px solid var(--gl-line);
+  /* lit top edge, dark underside, both hairlines: the bevel as a highlight
+     rather than as a 2px slab */
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-1);
+  backdrop-filter: blur(15px) saturate(1.12);
+  -webkit-backdrop-filter: blur(15px) saturate(1.12);
+}
+
+/* material overrides: a surface declares what it is made of */
+.mat-rose    { background-image: var(--grid), var(--mat-rose); }
+.mat-emerald { background-image: var(--grid), var(--mat-emerald); }
+.mat-diamond { background-image: var(--grid), var(--mat-diamond); }
+.mat-lava    { background-image: var(--grid), var(--mat-lava); }
+
+/* recessed things read as cut into the surface, not raised off it */
+.tile, .stakebox, .stakes__own, .code, .chat__list, .play, .track__bar {
+  background-image: var(--gl-sunk);
+  border: 1px solid rgba(0,0,0,.55);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.68), inset 0 -1px 0 var(--gl-hi);
+}
+
+/* ═════════ the backlight ═════════
+   A card's accent, thrown onto the page behind it. It lives on its own
+   pseudo-element underneath the card, blurred, so it reads as light escaping
+   from behind an object rather than as a border effect — and so it can animate
+   without touching the card's own compositing. */
+.card, .promo, .gamecard, .lvl, .strk, .crate { position: relative; isolation: isolate; }
+.promo::before, .gamecard::before, .crate::before {
+  content: ""; position: absolute; inset: 8% 6% -6%; z-index: -1;
+  border-radius: var(--r-lg);
+  background: radial-gradient(60% 70% at 50% 60%,
+              color-mix(in srgb, var(--ac, var(--ac-default)) 42%, transparent), transparent 72%);
+  filter: blur(22px);
+  opacity: .32; transform: translateY(4px) scale(.94);
+  transition: opacity .45s var(--ease), transform .45s var(--ease);
+}
+.promo:hover::before, .gamecard:hover::before, .crate:hover::before {
+  opacity: .8; transform: translateY(0) scale(1);
+}
+
+/* ── the lit edge ──
+   Every card already sets its own --ac, so one rule lights all of them. It is
+   painted on a pseudo-element so the ring can fade on its own clock,
+   independently of any transform running on the card itself. */
+.promo::after, .gamecard::after, .card::after, .lvl::after, .strk::after, .crate::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit;
+  pointer-events: none; opacity: 0;
+  border: 1px solid color-mix(in srgb, var(--ac, var(--ac-default)) 58%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ac, var(--ac-default)) 12%, transparent),
+              inset 0 0 22px -10px color-mix(in srgb, var(--ac, var(--ac-default)) 62%, transparent);
+  transition: opacity .32s var(--ease);
+}
+.promo:hover::after, .gamecard:hover::after, .card:hover::after,
+.lvl:hover::after, .strk:hover::after, .crate:hover::after,
+.promo:focus-visible::after, .gamecard:focus-visible::after,
+.crate:focus-visible::after { opacity: 1; }
+.gamecard--soon:hover::after, .gamecard--soon:hover::before { opacity: 0; }
+
+/* ═════════ promo cards ═════════ */
+.promos { gap: 12px; }
+.promo {
+  padding: 20px 19px 21px; min-height: 142px;
+  border-radius: var(--r-lg);
+  transition: transform .4s var(--ease), border-color .3s var(--ease), box-shadow .4s var(--ease);
+}
+.promo:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--ac) 34%, var(--gl-line));
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-2);
+}
+.promo__art {
+  right: -10px; width: 104px; height: 104px; opacity: .68;
+  filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--ac) 50%, transparent));
+  transition: transform .5s var(--ease), opacity .4s var(--ease);
+}
+.promo:hover .promo__art { transform: translateY(-50%) scale(1.07) rotate(-3deg); opacity: .92; }
+.promo h3 {
+  position: relative; z-index: 1;
+  font-size: 1.25rem; letter-spacing: -.015em; line-height: 1.3;
+  color: var(--text);
+}
+/* The accent belongs on a rule under the heading, not on the heading itself.
+   Coloured display type at this size costs contrast and buys nothing. */
+.promo h3::after {
+  content: ""; display: block; width: 52px; height: 2px; margin-top: 9px;
+  background: linear-gradient(90deg, var(--ac), transparent);
+  /* Drawn at full length and scaled down, so the hover animates a transform
+     rather than a width. Animating width relayouts the heading every frame. */
+  transform: scaleX(.5); transform-origin: left;
+  transition: transform .45s var(--ease);
+}
+.promo:hover h3::after { transform: scaleX(1); }
+.promo p {
+  position: relative; z-index: 1;
+  margin-top: 9px; max-width: 74%; font-size: .75rem; line-height: 1.55; color: var(--muted);
+}
+
+/* ═════════ cards and statistics panels ═════════ */
+.card { padding: 22px; border-radius: var(--r-lg); }
+.card__h {
+  font-size: 1rem; letter-spacing: -.01em; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card__h::before {
+  content: ""; width: 3px; height: 15px; border-radius: 4px; flex: none;
+  background: linear-gradient(180deg, var(--ac, var(--ac-default)), transparent);
+}
+.card__p { font-size: .875rem; line-height: 1.66; color: var(--muted); }
+.facts dd { font-family: var(--mono); font-size: .75rem; }
+
+.totals__one {
+  --ac: var(--tc); border-radius: var(--r-s); padding: 13px 14px 14px;
+  transition: transform .3s var(--ease), border-color .25s var(--ease), box-shadow .3s var(--ease);
+}
+.totals__one:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tc) 40%, var(--gl-line));
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-2);
+}
+.totals__one:active { transform: translateY(0) scale(.995); }
+.totals__bar { height: 4px; background: rgba(0,0,0,.55); box-shadow: inset 0 1px 2px rgba(0,0,0,.6); }
+.totals__bar i {
+  /* Full width, scaled to the share. The fill ratio arrives as --fill so the
+     bar animates a transform and never relayouts. */
+  width: 100%; transform: scaleX(var(--fill, 0)); transform-origin: left;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tc) 55%, #000), var(--tc));
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--tc) 75%, transparent);
+  transition: transform .8s var(--ease);
+}
+.totals__k { font-size: .75rem; letter-spacing: .15em; }
+.totals__nm { font-size: .75rem; letter-spacing: .01em; }
+.totals__v { font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* ═════════ the level track: a neon rail ═════════
+   It was a flat green fill in a grey slot. It is the only live number on the
+   page, so it gets the only real piece of light on the page: a lit core inside
+   a dark rail, with a sheen that travels the filled part and nothing else. */
+.track__bar { height: 10px; border-radius: 4px; position: relative; }
+.track__bar i {
+  /* Full width, scaled to the level. The fill ratio arrives as --fill so the
+     rail animates a transform; animating width here relayouts the whole row. */
+  position: relative; border-radius: 4px; overflow: hidden;
+  width: 100%; transform: scaleX(var(--fill, 0)); transform-origin: left;
+  /* --emerald was never defined, so this whole declaration was invalid and the fill painted
+     nothing at all. Now the lava ramp, which is what the rest of the site uses. */
+  background: linear-gradient(90deg, #a35f00, #ffaa00 62%, var(--gold-bright));
+  box-shadow: 0 0 6px -1px rgba(255, 170, 0, .22),
+              0 0 13px -6px rgba(255, 170, 0, .22),
+              inset 0 1px 0 rgba(255,255,255,.35);
+  transition: transform .8s var(--ease);
+}
+/* The sheen lives inside the scaled fill, so it inherits the squash. Undoing it
+   here keeps the highlight the same physical width at any level — without this
+   the sweep is five times too wide at level 20% and hairline at 100%. */
+.track__bar i::after {
+  content: ""; position: absolute; inset: 0;
+  transform: scaleX(calc(1 / max(var(--fill, 1), .04))); transform-origin: left;
+  background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.5) 50%, transparent 80%);
+  background-size: 220% 100%;
+  animation: railpulse 2.6s var(--ease-io) infinite;
+}
+@keyframes railpulse { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+
+.track__lv {
+  /* --emerald is not a token on this site; the level label was inheriting its colour by
+     accident. Gold, like every other figure that means "your standing". */
+  font-size: .75rem; letter-spacing: .16em; color: var(--gold);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.track__pc { font-size: .75rem; letter-spacing: .04em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.track__r { padding: 13px 15px; border-radius: var(--r-s); }
+.track__k { font-size: .75rem; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+.track__v { font-size: 1rem; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.track__v em { font-size: .75rem; letter-spacing: .02em; }
+
+/* ═════════ surfaces the component sheet missed ═════════ */
+.hero, .wallethero, .prof, .board, .tiers, .faq, .log, .rwpage > section {
+  background-image: var(--grid), var(--gl-1);
+  background-color: transparent;
+  border: 1px solid var(--gl-line);
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-2);
+  backdrop-filter: blur(16px) saturate(1.12);
+  -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  border-radius: var(--r-lg);
+}
+.hero { position: relative; overflow: hidden; }
+/* The key light on the hero, raking down from the top left — warmed, because
+   that is the corner the gold pool sits behind. */
+.hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(152deg, rgba(255,206,218,.085) 0%, transparent 42%);
+}
+
+/* ═════════ crates ═════════ */
+.crates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(232px, 100%), 1fr)); gap: 12px; }
+.crate {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 22px 18px 20px; border-radius: var(--r-lg);
+  text-align: center; cursor: pointer;
+  font: inherit; color: inherit;
+  transition: transform .4s var(--ease), border-color .3s var(--ease), box-shadow .4s var(--ease);
+}
+.crate:hover {
+  transform: translateY(-5px);
+  border-color: color-mix(in srgb, var(--ac) 40%, var(--gl-line));
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-3);
+}
+.crate:active { transform: translateY(-1px) scale(.994); }
+.crate__art {
+  width: 96px; height: 96px; object-fit: contain; image-rendering: pixelated;
+  filter: drop-shadow(0 8px 20px color-mix(in srgb, var(--ac) 55%, transparent));
+  transition: transform .5s var(--ease), opacity .35s var(--ease), filter .35s var(--ease);
+}
+.crate:hover .crate__art { transform: translateY(-3px) scale(1.06); }
+.crate__tier {
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .18em;
+  color: var(--ac); text-transform: uppercase;
+}
+.crate__nm { font-family: var(--disp); font-weight: 800; font-size: 1rem; letter-spacing: -.01em; line-height: 1.3; }
+.crate__blurb { font-size: .75rem; line-height: 1.55; color: var(--muted); }
+.crate__price {
+  margin-top: 2px; font-family: var(--mono); font-size: 1rem; font-weight: 800;
+  color: var(--amber); font-variant-numeric: tabular-nums;
+}
+.crate__odds { font-size: .75rem; color: var(--faint); letter-spacing: .02em; }
+
+/* Out of reach, not out of order.
+   It reads as unavailable — dimmed art, the price struck through in crimson,
+   the shortfall printed underneath — but it stays pressable, because a crate
+   you cannot afford still has to be able to tell you so and offer a way
+   forward. Disabling it instead is what made the whole page look broken at a
+   low balance: five dead cards and no explanation anywhere. */
+.crate[data-afford="0"] .crate__art { opacity: .38; filter: grayscale(.75); }
+.crate[data-afford="0"] .crate__price { color: var(--crimson); text-decoration: line-through; opacity: .78; }
+.crate[data-afford="0"] .crate__odds { opacity: .5; }
+.crate[data-afford="0"]::before { opacity: .1; }
+.crate[data-afford="0"]:hover::before { opacity: .22; }
+.crate__short {
+  font-family: var(--mono); font-size: .75rem; font-weight: 800;
+  letter-spacing: .04em; color: var(--crimson);
+}
+/* mid-pull: nothing to press, and it should not look pressable */
+.crate[data-busy] { pointer-events: none; opacity: .7; }
+
+/* ═════════ the case-opening reel ═════════
+   A canvas strip behind a fixed marker. Everything that moves is drawn in
+   reel.js — the marker and the frame are the only things CSS owns here,
+   because they are the two things that must NOT move. */
+.reel {
+  /* Every box property is stated, not inherited from whatever else matches
+     `.reel`. A stale rule in app.css set `width: max-content` on this class,
+     and because this block did not declare a width it leaked through and
+     shrink-wrapped a fixed full-screen overlay into a 280px column. */
+  position: fixed; inset: 0; z-index: 160;
+  width: 100%; height: 100%; margin: 0;
+  /* Three content-sized rows centred as a group. With a 1fr middle row the
+     rows fill the viewport and align-content has nothing left to centre, which
+     pinned the strip to the top of the screen. */
+  display: grid; grid-template-rows: auto auto auto; align-content: center;
+  justify-items: center;
+  gap: clamp(14px, 3vh, 30px);
+  padding: clamp(16px, 4vh, 44px);
+  background: radial-gradient(78% 62% at 50% 46%, rgba(14,14,17,.96), rgba(3,3,4,.995));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: fade .28s ease both;
+  overflow: hidden;
+}
+.reel[hidden] { display: none; }
+
+.reel__head {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  text-align: center;
+}
+.reel__kicker {
+  font-size: .75rem; letter-spacing: .32em; color: var(--amber);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--amber) 55%, transparent);
+}
+.reel__sub { font-size: .625rem; letter-spacing: .16em; color: var(--faint); }
+
+/* the strip. Fixed height so the canvas never resizes mid-spin, and masked at
+   both ends so tiles arrive and leave rather than popping at a hard edge. */
+.reel__stage {
+  position: relative;
+  width: 100%;
+  height: clamp(130px, 22vh, 180px);
+  border-top: 1px solid var(--gl-line);
+  border-bottom: 1px solid var(--gl-line);
+  background:
+    var(--grid),
+    linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.18) 50%, rgba(0,0,0,.55));
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 13%, #000 87%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 13%, #000 87%, transparent);
+}
+.reel__cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* The marker. A single hairline with a bloom behind it and a nock top and
+   bottom — the eye needs one unambiguous line to judge "dead centre" against,
+   and anything wider than a hairline makes the lock look approximate. */
+.reel__marker {
+  position: absolute; left: 50%; top: -1px; bottom: -1px; width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, var(--amber), #fff 50%, var(--amber));
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--amber) 75%, transparent),
+              0 0 44px 8px color-mix(in srgb, var(--amber) 35%, transparent);
+  pointer-events: none; z-index: 2;
+}
+.reel__marker::before,
+.reel__marker::after {
+  content: ""; position: absolute; left: 50%; width: 0; height: 0;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+}
+.reel__marker::before { top: -1px; border-top: 9px solid var(--amber); }
+.reel__marker::after  { bottom: -1px; border-bottom: 9px solid var(--amber); }
+/* on lock it turns the winner's colour, so the marker confirms the result */
+.reel[data-locked="1"] .reel__marker {
+  background: linear-gradient(180deg, var(--rar), #fff 50%, var(--rar));
+  box-shadow: 0 0 16px 3px color-mix(in srgb, var(--rar) 80%, transparent),
+              0 0 52px 10px color-mix(in srgb, var(--rar) 40%, transparent);
+}
+.reel[data-locked="1"] .reel__marker::before { border-top-color: var(--rar); }
+.reel[data-locked="1"] .reel__marker::after { border-bottom-color: var(--rar); }
+
+.reel__copy {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  text-align: center;
+  opacity: 0; transform: translateY(10px);
+  transition: opacity .4s var(--ease), transform .45s var(--ease);
+}
+.reel__copy[data-on="1"] { opacity: 1; transform: none; }
+.reel__tier {
+  font-size: .75rem; letter-spacing: .3em; color: var(--rar);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--rar) 60%, transparent);
+}
+.reel__name {
+  font-family: var(--disp); font-weight: 900;
+  font-size: clamp(1.5rem, 4vw, 2.4rem); line-height: 1.16; letter-spacing: -.028em;
+}
+.reel__val { font-size: .875rem; color: var(--muted); letter-spacing: .05em; }
+.reel__copy .btn { margin-top: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reel { animation: none; }
+  .reel__copy { transition: none; }
+}
+
+/* ═════════ the reveal films ═════════
+   One full-bleed canvas with the copy laid over it. Nothing here may animate
+   the shot — every moving thing is drawn in cutscene.js. Two clocks driving one
+   picture is exactly how the first upgrader reveal fell out of step with
+   itself, opening its lid while the chest was still flying in. */
+.cut {
+  position: fixed; inset: 0; z-index: 160;
+  display: grid; grid-template-rows: 1fr auto; place-items: center;
+  padding: clamp(16px, 4vh, 44px);
+  background: radial-gradient(72% 60% at 50% 44%, rgba(8,10,13,.95), rgba(2,3,4,.995));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fade .3s ease both;
+  overflow: hidden;
+}
+.cut[hidden] { display: none; }
+.cut__cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* The blinding flash at the lock beat — golden at the core, cyan at the edge,
+   the same pairing the rim light and the fireworks use.
+   A DOM layer rather than a canvas fill: it has to cover the copy and the
+   backdrop too, and at full-screen scale the compositor does this for free
+   where a canvas fillRect would not. */
+.cut__flash {
+  position: absolute; inset: 0; pointer-events: none; z-index: 5;
+  background:
+    radial-gradient(44% 38% at 50% 45%, #fff, rgba(255,214,138,.68) 44%, transparent 74%),
+    radial-gradient(60% 52% at 50% 45%, rgba(255,200,90,.5), transparent 78%),
+    radial-gradient(80% 68% at 50% 45%, rgba(255,170,0,.34), transparent 80%);
+  opacity: 0; transition: opacity .42s cubic-bezier(.16,1,.3,1);
+  mix-blend-mode: screen;
+}
+.cut__flash[data-on="1"] { opacity: .95; transition-duration: .05s; }
+/* the standard reveal never flashes; its lock is a click and a soft ring */
+.cut[data-mode="slow"] .cut__flash { display: none; }
+
+.cut__copy {
+  position: relative; z-index: 6; grid-row: 2;
+  margin-bottom: clamp(8px, 3vh, 34px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity .5s var(--ease), transform .55s var(--ease);
+}
+.cut__copy[data-on="1"] { opacity: 1; transform: none; }
+.cut__tier {
+  font-size: .75rem; letter-spacing: .3em; color: var(--rar, #fff);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--rar, #fff) 60%, transparent);
+}
+.cut__name {
+  font-family: var(--disp); font-weight: 900;
+  font-size: clamp(2rem, 6vw, 3.6rem); line-height: 1.16; letter-spacing: -.03em;
+}
+/* ── the jackpot banner ──
+   Only the profit cinematic carries this. It names why the shot happened:
+   the multiple, not the rarity — because the multiple is what the player
+   actually just experienced. */
+.cut__banner {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 4px; padding: 7px 16px 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(255,170,0,.16), rgba(255,120,0,.05));
+  box-shadow: inset 0 1px 0 rgba(255,226,170,.35),
+              0 0 30px -6px color-mix(in srgb, var(--amber) 60%, transparent);
+  font-family: var(--mono); font-size: .75rem; font-weight: 800;
+  letter-spacing: .26em; text-transform: uppercase; color: #ffd479;
+}
+.cut__banner b {
+  font-size: 1rem; letter-spacing: .04em; color: var(--text);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--amber) 80%, transparent);
+}
+.cut__banner[hidden] { display: none; }
+
+/* the standard reveal is a quieter piece of type, because it is a quieter pull */
+.cut[data-mode="slow"] .cut__name { font-size: clamp(1.6rem, 4vw, 2.4rem); }
+.cut[data-mode="slow"] .cut__tier { letter-spacing: .24em; }
+.cut__val { font-size: .875rem; color: var(--muted); letter-spacing: .04em; }
+.cut__copy .btn { margin-top: 14px; }
+
+/* ═════════ navigation actions ═════════
+   Three weights, deliberately unequal. Log in is glass — present, not sold.
+   Deposit keeps the house green. Withdraw is the loud one, lit in rose metal,
+   because on a gambling site the control a player most needs to find is the one
+   that takes money OUT, and burying it is a dark pattern. */
+#depositBtn { display: inline-flex; align-items: center; gap: 8px; }
+.btn__ico { width: 15px; height: 15px; flex: none; }
+.btn__ico path, .btn__ico circle {
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+.btn--glass {
+  display: inline-flex; align-items: center; gap: 8px;
+  background-image: var(--grid), linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
+  border: 1px solid rgba(224,137,155,.24);
+  color: var(--text);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  /* Glass has a defined edge, so it gets a contact shadow and no wide ambient
+     — a hairline border plus a diffuse bloom is the pattern the design review
+     flags, and on a pane that is meant to read as a sheet of glass the bloom
+     was wrong regardless. */
+  box-shadow: inset 0 1px 0 rgba(255,214,224,.16), 0 1px 2px rgba(0,0,0,.45);
+  transition: border-color .25s var(--ease), transform .2s var(--ease), box-shadow .25s var(--ease);
+}
+.btn--glass:hover {
+  border-color: rgba(224,137,155,.5);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255,214,224,.22), 0 2px 5px rgba(0,0,0,.5);
+}
+.btn--glass:active { transform: translateY(0); }
+
+.btn--withdraw {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  color: #2a1502; font-weight: 800; letter-spacing: .01em;
+  border: 1px solid #ffb340; border-radius: var(--r-s);
+  /* An EMBER ramp, not gold and not pink.
+   *
+   * --rose now aliases gold, so this gradient was running #f0a7b7 (pink) into gold into amber:
+   * three unrelated hues on one 90px button, and its top half was the only pink left on the page.
+   * Withdraw still has to be the loudest control in the bar — the control a player most needs to
+   * find is the one that takes money OUT, and burying it is a dark pattern — so it keeps its own
+   * identity by running hotter than Deposit rather than by being a different colour family. */
+  background: linear-gradient(180deg, #ffd27a 0%, #ff9500 44%, #ef6a00 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55),
+              inset 0 -1px 0 rgba(0,0,0,.28),
+              0 0 20px -4px color-mix(in srgb, var(--rose) 70%, transparent),
+              var(--el-1);
+  transition: transform .2s var(--ease), box-shadow .28s var(--ease), filter .2s var(--ease);
+}
+.btn--withdraw:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6),
+              inset 0 -1px 0 rgba(0,0,0,.28),
+              0 0 30px -2px color-mix(in srgb, var(--rose) 85%, transparent),
+              var(--el-2);
+}
+.btn--withdraw:active { transform: translateY(0) scale(.985); }
+.btn--withdraw .btn__ico path { stroke-width: 2.2; }
+
+@media (max-width: 1180px) { .btn--glass span { display: none; } .btn--glass { padding-inline: 10px; } }
+@media (max-width: 900px)  { .btn--withdraw span { display: none; } .btn--withdraw { padding-inline: 10px; } }
+
+/* ═════════ the animation test bench ═════════
+   Developer surface. Hidden until the chord or ?dev=1 sets data-on, so a player
+   never meets a control that can play a jackpot cinematic on demand. */
+#devRoot { position: fixed; inset: auto 0 0 auto; z-index: 200; pointer-events: none; }
+#devRoot[data-on="1"] { pointer-events: auto; }
+#devRoot:not([data-on="1"]) .devfab,
+#devRoot:not([data-on="1"]) .devpanel { display: none; }
+
+.devfab {
+  position: fixed; right: 18px; bottom: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 13px; border-radius: 4px; cursor: pointer;
+  font-family: var(--mono); font-size: .75rem; font-weight: 800; letter-spacing: .18em;
+  color: var(--rose);
+  background-image: var(--grid), var(--mat-obsidian);
+  border: 1px solid rgba(224,137,155,.35);
+  /* A defined rose edge, not a diffuse halo. Pairing a hairline border with a
+     wide chromatic glow is the generated-UI signature the design review flags,
+     and it is right: commit to the edge or to the elevation, not both. The edge
+     suits a rose-metal finish better anyway — metal has a bright rim, not a
+     bloom — so the glow became a second, tighter border line. */
+  box-shadow: inset 0 1px 0 var(--gl-hi),
+              0 0 0 1px color-mix(in srgb, var(--rose) 22%, transparent),
+              var(--el-2);
+  transition: transform .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.devfab:hover {
+  transform: translateY(-2px); border-color: var(--rose);
+  box-shadow: inset 0 1px 0 var(--gl-hi),
+              0 0 0 1px color-mix(in srgb, var(--rose) 45%, transparent),
+              var(--el-3);
+}
+.devfab svg { width: 15px; height: 15px; }
+.devfab svg path, .devfab svg circle {
+  fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.devpanel {
+  position: fixed; right: 18px; bottom: 66px; width: min(392px, calc(100vw - 36px));
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; border-radius: var(--r-lg);
+  background-image: var(--grid), var(--mat-obsidian);
+  border: 1px solid rgba(224,137,155,.3);
+  box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 -1px 0 var(--gl-lo), var(--el-3);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  animation: devin .24s var(--ease) both;
+}
+.devpanel[hidden] { display: none; }
+@keyframes devin { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+
+.devpanel__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.devpanel__title { font-size: .75rem; letter-spacing: .26em; color: var(--rose); }
+.devpanel__x {
+  width: 26px; height: 26px; display: grid; place-items: center; cursor: pointer;
+  border-radius: 4px; border: 1px solid var(--gl-line); background: rgba(0,0,0,.3); color: var(--muted);
+}
+.devpanel__x:hover { color: var(--text); border-color: var(--rose-mid); }
+.devpanel__x svg { width: 13px; height: 13px; }
+.devpanel__x svg path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.devpanel__note { font-size: .75rem; line-height: 1.5; color: var(--muted); margin: 0; }
+
+.devpanel__field { display: flex; flex-direction: column; gap: 4px; }
+.devpanel__label { font-size: .625rem; letter-spacing: .2em; color: var(--faint); }
+
+/* ── the test login ──
+   Fenced off inside the bench with its own rule and a warm tint, because it is
+   the one control in here that changes server state rather than replaying an
+   animation. It should not read as just another RUN row. */
+.devauth {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 11px 12px; margin: 4px 0 2px;
+  border-radius: 8px;
+  background: rgba(255, 170, 0, .05);
+  border: 1px solid rgba(255, 170, 0, .22);
+}
+.devauth__note { margin: 0; font-size: .625rem; line-height: 1.55; color: var(--faint); }
+.devauth__note code {
+  font-size: .625rem; padding: 1px 4px; border-radius: 4px;
+  background: rgba(0, 0, 0, .5); color: var(--gold-bright);
+}
+.devauth__row { display: flex; gap: 4px; }
+.devauth__in {
+  flex: 1; min-width: 0;
+  padding: 7px 9px; border-radius: 4px;
+  background: rgba(0, 0, 0, .5);
+  border: 1px solid rgba(255, 255, 255, .1);
+  color: var(--text); font-size: .625rem; outline: none;
+}
+.devauth__in:focus { border-color: #ffaa00; }
+.devauth__go, .devauth__alt {
+  flex: none; cursor: pointer;
+  padding: 7px 11px; border-radius: 4px;
+  font-size: .625rem; font-weight: 800; letter-spacing: .12em;
+  border: 1px solid transparent;
+  transition: filter .2s, border-color .2s, color .2s;
+}
+.devauth__go {
+  color: #241a02;
+  background: linear-gradient(180deg, #ffd94a, #ffaa00 52%, #d98800);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+.devauth__go:hover:not(:disabled) { filter: brightness(1.07); }
+.devauth__alt {
+  flex: 1;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .04);
+  border-color: rgba(255, 255, 255, .08);
+}
+.devauth__alt:hover:not(:disabled) { color: var(--text); border-color: rgba(255, 170, 0, .4); }
+.devauth__go:disabled, .devauth__alt:disabled { opacity: .5; cursor: not-allowed; }
+.devauth__state { font-size: .625rem; letter-spacing: .08em; color: var(--faint); word-break: break-word; }
+.devauth__state[data-on] { color: var(--gold-bright); }
+.devauth__state[data-err] { color: #ff2222; }
+.devpanel__sel {
+  width: 100%; padding: 8px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: .75rem; color: var(--text);
+  background: rgba(0,0,0,.45); border: 1px solid var(--gl-line);
+}
+.devpanel__sel:focus-visible { outline: 2px solid var(--rose-mid); outline-offset: 1px; }
+
+.devlist { display: flex; flex-direction: column; gap: 8px; }
+.devrow {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  padding: 11px 12px; border-radius: 4px; cursor: pointer; text-align: left;
+  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+  border: 1px solid var(--gl-line);
+  color: var(--text); font: inherit;
+  transition: border-color .2s var(--ease), transform .16s var(--ease), background .2s var(--ease);
+}
+.devrow:hover {
+  border-color: color-mix(in srgb, var(--ac) 55%, transparent);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  transform: translateX(2px);
+}
+.devrow:active { transform: translateX(0) scale(.995); }
+.devrow__n {
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 4px;
+  font-size: .625rem; font-weight: 800; color: #12090c;
+  background: var(--ac);
+}
+.devrow__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.devrow__name { font-size: .875rem; font-weight: 600; letter-spacing: -.005em; }
+.devrow__sub { font-size: .625rem; color: var(--faint); letter-spacing: .02em; }
+.devrow__go { font-size: .625rem; letter-spacing: .16em; color: var(--ac); }
+
+.devpanel__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: .625rem; color: var(--faint); letter-spacing: .04em;
+  border-top: 1px solid var(--gl-line); padding-top: 9px;
+}
+.devpanel__keys { display: inline-flex; gap: 4px; flex: none; }
+.devpanel__foot kbd {
+  font-family: var(--mono); font-size: .625rem; padding: 2px 5px; border-radius: 4px;
+  background: rgba(0,0,0,.5); border: 1px solid var(--gl-line); color: var(--muted);
+}
+#devRoot[data-busy] .devrow { pointer-events: none; opacity: .5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .devpanel { animation: none; }
+  .devfab, .devrow, .btn--glass, .btn--withdraw { transition: none; }
+}
+
+/* ═════════ typographic hierarchy ═════════ */
+.h2 { font-size: 1.5rem; letter-spacing: -.022em; margin: 36px 0 15px; }
+.h2 span { font-size: .75rem; letter-spacing: .02em; }
+.phead { font-size: 1.5rem; letter-spacing: -.026em; line-height: 1.3; }
+.board__n { letter-spacing: -.01em; }
+.board__v, .wallethero__v, .prof__sub { font-variant-numeric: tabular-nums; }
+.wallethero__k { font-size: .75rem; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+.wallethero__v { font-size: 1.5rem; letter-spacing: -.03em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cut { animation: none; }
+  .cut__flash, .cut__copy { transition: none; }
+  .track__bar i::after { animation: none; }
+  .promo, .promo__art, .promo h3::after, .track__bar i,
+  .crate, .crate__art, .promo::before, .gamecard::before, .crate::before { transition: none; }
+}

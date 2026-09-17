@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- Content-Security-Policy.
+
+     frame-ancestors is NOT here: a meta-delivered policy cannot express it and browsers ignore
+     the directive with a console warning. It is sent by the server as a real header instead,
+     alongside X-Frame-Options, which is where a framing rule has to live to actually apply.
+ Inline scripts and eval are forbidden outright, which is the
+     single most valuable thing a CSP does. style-src still needs 'unsafe-inline' because the
+     components set style="width:..." on progress bars — but it is confined to style-src-attr, so
+     an injected <style> BLOCK is still refused while the attribute that sizes a bar is allowed.
+     script-src needs no such exception, because the one inline script was moved into
+     assets/js/file-guard.js for exactly this reason.
+     connect-src lists the local API. A deployment behind a real domain must send this header
+     from the edge (infra/nginx/nginx.conf) with its own API origin rather than relying on
+     this tag. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://mc-heads.net; media-src 'self'; connect-src 'self' http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001 ws://127.0.0.1:3001" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Donut Drop — crates, cash upgrader &amp; faction war</title>
+<meta name="description" content="DonutSMP minigames: fifty crates, a cash upgrader, a 14-day Piggy Bank and a three-way faction war. In-game dollars only." />
+<meta name="api-base-url" content="http://localhost:3001" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Rubik:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/app.css" />
+<!-- Owns every large surface. Must load after app.css: it replaces four
+     inconsistent panel treatments in there with one material system. -->
+<link rel="stylesheet" href="assets/css/surface.css" />
+<!-- The upgrader owns its own sheet and its own palette. Loads last so the
+     component is the single source of truth for anything inside .upg. -->
+<link rel="stylesheet" href="assets/css/upgrader.css" />
+<link rel="stylesheet" href="assets/css/vault.css" />
+<link rel="stylesheet" href="assets/css/platform.css" />
+<!-- Loaded last on purpose: matte.css retunes the palette tokens and carries the controls that
+     replaced the explanatory copy stripped out of the game components. -->
+<link rel="stylesheet" href="assets/css/matte.css" />
+<!-- The eight secondary routes. After matte.css, so its tokens are already in scope. -->
+<link rel="stylesheet" href="assets/css/pages.css" />
+<!-- The finish layer, and it has to be last. It owns the one stacking order, the one scrollbar,
+     the one hover contract and the one measure for money — all four are cross-cutting, so every
+     sheet above has to have had its say before this one settles the argument. -->
+<link rel="stylesheet" href="assets/css/obsidian.css" />
+<!-- The duel mode owns its own sheet and loads after the finish layer, so it spends that layer's
+     tokens rather than restating them. -->
+<link rel="stylesheet" href="assets/css/duel.css" />
+<!-- The arena. Loads last of the mode sheets: it owns a full-bleed WebGL surface and the four
+     things that float on top of it, and nothing else on the site may end up inside .pit. -->
+<link rel="stylesheet" href="assets/css/slither.css" />
+<!-- The social suite: the chat rail's furniture, the vault jackpot bar and the two overlays. -->
+<link rel="stylesheet" href="assets/css/social.css" />
+<!-- The finish pass, and it has to be last: it settles the arguments the sheets above were having
+     about what a container looks like. One material at three weights, and gold as light rather
+     than paint. -->
+<link rel="stylesheet" href="assets/css/polish.css" />
+<link rel="icon" href="assets/img/items/ender_chest.png" />
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="bg" aria-hidden="true"></div>
+
+<!-- ══════════ top bar ══════════ -->
+<header class="top">
+  <button class="top__burger" id="burger" aria-label="Open menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+
+  <a class="brand" href="#/home" aria-label="Donut Drop home">
+    <img class="brand__mark" src="assets/img/items/ender_chest.png" alt="" />
+    <span class="brand__txt">DONUT<em>DROP</em></span>
+  </a>
+
+  <!-- Primary navigation.
+       Four entries and a call to action. Piggy Bank, Quests, War and Fair left this bar to cut
+       the clutter, but they are still live routes and still reachable — they moved into the
+       account menu under "Play" rather than being stranded behind a URL nobody can find. -->
+  <nav class="tabs" id="tabs" aria-label="Primary">
+    <a href="#/upgrader" data-route="upgrader">Upgrader</a>
+
+    <!-- Cases is a disclosure, not a link: it owns three routes and picking between them is the
+         decision, so the parent never navigates on its own. -->
+    <div class="tabdrop" id="casesDrop">
+      <button class="tabdrop__btn" id="casesBtn" type="button"
+              aria-haspopup="true" aria-expanded="false" aria-controls="casesMenu">
+        <span>Cases</span>
+        <svg class="tabdrop__chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="tabdrop__menu" id="casesMenu" role="menu" hidden>
+        <a class="tabdrop__row" href="#/crates" data-route="crates" role="menuitem">
+          <img src="assets/img/block/chest_normal.png" alt="" />
+          <span><b>Open Cases</b><i>Fifty crates, published odds</i></span>
+        </a>
+        <a class="tabdrop__row" href="#/battles" data-route="battles" role="menuitem">
+          <img src="assets/img/items/netherite_sword.png" alt="" />
+          <span><b>Case Battles</b><i>Stake the same crates, one pot</i></span>
+        </a>
+        <a class="tabdrop__row" href="#/studio" data-route="studio" role="menuitem">
+          <img src="assets/img/items/ender_chest.png" alt="" />
+          <span><b>Community Cases</b><i>Player-built crates and the studio</i></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- 1v1 Skill is the arena now. The header entry points at #/slither, which is the mode a
+         player means when they click it: a live pit they can be in within two taps. The turn-based
+         duel lobby it used to open is still a live route at #/skill-duel and still reachable from
+         the account menu — it was moved off the bar rather than removed, because one nav entry
+         cannot introduce two modes and the one worth introducing is the one that is real time. -->
+    <a class="navlive" href="#/slither" data-route="slither">
+      <span>1v1 Skill</span>
+      <i class="navlive__pill">LIVE</i>
+    </a>
+
+    <a class="navref" href="#/referrals" data-route="referrals">
+      <span class="navref__ico" aria-hidden="true">&#127873;</span>
+      <span class="navref__txt">$20M <b>PER INVITE</b></span>
+    </a>
+  </nav>
+
+  <div class="wallet">
+    <button class="lvl" id="lvlPill" hidden>
+      <span class="lvl__n mono" id="lvlNum">—</span>
+      <span class="lvl__bar"><i id="lvlFill"></i></span>
+    </button>
+    <button class="ihint lvl__tip" type="button" id="lvlTip" hidden
+            aria-label="VIP progress" data-tip="VIP progress"></button>
+    <!-- The key counter is gone. It counted a resource this platform does not have: the cash-only
+         economy removed crate keys entirely, so the box sat at a permanent zero next to the one
+         number players actually read. -->
+    <div class="cashpill" title="Balance — in-game DonutSMP dollars">
+      <i class="cashpill__coin" aria-hidden="true"></i>
+      <b class="cashpill__n mono" id="wCash">$0</b>
+    </div>
+    <button class="mute" id="muteBtn" data-muted="0" aria-pressed="false" aria-label="Mute sound">
+      <svg class="mute__on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm11.5 3a4 4 0 0 0-2-3.46v6.92A4 4 0 0 0 15.5 12zM13 3.2v2.06a6.5 6.5 0 0 1 0 13.48v2.06A8.5 8.5 0 0 0 13 3.2z"/></svg>
+      <svg class="mute__off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm15.5 3 2.3-2.3-1.2-1.2-2.3 2.3-2.3-2.3-1.2 1.2 2.3 2.3-2.3 2.3 1.2 1.2 2.3-2.3 2.3 2.3 1.2-1.2z"/></svg>
+    </button>
+    <!-- Login sits in glass: it is the quiet option, available but not sold.
+         Withdraw is the loud one, because taking money out is the action a
+         player most needs to be able to find on a gambling site. -->
+    <button class="btn btn--glass" id="loginBtn">
+      <svg class="btn__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      <span>Log in</span>
+    </button>
+    <button class="btn btn--go" id="depositBtn"><svg class="btn__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Deposit</span></button>
+    <button class="btn btn--withdraw" id="withdrawBtn">
+      <svg class="btn__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/><path d="M5 21h14"/></svg>
+      <span>Withdraw</span>
+    </button>
+    <div class="acct">
+      <button class="acct__btn" id="acctBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="menu" id="acctMenu" role="menu" hidden>
+      <a class="menu__row" href="#/profile" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+        <span>Profile</span>
+      </a>
+      <a class="menu__row menu__row--hi" href="#/referrals" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 11h4M19 9v4"/></svg>
+        <span><b id="menuInvites">$0</b> Invites</span>
+      </a>
+      <a class="menu__row" href="#/wallet" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.2"/></svg>
+        <span>Wallet</span>
+      </a>
+      <a class="menu__row menu__row--hi" href="#/vip" data-route="vip" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M4 18l-1.5-9 5 3.5L12 5l4.5 7.5 5-3.5L20 18"/></svg>
+        <span>VIP</span>
+      </a>
+      <a class="menu__row" href="#/rakeback" data-route="rakeback" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>
+        <span>Rakeback</span>
+      </a>
+      <a class="menu__row" href="#/daily-rewards" data-route="daily-rewards" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/></svg>
+        <span>Daily Rewards</span>
+      </a>
+      <a class="menu__row" href="#/support" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5S6 6 4.8 7.6C3.6 9.2 3 13 3 16.5c0 0 2 2 4 2l1-1.6"/><path d="M16 5.5S18 6 19.2 7.6C20.4 9.2 21 13 21 16.5c0 0-2 2-4 2l-1-1.6"/><circle cx="9.3" cy="12.5" r="1.3"/><circle cx="14.7" cy="12.5" r="1.3"/></svg>
+        <span>Discord</span>
+      </a>
+      <a class="menu__row" href="#/fairness" data-route="fairness" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span>Fairness</span>
+      </a>
+      <a class="menu__row" href="#/race" data-route="race" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 5h11l-1.6 3L16 11H5z"/></svg>
+        <span>Race</span>
+      </a>
+      <a class="menu__row" href="#/creator-media" data-route="creator-media" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 11l6-3v8l-6-3z"/></svg>
+        <span>Media Programme</span>
+      </a>
+      <a class="menu__row" href="#/discord" data-route="discord" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12a1 1 0 1 0 0-.1M16 12a1 1 0 1 0 0-.1"/><path d="M7.5 7.5A13 13 0 0 1 12 6.8a13 13 0 0 1 4.5.7l1.7 3.2a10 10 0 0 1 .6 5.6l-2.6 1.7-1.1-1.8"/><path d="M16.5 7.5 18 5M7.5 7.5 6 5"/><path d="M7.9 16.2 6.8 18l-2.6-1.7a10 10 0 0 1 .6-5.6L6.5 7.5"/></svg>
+        <span>Discord</span>
+      </a>
+
+        <div class="menu__sep" role="separator"></div>
+        <div class="menu__label">Play</div>
+        <!-- Skill Duels moved here when the header entry became the arena. It is a live route with
+             its own money in it; a mode is retired by being taken off the board, not by being left
+             running behind a URL nobody links to. -->
+        <a class="menu__row" href="#/skill-duel" data-route="skill-duel" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l7 7M20 4l-7 7"/><circle cx="12" cy="15" r="4"/></svg>
+          <span>Skill Duels</span>
+        </a>
+        <a class="menu__row" href="#/piggy" data-route="piggy" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"/><path d="M8 7V5h8v2"/><path d="M12 11v4M10 13h4"/></svg>
+          <span>Piggy Bank</span>
+        </a>
+        <a class="menu__row" href="#/quests" data-route="quests" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16l-7-4-7 4z"/><path d="M9 10l2 2 4-4"/></svg>
+          <span>Quests &amp; Streak</span>
+        </a>
+        <a class="menu__row" href="#/war" data-route="war" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l7 7M20 4l-7 7"/><path d="M12 11l5 9M12 11l-5 9"/></svg>
+          <span>Faction War</span>
+        </a>
+
+        <div class="menu__sep" role="separator"></div>
+        <div class="menu__label">Activity</div>
+        <a class="menu__row" href="#/leaderboard" data-route="leaderboard" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+          <span>Leaderboard</span>
+        </a>
+        <a class="menu__row" href="#/statistics" data-route="statistics" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <span>Statistics</span>
+        </a>
+        <a class="menu__row" href="#/history" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>
+          <span>Match history</span>
+        </a>
+        <div class="menu__sep" role="separator"></div>
+        <div class="menu__label">Account</div>
+        <a class="menu__row" href="#/settings" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.5-2.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 4.6V4a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 17 5.7l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 12a2 2 0 0 1 0 4z"/></svg>
+          <span>Settings</span>
+        </a>
+        <a class="menu__row" href="#/support" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.4"/><path d="M12 17h.01"/></svg>
+          <span>Support</span>
+        </a>
+        <a class="menu__row" href="#/terms" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          <span>Terms &amp; fairness</span>
+        </a>
+        <a class="menu__row menu__row--muted" href="#/home" role="menuitem" id="signOutBtn">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 19H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
+          <span>Sign out</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════ vault jackpot ══════════
+     Sticks directly under the navbar. The figure is a readout of a real server-side pot, not a
+     number that counts up in the browser; see assets/js/vault-jackpot.js. -->
+<div class="vjp" id="vaultJackpot" hidden></div>
+
+<div class="shell">
+
+  <!-- ══════════ live chat rail ══════════ -->
+  <aside class="chat" id="chat" aria-label="Live chat">
+    <div class="chat__rain">
+      <img src="assets/img/items/gold_block.png" alt="" />
+      <div>
+        <b class="mono" id="rainPot">$0</b>
+        <span>RAIN POT</span>
+      </div>
+      <span class="chat__timer mono" id="rainTimer">12:00</span>
+      <button class="btn btn--tiny" id="rainJoin">Join</button>
+    </div>
+    <div class="chat__head">
+      <span>GLOBAL CHAT</span>
+      <!-- The count in this badge is SIMULATED and is the only figure on the platform that is.
+           See assets/js/online-count.js, which says so in its own header. -->
+      <span class="chat__online"><i></i><b id="onlineCount">0</b><em>ONLINE</em></span>
+    </div>
+    <div class="chat__log" id="chatLog"></div>
+    <form class="chat__send" id="chatForm">
+      <input id="chatInput" placeholder="Send message…" maxlength="120" aria-label="Chat message" />
+      <button class="btn btn--tiny" type="submit">Send</button>
+    </form>
+  </aside>
+
+  <!-- ══════════ routed views ══════════ -->
+  <main class="main" id="main" tabindex="-1">
+
+    <!-- ─────── HOME ─────── -->
+    <section class="view" data-view="home" hidden>
+      <div class="hero">
+        <div class="hero__copy">
+          <h1>Play the drop,<br />not the <em>odds</em>.</h1>
+          <!-- The paragraph that sat here listed the four games in prose, two inches above the four
+               cards that list them as cards. What is left is the part a card cannot say: who
+               settles the round. Three chips, no sentence. -->
+          <ul class="herostats" aria-label="Platform guarantees">
+            <li><b class="mono">SERVER</b><span>settles every roll</span></li>
+            <li><b class="mono">HMAC-SHA256</b><span>provably fair</span></li>
+            <li><b class="mono">CASH</b><span>in-game dollars only</span></li>
+          </ul>
+          <div class="hero__cta">
+            <a class="btn btn--go btn--lg" href="#/crates">Open a crate</a>
+            <a class="btn btn--lg" href="#/piggy">Piggy Bank</a>
+          </div>
+        </div>
+        <div class="hero__art" aria-hidden="true">
+          <img class="hero__chest" src="assets/img/items/ender_chest.png" alt="" />
+          <span class="hero__glow"></span>
+          <img class="hero__f hero__f--1" src="assets/img/items/nether_star.png" alt="" />
+          <img class="hero__f hero__f--2" src="assets/img/items/diamond.png" alt="" />
+          <img class="hero__f hero__f--3" src="assets/img/items/totem.png" alt="" />
+          <img class="hero__f hero__f--4" src="assets/img/items/elytra.png" alt="" />
+          <img class="hero__f hero__f--5" src="assets/img/items/gold_ingot.png" alt="" />
+          <img class="hero__f hero__f--6" src="assets/img/items/god_apple.png" alt="" />
+        </div>
+      </div>
+
+      <div class="promos" id="promos"></div>
+
+      <section class="track" id="levelTrack" aria-label="Your progress"></section>
+
+      <!-- The game grid stood here: Cases / Upgrader / Piggy Bank / Faction War, as icon cards.
+           The promo row above it is the same four products with the same four icons, roughly 600px
+           apart, and a reader hitting them twice concludes the page is padded rather than full.
+           The promo row survives because its stat strip answers "how many / how long / how much",
+           which an icon and a label cannot. -->
+
+      <div class="cols">
+        <section class="card">
+          <h3 class="card__h">Biggest pulls today</h3>
+          <ol class="drops" id="bigDrops"></ol>
+        </section>
+        <section class="card">
+          <h3 class="card__h">How the odds work</h3>
+          <!-- Four bare strings in a monospace definition list — `server weight ÷ pool`,
+               `append-only ledger` — read as debug output rather than as the platform's guarantees.
+               Same four facts, as cards: a claim in gold, the mechanism under it, and for the two
+               that have one, a live value pulled off the current commitment. -->
+          <div class="oddsgrid">
+            <div class="oddscard" data-key="fair">
+              <span class="oddscard__tag">PROVABLY FAIR</span>
+              <b class="oddscard__v">HMAC-SHA256</b>
+              <span class="oddscard__k">every roll committed before you play</span>
+              <code class="oddscard__hash mono" id="fairHashPill">awaiting commitment</code>
+            </div>
+            <div class="oddscard" data-key="odds">
+              <span class="oddscard__tag">PUBLISHED ODDS</span>
+              <b class="oddscard__v">WEIGHT &divide; POOL</b>
+              <span class="oddscard__k">the full drop table, before you pay</span>
+            </div>
+            <div class="oddscard" data-key="pay">
+              <span class="oddscard__tag">INSTANT PAYOUTS</span>
+              <b class="oddscard__v">FULL VALUE</b>
+              <span class="oddscard__k">cash to an append-only ledger</span>
+            </div>
+            <div class="oddscard" data-key="rng">
+              <span class="oddscard__tag">VERIFIABLE RNG</span>
+              <b class="oddscard__v">SEED &middot; NONCE</b>
+              <span class="oddscard__k">re-hash it yourself, in your browser</span>
+              <code class="oddscard__hash mono" id="fairNoncePill">awaiting commitment</code>
+            </div>
+          </div>
+          <button class="btn btn--go" id="fairBtn">Provably-fair details</button>
+        </section>
+      </div>
+    </section>
+
+    <!-- ─────── CRATES ─────── -->
+    <section class="view" data-view="crates" hidden>
+      <header class="phead">
+        <h1>Crates <button class="ihint" type="button" aria-label="Every crate shows its full drop table, odds and house edge before you pay."
+          data-tip="Every crate shows its full drop table, odds and house edge before you pay."></button></h1>
+      </header>
+      <div class="crates" id="crateRoot"></div>
+    </section>
+
+    <!-- ─────── REFERRALS ─────── -->
+    <section class="view" data-view="referrals" hidden>
+      <header class="phead">
+        <h1>Invite &amp; Earn <button class="ihint" type="button" aria-label="You earn a cut of the house margin on your invites, never a cut of their losses."
+          data-tip="You earn a cut of the house margin on your invites, never a cut of their losses."></button></h1>
+      </header>
+      <div class="refer" id="referRoot"></div>
+    </section>
+
+    <!-- ─────── CASE BATTLES ─────── -->
+    <section class="view" data-view="battles" hidden>
+      <header class="phead">
+        <h1>Case Battles <button class="ihint" type="button" aria-label="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."
+          data-tip="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."></button></h1>
+      </header>
+      <div class="battles" id="battleRoot"></div>
+    </section>
+
+    <!-- ─────── COMMUNITY CRATES ─────── -->
+    <section class="view" data-view="studio" hidden>
+      <header class="phead">
+        <h1>Community Crates <button class="ihint" type="button" aria-label="Build a crate and earn a royalty on every open, carved from the house margin."
+          data-tip="Build a crate and earn a royalty on every open, carved from the house margin."></button></h1>
+      </header>
+      <div class="studiowrap" id="studioRoot"></div>
+    </section>
+
+    <!-- ─────── UPGRADER ─────── -->
+    <section class="view" data-view="upgrader" hidden>
+      <header class="phead">
+        <h1>Upgrader <button class="ihint" type="button" aria-label="The gold arc is your window: the pointer stops inside it and the payout is yours."
+          data-tip="The gold arc is your window: the pointer stops inside it and the payout is yours."></button></h1>
+      </header>
+      <div class="upg" id="upgRoot"></div>
+    </section>
+
+    <!-- ─────── 1v1 SKILL DUEL ─────── -->
+    <section class="view" data-view="skill-duel" hidden>
+      <header class="phead">
+        <h1>1v1 Skill <button class="ihint" type="button"
+          aria-label="Pure skill: the house takes no edge on the result and is paid a rake on the pot of a duel it decides."
+          data-tip="Pure skill. The house takes no edge on the result — it is paid a rake on the pot of a duel it decides, and nothing on a draw."></button></h1>
+      </header>
+      <div class="duelwrap" id="duelRoot"></div>
+    </section>
+
+    <!-- ─────── SLITHER ARENA ─────── -->
+    <section class="view" data-view="slither" hidden>
+      <header class="phead">
+        <h1>Slither Arena <button class="ihint" type="button"
+          aria-label="Your buy-in is your snake. Run into anyone and it is theirs; reach a gate or hold a straight line for three seconds and it is yours."
+          data-tip="Your buy-in is your snake. Run into anyone and it is theirs — reach a gate, or hold a straight line for three seconds, and it is yours."></button></h1>
+      </header>
+      <div class="arenawrap" id="slitherRoot"></div>
+    </section>
+
+    <!-- ─────── PIGGY BANK ─────── -->
+    <section class="view" data-view="piggy" hidden>
+      <header class="phead">
+        <h1>Nether Piggy Bank <button class="ihint" type="button" aria-label="Break early and your principal comes straight back; only the interest is forfeit."
+          data-tip="Break early and your principal comes straight back; only the interest is forfeit."></button></h1>
+      </header>
+      <div class="piggy" id="piggyRoot"></div>
+    </section>
+
+    <!-- ─────── QUESTS ─────── -->
+    <section class="view" data-view="quests" hidden>
+      <header class="phead">
+        <h1>Quests &amp; Streak <button class="ihint" type="button" aria-label="Counted server-side as you play. Everything resets at midnight UTC."
+          data-tip="Counted server-side as you play. Everything resets at midnight UTC."></button></h1>
+      </header>
+      <div class="quests" id="questRoot"></div>
+    </section>
+
+    <!-- ─────── FACTION WAR ─────── -->
+    <section class="view" data-view="war" hidden>
+      <header class="phead">
+        <h1>Faction War <button class="ihint" type="button" aria-label="Pick a side once. Every wager you place counts toward its total."
+          data-tip="Pick a side once. Every wager you place counts toward its total."></button></h1>
+      </header>
+      <div class="war" id="warRoot"></div>
+    </section>
+
+    <!-- ─────── PROVABLY FAIR ─────── -->
+    <section class="view" data-view="fairness" hidden>
+      <header class="phead">
+        <h1>Provably Fair <button class="ihint" type="button"
+          aria-label="Every roll is committed before you play and revealed after. Re-hash the revealed seed here, in your own browser, and confirm it matches the commitment you were given."
+          data-tip="Every roll is committed before you play and revealed after. Re-hash the revealed seed in your own browser and confirm it matches the commitment you were given."></button></h1>
+      </header>
+      <div class="fair" id="fairRoot"></div>
+    </section>
+
+    <!-- ─────── VIP ─────── -->
+    <section class="view" data-view="vip" hidden>
+      <header class="phead">
+        <h1>VIP <button class="ihint" type="button"
+          aria-label="Your level is lifetime wagered volume. The only thing it grants is rakeback."
+          data-tip="Your level is lifetime wagered volume. The only thing it grants is rakeback."></button></h1>
+      </header>
+      <div class="vip" id="vipRoot"></div>
+    </section>
+
+    <!-- ─────── RAKEBACK ─────── -->
+    <section class="view" data-view="rakeback" hidden>
+      <header class="phead">
+        <h1>Rakeback <button class="ihint" type="button"
+          aria-label="Every tier is a share of the house margin on what you wager, not of the wager itself."
+          data-tip="Every tier is a share of the house margin on what you wager, not of the wager itself."></button></h1>
+      </header>
+      <div class="rake" id="rakeRoot"></div>
+    </section>
+
+    <!-- ─────── DAILY REWARDS ─────── -->
+    <section class="view" data-view="daily-rewards" hidden>
+      <header class="phead">
+        <h1>Daily Rewards <button class="ihint" type="button"
+          aria-label="Miss a day and the streak resets to one. Everything rolls over at midnight UTC."
+          data-tip="Miss a day and the streak resets to one. Everything rolls over at midnight UTC."></button></h1>
+      </header>
+      <div class="daily" id="dailyRoot"></div>
+    </section>
+
+    <!-- ─────── DISCORD ─────── -->
+    <section class="view" data-view="discord" hidden>
+      <header class="phead">
+        <h1>Discord <button class="ihint" type="button"
+          aria-label="One Discord account verifies one site account, which is what keeps the referral bonus payable."
+          data-tip="One Discord account verifies one site account, which is what keeps the referral bonus payable."></button></h1>
+      </header>
+      <div class="dsync" id="discordRoot"></div>
+    </section>
+
+    <!-- ─────── WAGER RACE ─────── -->
+    <section class="view" data-view="race" hidden>
+      <header class="phead">
+        <h1>Wager Race <button class="ihint" type="button"
+          aria-label="Every wager you place counts automatically. Prizes pay out the moment the clock ends."
+          data-tip="Every wager you place counts automatically. Prizes pay out the moment the clock ends."></button></h1>
+      </header>
+      <div class="race" id="raceRoot"></div>
+    </section>
+
+    <!-- ─────── CREATOR & MEDIA ─────── -->
+    <section class="view" data-view="creator-media" hidden>
+      <header class="phead">
+        <h1>Creator &amp; Media <button class="ihint" type="button"
+          aria-label="An approved code raises your revenue share out of the house margin, never out of your audience."
+          data-tip="An approved code raises your revenue share out of the house margin, never out of your audience."></button></h1>
+      </header>
+      <div class="creator" id="creatorRoot"></div>
+    </section>
+
+    <!-- ─────── LEADERBOARD ─────── -->
+    <section class="view" data-view="leaderboard" hidden>
+      <header class="phead">
+        <h1>Leaderboard <button class="ihint" type="button"
+          aria-label="Every board covers the last 30 days, so the top is always reachable."
+          data-tip="Every board covers the last 30 days, so the top is always reachable."></button></h1>
+      </header>
+      <div class="board" id="boardRoot"></div>
+    </section>
+
+    <!-- ─────── STATISTICS ─────── -->
+    <section class="view" data-view="statistics" hidden>
+      <header class="phead">
+        <h1>Statistics</h1>
+      </header>
+      <div class="stats" id="statsRoot"></div>
+    </section>
+
+    <section class="view" data-view="profile" hidden></section>
+    <section class="view" data-view="wallet" hidden></section>
+    <section class="view" data-view="history" hidden></section>
+    <section class="view" data-view="settings" hidden></section>
+    <section class="view" data-view="support" hidden></section>
+    <section class="view" data-view="terms" hidden></section>
+
+    <!-- ─────── REWARDS ─────── -->
+
+    <!-- ─────── LIVE FEED ───────
+         In the document flow at the foot of the main column, on every route. It used to be a
+         fixed panel pinned over the bottom of the viewport, which meant an ambient feed sat in
+         the foreground of every page and had to be dismissed before the page underneath could be
+         read. It scrolls with the page now and carries its own internal scroller. -->
+    <div id="tickerRoot" class="feedwrap"></div>
+
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<dialog class="modal" id="modal">
+  <header class="modal__bar">
+    <h2 id="modalTitle">—</h2>
+    <button class="modal__x" id="modalClose" aria-label="Close">✕</button>
+  </header>
+  <div class="modal__body" id="modalBody"></div>
+</dialog>
+
+<script src="assets/js/file-guard.js"></script>
+<!-- ══════════ animation test menu ══════════
+     A developer surface, not a player one. It is built by devmenu.js and lives
+     outside .shell so the overlays it launches cannot be clipped by the app
+     layout. -->
+<div id="devRoot"></div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

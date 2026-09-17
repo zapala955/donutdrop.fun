@@ -89,12 +89,20 @@ const jobResultEvent = eventBase.extend({
     .regex(/^[A-Z0-9_]{1,64}$/)
     .optional(),
 });
+const paymentEvent = eventBase.extend({
+  type: z.literal('payment_observed'),
+  payer: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  // Only amounts DonutSMP renders exactly are accepted. At a thousand and above the payment
+  // message abbreviates, so a larger figure could not have been read from it truthfully.
+  amount: z.number().int().min(1).max(999),
+});
 const botEventSchema = z.discriminatedUnion('type', [
   heartbeatEvent,
   linkEvent,
   depositEvent,
   snapshotEvent,
   jobResultEvent,
+  paymentEvent,
 ]);
 const claimSchema = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const depositAuthorizationSchema = eventBase.extend({
@@ -248,10 +256,13 @@ export async function registerMinecraftInternalRoutes(
             await processDeposit(client, event, config);
             break;
           case 'inventory_snapshot':
-            await processSnapshot(client, event);
+            await processSnapshot(client, event, config);
             break;
           case 'job_result':
             await processJobResult(client, event);
+            break;
+          case 'payment_observed':
+            await processPaymentObserved(client, event);
             break;
         }
         return { accepted: true, duplicate: false };
@@ -744,9 +755,39 @@ async function processDeposit(
   );
 }
 
+/**
+ * Records that a payment matching a pending login was seen in chat.
+ *
+ * Deliberately does not confirm the login. The message is unsigned system chat, and the only
+ * evidence that money actually moved is the bot's real balance, which is read from the DonutSMP
+ * API outside this transaction. Marking the observation is what lets that check run.
+ */
+async function processPaymentObserved(
+  client: DbClient,
+  event: z.infer<typeof paymentEvent>,
+): Promise<void> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id FROM auth_link_challenges
+      WHERE method = 'payment' AND bot_id = $1
+        AND normalized_username = lower($2) AND pay_amount = $3
+        AND completed_at IS NULL AND confirmed_at IS NULL AND expires_at > now()
+      FOR UPDATE`,
+    [event.botId, event.payer, event.amount],
+  );
+  const challenge = result.rows[0];
+  // People pay the bot for reasons that have nothing to do with logging in. An unmatched payment
+  // is ordinary, not an error, and must not fail the event or trigger a bot retry.
+  if (!challenge) return;
+  await client.query(
+    'UPDATE auth_link_challenges SET observed_payment_at = now() WHERE id = $1',
+    [challenge.id],
+  );
+}
+
 async function processSnapshot(
   client: DbClient,
   event: z.infer<typeof snapshotEvent>,
+  config: AppConfig,
 ): Promise<void> {
   const supplied = new Map<string, bigint>();
   for (const item of event.totals)
@@ -764,11 +805,17 @@ async function processSnapshot(
   // Every physical item must be represented in custody, including fingerprints that are
   // absent from the catalog. A completely full inventory is also taken out of service so
   // new deposits cannot be accepted without room for safe transfer handling.
+  //
+  // None of that applies to website-only items: the bot then holds nothing on a player's
+  // behalf, so its own Minecraft inventory is not evidence of anything and must not
+  // quarantine the account that logins and gameplay depend on. Snapshots are still
+  // recorded either way, so enabling custody later starts from observed truth.
   const keys = new Set([...expected.keys(), ...supplied.keys()]);
-  const countsMatch = [...keys].every(
-    (key) => (expected.get(key) ?? 0n) === (supplied.get(key) ?? 0n),
-  );
-  const capacitySafe = event.occupiedSlots < event.capacitySlots;
+  const countsMatch =
+    !config.physicalCustodyEnabled ||
+    [...keys].every((key) => (expected.get(key) ?? 0n) === (supplied.get(key) ?? 0n));
+  const capacitySafe =
+    !config.physicalCustodyEnabled || event.occupiedSlots < event.capacitySlots;
   const matched = countsMatch && capacitySafe;
   const totalsObject = Object.fromEntries(
     [...supplied.entries()]
@@ -800,7 +847,7 @@ async function processSnapshot(
   );
   if (!countsMatch) await quarantineBotAndJobs(client, event.botId, 'INVENTORY_MISMATCH');
   await client.query(
-    `UPDATE bot_accounts SET last_snapshot_at = now(), reconciliation_status = $2,
+    `UPDATE bot_accounts SET last_snapshot_at = now(), reconciliation_status = $2::varchar,
             status = CASE WHEN status = 'quarantined' THEN 'quarantined'
                           WHEN $2 = 'matched'
                             AND last_heartbeat_at > now() - interval '45 seconds'

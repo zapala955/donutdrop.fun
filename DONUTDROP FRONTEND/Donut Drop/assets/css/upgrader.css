@@ -1,0 +1,457 @@
+/* ═══════════════════════════════════════════════════════════════
+   upgrader.css — nether lava gold on obsidian
+   ═══════════════════════════════════════════════════════════════
+   The upgrader owns its own sheet. It has its own palette, its own lighting
+   model and four animated states, and it was previously buried in app.css
+   between the empty-state styles and the reveal. Nothing else on the site
+   styles this component; if a rule elsewhere appears to reach it, that is a
+   leak and it belongs here.
+
+   THE ROOM
+   --------
+     stage   #0a0806   the obsidian floor the rig stands on
+     panel   #140f06   the cards, a shade warmer than the floor
+     gold    #ffaa00   the metal on every edge, and the only thing that glows
+     bright  var(--gold-bright)   its specular face
+     deep    #a35f00   its shadow side
+
+   The gold is a METAL, so it is never a flat fill. Every border is a gradient
+   with a specular band in it: shadow at the corners, a bright face at the
+   midpoint, shadow again. A flat yellow line reads as plastic; a gradient with
+   a highlight reads as an anodised edge catching a studio light.
+
+   ONE NOTE ON MEANING
+   -------------------
+   Gold used to mean "multiplier" here and nothing else. Now that gold is the
+   primary brand colour it can no longer carry that job alone, so the multiple
+   is distinguished by the BRIGHT stop (var(--gold-bright)) against the body gold, and
+   cyan keeps values. Crimson still means failure and nothing else.
+
+   Zero purple, by rule, and nothing in the 250-335 hue wedge.               */
+
+.upg {
+  /* ── the component's own tokens ── */
+  --u-stage:   #0a0806;
+  --u-panel:   #140f06;
+  --u-panel-2: #1c1408;
+  --u-ink:     #060406;
+
+  --u-gold:      #ffaa00;
+  --u-gold-bright: var(--gold-bright);
+  --u-gold-deep: #a35f00;
+  --u-amber:     #ffaa00;
+  --u-cyan:      #ffd700;
+  --u-crimson:   #ff2222;
+
+  /* The metal. Shadow, body, specular face, body, shadow — the highlight is
+     narrow on purpose; a wide one looks like a gradient rather than a surface
+     catching light. Used through border-image on every framed element. */
+  --u-metal: linear-gradient(135deg,
+    var(--u-gold-deep) 0%,
+    var(--u-gold) 38%,
+    var(--u-gold-bright) 50%,
+    var(--u-gold) 62%,
+    var(--u-gold-deep) 100%);
+
+  /* the pixel grid, at the component's own density */
+  --u-grid:
+    repeating-linear-gradient(0deg,  rgba(255,255,255,.018) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 1px, transparent 1px 4px);
+
+  --u-ease:  cubic-bezier(.22,1,.36,1);
+  --u-heavy: cubic-bezier(.62,.03,.20,1);
+
+  position: relative;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 22px;
+  border-radius: 4px;
+  background-image: var(--u-grid),
+    radial-gradient(120% 80% at 50% -10%, rgba(255,170,0,.10), transparent 62%),
+    linear-gradient(180deg, #100c06 0%, var(--u-stage) 55%, #070507 100%);
+  border: 1px solid rgba(255,170,0,.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,214,150,.14),
+    inset 0 -1px 0 rgba(0,0,0,.7),
+    0 2px 8px rgba(0,0,0,.55),
+    0 30px 70px -34px rgba(0,0,0,.95);
+  overflow: hidden;
+}
+
+/* ── the studio spotlights ──
+   Two pools on the floor of the rig: a wide key over the centre stage and a
+   cooler fill from the left. Fixed, not animated — a moving light on a static
+   layout reads as a screensaver. They sit under everything at z-index 0. */
+.upg::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(46% 52% at 50% 34%, rgba(255,170,0,.16), transparent 70%),
+    radial-gradient(38% 44% at 8% 16%,  rgba(255,170,0,.055), transparent 72%),
+    radial-gradient(34% 40% at 94% 78%, rgba(255,170,0,.05), transparent 72%);
+}
+/* a hairline of gold metal across the very top edge, like a machined seam */
+.upg::after {
+  content: ""; position: absolute; inset: 0 0 auto; height: 1px; z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--u-gold) 30%, var(--u-gold-bright) 50%, var(--u-gold) 70%, transparent);
+  opacity: .7; pointer-events: none;
+}
+.upg > * { position: relative; z-index: 2; }
+
+/* ═════════ THE SIMPLE LAYOUT ═════════
+   Card · dial · card, and the button under them. That is the whole component.
+
+   What was here before: a plasma conduit, a vortex, a chest, a six-cell
+   instrument cluster, a multiplier slider and a three-column odds strip. All of
+   it was machinery ABOUT the machinery. A player needs four things — what goes
+   in, what they are chasing, the odds, and the control — and every number now
+   has exactly one home instead of three. */
+.uwrap { display: grid; gap: clamp(18px, 2.6vh, 30px); }
+
+/* ── the tool strip ──
+   Small, quiet, top-left, the way a settings row sits above a machine rather
+   than inside it. */
+.utools { display: flex; align-items: center; gap: 8px; }
+.utool {
+  width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 4px; cursor: pointer;
+  background: none; border: 1px solid transparent; color: var(--u-gold);
+  transition: border-color .2s, color .2s, background .2s;
+}
+.utool:hover { color: var(--text); border-color: rgba(255,170,0,.4); background: rgba(255,170,0,.08); }
+.utool svg { width: 15px; height: 15px; }
+.utool svg path {
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.utool__seed { font-size: .625rem; letter-spacing: .1em; color: var(--faint); }
+.utool__stat {
+  margin-left: auto;
+  font-size: .625rem; font-weight: 800; letter-spacing: .24em; text-transform: uppercase;
+}
+.utool__stat[data-s="idle"]  { color: var(--faint); }
+.utool__stat[data-s="armed"] { color: var(--green); }
+.utool__stat[data-s="warn"]  { color: var(--u-crimson); }
+.utool__stat[data-s="fire"]  { color: var(--u-gold); animation: telBlink .55s steps(2) infinite; }
+@keyframes telBlink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ── the stage ── */
+.ustage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.2vw, 34px);
+  align-items: center;
+}
+
+/* ── the two cards ──
+   Flat, soft-cornered, almost no chrome. The reference gets its whole effect
+   from one thing: a big ghosted item behind a glowing glyph. Borders and
+   brackets would fight that, so there are none. */
+.ucard {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 24px 20px 26px;
+  min-height: clamp(300px, 38vh, 400px);
+  border-radius: 14px; text-align: center;
+  font: inherit; color: var(--text); cursor: pointer;
+  background: linear-gradient(180deg, rgba(30,27,20,.72), rgba(14,12,9,.86));
+  border: 1px solid rgba(255,255,255,.05);
+  transition: border-color .3s var(--u-ease), background .3s var(--u-ease);
+}
+.ucard--src { cursor: default; }
+.ucard--dst:hover { border-color: rgba(255,170,0,.3); background: linear-gradient(180deg, rgba(38,33,22,.78), rgba(16,14,10,.9)); }
+.ucard--dst:focus-visible { outline: 2px solid var(--u-gold); outline-offset: 2px; }
+
+.ucard__head { font-family: var(--body); font-weight: 800; font-size: .875rem; color: var(--text); letter-spacing: -.005em; }
+.ucard__sub { font-size: .75rem; color: var(--faint); }
+
+/* ── the image effect ──
+   The item sits BEHIND the glyph, pushed back three ways at once: darkened,
+   desaturated, and blurred a touch. One of those alone is not enough — a merely
+   dim image still competes for the eye, and a merely blurred one still carries
+   its colour. Together they turn the art into a silhouette the glyph can sit on
+   top of, which is exactly what the reference does.
+
+   The glow is a warm pool behind the glyph, not a filter on the image: a glow
+   applied to the art would light its edges and bring it forward again. */
+.ucard__art {
+  position: relative; z-index: 1;
+  width: min(78%, 230px); aspect-ratio: 1.25;
+  margin: auto 0;
+  display: grid; place-items: center;
+}
+.ucard__art img {
+  position: absolute; inset: 0; margin: auto;
+  width: 100%; height: 100%; object-fit: contain;
+  image-rendering: pixelated;
+  filter: brightness(.26) saturate(.18) blur(.6px);
+  transition: filter .45s var(--u-ease), transform .45s var(--u-ease);
+}
+/* Loaded: the item comes up out of the murk and reads as itself. It sat at
+ * brightness(.5) saturate(.55), which was the right treatment for a card that
+ * is still a placeholder and the wrong one for a card that is now showing the
+ * thing you picked — the chevron was the only part with any light on it, so
+ * the pick was legible only from its name underneath. */
+.ucard__art[data-empty="0"] img { filter: brightness(.95) saturate(1) blur(0); }
+.ucard--dst:hover .ucard__art img { transform: scale(1.04); }
+
+/* the pool of light the glyph stands in */
+.ucard__art::before {
+  content: ""; position: absolute; inset: -18%;
+  background: radial-gradient(closest-side, rgba(255,170,0,.42), transparent 72%);
+  filter: blur(14px);
+  opacity: .55; transition: opacity .45s var(--u-ease);
+  pointer-events: none;
+}
+.ucard__art[data-empty="0"]::before { opacity: .95; }
+.ucard--dst:hover .ucard__art::before { opacity: 1; }
+
+.ucard__glyph {
+  position: relative; z-index: 2; display: block; width: 46%; max-width: 96px;
+  transition: opacity .45s var(--u-ease), transform .45s var(--u-ease);
+}
+.ucard__glyph svg { width: 100%; height: auto; display: block; }
+/* Once the card holds something, the chevron stops being the subject and goes
+ * back to being the card's motif: still there, no longer in front of the item. */
+.ucard__art[data-empty="0"] .ucard__glyph {
+  opacity: .26; transform: translateY(14%) scale(.62);
+}
+
+.ucard__meta { display: flex; flex-direction: column; gap: 2px; min-height: 34px; }
+.ucard__name { font-size: .875rem; font-weight: 800; color: var(--rar, #fff); letter-spacing: -.01em; }
+.ucard__val {
+  font-size: 1rem; font-weight: 800; color: var(--u-cyan);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--u-cyan) 45%, transparent);
+}
+
+/* ── the stake controls, kept minimal ── */
+.stakebox {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 4px; width: 100%; max-width: 250px;
+  padding: 11px 14px; border-radius: 8px;
+  background: rgba(0,0,0,.45);
+  border: 1px solid rgba(255,255,255,.07);
+  transition: border-color .25s var(--u-ease);
+}
+.stakebox:focus-within { border-color: var(--u-gold); }
+.stakebox__cur { font-family: var(--mono); font-size: 1rem; font-weight: 800; color: var(--u-gold); flex: none; }
+.stakebox__in {
+  flex: 1; min-width: 0; width: 100%;
+  background: none; border: 0; outline: none;
+  font-family: var(--mono); font-size: 1.25rem; font-weight: 800;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.chips {
+  position: relative; z-index: 1;
+  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+  width: 100%; max-width: 250px; margin-top: 8px;
+}
+.chips .btn {
+  font-family: var(--mono); font-size: .75rem; font-weight: 600;
+  padding: 6px 10px; border-radius: 4px; color: var(--muted);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  transition: color .2s, border-color .2s, background .2s;
+}
+.chips .btn:hover { color: var(--text); border-color: rgba(255,170,0,.4); }
+.chips .btn[aria-pressed="true"] {
+  color: #241a02; font-weight: 800; border-color: transparent;
+  background: linear-gradient(180deg, var(--gold-bright), var(--u-gold));
+}
+
+/* ── the dial ──
+   One instrument. A dark ring, graduations inside it, and a gold-to-orange arc
+   showing the real chance, with the glyph and the number stacked in the middle. */
+.udial { display: grid; place-items: center; }
+.wheel__ring {
+  position: relative; width: clamp(230px, 27vw, 340px); aspect-ratio: 1;
+  border-radius: 50%;
+  /* the ring's own body: a dark disc so the arc has something to sit on */
+  background:
+    radial-gradient(closest-side, rgba(14,12,9,.9) 68%, rgba(26,23,16,.95) 70%, rgba(16,14,10,.95) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 22px 60px -30px rgba(0,0,0,.95);
+}
+.wheel__ring::before {
+  content: ""; position: absolute; inset: -12%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,140,0,.22), transparent 74%);
+  filter: blur(16px); pointer-events: none;
+  transition: opacity .4s var(--u-ease); opacity: .7;
+}
+.udial.is-spinning .wheel__ring::before { opacity: 1; }
+.wheel__ring svg { position: relative; z-index: 1; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.wheel__track { fill: none; stroke: #221d14; stroke-width: 7.5; }
+.wheel__arc {
+  fill: none; stroke: url(#upgGrad); stroke-width: 7.5; stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(255,140,0,.7));
+  transition: stroke-dasharray .5s var(--u-ease);
+}
+.wheel__arc[data-empty="1"] { stroke-opacity: 0; }
+.wheel__ticks .tick { stroke: #2e2718; stroke-width: 1.5; transition: stroke .25s; }
+.wheel__ticks .tick.on { stroke: var(--u-gold); }
+
+.wheel__fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+.wheel__3d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; z-index: 2; border-radius: 50%; }
+.wheel__ring[data-mode="2d"] .wheel__3d { display: block; }
+.wheel__ring[data-mode="2d"] svg,
+.wheel__ring[data-mode="2d"] .wheel__needle { display: none; }
+.wheel__ring[data-mode="2d"] .wheel__mid { z-index: 4; }
+
+/* the pointer, at the foot of the arc where the reference puts it */
+.wheel__needle { position: absolute; inset: 0; transition: transform 4.2s cubic-bezier(.14,.66,.14,1); z-index: 2; }
+.wheel__needle i {
+  position: absolute; left: 50%; bottom: -3px; transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-bottom: 13px solid var(--u-gold);
+  filter: drop-shadow(0 0 7px var(--u-gold));
+}
+.udial.is-win .wheel__needle i { border-bottom-color: var(--win); }
+.udial.is-lose .wheel__needle i { border-bottom-color: var(--u-crimson); }
+
+.wheel__mid {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  pointer-events: none;
+}
+.udial__glyph { width: 42%; max-width: 118px; margin-bottom: 6px; }
+.udial__glyph svg { width: 100%; height: auto; display: block; }
+.wheel__pct {
+  font-family: var(--disp); font-weight: 900;
+  font-size: clamp(1.4rem, 2.8vw, 2rem); letter-spacing: -.035em;
+  color: var(--text); font-variant-numeric: tabular-nums; transition: color .3s;
+}
+.wheel__lbl {
+  font-family: var(--mono); font-size: .625rem; font-weight: 800;
+  letter-spacing: .24em; text-transform: uppercase; color: var(--faint); transition: color .3s;
+}
+.wheel__mid[data-state="win"] .wheel__pct, .wheel__mid[data-state="win"] .wheel__lbl { color: var(--win); }
+.wheel__mid[data-state="lose"] .wheel__pct, .wheel__mid[data-state="lose"] .wheel__lbl { color: var(--u-crimson); }
+
+/* every chevron on the page is the same glyph in the same gold */
+.ucard__glyph svg path, .udial__glyph svg path, .btn__chev svg path { fill: var(--u-gold); }
+.ucard__glyph svg, .udial__glyph svg { filter: drop-shadow(0 3px 10px rgba(255,140,0,.55)); }
+
+/* ── the button ── */
+#pullBtn {
+  justify-self: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: min(420px, 100%);
+  padding: 17px 26px; border-radius: 8px;
+  font-family: var(--body); font-weight: 800; font-size: 1rem;
+  letter-spacing: .01em; color: #241a02; border: 0;
+  background: linear-gradient(180deg, #ffd94a 0%, var(--u-gold) 52%, #d98800 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 10px 30px -12px rgba(255,150,0,.75);
+  cursor: pointer;
+  transition: transform .18s var(--u-ease), box-shadow .3s var(--u-ease), filter .2s;
+}
+#pullBtn .btn__chev { width: 22px; flex: none; }
+#pullBtn .btn__chev svg { width: 100%; height: auto; display: block; }
+#pullBtn .btn__chev svg path { fill: #241a02; }
+#pullBtn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 16px 40px -12px rgba(255,150,0,.9); }
+#pullBtn:active:not(:disabled) { transform: translateY(0) scale(.99); }
+#pullBtn:disabled {
+  cursor: not-allowed; color: var(--faint);
+  background: rgba(255,255,255,.05); box-shadow: none;
+}
+#pullBtn:disabled .btn__chev svg path { fill: var(--faint); }
+
+.upg__seed { display: none; }
+.upg__note {
+  font-family: var(--mono); font-size: .625rem; color: var(--faint);
+  text-align: center; line-height: 1.7; margin: 0;
+}
+
+/* ── narrow ── */
+@media (max-width: 1040px) {
+  .ustage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .udial { grid-column: 1 / -1; order: -1; }
+  .ucard { min-height: 0; }
+}
+@media (max-width: 620px) {
+  .upg { padding: 14px; }
+  .ustage { grid-template-columns: minmax(0, 1fr); }
+  .ucard__art { width: min(62%, 190px); }
+}
+
+
+
+/* ═════════ the catalogue ═════════ */
+.pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(112px, 100%), 1fr)); gap: 8px; }
+.pickgrid button { cursor: pointer; border: 0; padding: 0; background: none; font: inherit; }
+.pickgrid .tile { transition: transform .16s var(--u-ease), border-color .16s, box-shadow .2s; }
+.pickgrid button:hover .tile { transform: translateY(-3px); border-color: var(--rar); }
+.pickgrid button[data-on="1"] .tile {
+  border-color: var(--u-gold);
+  box-shadow: inset 0 0 0 1px var(--u-gold), 0 0 20px -6px var(--u-gold);
+}
+
+/* ═════════ narrow ═════════ */
+/* ═════════ narrow ═════════
+   Below 1080px the pods would overlap the machine, so the stage keeps the
+   canvas and the dial and the pods drop underneath it as a pair. The conduit
+   still reads left-to-right; it just has less room to do it in. */
+@media (max-width: 1080px) {
+  .forge {
+    height: auto; padding: 14px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .forge__cv { position: absolute; inset: 0; height: 100%; }
+  .forge > .wheel, .forge > .forge__fire, .forge > .tele { position: static; transform: none; }
+  .forge > .wheel { grid-column: 1 / -1; justify-self: center; margin: 4px 0 2px; }
+  .forge__fire { grid-column: 1 / -1; width: min(320px, 100%); justify-self: center; }
+  .tele {
+    grid-column: 1 / -1; justify-self: stretch;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tele__row--wide, .tele__row--stat { grid-column: span 3; }
+  .pod { position: static; transform: none; width: auto; }
+  .pod--target:hover { transform: translateY(-3px); }
+}
+@media (max-width: 560px) {
+  .upg { padding: 14px; }
+  .forge { grid-template-columns: 1fr; }
+  .pod__art { width: 72px; height: 72px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bay[data-loaded="1"] .bay__art img { animation: none; }
+  .wheel.is-spinning .wheel__ring { animation: none; }
+  .bay, .chips .btn, .mults button, #pullBtn, .pickgrid .tile { transition: none; }
+}
+
+
+/* ═════════ backend adaptation ═════════
+   Upstream, the left card held a cash amount: a $ field and a row of quick
+   chips. This build stakes a CUSTODY LOT instead — /v1/upgrades takes
+   inventoryLotId, not a number — so the left card is a picker exactly like the
+   right one, and the two read as a matched pair rather than one control and one
+   readout. Everything above is the design sheet as authored; this block is the
+   only divergence, kept at the bottom so a future design sync diffs cleanly.
+
+   .stakebox and .chips above are dead rules for this build. They stay so the
+   sheet keeps matching its source, and cost nothing — nothing emits them. */
+.ucard--src { cursor: default; }
+
+/* The mode switch. Two chips at the top of the card, styled off .chips so the
+   switch and the quick-stake row below it read as the same family of control
+   rather than two different ideas stacked on one card. */
+.umode { margin: 2px 0 0; max-width: 200px; }
+.umode .btn { flex: 1; text-align: center; }
+
+/* Item mode: the whole art + meta stack is the picker, so the affordance is the
+   card itself and not a button bolted under it. */
+.ucard__pick {
+  position: relative; z-index: 1;
+  display: block; width: 100%;
+  padding: 0; border: 0; background: none; font: inherit; color: inherit;
+  cursor: pointer;
+}
+.ucard--src[data-mode="item"] .ucard__art { cursor: pointer; }
+.ucard--src[data-mode="item"]:hover { border-color: rgba(255,170,0,.3); }
+.ucard--src[data-mode="item"]:hover .ucard__art img { transform: scale(1.04); }
+.ucard--src[data-mode="item"]:hover .ucard__art::before { opacity: 1; }
+.ucard__pick:focus-visible { outline: 2px solid var(--u-gold); outline-offset: 4px; border-radius: 8px; }
+
+/* Cash mode: the ingot is a label, not a target, so it must not offer a hover
+   the click does nothing with. */
+.ucard--src[data-mode="cash"] .ucard__art { cursor: default; }

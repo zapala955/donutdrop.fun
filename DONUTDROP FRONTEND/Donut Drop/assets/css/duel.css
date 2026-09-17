@@ -1,0 +1,363 @@
+/* duel.css — 1v1 Skill Duels.
+ *
+ * Loaded after obsidian.css, so the finish layer's tokens are already in scope and this sheet
+ * spends them rather than restating them: --ob-line for every hairline, --ob-gap for every gap,
+ * --r-crisp / --r-panel for every corner. Nothing here invents a colour, a radius or a spacing
+ * step — a new mode is exactly where a palette starts to drift, and the way it drifts is one
+ * file deciding its own gold is slightly better.
+ *
+ * Two surfaces: the lobby table, and the arena. The arena is the one that had to be designed
+ * rather than laid out, because it is the only screen on the platform where a player is looking
+ * at one pixel and reacting to it.
+ */
+
+/* ═════════════════════════ the lobby ═════════════════════════ */
+
+.duel { display: flex; flex-direction: column; gap: var(--ob-gap-lg); min-width: 0; }
+
+/* ── the rules, as metrics ──
+   This is the "zero text bloat" rule made structural. The mode's terms are four numbers, and four
+   numbers are read faster as four numbers than as a sentence containing them. */
+.duel__badges { display: flex; flex-wrap: wrap; gap: var(--ob-gap); }
+.duel__badge {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(18, 18, 22, .72);
+  border: 1px solid var(--ob-line);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .06);
+}
+.duel__badge b { color: var(--gold-bright); font-size: .875rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.duel__badge i { color: var(--faint); font-style: normal; font-size: .625rem; letter-spacing: .14em; }
+
+.duel__head { display: flex; align-items: center; justify-content: space-between; gap: var(--ob-gap); flex-wrap: wrap; }
+.duel__h { font-size: 1.25rem; margin: 0; }
+
+/* ── the table ──
+   A grid, not a <table>. Every row is the same six-track template, so the columns line up down
+   the board without a single width being stated twice, and the whole thing collapses to a card
+   on a phone by redefining one property. */
+.duel__table {
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 0;
+  border-radius: var(--r-panel);
+  padding: var(--ob-gap);
+  background: linear-gradient(180deg, rgba(22, 22, 27, .8), rgba(10, 10, 12, .9));
+  border: 1px solid var(--ob-line);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+.duel__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  align-items: center;
+  gap: var(--ob-gap);
+  padding: 10px 12px;
+  border-radius: var(--r-soft);
+  background: rgba(10, 10, 12, .5);
+  border: 1px solid transparent;
+  transition: border-color .18s var(--ob-ease), background .18s var(--ob-ease);
+}
+.duel__row:not(.duel__row--head):hover { border-color: var(--ob-line-hi); background: rgba(22, 22, 27, .7); }
+/* Your own challenge, so you do not go looking for the Join button on it. */
+.duel__row[data-mine="1"] { border-color: rgba(255, 170, 0, .22); background: rgba(255, 170, 0, .05); }
+.duel__row--head {
+  background: none; padding-block: 2px;
+  font-size: .625rem; letter-spacing: .14em; color: var(--faint);
+}
+.duel__row--head:hover { border-color: transparent; }
+
+.duel__c { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.duel__c--who { display: flex; align-items: center; gap: 8px; }
+.duel__c--who b { font-size: .875rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel__c--stake { color: var(--text); font-weight: 800; }
+.duel__c--mode { color: var(--muted); font-size: .75rem; }
+.duel__c--rake { color: var(--faint); font-size: .75rem; }
+.duel__c--take { color: var(--gold-bright); font-weight: 800; }
+.duel__c--go { display: flex; justify-content: flex-end; }
+
+.duel__lock {
+  font-style: normal; flex: none;
+  font-size: .625rem; letter-spacing: .12em;
+  padding: 2px 7px; border-radius: 999px;
+  color: var(--gold-deep);
+  border: 1px solid rgba(255, 215, 0, .25);
+}
+
+/* ── the player chip ──
+   Initials, not a skin render. The page's CSP allows images from 'self' and data: only, so a
+   third-party head API could not load here even if it were desirable to depend on one. */
+.duelav {
+  display: inline-grid; place-items: center; flex: none;
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  font: 800 .625rem/1 var(--mono);
+  letter-spacing: .04em;
+  color: #0a0a0c;
+  background: linear-gradient(140deg, #ffd700, #ffaa00);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, .35);
+}
+.duelav--lg { width: 58px; height: 58px; font-size: 1rem; }
+
+/* ═════════════════════════ create ═════════════════════════ */
+
+.duelnew { display: flex; flex-direction: column; gap: var(--ob-gap); min-width: 0; }
+.duelnew__fig {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px; border-radius: var(--r-panel);
+  background: radial-gradient(90% 120% at 50% 0%, rgba(255, 170, 0, .12), transparent 70%), rgba(10, 10, 12, .6);
+  border: 1px solid var(--ob-line);
+}
+.duelnew__amt { font-size: 1.5rem; font-weight: 800; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.duelnew__split { font-size: .625rem; letter-spacing: .08em; color: var(--faint); text-align: center; overflow-wrap: anywhere; }
+
+/* Two segmented controls, same shape. Three variants in the first, two room types in the second. */
+.duelnew__seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.duelnew__seg--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.duelnew__opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 8px; min-width: 0;
+  border-radius: var(--r-soft);
+  background: rgba(18, 18, 22, .7);
+  border: 1px solid var(--ob-line);
+  color: var(--muted); font: inherit; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.duelnew__opt b { font-size: .8125rem; font-weight: 700; }
+.duelnew__opt i { font-style: normal; font-size: .5625rem; letter-spacing: .12em; color: var(--faint); }
+.duelnew__opt:hover { border-color: var(--ob-line-hi); color: var(--text); }
+.duelnew__opt[data-on="1"] {
+  color: var(--gold-bright);
+  border-color: var(--gold-bright);
+  background: rgba(255, 170, 0, .1);
+}
+.duelnew__opt[data-on="1"] i { color: var(--gold-deep); }
+
+.duelnew__secret {
+  padding: 10px 12px; border-radius: var(--r-soft);
+  background: #0a0a0c; border: 1px solid var(--ob-line);
+  color: var(--text); font: 400 .875rem var(--body);
+}
+.duelnew__secret:focus { outline: none; border-color: var(--gold-bright); }
+
+/* ═════════════════════════ the arena ═════════════════════════ */
+
+/* Split screen: you on the left, always. The grid collapses to a single column under 760px, with
+   the stage first — on a phone the thing you react to must not be below the fold. */
+.arena {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-areas: "left stage right" "pot pot pot";
+  gap: var(--ob-gap-lg);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.arena__side {
+  grid-area: left;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 18px 14px; min-width: 0;
+  border-radius: var(--r-panel);
+  background: linear-gradient(180deg, rgba(22, 22, 27, .82), rgba(10, 10, 12, .92));
+  border: 1px solid var(--ob-line);
+  transition: border-color .2s var(--ob-ease), box-shadow .2s var(--ob-ease);
+}
+.arena__side--right { grid-area: right; }
+/* Your side carries the gold edge. On a screen with two identical panels the first question is
+   "which one am I", and a border answers it faster than a label. */
+.arena__side[data-you="1"] {
+  border-color: var(--ob-line-hi);
+  box-shadow: var(--ob-glow);
+}
+.arena__name { font-size: .9375rem; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arena__stake { font-size: .8125rem; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.arena__status { font-size: .5625rem; letter-spacing: .16em; color: var(--faint); }
+.arena__rounds {
+  font-size: 2.25rem; font-weight: 800; line-height: 1;
+  color: var(--gold-bright); font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 24px rgba(255, 170, 0, .4);
+}
+
+/* ── the stage ──
+   The whole box is the input surface. A duel decided on a 200ms reaction must not also be a test
+   of how far the pointer has to travel, so there is no button to hit — there is a target the size
+   of the arena. */
+.arena__stage {
+  grid-area: stage;
+  position: relative; isolation: isolate;
+  display: grid; place-items: center;
+  min-height: clamp(240px, 38vh, 380px);
+  border-radius: var(--r-panel);
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 215, 0, .04) 0 1px, transparent 1px 40px),
+    repeating-linear-gradient(90deg, rgba(255, 215, 0, .04) 0 1px, transparent 1px 40px),
+    radial-gradient(80% 80% at 50% 50%, #121216, #0a0a0c);
+  border: 1px solid var(--ob-line);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  transition: border-color .12s, box-shadow .12s, background-color .12s;
+}
+.arena__stage:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+
+/* The cue. Nothing about it is visible until the frame that fires it, and then it is the loudest
+   thing on the screen — that transition IS the game. */
+.arena__cue {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(60% 60% at 50% 50%, #ffd700, rgba(255, 170, 0, .5) 45%, transparent 72%);
+  transition: opacity 60ms linear;
+}
+.arena__cue[data-on="1"] { opacity: .92; }
+
+.arena__label {
+  position: relative; z-index: 1;
+  font-family: var(--disp); font-weight: 900;
+  font-size: clamp(1.25rem, 3.4vw, 2.25rem);
+  letter-spacing: -.02em; text-align: center;
+  color: var(--text);
+  padding: 0 16px;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, .8);
+}
+
+/* Stage states. Each one is a different instruction to the eye, so each one is a different
+   ground rather than a different word on the same ground. */
+.arena__stage[data-state="countdown"] { border-color: var(--ob-line); }
+.arena__stage[data-state="armed"]     { border-color: rgba(255, 215, 0, .3); }
+.arena__stage[data-state="cue"]       { border-color: #ffd700; box-shadow: 0 0 60px -10px rgba(255, 170, 0, .8); }
+.arena__stage[data-state="sent"]      { border-color: var(--ob-line); opacity: .75; cursor: default; }
+.arena__stage[data-state="scored"]    { border-color: var(--ob-line-hi); }
+
+/* ── precision: the sweeping needle ──
+   Driven by --sweep, set on every animation frame against the round's shared start. A CSS
+   animation would drift from the server's clock; this cannot, because it reads it. */
+.arena__stage[data-state="sweep"]::before {
+  content: "";
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  left: calc(var(--sweep, 0) * 100%);
+  background: linear-gradient(180deg, transparent, #ffd700 20%, #fff 50%, #ffd700 80%, transparent);
+  box-shadow: 0 0 16px 2px rgba(255, 215, 0, .8);
+}
+/* The mark to stop on. Centred, because the target is the middle of the band the server draws
+   from and a visible mark that lies about where the target is would be worse than none. */
+.arena__stage[data-state="sweep"]::after {
+  content: "";
+  position: absolute; top: 12%; bottom: 12%; left: 50%;
+  width: 3px; transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 170, 0, .3);
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, .2);
+}
+
+/* ── sequence: the pad ── */
+.arena__pad {
+  position: absolute; inset: auto 0 18px; z-index: 2;
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 8px;
+  padding: 0 12px;
+}
+.arena__sym {
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  border-radius: var(--r-soft);
+  font-size: 1.25rem; color: var(--gold-bright);
+  background: rgba(10, 10, 12, .8);
+  border: 1px solid var(--ob-line-hi);
+  animation: duel-sym .3s var(--ob-ease) both;
+  animation-delay: calc(var(--i) * .18s);
+}
+@keyframes duel-sym {
+  from { opacity: 0; transform: translateY(6px) scale(.9); }
+  to   { opacity: 1; transform: none; }
+}
+.arena__key {
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  border-radius: var(--r-soft);
+  font-size: 1.25rem; color: var(--muted);
+  background: rgba(18, 18, 22, .9);
+  border: 1px solid var(--ob-line);
+  cursor: pointer;
+  transition: color .1s, border-color .1s, transform .1s;
+}
+.arena__key:hover { color: var(--text); border-color: var(--ob-line-hi); }
+.arena__key[data-hit="1"] { color: #0a0a0c; background: #ffd700; transform: scale(.94); }
+
+/* ── the pot strip ── */
+.arena__pot {
+  grid-area: pot;
+  display: flex; align-items: baseline; justify-content: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--r-panel);
+  background: rgba(10, 10, 12, .7);
+  border: 1px solid var(--ob-line);
+}
+.arena__pot b { font-size: 1.25rem; font-weight: 800; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.arena__pot i { font-style: normal; font-size: .625rem; letter-spacing: .14em; color: var(--faint); }
+
+/* ═════════════════════════ settlement ═════════════════════════ */
+
+.duelend {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 8px 0 4px; text-align: center; min-width: 0;
+}
+.duelend__kicker { font-size: .6875rem; letter-spacing: .3em; color: var(--faint); }
+.duelend__fig {
+  font-size: clamp(1.75rem, 7vw, 2.75rem); font-weight: 800; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-bright);
+  text-shadow: 0 0 40px rgba(255, 170, 0, .45);
+}
+.duelend__cap { font-size: .625rem; letter-spacing: .18em; color: var(--muted); }
+.duelend[data-result="lose"] .duelend__fig { color: var(--muted); text-shadow: none; }
+.duelend[data-result="draw"] .duelend__fig { color: var(--text); text-shadow: none; }
+
+/* The fee, stated on the winning screen rather than buried in a receipt. A player who just won
+   should be told what the house took at the moment they are told what they won. */
+.duelend__chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 8px 0 4px; }
+.duelend__chip {
+  display: inline-flex; flex-direction: column; gap: 1px;
+  padding: 6px 12px; border-radius: var(--r-soft);
+  background: rgba(10, 10, 12, .6);
+  border: 1px solid rgba(255, 215, 0, .12);
+}
+.duelend__chip b { font-size: .8125rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.duelend__chip i { font-style: normal; font-size: .5625rem; letter-spacing: .14em; color: var(--faint); }
+
+/* ═════════════════════════ narrow ═════════════════════════ */
+
+@media (max-width: 760px) {
+  /* Stage first. On a phone the thing the player reacts to cannot be below the fold. */
+  .arena {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage" "left" "right" "pot";
+  }
+  .arena__side { flex-direction: row; justify-content: space-between; }
+  .arena__rounds { font-size: 1.5rem; }
+
+  /* The table becomes cards: the six-column grid is unreadable at this width, and a horizontal
+     scroller on the one screen with a JOIN button is worse than a taller page. */
+  .duel__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "who who" "stake take" "mode rake" "go go";
+    row-gap: 8px;
+    background: rgba(18, 18, 22, .7);
+    border-color: var(--ob-line);
+  }
+  .duel__row--head { display: none; }
+  .duel__c--who   { grid-area: who; }
+  .duel__c--stake { grid-area: stake; }
+  .duel__c--take  { grid-area: take; text-align: right; }
+  .duel__c--mode  { grid-area: mode; }
+  .duel__c--rake  { grid-area: rake; text-align: right; }
+  .duel__c--go    { grid-area: go; }
+  .duel__c--go .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The cue keeps its transition. Everything else stops.
+     This is the one animation on the site that is not decoration: it is the stimulus the player
+     is being timed against, and removing it would remove the game rather than calm it. */
+  .arena__sym { animation: none; }
+  .duel__row, .duelnew__opt, .arena__side, .arena__key { transition: none; }
+}

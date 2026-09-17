@@ -1,0 +1,440 @@
+/* slither.css — the Slither arena.
+ *
+ * Loaded after obsidian.css and duel.css, so the finish layer's tokens are already in scope and
+ * this sheet spends them rather than restating them: --ob-line for every hairline, --ob-gap for
+ * every gap, --r-crisp / --r-panel for every corner, --gold-bright / --gold-body for every accent.
+ * Nothing here invents a colour, a radius or a spacing step.
+ *
+ * Two surfaces, and they have opposite jobs.
+ *
+ * The LOBBY is a page: three metric chips, a heading, a button and a board. It is read.
+ *
+ * The PIT is not a page at all. It is a full-bleed canvas with four things floating on it, and
+ * every one of those four had to earn its place, because the player is looking at a moving gap
+ * between two snakes and anything else on screen is competing with that. There is no panel, no
+ * card, no border and no background behind the HUD — the numbers sit directly on the floor with a
+ * shadow under them, which is the only treatment that stays legible over a surface whose
+ * brightness is changing twenty times a second.
+ */
+
+/* ═════════════════════════ the lobby ═════════════════════════ */
+
+/* The route's own container, matching .duelwrap: min-width 0 so a full-bleed canvas inside a grid
+   column cannot push the page wider than the viewport on a phone. */
+.arenawrap { min-width: 0; }
+
+.arena { display: flex; flex-direction: column; gap: var(--ob-gap-lg); min-width: 0; }
+
+/* ── the terms, as metrics ──
+   The mode's whole contract is three numbers. Three numbers are read faster as three numbers than
+   as a sentence containing them, and there is no fourth chip because there is no fee to quote. */
+.arena__badges { display: flex; flex-wrap: wrap; gap: var(--ob-gap); }
+.arena__badge {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(18, 18, 22, .72);
+  border: 1px solid var(--ob-line);
+  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .06);
+}
+.arena__badgeIco { font-style: normal; font-size: .8125rem; line-height: 1; filter: saturate(.85); }
+.arena__badge b {
+  color: var(--gold-bright); font-size: .875rem; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.arena__badge i {
+  color: var(--faint); font-style: normal; font-size: .625rem; letter-spacing: .14em;
+}
+
+.arena__head {
+  display: flex; align-items: center; gap: var(--ob-gap); flex-wrap: wrap;
+}
+.arena__h { font-size: 1.25rem; margin: 0; }
+.arena__live {
+  margin-left: auto;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .14em;
+  color: var(--muted);
+  padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--ob-line);
+}
+
+/* ── the board ──
+   Used twice: once as a lobby panel, once floating in the top right of the pit. Same markup, and
+   the pit only changes where it sits and how heavily it is shadowed. */
+.arenalb {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px;
+  border-radius: var(--r-panel);
+  background: rgba(18, 18, 22, .72);
+  border: 1px solid var(--ob-line);
+}
+.arenalb__cap {
+  font-size: .625rem; letter-spacing: .24em; color: var(--faint);
+  padding: 0 4px 8px;
+}
+.arenalb__none { color: var(--faint); font-size: .8125rem; padding: 4px; }
+.arenalb__row {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  align-items: center; gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--r-crisp);
+  border: 1px solid transparent;
+}
+.arenalb__row[data-you="1"] {
+  border-color: rgba(255, 170, 0, .24);
+  background: rgba(255, 170, 0, .06);
+}
+.arenalb__rank {
+  font-family: var(--mono); font-size: .6875rem; color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.arenalb__name {
+  font-size: .8125rem; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.arenalb__val {
+  color: var(--gold-bright); font-weight: 800; font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+/* Spans the full width on the next line, because it is a warning about the row above it rather
+   than another column of it. */
+.arenalb__pill {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-left: 2.4rem;
+  font-style: normal; font-size: .5rem; letter-spacing: .18em; font-weight: 800;
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-body));
+  padding: 2px 6px; border-radius: 3px;
+}
+
+/* ═════════════════════════ the entry modal ═════════════════════════ */
+
+.arenanew { display: flex; flex-direction: column; gap: var(--ob-gap); min-width: 0; }
+
+.arenanew__fig {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 18px 16px 14px;
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(255, 170, 0, .10), transparent 62%),
+    rgba(10, 10, 12, .8);
+  border: 1px solid var(--ob-line);
+}
+.arenanew__amt {
+  font-size: 1.75rem; font-weight: 800; color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(255, 170, 0, .35);
+}
+/* The one line of copy in the whole mode, and it is four words that change with the number above
+   it: what the money BUYS, never what it costs. */
+.arenanew__shape {
+  font-size: .625rem; letter-spacing: .18em; color: var(--muted); text-align: center;
+  overflow-wrap: anywhere;
+}
+.arenanew__fig[data-tier="max"] .arenanew__amt { text-shadow: 0 0 34px rgba(255, 215, 0, .6); }
+.arenanew__fig[data-tier="max"] .arenanew__shape { color: var(--gold-bright); }
+
+/* The band, drawn. It is the only place the two limits are shown as a distance rather than as two
+   numbers, and it is what makes "I am near the top" legible without reading either of them. */
+.arenanew__bar {
+  height: 4px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, .06);
+}
+.arenanew__fillbar {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-body), var(--gold-bright));
+  transition: width var(--ob-quick);
+}
+
+.arenanew__input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--r-crisp);
+  background: rgba(10, 10, 12, .9);
+  border: 1px solid var(--ob-line);
+  color: var(--text); font-size: 1rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.arenanew__input:focus { outline: none; border-color: var(--gold-bright); }
+
+.arenanew__seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.arenanew__seg--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.arenanew__opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 6px;
+  border-radius: var(--r-crisp);
+  background: rgba(18, 18, 22, .8);
+  border: 1px solid var(--ob-line);
+  color: var(--muted);
+  transition: border-color var(--ob-quick), color var(--ob-quick);
+}
+.arenanew__opt b { font-size: .8125rem; font-weight: 700; }
+.arenanew__opt i { font-style: normal; font-size: .5625rem; letter-spacing: .12em; color: var(--faint); }
+.arenanew__opt:hover { border-color: var(--ob-line-hi); color: var(--text); }
+.arenanew__go { width: 100%; justify-content: center; }
+
+/* ═════════════════════════ the pit ═════════════════════════ */
+
+.pit {
+  position: relative;
+  width: 100%;
+  /* Tall enough to be a game and short enough to leave the site's chrome visible. The dvh unit
+     matters on a phone: with vh the browser bar overlaps the cashout button, which is the one
+     control a player must be able to reach while panicking. */
+  height: clamp(420px, 74dvh, 900px);
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  border: 1px solid var(--ob-line);
+  background: #06070a;
+  /* The pointer IS the control. A caret over the arena would be a cursor pretending to be one. */
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.pit__gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ── names over the snakes ──
+   Text the browser lays out once, not glyphs rasterised into the arena texture every frame. The
+   renderer writes a `transform` onto each visible label and touches nothing else, so a label that
+   moves costs a composite and never a reflow — which is the entire reason these are DOM at all.
+
+   `contain` is load-bearing rather than decorative: without it, sixty transform writes a second on
+   a couple of dozen children invalidate layout for the whole pit, and the cost of the names grows
+   with the complexity of everything around them. */
+.pit__names {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  /* No `z-index`. DOM order alone puts this above the canvas and below the board, the HUD and the
+     result overlay; a stacking index here would lift the names on top of all three. */
+  contain: layout paint style;
+}
+.pit__name {
+  /* Anchored at the container's origin because the renderer's transform carries the whole
+     position, including the `translate(-50%, -100%)` that puts the label above its own head. */
+  position: absolute; top: 0; left: 0;
+  max-width: 13ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .625rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--muted);
+  /* Tight and black for legibility wherever a name crosses a lit body or an orb's halo. No plate
+     behind it: a filled chip per snake would put another opaque rectangle over the floor the
+     player is reading, and the floor is the game. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 10px rgba(0, 0, 0, .8);
+  /* Deliberately NO transition on `transform`. The renderer already interpolates between
+     snapshots; a CSS transition on top would fight it and smear every label a frame behind the
+     head it belongs to. */
+  will-change: transform;
+}
+/* Your own name, in gold. The one label a player needs to find instantly in a crowd. */
+.pit__name[data-you="1"] {
+  color: var(--gold-bright);
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 0 14px rgba(255, 170, 0, .55);
+}
+/* The lobby drops the names entirely rather than blurring them to match the floor. Blurring would
+   re-run a filter pass over a layer whose children are re-transformed every frame, and at this
+   size the result is unreadable noise regardless — a per-frame GPU cost buying nothing. Hidden,
+   they also stop generating style work on the one screen where the player is reading a wager card
+   rather than the floor. The leaderboard on the card is where lobby names belong. */
+.pit--entry .pit__names { display: none; }
+
+/* ── the board, floating ──
+   Top right, per the brief, and deliberately not in a panel with a background: it sits over a
+   floor whose brightness changes constantly, so it carries its own drop shadow instead. */
+.pit__lb {
+  position: absolute; top: 12px; right: 12px;
+  width: min(268px, 46vw);
+  pointer-events: none;
+}
+.pit__lb .arenalb {
+  background: rgba(6, 7, 10, .62);
+  backdrop-filter: blur(6px);
+  border-color: rgba(255, 215, 0, .12);
+  box-shadow: 0 18px 44px -28px rgba(0, 0, 0, 1);
+}
+
+/* ── the HUD ──
+   Two things: what you are carrying, and the way out. Nothing else. */
+.pit__hud {
+  position: absolute; left: 0; right: 0; bottom: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  pointer-events: none;
+}
+.pit__value {
+  font-size: clamp(1.5rem, 4.5vw, 2.25rem);
+  font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  /* No plate behind it. Two shadows — one tight and black for legibility over a bright floor, one
+     wide and gold so the number reads as the thing that is at stake. */
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .95), 0 0 30px rgba(255, 170, 0, .45);
+}
+
+.pit__cash {
+  position: relative;
+  pointer-events: auto;
+  overflow: hidden;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 215, 0, .3);
+  background: rgba(6, 7, 10, .72);
+  backdrop-filter: blur(6px);
+  color: var(--gold-bright);
+  font-size: .75rem; font-weight: 800; letter-spacing: .16em;
+  transition: border-color var(--ob-quick), transform var(--ob-quick);
+}
+.pit__cash[data-on="1"] { border-color: var(--gold-bright); transform: scale(1.04); }
+/* The channel, as a fill behind the label. It is the same 0..1 the server is counting, so the bar
+   and the snake's glow finish together. */
+.pit__cashfill {
+  position: absolute; inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(90deg, rgba(255, 170, 0, .35), rgba(255, 215, 0, .55));
+  transition: width 90ms linear;
+}
+.pit__cashtxt { position: relative; }
+
+/* ── boost, on touch only ──
+   A keyboard has a space bar and a mouse has a right button. A phone has neither, so it gets a
+   thumb pad — and only a phone, because a button that duplicates a key is clutter on a desktop. */
+.pit__boost {
+  position: absolute; right: 16px; bottom: 86px;
+  display: none;
+  width: 86px; height: 86px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 215, 0, .32);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 170, 0, .3), rgba(6, 7, 10, .8));
+  color: var(--gold-bright);
+  font-size: .625rem; font-weight: 800; letter-spacing: .16em;
+}
+.pit__boost:active { background: radial-gradient(circle at 50% 35%, rgba(255, 215, 0, .55), rgba(6, 7, 10, .85)); }
+
+@media (hover: none) and (pointer: coarse) {
+  .pit__boost { display: block; }
+}
+
+/* ── the result ──
+   Covers the pit, because the round is over and the floor behind it is no longer information. */
+.pit__over {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: radial-gradient(120% 90% at 50% 45%, rgba(10, 10, 12, .82), rgba(6, 7, 10, .96));
+  backdrop-filter: blur(3px);
+}
+.pit__over[data-on="1"] { display: flex; }
+.pit__overkick {
+  font-size: .6875rem; letter-spacing: .34em; color: var(--faint);
+}
+.pit__overfig {
+  font-size: clamp(2rem, 8vw, 3.5rem); font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 46px rgba(255, 170, 0, .5);
+}
+.pit__over[data-result="lose"] .pit__overfig {
+  color: var(--muted);
+  text-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .pit__lb { width: min(200px, 52vw); }
+  .pit__lb .arenalb { padding: 8px; }
+  .pit__lb .arenalb__pill { display: none; }
+  .arena__live { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pit__cash, .arenanew__fillbar, .pit__cashfill { transition: none; }
+}
+
+/* ═════════════════════════ the entry screen ═════════════════════════ */
+
+/* The wager card sits over the live pit. The canvas behind it is the real arena on a spectator
+   feed, blurred so the only thing in focus is the number the player is about to risk. */
+.arena--entry { gap: 0; }
+
+.pit--entry { cursor: default; }
+.pit--entry .pit__gl {
+  /* Blurred and dimmed in CSS rather than rendered small: a low-resolution render still costs a
+     full-screen pass and looks worse. `scale` hides the soft transparent edge a blur leaves. */
+  filter: blur(7px) saturate(1.15) brightness(.55);
+  transform: scale(1.06);
+}
+/* A vignette over the blur, so the card's edge never has to fight a bright patch of floor. */
+.pit__veil {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(74% 68% at 50% 46%, rgba(10, 10, 12, .58), rgba(6, 7, 10, .93) 78%),
+    linear-gradient(180deg, rgba(6, 7, 10, .5), transparent 28%, rgba(6, 7, 10, .72));
+  pointer-events: none;
+}
+/* No WebGL: the blur has nothing to blur, so the card gets a flat backdrop instead of a hole. */
+.pit--entry[data-flat="1"] {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 170, 0, .06), transparent 60%),
+    var(--bg);
+}
+
+.entry {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(380px, calc(100% - 28px));
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 20px;
+  border-radius: var(--r-panel);
+  background: rgba(14, 14, 18, .82);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 215, 0, .2);
+  box-shadow: 0 0 90px -30px rgba(255, 170, 0, .45), 0 30px 70px -40px rgba(0, 0, 0, 1);
+}
+.entry__badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.entry__badges .arena__badge { padding: 5px 9px; }
+.entry__badges .arena__badge b { font-size: .6875rem; }
+.entry__badges .arena__badge i { font-size: .5rem; }
+
+.entry__amt {
+  text-align: center;
+  font-size: clamp(1.75rem, 6vw, 2.5rem); font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 28px rgba(255, 170, 0, .45);
+  line-height: 1.05;
+}
+.entry__shape {
+  text-align: center;
+  font-size: .5625rem; letter-spacing: .16em; color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.entry[data-tier="max"] .entry__amt { text-shadow: 0 0 42px rgba(255, 215, 0, .7); }
+.entry[data-tier="max"] .entry__shape { color: var(--gold-bright); }
+
+.entry__go { width: 100%; justify-content: center; margin-top: 2px; }
+
+/* The live board, under the button: what a player is about to walk into. */
+.entry__lb:empty { display: none; }
+.entry__lb .arenalb {
+  background: rgba(10, 10, 12, .5);
+  border-color: rgba(255, 215, 0, .1);
+  padding: 8px;
+}
+.entry__lb .arenalb__pill { display: none; }
+
+@media (max-width: 720px) {
+  .entry { width: calc(100% - 20px); padding: 16px; gap: 8px; }
+  .entry__lb { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pit--entry .pit__gl { filter: blur(7px) brightness(.5); }
+}
