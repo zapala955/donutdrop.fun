@@ -13,15 +13,17 @@
      an injected <style> BLOCK is still refused while the attribute that sizes a bar is allowed.
      script-src needs no such exception, because the one inline script was moved into
      assets/js/file-guard.js for exactly this reason.
-     connect-src lists the local API. A deployment behind a real domain must send this header
-     from the edge (infra/nginx/nginx.conf) with its own API origin rather than relying on
-     this tag. -->
+     connect-src permits the same-origin API and WebSocket endpoints. The localhost entries keep
+     the static development preview usable when its API listens on port 3001. Production also
+     sends a stricter domain-specific policy from the edge. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://mc-heads.net; media-src 'self'; connect-src 'self' http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001 ws://127.0.0.1:3001" />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Donut Drop — crates, cash upgrader &amp; faction war</title>
 <meta name="description" content="DonutSMP minigames: fifty crates, a cash upgrader, a 14-day Piggy Bank and a three-way faction war. In-game dollars only." />
-<meta name="api-base-url" content="http://localhost:3001" />
+<!-- Empty means same origin. A local split-origin preview may override this with
+     window.DONUTDROP_API_URL before the module graph loads. -->
+<meta name="api-base-url" content="" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=Rubik:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />

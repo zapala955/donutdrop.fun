@@ -1,8 +1,13 @@
 # Deployment infrastructure
 
-The Compose deployment separates public proxy traffic, PostgreSQL, Redis, bot control traffic, and
-bot internet egress. PostgreSQL and Redis cannot reach one another and have no external network,
-the API has no internet egress, and the Mineflayer container cannot reach either data network.
+The Compose deployment separates public proxy traffic, PostgreSQL, Redis, bot control traffic, API
+egress, and bot internet egress. PostgreSQL and Redis cannot reach one another and have no external
+network. The API and Mineflayer containers have separate outbound bridges and neither has a
+published application port; the Mineflayer container cannot reach either data network.
+
+For the exact `donutdrop.fun` VPS topology, first-deploy commands, TLS configuration, and update
+procedure, use [`vps/README.md`](vps/README.md). The Compose nginx bind-mounts the checked-in
+frontend read-only and exposes only `127.0.0.1:8080` for the host TLS proxy.
 
 Images and GitHub Actions are pinned to reviewed immutable digests. Update a version and digest
 together only after reviewing its upstream release notes.
@@ -35,6 +40,8 @@ Other required files:
 - `api-redis-url`: `redis://:<encoded-password>@redis:6379/0` using that Redis password.
 - `api-cookie-secret`, `api-audit-hmac-key`, and `api-ip-hash-key`: distinct random values of at
   least 32 characters.
+- `api-donutsmp-api-key`: the private key created with `/api` in game. It is required for the
+  payment-login balance check and is mounted only into the API.
 - `api-data-encryption-key`: exactly 32 random bytes in canonical base64.
 - `api-bot-credentials.json`: one-line JSON mapping each provisioned bot UUID to an object containing
   its independent 32-byte canonical-base64 `secret`, exact `serverHost`, and exact in-game
@@ -123,6 +130,11 @@ Compose isolates bot control traffic, but a Docker bridge is not a destination a
 enabling any transfer adapter, enforce bot egress at the host firewall or a dedicated egress proxy,
 allowing only the reviewed Microsoft authentication endpoints, DNS/NTP dependencies, and the
 configured DonutSMP endpoint. Deny access to cloud metadata and private management networks.
+
+The API also needs outbound HTTPS for payment-login balance verification against
+`api.donutsmp.net` (and for Discord OAuth/webhooks if those optional features are enabled). Apply
+the same host-firewall or dedicated-proxy policy to `API_EGRESS_NETWORK_CIDR`; in particular, deny
+cloud metadata and private management ranges. Removing API egress disables payment login.
 
 ## Backup launch gate
 

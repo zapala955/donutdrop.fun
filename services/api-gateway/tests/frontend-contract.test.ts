@@ -14,10 +14,13 @@ async function source(relativePath: string): Promise<string> {
 describe('frontend/backend contract', () => {
   it('uses one credentialed API client with CSRF and idempotency support', async () => {
     const api = await source('assets/js/api.js');
+    const html = await source('index.html');
     assert.match(api, /credentials: 'include'/);
     assert.match(api, /headers\['X-CSRF-Token'\]/);
     assert.match(api, /headers\['Idempotency-Key'\]/);
     assert.match(api, /crypto\.getRandomValues/);
+    assert.match(api, /window\.location\.origin/);
+    assert.match(html, /meta name="api-base-url" content=""/);
   });
 
   it('routes every core economic action to the backend', async () => {
@@ -89,7 +92,10 @@ describe('frontend/backend contract', () => {
      * client never receives a rate, so there is nothing here that could render one. */
     const arena = await source('assets/js/slither.js');
     const sheet = await source('assets/css/slither.css');
-    for (const [label, body] of [['slither.js', arena], ['slither.css', sheet]] as const) {
+    for (const [label, body] of [
+      ['slither.js', arena],
+      ['slither.css', sheet],
+    ] as const) {
       for (const forbidden of [/feeBps/, /rakeBps/, /RAKE/, /HOUSE (EDGE|CUT)/]) {
         assert.doesNotMatch(body, forbidden, `${label} must not surface a platform cut`);
       }
@@ -132,23 +138,15 @@ ${detail}`);
     }
   });
 
-  it('renders the arena with no GLSL at all', async () => {
-    /* This test used to guard the arena's shaders against three things that break GLSL silently —
-     * a backtick, a `${`, and non-ASCII. The shaders are gone: the renderer is Canvas2D now, so
-     * there is no shader to break, no per-pixel floor, and no vertex buffer rebuilt per snake per
-     * frame. The guard is inverted rather than deleted, because the failure it protected against
-     * only stops being possible while the GLSL stays gone.
-     *
-     * Three.js is still used, by the home page's hero scene. It is simply not used here. */
+  it('keeps the arena renderer isolated and uses the WebGL2 instanced path', async () => {
     const arena = await source('assets/js/slither.js');
-    assert.doesNotMatch(arena, /gl_FragColor|gl_Position|precision highp/);
-    assert.doesNotMatch(arena, /_VERTEX = `|_FRAGMENT = `/);
+    const renderer = await source('assets/js/slither-renderer.js');
+    assert.match(arena, /createSlitherRenderer/);
     assert.doesNotMatch(arena, /getTHREE|WebGLRenderer/);
-    assert.match(arena, /getContext\('2d'/, 'the arena draws through a 2D context');
-    /* The two properties the rewrite exists for: one pre-rendered floor tile instead of a
-     * per-pixel shader, and a body drawn as a stroked polyline instead of a rebuilt mesh. */
-    assert.match(arena, /createPattern/);
-    assert.match(arena, /lineCap = 'round'/);
+    assert.match(renderer, /getContext\('webgl2'/, 'the arena requires a WebGL2 context');
+    assert.match(renderer, /drawArraysInstanced/);
+    assert.match(renderer, /createShader/);
+    assert.match(renderer, /createTexture/);
   });
 
   it('forbids inline script with a content security policy', async () => {
@@ -171,10 +169,13 @@ ${detail}`);
     const FIELDS = 'name|displayName|blurb|description|player';
     for (const file of ['crates.js', 'war.js', 'quests.js', 'fair.js', 'piggy.js', 'ticker.js']) {
       const module = await source('assets/js/' + file);
-      const markup = [...module.matchAll(/innerHTML\s*(?:\+)?=\s*`([\s\S]*?)`;/g)]
-        .map((m) => m[1] ?? '');
+      const markup = [...module.matchAll(/innerHTML\s*(?:\+)?=\s*`([\s\S]*?)`;/g)].map(
+        (m) => m[1] ?? '',
+      );
       for (const block of markup) {
-        const bare = block.match(new RegExp(`\\$\\{\\s*[a-zA-Z_$][\\w$]*\\.(?:${FIELDS})\\s*\\}`, 'g'));
+        const bare = block.match(
+          new RegExp(`\\$\\{\\s*[a-zA-Z_$][\\w$]*\\.(?:${FIELDS})\\s*\\}`, 'g'),
+        );
         assert.equal(
           bare,
           null,

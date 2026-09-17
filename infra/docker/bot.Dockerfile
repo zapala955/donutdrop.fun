@@ -4,6 +4,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/provably-fair/package.json packages/provably-fair/
 COPY services/api-gateway/package.json services/api-gateway/
 COPY services/minecraft-bot/package.json services/minecraft-bot/tsconfig.json services/minecraft-bot/
+COPY services/discord-bot/package.json services/discord-bot/tsconfig.json services/discord-bot/
 RUN npm ci --ignore-scripts
 COPY services/minecraft-bot services/minecraft-bot
 RUN npm run build --workspace @donut/minecraft-bot
@@ -15,6 +16,7 @@ COPY package.json package-lock.json ./
 COPY packages/provably-fair/package.json packages/provably-fair/
 COPY services/api-gateway/package.json services/api-gateway/
 COPY services/minecraft-bot/package.json services/minecraft-bot/
+COPY services/discord-bot/package.json services/discord-bot/
 RUN npm ci --omit=dev --ignore-scripts --workspace @donut/minecraft-bot && npm cache clean --force
 COPY --from=build /app/services/minecraft-bot/dist services/minecraft-bot/dist
 RUN mkdir -p /var/lib/donut-bot/auth && chown -R node:node /var/lib/donut-bot

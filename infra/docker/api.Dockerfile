@@ -4,6 +4,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/provably-fair/package.json packages/provably-fair/tsconfig.json packages/provably-fair/
 COPY services/api-gateway/package.json services/api-gateway/tsconfig.json services/api-gateway/
 COPY services/minecraft-bot/package.json services/minecraft-bot/tsconfig.json services/minecraft-bot/
+COPY services/discord-bot/package.json services/discord-bot/tsconfig.json services/discord-bot/
 RUN npm ci --ignore-scripts
 COPY packages/provably-fair packages/provably-fair
 COPY packages/db packages/db
@@ -17,6 +18,7 @@ COPY package.json package-lock.json ./
 COPY packages/provably-fair/package.json packages/provably-fair/
 COPY services/api-gateway/package.json services/api-gateway/
 COPY services/minecraft-bot/package.json services/minecraft-bot/
+COPY services/discord-bot/package.json services/discord-bot/
 RUN npm ci --omit=dev --ignore-scripts --workspace @donut/api --workspace @donut/provably-fair && npm cache clean --force
 COPY --from=build /app/packages/provably-fair/dist packages/provably-fair/dist
 COPY --from=build /app/services/api-gateway/dist services/api-gateway/dist

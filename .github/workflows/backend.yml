@@ -59,6 +59,7 @@ jobs:
           printf '%s' '{}' > .secrets/api-admin-totp-secrets.json
           printf '%s' 'CiAuditHmac_f81Cq3Lm7Vp2Xs9Kd5Jn4Rt6' > .secrets/api-audit-hmac-key
           printf '%s' 'CiIpHashKey_a71Lm4Vq8Xs2Kn6Jp9Rt3Wd5' > .secrets/api-ip-hash-key
+          printf '%s' 'ci-donutsmp-key-disabled-for-tests' > .secrets/api-donutsmp-api-key
           printf '%s' '{"ci-audit-v1":"CiAuditHmac_f81Cq3Lm7Vp2Xs9Kd5Jn4Rt6"}' > .secrets/audit-verification-keys.json
           printf '%s' 'CiCheckpointKey_q92Vs5Lm8Xa3Kr7Jt4Wd6' > .secrets/audit-checkpoint-hmac-key
           printf '%s' 'Q0lfQm90S2V5Xzl2TG0zWHE3S3QyV3M4SnI1UGQ0WmE=' > .secrets/bot-webhook-secret
@@ -108,6 +109,10 @@ jobs:
             if [ "$attempt" = 30 ]; then docker compose --env-file .env.example -f infra/docker/compose.yml logs; exit 1; fi
             sleep 2
           done
+          curl --fail --silent http://127.0.0.1:8080/ | grep -q '<title>Donut Drop'
+          curl --fail --silent http://127.0.0.1:8080/assets/js/api.js | grep -q 'window.location.origin'
+          curl --fail --silent --head http://127.0.0.1:8080/ | grep -qi '^Content-Security-Policy:'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/README.md)" = 404
           docker compose --env-file .env.example -f infra/docker/compose.yml up -d --force-recreate --no-deps api
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8080/health/ready >/dev/null; then break; fi

@@ -23,7 +23,8 @@
  */
 
 const API_BASE = (
-  document.querySelector('meta[name="api-base-url"]')?.content?.trim() || 'http://localhost:3001'
+  document.querySelector('meta[name="api-base-url"]')?.content?.trim() ||
+  (/^https?:$/.test(window.location.protocol) ? window.location.origin : 'http://localhost:3001')
 ).replace(/\/$/, '');
 
 const $ = (id) => document.getElementById(id);
@@ -168,9 +169,9 @@ function confirmAction(message) {
     reason.value = '';
     const done = () => {
       dialog.removeEventListener('close', done);
-      resolve(dialog.returnValue === 'go' && reason.value.trim().length >= 3
-        ? reason.value.trim()
-        : null);
+      resolve(
+        dialog.returnValue === 'go' && reason.value.trim().length >= 3 ? reason.value.trim() : null,
+      );
     };
     dialog.addEventListener('close', done);
     dialog.showModal();
@@ -196,7 +197,11 @@ async function loadOverview() {
     ['Recent players', (users.users ?? []).length, false],
     ['Bots', botRows.length, false],
     ['Quarantined', quarantined, quarantined > 0],
-    ['Open jobs', jobRows.filter((job) => job.status === 'queued' || job.status === 'leased').length, false],
+    [
+      'Open jobs',
+      jobRows.filter((job) => job.status === 'queued' || job.status === 'leased').length,
+      false,
+    ],
     ['Dead letter', deadLetter, deadLetter > 0],
   ];
   const host = $('overviewStats');
@@ -260,15 +265,15 @@ async function loadBots() {
       );
       tr.append(status);
       const recon = document.createElement('td');
-      recon.append(pill(bot.reconciliation_status, bot.reconciliation_status === 'matched' ? 'ok' : 'bad'));
+      recon.append(
+        pill(bot.reconciliation_status, bot.reconciliation_status === 'matched' ? 'ok' : 'bad'),
+      );
       tr.append(recon);
       const transfers = document.createElement('td');
-      transfers.append(pill(bot.transfer_capable ? 'enabled' : 'disabled', bot.transfer_capable ? 'ok' : 'warn'));
-      tr.append(
-        transfers,
-        cell(bot.last_heartbeat_at),
-        cell(bot.open_jobs, { mono: true }),
+      transfers.append(
+        pill(bot.transfer_capable ? 'enabled' : 'disabled', bot.transfer_capable ? 'ok' : 'warn'),
       );
+      tr.append(transfers, cell(bot.last_heartbeat_at), cell(bot.open_jobs, { mono: true }));
 
       const actions = document.createElement('td');
       const quarantining = bot.status !== 'quarantined';
@@ -315,9 +320,17 @@ async function loadJobs() {
       tr.append(cell(job.id, { mono: true }), cell(job.kind));
       const status = document.createElement('td');
       status.append(
-        pill(job.status, job.status === 'dead_letter' ? 'bad' : job.status === 'completed' ? 'ok' : 'warn'),
+        pill(
+          job.status,
+          job.status === 'dead_letter' ? 'bad' : job.status === 'completed' ? 'ok' : 'warn',
+        ),
       );
-      tr.append(status, cell(job.attempts, { mono: true }), cell(job.last_error_code), cell(job.updated_at));
+      tr.append(
+        status,
+        cell(job.attempts, { mono: true }),
+        cell(job.last_error_code),
+        cell(job.updated_at),
+      );
       return tr;
     },
   );
@@ -331,7 +344,11 @@ async function loadItems() {
     data.items ?? [],
     (item) => {
       const tr = document.createElement('tr');
-      tr.append(cell(item.display_name), cell(item.minecraft_name), cell(item.last_quantity, { mono: true }));
+      tr.append(
+        cell(item.display_name),
+        cell(item.minecraft_name),
+        cell(item.last_quantity, { mono: true }),
+      );
       const known = document.createElement('td');
       known.append(pill(item.catalog_item_id ? 'yes' : 'no', item.catalog_item_id ? 'ok' : 'warn'));
       tr.append(known, cell(item.last_seen_at));

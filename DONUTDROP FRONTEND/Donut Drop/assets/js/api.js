@@ -1,8 +1,10 @@
 /* api.js — the only browser-to-backend transport. */
 
 const metaBase = document.querySelector('meta[name="api-base-url"]')?.content?.trim();
-export const API_BASE_URL = (window.DONUTDROP_API_URL || metaBase || 'http://localhost:3001')
-  .replace(/\/$/, '');
+const pageOrigin = /^https?:$/.test(window.location.protocol)
+  ? window.location.origin
+  : 'http://localhost:3001';
+export const API_BASE_URL = (window.DONUTDROP_API_URL || metaBase || pageOrigin).replace(/\/$/, '');
 
 let inMemoryCsrf = '';
 
@@ -22,7 +24,9 @@ export function setCsrfToken(value) {
 
 function cookie(name) {
   const prefix = name + '=';
-  const found = document.cookie.split(';').map((entry) => entry.trim())
+  const found = document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
     .find((entry) => entry.startsWith(prefix));
   return found ? decodeURIComponent(found.slice(prefix.length)) : '';
 }

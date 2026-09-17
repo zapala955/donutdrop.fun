@@ -1,0 +1,20 @@
+{
+	admin off
+}
+
+www.donutdrop.fun {
+	redir https://donutdrop.fun{uri} permanent
+}
+
+donutdrop.fun {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:8080 {
+		# Never pass client-supplied forwarding headers into the trusted Docker edge.
+		header_up -Forwarded
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up Host {host}
+	}
+}

@@ -362,6 +362,22 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
           '006_admin_mfa_key_binding.sql',
           '007_deposit_authorization_leases.sql',
           '008_cases_wallets_and_sales.sql',
+          '009_pay_login_challenges.sql',
+          '010_upgrader_balance_stakes.sql',
+          '011_vault_yield_and_piggy_bank.sql',
+          '012_cash_only_quests_and_factions.sql',
+          '013_case_rounds_allow_cash_only.sql',
+          '014_chat_messages.sql',
+          '015_battles_and_community_cases.sql',
+          '016_referrals_and_discord.sql',
+          '017_rakeback_races_creators.sql',
+          '018_drop_daily_wager_limit.sql',
+          '019_vip_levels.sql',
+          '020_skill_duels.sql',
+          '021_slither_arena.sql',
+          '022_social_retention_suite.sql',
+          '023_discord_control.sql',
+          '024_runtime_readiness.sql',
         ],
       );
 
@@ -420,7 +436,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await assertRuntimeDatabaseRole(runtime);
         await assert.doesNotReject(runtime.query('SELECT count(*) FROM audit_log'));
         const readiness = await runtime.query<{ ready: boolean }>(
-          'SELECT public.donut_schema_ready_v19() AS ready',
+          'SELECT public.donut_schema_ready_v24() AS ready',
         );
         assert.equal(readiness.rows[0]?.ready, true);
 
