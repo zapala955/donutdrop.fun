@@ -83,7 +83,11 @@ write_one audit-verification-keys.json "{\"$audit_key_id\":\"$audit_hmac_key\"}"
 write_one audit-checkpoint-hmac-key "$(random_hex)"
 write_one bot-webhook-secret "$bot_webhook_secret"
 
-chmod 0600 "$secret_dir"/*
+# Docker Compose implements local file-backed secrets as bind mounts, so the files keep their
+# host mode inside the container. The services deliberately run under different non-root UIDs and
+# must be able to read their individual mounts. The parent directory remains root-owned and 0700,
+# which prevents unprivileged host users from traversing to these read-only files.
+chmod 0444 "$secret_dir"/*
 chown -R 1000:1000 "$auth_dir"
 chmod 0700 "$auth_dir"
 

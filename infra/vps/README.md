@@ -53,6 +53,12 @@ sudo BOT_ID='replace-with-bot-uuid' \
 
 The script prompts for the DonutSMP API key without echoing it.
 
+The generated secret directory is root-owned with mode `0700`. Individual files are read-only but
+world-readable *inside their dedicated container mount* because local Docker Compose preserves
+host ownership for file-backed secrets and the services run under different non-root UIDs. The
+root-only parent directory prevents other VPS users from traversing to those files on the host.
+Do not loosen the directory permissions.
+
 The script refuses to overwrite an existing secret directory. Back up
 `/opt/donutdrop/shared/secrets` to an encrypted secret store before continuing. Losing the data
 encryption key or audit keys makes recovery incomplete; exposing the cookie, bot, or database
