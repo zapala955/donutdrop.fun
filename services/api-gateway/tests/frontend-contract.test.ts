@@ -23,6 +23,16 @@ describe('frontend/backend contract', () => {
     assert.match(html, /meta name="api-base-url" content=""/);
   });
 
+  it('keeps payment-login completion player-facing and retryable', async () => {
+    const app = await source('assets/js/app.js');
+    const store = await source('assets/js/store.js');
+    assert.doesNotMatch(app, /Admin TOTP|linkTotp/);
+    assert.match(app, /type="button" id="linkComplete"/);
+    assert.match(app, /completionPending = false;\s*button\.disabled = false;/);
+    assert.doesNotMatch(store, /completeLogin\(challengeId,\s*adminTotpCode/);
+    assert.match(store, /Post-login data refresh failed/);
+  });
+
   it('routes every core economic action to the backend', async () => {
     const store = await source('assets/js/store.js');
     assert.match(store, /\/v1\/cases\/'/);

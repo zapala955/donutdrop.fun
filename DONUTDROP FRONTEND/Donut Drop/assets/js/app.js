@@ -234,9 +234,10 @@ function openLoginModal() {
           <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(challenge.instruction)}</p>
           <p class="card__p">Pay exactly $${escapeText(String(challenge.payAmount))} \u2014 the amount is what identifies you, so a different amount will not sign you in.</p>
           <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
-          <div id="linkFinish" hidden><div class="modal__label">Admin TOTP (admins only)</div>
-          <div class="modal__row"><input id="linkTotp" inputmode="numeric" maxlength="8" placeholder="optional">
-          <button class="btn btn--go" id="linkComplete">Finish login</button></div></div>`;
+          <div id="linkFinish" hidden>
+            <button class="btn btn--go" type="button" id="linkComplete">Finish login</button>
+            <p class="card__p" id="linkCompleteError" role="alert" hidden></p>
+          </div>`;
         pollLink(challenge.challengeId, body);
       } catch (error) {
         showApiError(error);
@@ -285,18 +286,27 @@ async function pollLink(challengeId, body) {
     if (state === 'confirmed') {
       const finish = $('#linkFinish', body);
       finish.hidden = false;
+      let completionPending = false;
       $('#linkComplete', body).addEventListener('click', async () => {
+        if (completionPending) return;
+        completionPending = true;
         const button = $('#linkComplete', body);
+        const inlineError = $('#linkCompleteError', body);
         button.disabled = true;
+        inlineError.hidden = true;
+        inlineError.textContent = '';
         try {
-          const user = await completeLogin(challengeId, $('#linkTotp', body).value.trim());
+          const user = await completeLogin(challengeId);
           closeModal();
           toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
         } catch (error) {
+          inlineError.textContent = error?.message || 'The server rejected the request.';
+          inlineError.hidden = false;
           showApiError(error);
+          completionPending = false;
           button.disabled = false;
         }
-      }, { once: true });
+      });
       return;
     }
     if (['expired', 'locked', 'completed'].includes(state)) return;

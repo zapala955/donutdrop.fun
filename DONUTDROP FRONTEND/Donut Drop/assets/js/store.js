@@ -291,15 +291,20 @@ export async function loginStatus(challengeId) {
   return api.get('/v1/auth/pay/status?challengeId=' + encodeURIComponent(challengeId));
 }
 
-export async function completeLogin(challengeId, adminTotpCode) {
-  const payload = { challengeId };
-  if (adminTotpCode) payload.adminTotpCode = adminTotpCode;
-  const result = await api.post('/v1/auth/link/complete', payload);
+export async function completeLogin(challengeId) {
+  const result = await api.post('/v1/auth/link/complete', { challengeId });
   setCsrfToken(result.csrfToken);
   state.user = result.user;
   state.authenticated = true;
   state.online = true;
-  await refreshPrivate(false);
+  try {
+    await refreshPrivate(false);
+  } catch (error) {
+    // The session already exists at this point. A secondary dashboard endpoint must not make the
+    // completed login look like it failed, or a retry hits CHALLENGE_USED and strands the modal.
+    state.lastError = error;
+    console.warn('Post-login data refresh failed', error);
+  }
   emit('login');
   return result.user;
 }
