@@ -27,6 +27,38 @@ fi
 
 umask 077
 
+# ── refuse a pasted placeholder ──
+#
+# Both of these are validated by the gateway, and DISCORD_OPERATORS_JSON is validated at startup:
+# an identity that is not `mc:` plus 32 hex characters stops the API booting at all once
+# DISCORD_CONTROL_ENABLED is on. Catching it here turns "the site is down" into "the script said
+# no", which is the whole reason these checks are worth the lines.
+
+if [[ "${DISCORD_BOT_TOKEN:-}" == *'<'* || "${DISCORD_OPERATORS_JSON:-}" == *'<'* ]]; then
+  echo "A value still contains <...>: substitute the real token and identity first" >&2
+  exit 1
+fi
+
+if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+  # A Discord bot token is three dot-separated segments. Anything without them is prose.
+  if [[ ! "$DISCORD_BOT_TOKEN" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; then
+    echo "DISCORD_BOT_TOKEN does not look like a Discord token (expected three dot-separated parts)" >&2
+    exit 1
+  fi
+fi
+
+if [[ -n "${DISCORD_OPERATORS_JSON:-}" ]]; then
+  # `{"<snowflake>":"mc:<32 hex>"}`, one or more entries. Exactly what the gateway will accept.
+  entry='"[0-9]{5,32}"[[:space:]]*:[[:space:]]*"mc:[0-9a-fA-F]{32}"'
+  if [[ ! "$DISCORD_OPERATORS_JSON" =~ ^\{[[:space:]]*${entry}([[:space:]]*,[[:space:]]*${entry})*[[:space:]]*\}$ ]]; then
+    echo "DISCORD_OPERATORS_JSON must be {\"<discord id>\":\"mc:<32 hex>\"}" >&2
+    echo "Look the identity up with:" >&2
+    echo "  docker compose ... exec -T postgres psql -qtAX -U postgres -d donut_upgrader \\" >&2
+    echo "    -c \"SELECT minecraft_identity FROM users WHERE normalized_username = lower('YOURNAME')\"" >&2
+    exit 1
+  fi
+fi
+
 # Existing value wins over the generated fallback, and an explicitly supplied value wins over both.
 keep_or_write() {
   local name="$1" supplied="$2" fallback="$3" path="$secret_dir/$1"
