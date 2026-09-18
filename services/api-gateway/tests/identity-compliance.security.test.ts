@@ -303,6 +303,87 @@ describe('identity and compliance hardening', () => {
     );
   });
 
+  it('completes and credits a confirmed payment exactly once after its timer expires', async () => {
+    const { app, handlers } = captureApp();
+    const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
+    const challengeId = '10000000-0000-4000-8000-000000000061';
+    const userId = '10000000-0000-4000-8000-000000000062';
+    const database = {
+      transaction: async (work: (client: DbClient) => Promise<unknown>) =>
+        work({
+          query: async (sql: string, values?: readonly unknown[]) => {
+            statements.push(values ? { sql, values } : { sql });
+            if (sql.includes('FROM auth_link_challenges') && sql.includes('FOR UPDATE')) {
+              return result([
+                {
+                  id: challengeId,
+                  method: 'payment',
+                  requested_username: 'PayingPlayer',
+                  pay_amount: 160,
+                  confirmed_identity: 'paying-player-uuid',
+                  confirmed_username: 'PayingPlayer',
+                  confirmed_at: new Date(),
+                  completed_at: null,
+                  attempts: 0,
+                  expired: true,
+                },
+              ]);
+            }
+            if (sql.includes('FROM users WHERE minecraft_identity')) return result([]);
+            if (sql.includes('normalized_username = lower($1)')) return result([]);
+            if (sql.includes('INSERT INTO users')) {
+              return result([
+                {
+                  id: userId,
+                  minecraft_identity: 'paying-player-uuid',
+                  minecraft_username: 'PayingPlayer',
+                  role: 'player',
+                  status: 'pending_compliance',
+                },
+              ]);
+            }
+            if (sql.includes('UPDATE user_wallets')) {
+              return result([{ balance_minor: '16000' }]);
+            }
+            return result([]);
+          },
+        } as unknown as DbClient),
+    } as unknown as Database;
+    await registerAuthRoutes(app, database, loadConfig(configInput));
+    const complete = handlerFor(handlers, 'POST /v1/auth/link/complete');
+
+    await complete(
+      {
+        body: { challengeId },
+        cookies: { du_link: 'signed-link-cookie' },
+        headers: { 'user-agent': 'test' },
+        ip: '192.0.2.61',
+        unsignCookie: () => ({ valid: true, renew: false, value: 'browser-token' }),
+      } as unknown as FastifyRequest,
+      new ReplyStub() as unknown as FastifyReply,
+    );
+
+    const userInsert = statements.find(({ sql }) => sql.includes('INSERT INTO users'));
+    assert.match(userInsert?.sql ?? '', /\$3::varchar\(16\).*lower\(\$3::varchar\(16\)\)/s);
+    assert.ok(
+      statements.some(
+        ({ sql, values }) =>
+          sql.includes('UPDATE user_wallets') && values?.[0] === userId && values?.[1] === '16000',
+      ),
+    );
+    assert.ok(
+      statements.some(
+        ({ sql, values }) =>
+          sql.includes('INSERT INTO wallet_transactions') &&
+          values?.[4] === 'pay_login_deposit' &&
+          values?.[5] === challengeId,
+      ),
+    );
+    const creditIndex = statements.findIndex(({ sql }) => sql.includes('UPDATE user_wallets'));
+    const completedIndex = statements.findIndex(({ sql }) => sql.includes('SET completed_at'));
+    assert.ok(creditIndex >= 0 && completedIndex > creditIndex);
+  });
+
   it('requires and atomically persists administrator MFA during account linking', async () => {
     const { app, handlers } = captureApp();
     const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];

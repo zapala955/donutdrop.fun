@@ -11,6 +11,7 @@ import type { DbClient } from './db.js';
  */
 
 export type WalletKind =
+  | 'pay_login_deposit'
   | 'upgrade_win'
   | 'case_win'
   | 'quest_reward'

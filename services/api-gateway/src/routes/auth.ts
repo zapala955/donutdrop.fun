@@ -12,8 +12,10 @@ import {
   sessionCookieName,
   sessionCookieOptions,
 } from '../lib/auth.js';
+import { MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
+import { creditWallet } from '../lib/wallet.js';
 
 const startSchema = z
   .object({
@@ -39,7 +41,9 @@ const MAX_ADMIN_MFA_ATTEMPTS = 5;
 
 interface ChallengeRow {
   id: string;
+  method: 'chat_code' | 'payment';
   requested_username: string;
+  pay_amount: number | null;
   confirmed_identity: string | null;
   confirmed_username: string | null;
   confirmed_at: Date | null;
@@ -136,8 +140,9 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
     const query = parseWith(challengeStatusSchema, request.query);
     const browserToken = readLinkCookie(request, config);
     const result = await db.query<ChallengeRow>(
-      `SELECT id, requested_username, confirmed_identity, confirmed_username, confirmed_at,
-              completed_at, attempts, expires_at <= now() AS expired
+      `SELECT id, method, requested_username, pay_amount, confirmed_identity,
+              confirmed_username, confirmed_at, completed_at, attempts,
+              expires_at <= now() AS expired
          FROM auth_link_challenges WHERE id = $1 AND browser_token_hash = $2`,
       [query.challengeId, sha256(browserToken)],
     );
@@ -172,8 +177,9 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
 
       const completion = await db.transaction<LinkCompletion>(async (client) => {
         const result = await client.query<ChallengeRow>(
-          `SELECT id, requested_username, confirmed_identity, confirmed_username, confirmed_at,
-                  completed_at, attempts, expires_at <= now() AS expired
+          `SELECT id, method, requested_username, pay_amount, confirmed_identity,
+                  confirmed_username, confirmed_at, completed_at, attempts,
+                  expires_at <= now() AS expired
              FROM auth_link_challenges
             WHERE id = $1 AND browser_token_hash = $2 FOR UPDATE`,
           [body.challengeId, sha256(browserToken)],
@@ -185,7 +191,9 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         if (challenge.attempts >= MAX_ADMIN_MFA_ATTEMPTS) {
           return { ok: false, error: adminMfaChallengeLocked() };
         }
-        if (challenge.expired)
+        // A confirmed payment is money already received. It must remain redeemable if the
+        // browser's completion request is delayed or an earlier deployment returned a 500.
+        if (challenge.expired && !(challenge.method === 'payment' && challenge.confirmed_at))
           throw new AppError(410, 'CHALLENGE_EXPIRED', 'Link challenge expired');
         if (
           !challenge.confirmed_at ||
@@ -293,7 +301,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         }>(
           `INSERT INTO users
              (id, minecraft_identity, minecraft_username, normalized_username, role, last_login_at)
-           VALUES ($1, $2, $3, lower($3), $4, now())
+           VALUES ($1, $2, $3::varchar(16), lower($3::varchar(16)), $4, now())
            ON CONFLICT (minecraft_identity) DO UPDATE
              SET minecraft_username = EXCLUDED.minecraft_username,
                  normalized_username = EXCLUDED.normalized_username,
@@ -320,6 +328,22 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           'INSERT INTO responsible_limits(user_id) VALUES ($1) ON CONFLICT DO NOTHING',
           [row.id],
         );
+        if (challenge.method === 'payment') {
+          if (!Number.isInteger(challenge.pay_amount) || (challenge.pay_amount ?? 0) <= 0) {
+            throw new AppError(
+              500,
+              'CHALLENGE_INVALID',
+              'Login challenge is missing payment details',
+            );
+          }
+          await creditWallet(
+            client,
+            row.id,
+            BigInt(challenge.pay_amount!) * MONEY_MINOR_SCALE,
+            'pay_login_deposit',
+            challenge.id,
+          );
+        }
         await client.query(
           `INSERT INTO sessions
              (id, user_id, token_hash, csrf_hash, ip_hash, user_agent, expires_at,
