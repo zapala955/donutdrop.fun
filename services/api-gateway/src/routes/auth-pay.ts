@@ -8,6 +8,7 @@ import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { resolveMinecraftAccount } from '../lib/minecraft-identity.js';
 import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
+import { TURNSTILE_TOKEN_PATTERN, verifyTurnstile } from '../lib/turnstile.js';
 import { parseWith } from '../lib/validation.js';
 
 /**
@@ -24,7 +25,13 @@ import { parseWith } from '../lib/validation.js';
  */
 
 const startSchema = z
-  .object({ minecraftUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN) })
+  .object({
+    minecraftUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN),
+    /* Optional in the shape, required by the handler when Turnstile is on. Keeping it out of the
+     * schema's required set means a deployment that has not configured a challenge does not reject
+     * every sign-in for omitting one. */
+    turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional(),
+  })
   .strict();
 const statusSchema = z.object({ challengeId: z.uuid() }).strict();
 
@@ -88,6 +95,18 @@ export async function registerPayLoginRoutes(
     });
   };
 
+  /* What the browser needs to know before it can draw a challenge, and nothing else. Public on
+   * purpose: the site key is rendered into the widget, and a deployment with Turnstile off answers
+   * `enabled: false` so the sign-in card simply does not draw one. */
+  app.get(
+    '/v1/auth/pay/turnstile',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async () => ({
+      enabled: config.turnstileEnabled,
+      siteKey: config.turnstileEnabled ? config.turnstileSiteKey : '',
+    }),
+  );
+
   app.post(
     '/v1/auth/pay/start',
     {
@@ -96,6 +115,17 @@ export async function registerPayLoginRoutes(
     },
     async (request, reply) => {
       const body = parseWith(startSchema, request.body);
+
+      /* Before anything else costs anything. A challenge checked after the bot lookup and the
+       * expiry sweep would let an unsolved request do that work first, which is exactly the work
+       * a flood is trying to make this server do. */
+      if (config.turnstileEnabled) {
+        if (!body.turnstileToken) {
+          throw new AppError(400, 'CHALLENGE_REQUIRED', 'Complete the challenge and try again');
+        }
+        await verifyTurnstile(config, body.turnstileToken, request.ip);
+      }
+
       const selectedBot = await selectOnlineBot();
       if (!selectedBot) {
         throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');

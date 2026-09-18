@@ -178,6 +178,9 @@ services:
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       DISCORD_CONTROL_HMAC_KEY_FILE: /run/secrets/discord_control_hmac_key
       DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
+      TURNSTILE_ENABLED: '${TURNSTILE_ENABLED:-false}'
+      TURNSTILE_SITE_KEY: '${TURNSTILE_SITE_KEY:-}'
+      TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key
       PAY_LOGIN_MIN_AMOUNT: '${PAY_LOGIN_MIN_AMOUNT:-100}'
       PAY_LOGIN_MAX_AMOUNT: '${PAY_LOGIN_MAX_AMOUNT:-999}'
       TRUSTED_PROXY_CIDRS: '${EDGE_NETWORK_CIDR:-172.30.0.0/24}'
@@ -195,6 +198,7 @@ services:
       - discord_bot_token
       - discord_control_hmac_key
       - discord_operators_json
+      - turnstile_secret_key
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -429,6 +433,10 @@ secrets:
     file: ${DISCORD_CONTROL_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/discord-control-hmac-key}
   discord_operators_json:
     file: ${DISCORD_OPERATORS_JSON_FILE:-/opt/donutdrop/shared/secrets/discord-operators.json}
+  # Defaulted, not required: compose resolves every variable before it does anything else, so a
+  # `:?` here would make a stack that has never heard of Turnstile refuse to start.
+  turnstile_secret_key:
+    file: ${TURNSTILE_SECRET_KEY_FILE:-/opt/donutdrop/shared/secrets/turnstile-secret-key}
 
 volumes:
   postgres-data:

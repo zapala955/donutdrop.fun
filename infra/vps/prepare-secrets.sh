@@ -95,6 +95,11 @@ discord_operators="${DISCORD_OPERATORS_JSON:-}"
 if [[ -z "$discord_operators" ]]; then discord_operators='{}'; fi
 write_one discord-operators.json "$discord_operators"
 
+# The API mounts this whether or not a challenge is configured, so it always has to exist. A
+# placeholder is a key that cannot verify anything, which is the right state for a deployment with
+# TURNSTILE_ENABLED off.
+write_one turnstile-secret-key "${TURNSTILE_SECRET_KEY:-disabled-no-turnstile}"
+
 # Docker Compose implements local file-backed secrets as bind mounts, so the files keep their
 # host mode inside the container. The services deliberately run under different non-root UIDs and
 # must be able to read their individual mounts. The parent directory remains root-owned and 0700,

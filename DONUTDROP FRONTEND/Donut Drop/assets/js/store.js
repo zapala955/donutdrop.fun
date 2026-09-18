@@ -291,8 +291,17 @@ export async function refreshPrivate(notify = true) {
   if (notify) emit('private');
 }
 
-export async function startLogin(minecraftUsername) {
-  return api.post('/v1/auth/pay/start', { minecraftUsername });
+export async function turnstileConfig() {
+  return api.get('/v1/auth/pay/turnstile');
+}
+
+export async function startLogin(minecraftUsername, turnstileToken) {
+  /* The field is omitted rather than sent empty: the request schema is strict, and a deployment
+   * with no challenge configured would refuse a body carrying one. */
+  return api.post('/v1/auth/pay/start', {
+    minecraftUsername,
+    ...(turnstileToken ? { turnstileToken } : {}),
+  });
 }
 
 export async function loginStatus(challengeId) {

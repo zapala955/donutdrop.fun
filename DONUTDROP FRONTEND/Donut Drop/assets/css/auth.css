@@ -479,3 +479,20 @@
   border-color: var(--line2);
   color: var(--text);
 }
+
+/* ─────────── the sign-in challenge ───────────
+ *
+ * Cloudflare renders an iframe of its own size in here, so this reserves the row rather than
+ * styling it: the only job is that the card does not jump when the widget arrives, and that the
+ * space is not held open on a deployment that has no challenge configured.
+ */
+.auth__challenge {
+  margin-top: 18px;
+  min-height: 65px;
+  color: var(--faint);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.auth__challenge[hidden] {
+  display: none;
+}

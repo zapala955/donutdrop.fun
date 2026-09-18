@@ -31,6 +31,10 @@ const FILE_BACKED_SETTINGS = [
    * sense, but it is the allowlist that decides who can mint an admin session, so it is read the
    * same careful way as one rather than being passed on a command line. */
   'DISCORD_OPERATORS_JSON',
+  /* The half of the Turnstile pair that proves a challenge was really solved. The site key beside
+   * it is public by design and printed into the page; this one is what stops somebody minting
+   * their own "passed" answer, so it is read the same careful way as every other secret here. */
+  'TURNSTILE_SECRET_KEY',
 ] as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -615,6 +619,12 @@ const environmentSchema = z
     DONUTSMP_API_KEY: z.string().default(''),
     PAY_LOGIN_MIN_AMOUNT: z.coerce.number().int().min(1).max(999).default(100),
     PAY_LOGIN_MAX_AMOUNT: z.coerce.number().int().min(1).max(999).default(999),
+    /* Cloudflare Turnstile on the sign-in card. The site key is public — it is rendered into the
+     * widget — and is served to the browser by GET /v1/auth/pay/turnstile so a deployment without
+     * Turnstile configured simply does not draw one. */
+    TURNSTILE_ENABLED: booleanString,
+    TURNSTILE_SITE_KEY: z.string().max(128).default(''),
+    TURNSTILE_SECRET_KEY: z.string().max(256).default(''),
     TRUSTED_PROXY_CIDRS: z.string().default('127.0.0.1/32,::1/128'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -822,6 +832,24 @@ const environmentSchema = z
           code: 'custom',
           path: ['DISCORD_OPERATORS_JSON'],
           message: 'must list at least one operator when DISCORD_CONTROL_ENABLED is on',
+        });
+      }
+    }
+    /* Half-configured is refused rather than quietly ignored. A deployment that believes it is
+     * challenging sign-ups and is not is worse off than one that knows it is not. */
+    if (env.TURNSTILE_ENABLED) {
+      if (!env.TURNSTILE_SITE_KEY) {
+        context.addIssue({
+          code: 'custom',
+          path: ['TURNSTILE_SITE_KEY'],
+          message: 'is required when TURNSTILE_ENABLED is on',
+        });
+      }
+      if (!env.TURNSTILE_SECRET_KEY) {
+        context.addIssue({
+          code: 'custom',
+          path: ['TURNSTILE_SECRET_KEY'],
+          message: 'is required when TURNSTILE_ENABLED is on',
         });
       }
     }
@@ -1071,6 +1099,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     donutsmpApiKey: env.DONUTSMP_API_KEY,
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
+    turnstileEnabled: env.TURNSTILE_ENABLED,
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY,
+    turnstileSecretKey: env.TURNSTILE_SECRET_KEY,
     trustedProxyCidrs,
     logLevel: env.LOG_LEVEL,
     secureCookies: env.NODE_ENV === 'production',

@@ -6,7 +6,7 @@ import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
-  cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus,
+  cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
@@ -227,6 +227,32 @@ const PERSON_ICON =
   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 
+/**
+ * Loads Cloudflare's Turnstile script, once per page.
+ *
+ * Deliberately not in index.html: a deployment with no challenge configured should not fetch a
+ * third-party script on every page load to then not use it. The promise is cached so reopening the
+ * sign-in card does not add another tag, and cleared on failure so a transient network error does
+ * not permanently poison it.
+ */
+let turnstileScript;
+function loadTurnstile() {
+  if (!turnstileScript) {
+    turnstileScript = new Promise((resolve, reject) => {
+      const tag = document.createElement('script');
+      tag.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      tag.async = true;
+      tag.onload = () => resolve(window.turnstile);
+      tag.onerror = () => {
+        turnstileScript = undefined;
+        reject(new Error('Turnstile could not be loaded'));
+      };
+      document.head.appendChild(tag);
+    });
+  }
+  return turnstileScript;
+}
+
 function openLoginModal() {
   if (state.authenticated) {
     toast({ kind: 'win', title: 'Already linked', body: state.user.minecraftUsername });
@@ -273,6 +299,7 @@ function openLoginModal() {
           </div>
         </details>
 
+        <div class="auth__challenge" id="linkChallenge" hidden></div>
         <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
       </form>
       <div id="linkProgress" role="status"></div>`;
@@ -285,6 +312,7 @@ function openLoginModal() {
     const bedrock = $('#linkBedrock', body);
     const referral = $('#linkRef', body);
     const go = $('#linkGo', body);
+    const slot = $('#linkChallenge', body);
     const inlineError = $('#linkError', body);
 
     const typedName = () => input.value.trim();
@@ -301,11 +329,61 @@ function openLoginModal() {
 
     /* Continue stays disabled until the form could actually succeed. A button that is enabled and
      * then rejects the click is a worse answer than one that says up front it is not ready. */
+    /* Whether this deployment challenges sign-ins, and the answer if it does. Both start empty and
+     * are filled in below once the server has been asked; the form stays usable either way. */
+    let challengeRequired = false;
+    let challengeToken = '';
+    let challengeWidget;
+
     const sync = () => {
       prefix.hidden = !bedrock.checked;
       input.maxLength = bedrock.checked ? 15 : 16;
-      go.disabled = !(nameValid() && terms.checked && referralValid());
+      go.disabled = !(
+        nameValid() &&
+        terms.checked &&
+        referralValid() &&
+        (!challengeRequired || challengeToken)
+      );
     };
+
+    /* Asked for after the card is already on screen. Blocking the modal on a third-party script
+     * would make a Cloudflare hiccup look like a broken sign-in button. */
+    void (async () => {
+      let settings;
+      try {
+        settings = await turnstileConfig();
+      } catch {
+        return; // The server decides; if it cannot be asked, submitting will say so.
+      }
+      if (!settings?.enabled || !settings.siteKey || !slot.isConnected) return;
+      challengeRequired = true;
+      sync();
+      try {
+        const turnstile = await loadTurnstile();
+        slot.hidden = false;
+        challengeWidget = turnstile.render(slot, {
+          sitekey: settings.siteKey,
+          theme: 'dark',
+          callback: (token) => {
+            challengeToken = token;
+            setError('');
+            sync();
+          },
+          // A token is single-use and expires. Dropping it is what stops a stale one being sent.
+          'expired-callback': () => {
+            challengeToken = '';
+            sync();
+          },
+          'error-callback': () => {
+            challengeToken = '';
+            sync();
+          },
+        });
+      } catch {
+        slot.hidden = false;
+        slot.textContent = 'The sign-in challenge could not load. Disable your blocker and reopen.';
+      }
+    })();
 
     input.addEventListener('input', () => {
       // Somebody who knows the convention will type the dot themselves. Take that as the answer to
@@ -346,7 +424,7 @@ function openLoginModal() {
       go.dataset.state = 'loading';
       go.textContent = 'Checking…';
       try {
-        const challenge = await startLogin(username);
+        const challenge = await startLogin(username, challengeToken);
         // Held, not sent: attaching a referrer needs a session, and there is none until the
         // payment lands. The referral panel spends it on the first mount after login.
         if (code) setPendingReferralCode(code);
@@ -364,7 +442,19 @@ function openLoginModal() {
       } catch (error) {
         go.dataset.state = '';
         go.textContent = 'Continue';
+        /* The token was spent on the attempt that failed, so a retry needs a new one. Resetting
+         * the widget is what asks for it; without this the second attempt sends a used token and
+         * fails for a reason that has nothing to do with the first. */
+        challengeToken = '';
+        if (challengeWidget !== undefined) {
+          try {
+            window.turnstile?.reset(challengeWidget);
+          } catch {
+            /* A widget that will not reset still leaves the button correctly disabled. */
+          }
+        }
         go.disabled = false;
+        sync();
         setError(error?.message || 'Could not start the login.');
       }
     });
