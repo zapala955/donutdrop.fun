@@ -1,6 +1,6 @@
 /* app.js — entry point: shell wiring, hash router, home + crates + inventory. */
 import {
-  RARITY, IMG,
+  RARITY, IMG, UPGRADER,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -44,6 +44,16 @@ import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
 
+/** A countable thing's size, or an em dash while it is still unknown. */
+function count(collection) {
+  const size = Array.isArray(collection)
+    ? collection.length
+    : collection && typeof collection === 'object'
+      ? Object.keys(collection).length
+      : 0;
+  return size > 0 ? String(size) : '—';
+}
+
 /* ═════════ home ═════════ */
 function mountHome(view) {
   if (view.dataset.built) return;
@@ -54,31 +64,45 @@ function mountHome(view) {
   const art = $('.hero__art', view);
   if (art) mountHero3d(art).catch(() => { delete art.dataset.mode; });
 
-  /* Four routes, four figures each.
+  /* Four routes, two figures each.
    *
-   * These were paragraphs — one sentence of prose per card, four of them stacked down the
-   * homepage, all saying roughly "this is a game and it is fair". A player scanning a lobby is
-   * comparing games, and a sentence is the slowest possible way to answer "how many, how long,
-   * how much". Every card now carries the same three-slot stat strip, so the four are readable
-   * against each other in one pass instead of four reads. */
-  const promos = [
+   * The strip stays, because a player scanning a lobby is comparing games and a sentence is the
+   * slowest way to answer "how much, how long". What changed is what the figures say. Half of them
+   * described the machinery rather than the game — SERVER ROLL, LIVE QUOTE, PUBLISHED ODDS — which
+   * answers a question nobody standing in a lobby is asking, in words they would have to look up.
+   *
+   * Two cells rather than three is also what stops them clipping: the cells divide the card width
+   * evenly and ellipsise the overflow, so PUBLISHED ODDS rendered as "PUBLI…".
+   *
+   * Every figure is read from something that knows the answer rather than typed here. The crate
+   * count was hard-coded as 50 and nothing on the page had ever checked; it now counts the
+   * catalogue the server actually sent, and reads "—" until that arrives instead of asserting a
+   * number before it could possibly be known. */
+  const promos = () => [
     { ac: '#ffaa00', h: 'Crates',      art: 'chest.png',       href: '#/crates',
-      stats: [['50', 'CRATES'], ['5', 'TIERS'], ['PUBLISHED', 'ODDS']] },
+      stats: [[count(state.cases), 'CRATES'], [count(RARITY), 'RARITIES']] },
     { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '#/upgrader',
-      stats: [['CASH', 'IN/OUT'], ['SERVER', 'ROLL'], ['LIVE', 'QUOTE']] },
+      stats: [[money(UPGRADER.stakes[0]), 'MIN STAKE'],
+              [money(UPGRADER.stakes[UPGRADER.stakes.length - 1]), 'MAX STAKE']] },
     { ac: '#ffd700', h: 'Piggy Bank',  art: 'gold_block.png',  href: '#/piggy',
-      stats: [['14d', 'MINIMUM'], ['FIXED', 'RETURN'], ['NO', 'RISK']] },
+      stats: [['FIXED', 'RETURN'], ['NO', 'RISK']] },
     { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '#/war',
-      stats: [['3', 'SIDES'], ['7d', 'SEASON'], ['1', 'POOL']] },
+      stats: [[count(state.war?.factions), 'SIDES'], ['ONE', 'PRIZE POT']] },
   ];
-  $('#promos', view).innerHTML = promos.map((p) => `
+
+  const paintPromos = () => {
+    const row = $('#promos', view);
+    if (!row) return;
+    row.innerHTML = promos().map((p) => `
     <a class="promo" href="${p.href}" style="--ac:${p.ac}">
       <img class="promo__art" src="${IMG}${p.art}" alt="">
       <h3>${p.h}</h3>
       <dl class="statstrip">${p.stats.map(([v, k]) => `
-        <div><dt class="statstrip__v mono">${v}</dt><dd class="statstrip__k">${k}</dd></div>`).join('')}
+        <div><dt class="statstrip__v mono">${escapeText(v)}</dt><dd class="statstrip__k">${k}</dd></div>`).join('')}
       </dl>
     </a>`).join('');
+  };
+  paintPromos();
 
   const paintAccount = () => {
     const panel = $('#levelTrack', view);
@@ -173,6 +197,7 @@ function mountHome(view) {
   paintActivity();
   bus.addEventListener('change', () => {
     if (!view.isConnected) return;
+    paintPromos();
     paintAccount();
     paintActivity();
   });
