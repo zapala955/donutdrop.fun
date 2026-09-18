@@ -417,10 +417,13 @@ describe('identity and compliance hardening', () => {
 
     const userInsert = statements.find(({ sql }) => sql.includes('INSERT INTO users'));
     assert.match(userInsert?.sql ?? '', /\$3::varchar\(16\).*lower\(\$3::varchar\(16\)\)/s);
+    /* 160, not 16000. This assertion previously carried the scaled figure, which is how a login
+     * nonce of $160 came to be paid out as $16,000 with a green suite: the expectation was written
+     * from the code rather than from the unit the wallet actually counts, which is whole dollars. */
     assert.ok(
       statements.some(
         ({ sql, values }) =>
-          sql.includes('UPDATE user_wallets') && values?.[0] === userId && values?.[1] === '16000',
+          sql.includes('UPDATE user_wallets') && values?.[0] === userId && values?.[1] === '160',
       ),
     );
     assert.ok(
@@ -432,12 +435,16 @@ describe('identity and compliance hardening', () => {
           values[0].includes(earlierChallengeId),
       ),
     );
+    /* The amount, not merely the presence of a row. A credit of the right kind against the right
+     * challenge for the wrong number is the shape the 100x pay-login overpayment took, and every
+     * assertion here passed throughout it. Both nonces are credited one for one. */
     assert.ok(
       statements.some(
         ({ sql, values }) =>
           sql.includes('INSERT INTO wallet_transactions') &&
           values?.[4] === 'pay_login_deposit' &&
-          values?.[5] === challengeId,
+          values?.[5] === challengeId &&
+          values?.[2] === '160',
       ),
     );
     assert.ok(
@@ -445,7 +452,8 @@ describe('identity and compliance hardening', () => {
         ({ sql, values }) =>
           sql.includes('INSERT INTO wallet_transactions') &&
           values?.[4] === 'pay_login_deposit' &&
-          values?.[5] === earlierChallengeId,
+          values?.[5] === earlierChallengeId &&
+          values?.[2] === '170',
       ),
     );
     const creditIndex = statements.findIndex(({ sql }) => sql.includes('UPDATE user_wallets'));

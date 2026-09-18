@@ -12,7 +12,6 @@ import {
   sessionCookieName,
   sessionCookieOptions,
 } from '../lib/auth.js';
-import { MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
 import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
@@ -355,10 +354,13 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
                 'Login challenge is missing payment details',
               );
             }
+            /* Credited one for one. Despite the `_minor` column names, this wallet counts whole
+             * DonutSMP dollars: a $1M arena entry is MIN_ENTRY_MINOR = 1_000_000n, not
+             * 100_000_000n. Scaling by a hundred here paid a $930 login nonce out as $93,000. */
             await creditWallet(
               client,
               row.id,
-              BigInt(payment.pay_amount!) * MONEY_MINOR_SCALE,
+              BigInt(payment.pay_amount!),
               'pay_login_deposit',
               payment.id,
             );
