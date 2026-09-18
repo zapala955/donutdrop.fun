@@ -442,6 +442,23 @@ describe('cash payout worker', () => {
     assert.equal(completed?.outcome, 'completed');
   });
 
+  it('pays with a window open, because a chat command cannot touch an inventory', async () => {
+    /* DonutSMP and servers like it pop a menu on join. currentWindow being truthy used to stop the
+     * bot asking for ANY job, so a payout queued behind a GUI nobody closed. */
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async () => undefined,
+    } as unknown as ApiClient;
+
+    const { harness, chats } = payoutHarness(api);
+    harness.snapshotHealthy = false;
+    (harness.bot as unknown as { currentWindow: unknown }).currentWindow = { id: 1 };
+
+    await harness.pollJobs();
+
+    assert.deepEqual(chats, ['/pay q9w 100000']);
+  });
+
   it('polls for jobs regardless of the item-transfer flag', async () => {
     /* A source assertion, because the scheduling happens on spawn and this harness does not
      * simulate one. It is worth having anyway: cash payouts share the job queue with item work,

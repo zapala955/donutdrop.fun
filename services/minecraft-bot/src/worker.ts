@@ -33,6 +33,8 @@ export class MinecraftWorker {
   private readonly lastPlayerCommandAt = new Map<string, number>();
   private recentCommandTimes: number[] = [];
   private paymentReports: Promise<void> = Promise.resolve();
+  /** Last reason the bot declined to ask for work, so a change is logged once, not per tick. */
+  private claimBlockReason: string | undefined;
 
   constructor(
     private readonly config: BotConfig,
@@ -505,16 +507,31 @@ export class MinecraftWorker {
   private captureJobClaimState(): JobClaimState | null {
     const bot = this.bot;
     const connectionController = this.connectionController;
-    if (
-      !bot?.entity ||
-      !connectionController ||
-      connectionController.signal.aborted ||
-      this.transferring ||
-      bot.currentWindow ||
-      bot.inventory.selectedItem
-    ) {
-      return null;
+
+    /* Only liveness. An open window and a held item are states of the INVENTORY, and a cash payout
+     * is a chat command that cannot touch one — but this gate runs before the job is claimed and
+     * so before its kind is known, so anything checked here blocks every kind. A server that pops
+     * a menu on join would otherwise stop payouts forever. Item work still gets the full check in
+     * isJobClaimStateSafe, which is the only place it can be applied to the right job. */
+    const blocked = !bot?.entity
+      ? 'bot_not_spawned'
+      : !connectionController
+        ? 'no_connection'
+        : connectionController.signal.aborted
+          ? 'connection_closing'
+          : this.transferring
+            ? 'transfer_in_progress'
+            : undefined;
+
+    /* Logged on change. A gate that refuses silently is why a queued payout looked identical to a
+     * bot with nothing to do, through several rounds of looking in the wrong place. */
+    if (blocked !== this.claimBlockReason) {
+      this.claimBlockReason = blocked;
+      if (blocked) this.log.warn({ reason: blocked }, 'not claiming bot jobs');
+      else this.log.info('claiming bot jobs');
     }
+    if (blocked || !bot || !connectionController) return null;
+
     return { bot, connectionController, inventoryRevision: this.inventoryRevision };
   }
 
