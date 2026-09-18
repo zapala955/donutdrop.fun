@@ -303,7 +303,7 @@
                settles the round. Three chips, no sentence. -->
           <ul class="herostats" aria-label="Platform guarantees">
             <li><b class="mono">SERVER</b><span>settles every roll</span></li>
-            <li><b class="mono">HMAC-SHA256</b><span>provably fair</span></li>
+            <li><b class="mono">PROVABLE</b><span>check any roll yourself</span></li>
             <li><b class="mono">CASH</b><span>in-game dollars only</span></li>
           </ul>
           <div class="hero__cta">
@@ -333,42 +333,15 @@
            The promo row survives because its stat strip answers "how many / how long / how much",
            which an icon and a label cannot. -->
 
+      <!-- One column, because the second one held a four-card explanation of HMAC commitments,
+           weight-over-pool odds and append-only ledgers. That is the answer to a question nobody
+           has yet on the page where they are deciding whether to play at all, and it read as debug
+           output beside a list of wins. It lives on its own page, linked from the menu, where
+           somebody who does want it goes looking. -->
       <div class="cols">
         <section class="card">
           <h3 class="card__h">Biggest pulls today</h3>
           <ol class="drops" id="bigDrops"></ol>
-        </section>
-        <section class="card">
-          <h3 class="card__h">How the odds work</h3>
-          <!-- Four bare strings in a monospace definition list — `server weight ÷ pool`,
-               `append-only ledger` — read as debug output rather than as the platform's guarantees.
-               Same four facts, as cards: a claim in gold, the mechanism under it, and for the two
-               that have one, a live value pulled off the current commitment. -->
-          <div class="oddsgrid">
-            <div class="oddscard" data-key="fair">
-              <span class="oddscard__tag">PROVABLY FAIR</span>
-              <b class="oddscard__v">HMAC-SHA256</b>
-              <span class="oddscard__k">every roll committed before you play</span>
-              <code class="oddscard__hash mono" id="fairHashPill">awaiting commitment</code>
-            </div>
-            <div class="oddscard" data-key="odds">
-              <span class="oddscard__tag">PUBLISHED ODDS</span>
-              <b class="oddscard__v">WEIGHT &divide; POOL</b>
-              <span class="oddscard__k">the full drop table, before you pay</span>
-            </div>
-            <div class="oddscard" data-key="pay">
-              <span class="oddscard__tag">INSTANT PAYOUTS</span>
-              <b class="oddscard__v">FULL VALUE</b>
-              <span class="oddscard__k">cash to an append-only ledger</span>
-            </div>
-            <div class="oddscard" data-key="rng">
-              <span class="oddscard__tag">VERIFIABLE RNG</span>
-              <b class="oddscard__v">SEED &middot; NONCE</b>
-              <span class="oddscard__k">re-hash it yourself, in your browser</span>
-              <code class="oddscard__hash mono" id="fairNoncePill">awaiting commitment</code>
-            </div>
-          </div>
-          <button class="btn btn--go" id="fairBtn">Provably-fair details</button>
         </section>
       </div>
     </section>

@@ -12,7 +12,7 @@ import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
 } from './util.js';
 import {
-  toast, initModal, initWallet, fairSheet, broadcast,
+  toast, initModal, initWallet, broadcast,
   openModal, closeModal,
 } from './ui.js';
 import { mountUpgrader } from './upgrader.js';
@@ -176,42 +176,8 @@ function mountHome(view) {
     paintAccount();
     paintActivity();
   });
-  /* The two pills that carry a live value. They are filled from the CURRENT commitment, so the
-   * card is showing the seed the next roll will actually be settled against rather than a stock
-   * string that looks like one. */
-  const paintFairPills = () => {
-    const hash = state.fairness?.serverSeedHash ?? state.fairness?.server_seed_hash ?? '';
-    const nonce = state.fairness?.nonce;
-    const hashPill = $('#fairHashPill', view);
-    const noncePill = $('#fairNoncePill', view);
-    if (hashPill) {
-      hashPill.textContent = hash ? `${String(hash).slice(0, 18)}…` : 'log in to see yours';
-    }
-    if (noncePill) {
-      noncePill.textContent =
-        nonce === undefined || nonce === null ? 'log in to see yours' : `nonce ${nonce}`;
-    }
-  };
-  paintFairPills();
-  bus.addEventListener('change', () => {
-    if (view.isConnected) paintFairPills();
-  });
-
-  $('#fairBtn', view).addEventListener('click', () => showFairness());
 }
 
-function showFairness() {
-  if (!state.fairness) {
-    toast({ kind: 'lose', title: 'No fairness commitment', body: 'Log in to request the active server commitment.' });
-    return;
-  }
-  fairSheet({
-    server: state.fairness.serverSeedHash,
-    client: 'generated securely for each request',
-    nonce: state.fairness.nonce,
-    algorithm: state.fairness.algorithm,
-  });
-}
 
 /* The two shapes a name can take on the way in.
  *
