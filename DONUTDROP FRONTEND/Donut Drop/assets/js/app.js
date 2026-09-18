@@ -693,8 +693,12 @@ setInterval(async () => {
   let credited;
   try {
     credited = await pollDeposits();
-  } catch {
-    return; // A missed tick costs six seconds; the watermark is untouched, so nothing is lost.
+  } catch (error) {
+    /* A missed tick costs six seconds and the watermark is untouched, so the next one recovers.
+     * It is still logged: a poll that fails every time looks exactly like a poll that is not
+     * running at all, and silence here cost a debugging round trip once already. */
+    console.warn('[donutdrop] deposit poll failed', error?.code || error);
+    return;
   }
   if (!credited.length) return;
 
