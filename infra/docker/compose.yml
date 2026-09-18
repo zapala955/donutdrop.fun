@@ -171,6 +171,13 @@ services:
       PHYSICAL_CUSTODY_ENABLED: '${PHYSICAL_CUSTODY_ENABLED:-false}'
       DONUTSMP_API_BASE_URL: '${DONUTSMP_API_BASE_URL:-https://api.donutsmp.net}'
       DONUTSMP_API_KEY_FILE: /run/secrets/api_donutsmp_api_key
+      DISCORD_CONTROL_ENABLED: '${DISCORD_CONTROL_ENABLED:-false}'
+      DISCORD_GUILD_ID: '${DISCORD_GUILD_ID:-}'
+      DISCORD_ALERT_CHANNEL_ID: '${DISCORD_ALERT_CHANNEL_ID:-}'
+      DISCORD_ADMIN_LINK_TTL_SECONDS: '${DISCORD_ADMIN_LINK_TTL_SECONDS:-300}'
+      DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
+      DISCORD_CONTROL_HMAC_KEY_FILE: /run/secrets/discord_control_hmac_key
+      DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
       PAY_LOGIN_MIN_AMOUNT: '${PAY_LOGIN_MIN_AMOUNT:-100}'
       PAY_LOGIN_MAX_AMOUNT: '${PAY_LOGIN_MAX_AMOUNT:-999}'
       TRUSTED_PROXY_CIDRS: '${EDGE_NETWORK_CIDR:-172.30.0.0/24}'
@@ -185,6 +192,9 @@ services:
       - api_audit_hmac_key
       - api_ip_hash_key
       - api_donutsmp_api_key
+      - discord_bot_token
+      - discord_control_hmac_key
+      - discord_operators_json
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -307,6 +317,44 @@ services:
     pids_limit: 256
     logging: *json-logging
 
+  discord-bot:
+    # Opt in with `--profile discord`. Without it this service is not created at all, so a stack
+    # that has no Discord application does not carry a container crash-looping on a missing token.
+    profiles: ['discord']
+    build:
+      context: ../..
+      dockerfile: infra/docker/discord.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # The origin only. The client resolves an absolute /internal/v1/discord/... path against
+      # this, so any path here would be discarded — spelling one out invites someone to "fix" the
+      # path later and quietly change nothing. Internal by design: these routes are signature-gated
+      # rather than session-gated and must never be reachable from the public network.
+      API_INTERNAL_BASE_URL: http://api:3001
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:?Set the Discord application id}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?Set the Discord guild id the bot is pinned to}
+      DISCORD_ALERT_CHANNEL_ID: '${DISCORD_ALERT_CHANNEL_ID:-}'
+      DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
+      DISCORD_CONTROL_HMAC_KEY_FILE: /run/secrets/discord_control_hmac_key
+      ALERT_POLL_SECONDS: '${DISCORD_ALERT_POLL_SECONDS:-60}'
+      LOG_LEVEL: '${DISCORD_LOG_LEVEL:-info}'
+    secrets:
+      - discord_bot_token
+      - discord_control_hmac_key
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [bot-control, discord-egress]
+    mem_limit: 384m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
   nginx:
     image: nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c
     restart: unless-stopped
@@ -372,6 +420,12 @@ secrets:
     file: ${AUDIT_CHECKPOINT_HMAC_KEY_FILE:?Set AUDIT_CHECKPOINT_HMAC_KEY_FILE}
   bot_webhook_secret:
     file: ${BOT_WEBHOOK_SECRET_FILE:?Set BOT_WEBHOOK_SECRET_FILE}
+  discord_bot_token:
+    file: ${DISCORD_BOT_TOKEN_FILE:?Set DISCORD_BOT_TOKEN_FILE}
+  discord_control_hmac_key:
+    file: ${DISCORD_CONTROL_HMAC_KEY_FILE:?Set DISCORD_CONTROL_HMAC_KEY_FILE}
+  discord_operators_json:
+    file: ${DISCORD_OPERATORS_JSON_FILE:?Set DISCORD_OPERATORS_JSON_FILE}
 
 volumes:
   postgres-data:
@@ -410,3 +464,9 @@ networks:
     ipam:
       config:
         - subnet: ${API_EGRESS_NETWORK_CIDR:-172.36.0.0/24}
+  # Its own egress rather than a share of the Minecraft bot's: the two talk to different third
+  # parties, and one reached process should not inherit the other's route out.
+  discord-egress:
+    ipam:
+      config:
+        - subnet: ${DISCORD_EGRESS_NETWORK_CIDR:-172.37.0.0/24}

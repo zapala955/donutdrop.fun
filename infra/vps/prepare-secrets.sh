@@ -83,6 +83,18 @@ write_one audit-verification-keys.json "{\"$audit_key_id\":\"$audit_hmac_key\"}"
 write_one audit-checkpoint-hmac-key "$(random_hex)"
 write_one bot-webhook-secret "$bot_webhook_secret"
 
+# Discord. The three files are always written so the API can mount them whether or not the control
+# plane is switched on; DISCORD_CONTROL_ENABLED is what actually turns the feature on, and the
+# gateway only validates these when it is. A placeholder token is a token that cannot log in, which
+# is the correct state for a deployment that has no Discord application.
+write_one discord-bot-token "${DISCORD_BOT_TOKEN:-disabled-no-discord-application}"
+write_one discord-control-hmac-key "${DISCORD_CONTROL_HMAC_KEY:-$(random_base64)}"
+discord_operators="${DISCORD_OPERATORS_JSON:-}"
+# An empty allowlist, written explicitly. ${VAR:-{}} does not survive brace parsing in bash, and
+# a silently mangled operator file is one that either locks everybody out or lets somebody in.
+if [[ -z "$discord_operators" ]]; then discord_operators='{}'; fi
+write_one discord-operators.json "$discord_operators"
+
 # Docker Compose implements local file-backed secrets as bind mounts, so the files keep their
 # host mode inside the container. The services deliberately run under different non-root UIDs and
 # must be able to read their individual mounts. The parent directory remains root-owned and 0700,

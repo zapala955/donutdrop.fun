@@ -126,6 +126,61 @@ allowed to start. The readiness route is pinned to the newest schema marker. Sta
 revalidation because their filenames are not content-hashed, so a deploy cannot strand browsers
 on a week-old JavaScript file.
 
+## 6. Discord control plane (optional)
+
+The admin dashboard has no password. The only way in is a one-time link minted by a Discord slash
+command, so approving a held payout means running the Discord bot.
+
+Create the application at <https://discord.com/developers/applications> and invite it to exactly one
+guild. Then find the platform identity the operator will act as — the `mc:` value, not a username,
+because usernames are reassignable:
+
+```bash
+cd /opt/donutdrop/app
+sudo docker compose --env-file /opt/donutdrop/shared/donutdrop.env \
+  -f infra/docker/compose.yml exec -T postgres \
+  psql -qtAX -U postgres -d donut_upgrader \
+  -c "SELECT minecraft_identity FROM users WHERE normalized_username = lower('YOUR_MC_NAME')"
+```
+
+Write the Discord secrets. `prepare-secrets.sh` rewrites every secret file, so pass the same
+`BOT_ID` and `BOT_USERNAME` the first run used — otherwise the bot credentials stop matching the
+provisioned Minecraft account and the bot cannot authenticate:
+
+```bash
+BOT_ID="$(sudo sed -n 's/^BOT_ID=//p' /opt/donutdrop/shared/donutdrop.env)"
+BOT_USERNAME="$(sudo sed -n 's/^MINECRAFT_EXPECTED_USERNAME=//p' /opt/donutdrop/shared/donutdrop.env)"
+
+sudo BOT_ID="$BOT_ID" BOT_USERNAME="$BOT_USERNAME" \
+  DISCORD_BOT_TOKEN='paste-the-token-here' \
+  DISCORD_OPERATORS_JSON='{"YOUR_DISCORD_USER_ID":"mc:the-identity-from-above"}' \
+  ./infra/vps/prepare-secrets.sh
+```
+
+One entry in `DISCORD_OPERATORS_JSON` means one operator. Nobody else can mint an admin link, in
+that guild or any other.
+
+Then set in `/opt/donutdrop/shared/donutdrop.env`:
+
+```
+DISCORD_CONTROL_ENABLED=true
+DISCORD_APPLICATION_ID=<application id>
+DISCORD_GUILD_ID=<the one guild the bot is pinned to>
+```
+
+Register the slash commands once, then bring the profile up:
+
+```bash
+npm run commands:register --workspace @donut/discord-bot
+sudo docker compose --env-file /opt/donutdrop/shared/donutdrop.env \
+  -f infra/docker/compose.yml --profile discord up -d --build
+```
+
+The bot sits behind the `discord` compose profile, so an ordinary `deploy.sh` leaves it untouched
+unless `--profile discord` is passed. The token never belongs in the repository or in
+`donutdrop.env`: it is read from `/opt/donutdrop/shared/secrets/discord-bot-token`, mounted
+read-only, and a token that has been pasted anywhere else should be regenerated before use.
+
 ## Launch gates that deployment cannot automate
 
 A clean production database intentionally has an empty item and case catalogue. Direct production
