@@ -14,12 +14,18 @@ cd "$repo_root"
 docker compose --env-file "$env_file" -f "$compose_file" config --quiet
 docker compose --env-file "$env_file" -f "$compose_file" up -d --build --remove-orphans
 
-# nginx's configuration and the frontend bundle are bind-mounted, so changing either on disk gives
-# compose no reason to recreate the container — and a container it does not recreate keeps serving
-# whatever it parsed at startup. That is how a security header stayed stale through three deploys
-# that all reported success. A reload costs nothing and picks the changes up; if the container was
-# only just created and is not ready for a signal yet, recreating it does the same job.
-docker compose --env-file "$env_file" -f "$compose_file" exec -T nginx nginx -s reload 2>/dev/null || docker compose --env-file "$env_file" -f "$compose_file" up -d --force-recreate nginx
+# nginx is recreated, not reloaded, and the difference matters.
+#
+# Its two config files are bind-mounted individually, and a single-file bind mount pins the inode.
+# git does not edit a file in place — it writes a replacement and renames it — so after a pull the
+# host has a new inode while the container is still looking at the old one. The file on disk is
+# correct, `nginx -s reload` re-reads it, and nginx serves the previous contents anyway, because
+# from inside the container nothing changed. A reload cannot fix this; only re-resolving the mount
+# can, which means a new container.
+#
+# The frontend does not have this problem: it is mounted as a directory, and directory mounts
+# track their contents.
+docker compose --env-file "$env_file" -f "$compose_file" up -d --force-recreate nginx
 
 for attempt in $(seq 1 60); do
   if curl --fail --silent --show-error http://127.0.0.1:8080/health/ready >/dev/null; then
