@@ -486,6 +486,16 @@ export class MinecraftWorker {
     }
   }
 
+  /**
+   * Whether the bot is in a fit state to claim a job at all.
+   *
+   * Deliberately does NOT require a healthy inventory snapshot. A cash payout is one chat command
+   * and never opens the bot's inventory, but this gate runs before the job is claimed and so
+   * before its kind is known — so requiring snapshot health here meant that a bot which had lost
+   * its snapshot (an unreachable API is enough) would sit on a queued payout forever while looking
+   * perfectly healthy in every other respect. The inventory conditions moved to executeJob, where
+   * they are applied to the one kind of job that actually touches the inventory.
+   */
   private captureJobClaimState(): JobClaimState | null {
     const bot = this.bot;
     const connectionController = this.connectionController;
@@ -494,7 +504,6 @@ export class MinecraftWorker {
       !connectionController ||
       connectionController.signal.aborted ||
       this.transferring ||
-      !this.snapshotHealthy ||
       bot.currentWindow ||
       bot.inventory.selectedItem
     ) {
@@ -511,11 +520,24 @@ export class MinecraftWorker {
     );
   }
 
-  private isJobClaimStateSafe(state: JobClaimState): boolean {
+  /** The connection this job was claimed on is still the live one. */
+  private isConnectionLive(state: JobClaimState): boolean {
     return (
       this.isCurrentConnection(state.bot, state.connectionController) &&
       Boolean(state.bot.entity) &&
-      !this.transferring &&
+      !this.transferring
+    );
+  }
+
+  /**
+   * Everything above, plus the inventory being exactly as it was when the job was claimed.
+   *
+   * Only item work needs this. Holding a cash payout to it means a stale snapshot blocks a
+   * payment that cannot touch an item.
+   */
+  private isJobClaimStateSafe(state: JobClaimState): boolean {
+    return (
+      this.isConnectionLive(state) &&
       this.snapshotHealthy &&
       this.inventoryRevision === state.inventoryRevision &&
       !state.bot.currentWindow &&
@@ -535,7 +557,7 @@ export class MinecraftWorker {
   private async sendCashPayout(job: CashPayoutBotJob, claimState: JobClaimState): Promise<void> {
     const { payee, amountMinor } = job.payload;
     try {
-      if (!this.isJobClaimStateSafe(claimState)) throw new Error('PAYOUT_NOT_SENT');
+      if (!this.isConnectionLive(claimState)) throw new Error('PAYOUT_NOT_SENT');
       // Re-checked immediately before the write: a disconnect between the guard above and this
       // line would otherwise send the command into a dead socket and call it delivered.
       const bot = this.bot;
@@ -564,18 +586,19 @@ export class MinecraftWorker {
   }
 
   private async executeJob(job: BotJob, claimState: JobClaimState): Promise<void> {
+    /* A cash payout is one chat command and touches no inventory, so it does not take the
+     * transfer flag, does not invalidate the snapshot, and does not run the reconciliation
+     * afterwards. It is handled before the inventory-strict check below, because holding a
+     * payment to the state of an inventory it never opens is what kept one queued indefinitely. */
+    if (job.kind === 'cash_payout') {
+      await this.sendCashPayout(job, claimState);
+      return;
+    }
+
     let transferStarted = false;
     try {
       if (!this.isJobClaimStateSafe(claimState)) {
         throw new Error('BOT_STATE_CHANGED_DURING_CLAIM');
-      }
-      /* A cash payout is one chat command and touches no inventory, so it does not take the
-       * transfer flag, does not invalidate the snapshot, and does not run the reconciliation
-       * afterwards. Routing it through the item path would block it behind a transfer adapter
-       * that is deliberately switched off. */
-      if (job.kind === 'cash_payout') {
-        await this.sendCashPayout(job, claimState);
-        return;
       }
       if (job.kind !== 'withdrawal') throw new Error('UNSUPPORTED_JOB_KIND');
       const leaseDeadline = Date.parse(job.leaseExpiresAt);

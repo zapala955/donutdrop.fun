@@ -370,3 +370,124 @@ describe('lease-bound deposit worker', () => {
     assert.equal(created.harness.snapshotHealthy, false);
   });
 });
+
+/* ── cash payouts ──
+ *
+ * These exist because a real payout sat queued indefinitely while the bot looked healthy in every
+ * visible way. The claim gate required a healthy inventory snapshot, which a cash payout can never
+ * affect and which an unreachable API is enough to invalidate. */
+
+const payoutJob = {
+  id: '50000000-0000-4000-8000-000000000005',
+  kind: 'cash_payout' as const,
+  reference_id: '60000000-0000-4000-8000-000000000006',
+  payload: {
+    withdrawalId: '60000000-0000-4000-8000-000000000006',
+    payee: 'q9w',
+    amountMinor: '100000',
+  },
+  leaseToken: 'cd'.repeat(32),
+  leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
+};
+
+function payoutHarness(api: ApiClient): { harness: WorkerHarness; chats: string[] } {
+  const chats: string[] = [];
+  const bot = {
+    entity: {},
+    currentWindow: null,
+    inventory: {
+      craftingResultSlot: -1,
+      selectedItem: null,
+      slots: Array.from({ length: 36 }, () => null),
+    },
+    whisper: () => undefined,
+    chat: (message: string) => chats.push(message),
+  } as unknown as Bot;
+  const log = {
+    info: () => undefined,
+    warn: () => undefined,
+    fatal: () => undefined,
+    error: () => undefined,
+  } as unknown as Logger;
+  const transfers = {
+    reviewedCapability: false,
+    beginDeposit: async () => ({ outcome: 'cancelled' as const, reasonCode: 'UNUSED' }),
+    executeWithdrawal: withdrawalNotUsed,
+  } as unknown as TransferAdapter;
+  const worker = new MinecraftWorker(loadBotConfig(environment), api, transfers, log);
+  const harness = worker as unknown as WorkerHarness;
+  harness.bot = bot;
+  harness.connectionController = new AbortController();
+  return { harness, chats };
+}
+
+describe('cash payout worker', () => {
+  it('pays even when the inventory snapshot is unhealthy', async () => {
+    let completed: { outcome: string; options?: { errorCode?: string } } | undefined;
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness, chats } = payoutHarness(api);
+    // The exact state that stalled a real payout: connected, paying attention, no usable snapshot.
+    harness.snapshotHealthy = false;
+
+    await harness.pollJobs();
+
+    assert.deepEqual(chats, ['/pay q9w 100000']);
+    assert.equal(completed?.outcome, 'completed');
+  });
+
+  it('sends the amount as written rather than through a number', async () => {
+    // Balances here run past 2^53, and a payout that rounds is a payout of the wrong figure.
+    const big = {
+      ...payoutJob,
+      payload: { ...payoutJob.payload, amountMinor: '9007199254740993' },
+    };
+    const api = {
+      claimJob: async () => big,
+      completeJob: async () => undefined,
+    } as unknown as ApiClient;
+
+    const { harness, chats } = payoutHarness(api);
+    harness.snapshotHealthy = false;
+    await harness.pollJobs();
+
+    assert.deepEqual(chats, ['/pay q9w 9007199254740993']);
+  });
+
+  it('reports PAYOUT_NOT_SENT, not a guess, when the connection dies before the command', async () => {
+    let completed:
+      { outcome: string; options?: { errorCode?: string; retryable?: boolean } } | undefined;
+    let harness: WorkerHarness;
+    const api = {
+      claimJob: async () => {
+        // The socket goes between claiming the job and writing to it.
+        harness.connectionController?.abort();
+        return payoutJob;
+      },
+      completeJob: async (
+        _job: unknown,
+        outcome: string,
+        options?: { errorCode?: string; retryable?: boolean },
+      ) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const created = payoutHarness(api);
+    harness = created.harness;
+    harness.snapshotHealthy = true;
+
+    await harness.pollJobs();
+
+    assert.deepEqual(created.chats, [], 'nothing may be sent on a dead connection');
+    assert.equal(completed?.outcome, 'failed');
+    // Only this code refunds on the gateway side, so it must mean "the server never saw it".
+    assert.equal(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
+    assert.equal(completed?.options?.retryable, false);
+  });
+});
