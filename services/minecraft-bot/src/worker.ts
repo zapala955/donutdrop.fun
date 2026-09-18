@@ -5,12 +5,14 @@ import type { BotConfig } from './config.js';
 import type { ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
-import { parsePaymentMessage, parsePaymentNotice } from './payment-chat.js';
+import { describeSystemChat, parsePaymentMessage, parsePaymentNotice } from './payment-chat.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
 const MIN_DEPOSIT_TRANSFER_WINDOW_MS = 20_000;
 const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
+/** How long after a payout the server's reply is worth logging. */
+const PAYOUT_CHAT_CAPTURE_MS = 8_000;
 
 interface JobClaimState {
   readonly bot: Bot;
@@ -33,8 +35,16 @@ export class MinecraftWorker {
   private readonly lastPlayerCommandAt = new Map<string, number>();
   private recentCommandTimes: number[] = [];
   private paymentReports: Promise<void> = Promise.resolve();
-  /** Last reason the bot declined to ask for work, so a change is logged once, not per tick. */
-  private claimBlockReason: string | undefined;
+  /**
+   * Last reason the bot declined to ask for work, so a change is logged once, not per tick.
+   *
+   * Starts at a sentinel rather than undefined, because undefined is also the value meaning
+   * "nothing is blocking": initialising to it made the first healthy evaluation a no-op, so the
+   * line confirming the bot was asking for work never printed at all.
+   */
+  private claimBlockReason: string | undefined = 'startup';
+  /** While set, system chat is logged verbatim so a payout's server reply can be read back. */
+  private payoutChatCaptureUntil = 0;
 
   constructor(
     private readonly config: BotConfig,
@@ -131,6 +141,13 @@ export class MinecraftWorker {
     // ordinary deposits; the separate payment-login flow performs its own exact verification.
     bot._client.on('packet', (data: unknown, meta: unknown) => {
       if (packetName(meta) !== 'system_chat') return;
+      /* Everything the server says in the seconds after a payout, whether or not this bot can
+       * parse it. A payout is not confirmed today — see sendCashPayout — and these lines are how
+       * the confirming parser gets written from real wording rather than from a guess. */
+      if (Date.now() < this.payoutChatCaptureUntil) {
+        const described = describeSystemChat(data);
+        if (described) this.log.info({ chat: described }, 'system chat after payout');
+      }
       const notice = parsePaymentNotice(data);
       if (!notice) return;
       if (notice.payer.toLowerCase() === bot.username.toLowerCase()) return;
@@ -585,6 +602,8 @@ export class MinecraftWorker {
       // line would otherwise send the command into a dead socket and call it delivered.
       const bot = this.bot;
       if (!bot || bot !== claimState.bot) throw new Error('PAYOUT_NOT_SENT');
+      /* Opened before the command, because the server can answer within the same tick. */
+      this.payoutChatCaptureUntil = Date.now() + PAYOUT_CHAT_CAPTURE_MS;
       bot.chat(`/pay ${payee} ${amountMinor}`);
       this.log.info({ jobId: job.id, payee, amountMinor }, 'cash payout sent');
     } catch (error) {

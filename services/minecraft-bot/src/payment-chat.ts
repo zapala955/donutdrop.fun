@@ -96,6 +96,27 @@ function fieldText(segment: unknown, field: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Flattens a system chat packet into one line a human can read in a log.
+ *
+ * This exists because a payout currently cannot be confirmed: the bot fires `/pay` and assumes it
+ * worked, so a bot with insufficient funds marks a withdrawal paid while the player receives
+ * nothing. Confirming it needs a parser as strict as the deposit one, and a strict parser has to
+ * match the component structure — which is what this prints, colour by colour, so the real wording
+ * can be captured from a live server instead of guessed at.
+ */
+export function describeSystemChat(packet: unknown): string | undefined {
+  if (packet === null || typeof packet !== 'object') return undefined;
+  const record = packet as Record<string, unknown>;
+  if (unwrap(record['isActionBar']) === true) return undefined;
+  const segments = componentSegments(record['content'] ?? record['message']);
+  if (!segments || segments.length === 0) return undefined;
+  return segments
+    .map((segment) => `${colorOf(segment) ?? 'none'}:${JSON.stringify(textOf(segment) ?? '')}`)
+    .join(' | ')
+    .slice(0, 500);
+}
+
 function textOf(segment: unknown): string | undefined {
   return fieldText(segment, 'text');
 }
