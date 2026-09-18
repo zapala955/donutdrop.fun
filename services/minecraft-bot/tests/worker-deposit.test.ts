@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import type { Bot } from 'mineflayer';
 import type { Logger } from 'pino';
@@ -423,7 +424,7 @@ function payoutHarness(api: ApiClient): { harness: WorkerHarness; chats: string[
 
 describe('cash payout worker', () => {
   it('pays even when the inventory snapshot is unhealthy', async () => {
-    let completed: { outcome: string; options?: { errorCode?: string } } | undefined;
+    let completed: { outcome: string; options: { errorCode?: string } | undefined } | undefined;
     const api = {
       claimJob: async () => payoutJob,
       completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
@@ -439,6 +440,21 @@ describe('cash payout worker', () => {
 
     assert.deepEqual(chats, ['/pay q9w 100000']);
     assert.equal(completed?.outcome, 'completed');
+  });
+
+  it('polls for jobs regardless of the item-transfer flag', async () => {
+    /* A source assertion, because the scheduling happens on spawn and this harness does not
+     * simulate one. It is worth having anyway: cash payouts share the job queue with item work,
+     * and gating the poll on BOT_TRANSFERS_ENABLED left every payout queued on a deployment that
+     * deliberately runs with item transfers off, with nothing anywhere reporting a problem. */
+    const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
+    const spawn = source.slice(
+      source.indexOf("'Mineflayer bot spawned'"),
+      source.indexOf("bot.on('windowOpen'"),
+    );
+    assert.ok(spawn.length > 0, 'could not locate the spawn handler');
+    assert.match(spawn, /this\.schedule\(\(\) => this\.run\(this\.pollJobs\(\)/);
+    assert.doesNotMatch(spawn, /if \(this\.config\.transfersEnabled\)/);
   });
 
   it('sends the amount as written rather than through a number', async () => {
@@ -461,7 +477,8 @@ describe('cash payout worker', () => {
 
   it('reports PAYOUT_NOT_SENT, not a guess, when the connection dies before the command', async () => {
     let completed:
-      { outcome: string; options?: { errorCode?: string; retryable?: boolean } } | undefined;
+      | { outcome: string; options: { errorCode?: string; retryable?: boolean } | undefined }
+      | undefined;
     let harness: WorkerHarness;
     const api = {
       claimJob: async () => {

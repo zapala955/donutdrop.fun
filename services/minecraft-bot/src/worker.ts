@@ -96,9 +96,15 @@ export class MinecraftWorker {
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
-      if (this.config.transfersEnabled) {
-        this.schedule(() => this.run(this.pollJobs(), 'job poll'), this.config.pollIntervalMs);
-      }
+      /* Polled whatever the transfer flag says. BOT_TRANSFERS_ENABLED governs what the bot may do
+       * with an ITEM, not whether it may ask for work: cash payouts share this queue and move a
+       * number with the server's own /pay. Gating the poll on it meant a deployment with item
+       * transfers off — which is every deployment, deliberately — left every payout queued with
+       * nobody ever asking for it, and nothing anywhere reporting a problem.
+       *
+       * Item work stays refused where it was always refused: the adapter throws, the job fails
+       * non-retryably, and the withdrawal goes to manual review rather than sitting unseen. */
+      this.schedule(() => this.run(this.pollJobs(), 'job poll'), this.config.pollIntervalMs);
     });
     bot.on('windowOpen', () => this.markInventoryDirty());
     bot._client.on('playerChat', (packet: unknown) => {
