@@ -639,6 +639,32 @@ export async function cashDepositInfo() {
   return api.get('/v1/cash-deposits/info');
 }
 
+/* ─────────── cash withdrawals ───────────
+ *
+ * Separate from withdrawInventoryItem below it, which moves physical items and stays closed. This
+ * moves a number: the bot pays the player with DonutSMP's own /pay.
+ */
+
+export async function cashWithdrawalInfo() {
+  return api.get('/v1/cash-withdrawals/info');
+}
+
+export async function requestCashWithdrawal(amountMinor) {
+  /* The idempotency key is what makes a double-tapped Send one payout rather than two. The server
+   * replays the first result instead of debiting again. */
+  const result = await api.post(
+    '/v1/cash-withdrawals',
+    { amountMinor: String(amountMinor) },
+    { idempotencyKey: idempotencyKey() },
+  );
+  emit('balance');
+  return result;
+}
+
+export async function cashWithdrawalStatus(id) {
+  return api.get('/v1/cash-withdrawals/' + encodeURIComponent(id));
+}
+
 export async function withdrawInventoryItem(item, quantity = 1) {
   const result = await api.post(
     '/v1/withdrawals',

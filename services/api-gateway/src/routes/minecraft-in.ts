@@ -14,6 +14,7 @@ import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { MINECRAFT_USERNAME_PATTERN, platformIdentityFor } from '../lib/minecraft-username.js';
+import { refundWithdrawal } from './cash-withdrawals.js';
 import { parseWith } from '../lib/validation.js';
 import { creditWallet } from '../lib/wallet.js';
 
@@ -142,7 +143,7 @@ const storedClaimResponseSchema = z
     job: z
       .object({
         id: z.uuid(),
-        kind: z.enum(['withdrawal', 'inventory_resync']),
+        kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout']),
         reference_id: z.uuid(),
         payload: z.unknown(),
         leaseExpiresAt: z.string().datetime({ offset: true }),
@@ -531,6 +532,13 @@ export async function registerMinecraftInternalRoutes(
       if (job.kind === 'withdrawal') {
         await client.query(
           "UPDATE withdrawals SET status = 'processing', attempts = attempts + 1, updated_at = now() WHERE id = $1",
+          [job.reference_id],
+        );
+      }
+      if (job.kind === 'cash_payout') {
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'processing', updated_at = now()
+            WHERE id = $1 AND status = 'queued'`,
           [job.reference_id],
         );
       }
@@ -1029,6 +1037,20 @@ async function processJobResult(
     // A result can follow a physical transfer. Keep the replay journal committed and fail
     // closed instead of throwing it away and inviting endless retries or automatic reuse.
     await quarantineBotAndJobs(client, event.botId, 'INVALID_JOB_LEASE');
+    if (job?.kind === 'cash_payout' && job.status !== 'completed') {
+      await client.query(
+        `UPDATE cash_withdrawals SET status = 'manual_review', error_code = 'INVALID_JOB_LEASE',
+                updated_at = now()
+          WHERE id = $1 AND status IN ('queued', 'processing')`,
+        [job.reference_id],
+      );
+      await client.query(
+        `UPDATE bot_jobs SET status = 'dead_letter', last_error_code = 'INVALID_JOB_LEASE',
+                lease_token_hash = NULL, lease_expires_at = NULL, updated_at = now()
+          WHERE id = $1 AND status <> 'completed'`,
+        [job.id],
+      );
+    }
     if (job?.kind === 'withdrawal' && job.status !== 'completed') {
       await client.query(
         `UPDATE withdrawals SET status = 'manual_review', error_code = 'INVALID_JOB_LEASE',
@@ -1046,15 +1068,28 @@ async function processJobResult(
     return;
   }
   if (event.outcome === 'completed') {
-    const safeBot = await client.query(
-      `SELECT 1 FROM bot_accounts
-        WHERE id = $1 AND status = 'online' AND reconciliation_status = 'matched'
-          AND transfer_capable
-          AND last_heartbeat_at > now() - interval '45 seconds'
-          AND last_snapshot_at > now() - interval '90 seconds'
-        FOR SHARE`,
-      [event.botId],
-    );
+    /* A cash payout moves a number through the server's own /pay and never opens the bot's
+     * inventory, so it is held to liveness alone. Requiring transfer_capable and a matched
+     * inventory reconciliation here would dead-letter every payout on a platform where physical
+     * item transfer is deliberately switched off. */
+    const safeBot =
+      job.kind === 'cash_payout'
+        ? await client.query(
+            `SELECT 1 FROM bot_accounts
+              WHERE id = $1 AND status = 'online'
+                AND last_heartbeat_at > now() - interval '45 seconds'
+              FOR SHARE`,
+            [event.botId],
+          )
+        : await client.query(
+            `SELECT 1 FROM bot_accounts
+              WHERE id = $1 AND status = 'online' AND reconciliation_status = 'matched'
+                AND transfer_capable
+                AND last_heartbeat_at > now() - interval '45 seconds'
+                AND last_snapshot_at > now() - interval '90 seconds'
+              FOR SHARE`,
+            [event.botId],
+          );
     if (!safeBot.rowCount) {
       await client.query(
         `UPDATE bot_jobs SET status = 'dead_letter', last_error_code = 'BOT_STATE_UNSAFE',
@@ -1069,6 +1104,13 @@ async function processJobResult(
           [job.reference_id],
         );
       }
+      if (job.kind === 'cash_payout') {
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'manual_review', error_code = 'BOT_STATE_UNSAFE',
+                  updated_at = now() WHERE id = $1 AND status IN ('queued', 'processing')`,
+          [job.reference_id],
+        );
+      }
       return;
     }
     await client.query(
@@ -1076,6 +1118,13 @@ async function processJobResult(
       [job.id],
     );
     if (job.kind === 'withdrawal') await completeWithdrawal(client, job.reference_id);
+    if (job.kind === 'cash_payout') {
+      await client.query(
+        `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), updated_at = now()
+          WHERE id = $1 AND status IN ('queued', 'processing')`,
+        [job.reference_id],
+      );
+    }
     return;
   }
   const terminal = !event.retryable || job.attempts >= 5;
@@ -1085,6 +1134,24 @@ async function processJobResult(
       WHERE id = $1`,
     [job.id, terminal ? 'dead_letter' : 'queued', event.errorCode ?? 'BOT_JOB_FAILED'],
   );
+  if (job.kind === 'cash_payout') {
+    /* Refunding is only safe on the one error the bot raises when the command never reached the
+     * server. Every other failure might sit on the far side of a payout that did land, and paying
+     * a second time is worse than making one person wait for a human to look. */
+    if (terminal && event.errorCode === 'PAYOUT_NOT_SENT') {
+      await refundWithdrawal(client, job.reference_id, 'PAYOUT_NOT_SENT');
+    } else {
+      await client.query(
+        `UPDATE cash_withdrawals SET status = $2, error_code = $3, updated_at = now()
+          WHERE id = $1 AND status IN ('queued', 'processing')`,
+        [
+          job.reference_id,
+          terminal ? 'manual_review' : 'queued',
+          event.errorCode ?? 'BOT_JOB_FAILED',
+        ],
+      );
+    }
+  }
   if (job.kind === 'withdrawal') {
     await client.query(
       'UPDATE withdrawals SET status = $2, error_code = $3, updated_at = now() WHERE id = $1',

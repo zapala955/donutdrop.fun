@@ -439,7 +439,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await assertRuntimeDatabaseRole(runtime);
         await assert.doesNotReject(runtime.query('SELECT count(*) FROM audit_log'));
         const readiness = await runtime.query<{ ready: boolean }>(
-          'SELECT public.donut_schema_ready_v27() AS ready',
+          'SELECT public.donut_schema_ready_v28() AS ready',
         );
         assert.equal(readiness.rows[0]?.ready, true);
 

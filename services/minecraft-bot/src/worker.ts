@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import mineflayer, { type Bot } from 'mineflayer';
 import type { Logger } from 'pino';
 import type { BotConfig } from './config.js';
-import type { ApiClient, BotJob } from './api-client.js';
+import type { ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
 import { parsePaymentMessage, parsePaymentNotice } from './payment-chat.js';
@@ -523,11 +523,59 @@ export class MinecraftWorker {
     );
   }
 
+  /**
+   * Pays a player with the server's own `/pay`.
+   *
+   * The gateway debited the wallet before queueing this, so the only outcomes that matter here are
+   * "the command went to the server" and "it did not". PAYOUT_NOT_SENT is raised only in the
+   * second case, and it is the single error the gateway will refund on — every other failure is
+   * reported as non-retryable and parked for a human, because a retry after an unknown outcome is
+   * how a player gets paid twice.
+   */
+  private async sendCashPayout(job: CashPayoutBotJob, claimState: JobClaimState): Promise<void> {
+    const { payee, amountMinor } = job.payload;
+    try {
+      if (!this.isJobClaimStateSafe(claimState)) throw new Error('PAYOUT_NOT_SENT');
+      // Re-checked immediately before the write: a disconnect between the guard above and this
+      // line would otherwise send the command into a dead socket and call it delivered.
+      const bot = this.bot;
+      if (!bot || bot !== claimState.bot) throw new Error('PAYOUT_NOT_SENT');
+      bot.chat(`/pay ${payee} ${amountMinor}`);
+      this.log.info({ jobId: job.id, payee, amountMinor }, 'cash payout sent');
+    } catch (error) {
+      const code =
+        error instanceof Error && error.message === 'PAYOUT_NOT_SENT'
+          ? 'PAYOUT_NOT_SENT'
+          : 'PAYOUT_FAILED';
+      await this.api.completeJob(job, 'failed', { retryable: false, errorCode: code });
+      return;
+    }
+    try {
+      await this.api.completeJob(job, 'completed');
+    } catch (error) {
+      /* The money has left. Never report this as a failure and never retry it: the gateway moves
+       * a lease that expires without an answer to manual review, which is the correct landing
+       * place for a payout whose acknowledgement was lost. */
+      this.log.fatal(
+        { err: error, jobId: job.id },
+        'Cash payout sent but could not be acknowledged; manual review required',
+      );
+    }
+  }
+
   private async executeJob(job: BotJob, claimState: JobClaimState): Promise<void> {
     let transferStarted = false;
     try {
       if (!this.isJobClaimStateSafe(claimState)) {
         throw new Error('BOT_STATE_CHANGED_DURING_CLAIM');
+      }
+      /* A cash payout is one chat command and touches no inventory, so it does not take the
+       * transfer flag, does not invalidate the snapshot, and does not run the reconciliation
+       * afterwards. Routing it through the item path would block it behind a transfer adapter
+       * that is deliberately switched off. */
+      if (job.kind === 'cash_payout') {
+        await this.sendCashPayout(job, claimState);
+        return;
       }
       if (job.kind !== 'withdrawal') throw new Error('UNSUPPORTED_JOB_KIND');
       const leaseDeadline = Date.parse(job.leaseExpiresAt);

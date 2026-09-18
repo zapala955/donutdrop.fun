@@ -6,16 +6,17 @@ import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
+  cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus,
 } from './store.js';
 import {
-  $, $$, el, money, itemTile, reduceMotion, safeImage,
+  $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
 } from './util.js';
 import {
   toast, initModal, initWallet, fairSheet, broadcast,
   openModal, closeModal,
 } from './ui.js';
 import { mountUpgrader } from './upgrader.js';
-import { mountPiggy, openWithdrawDesk } from './piggy.js';
+import { mountPiggy } from './piggy.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
@@ -372,29 +373,257 @@ function openLoginModal() {
   }, { variant: 'auth' });
 }
 
+const CASH_STATE_TEXT = {
+  pending_approval: 'waiting for an operator to approve it',
+  queued: 'queued for the bot',
+  processing: 'the bot is paying you now',
+  paid: 'paid in game',
+  rejected: 'rejected, your balance was returned',
+  failed: 'could not be sent, your balance was returned',
+  manual_review: 'held for review — contact support, do not retry',
+};
+
 async function openDepositModal() {
   if (!state.authenticated) {
     openLoginModal();
     return;
   }
-  let modalBody;
-  openModal('Deposit DonutSMP money', (body) => {
-    modalBody = body;
-    body.innerHTML = '<p class="card__p">Loading payment bot…</p>';
-  });
+  let host;
+  openModal('Deposit', (body) => {
+    host = body;
+    body.innerHTML = '<p class="auth__lede">Finding the payment bot…</p>';
+  }, { variant: 'auth' });
+
+  let info;
   try {
-    const info = await cashDepositInfo();
-    if (!modalBody?.isConnected || !$('#modal').open) return;
-    modalBody.innerHTML = `<p>Pay any amount from your linked Minecraft account. It will be
-      credited automatically when the bot sees the payment in chat. Use round amounts such as
-      1M or 5M because DonutSMP shortens other large values.</p>
-      <div class="kv"><span>Bot IGN</span><span class="mono">${escapeText(info.botUsername)}</span></div>
-      <div class="modal__label">Command</div>
-      <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(info.command)}</p>`;
+    info = await cashDepositInfo();
   } catch (error) {
     closeModal();
     showApiError(error);
+    return;
   }
+  if (!host?.isConnected || !$('#modal').open) return;
+
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Deposit</h3>
+    <p class="auth__lede">Pay the bot from your linked Minecraft account. It is credited
+      automatically when the bot sees the payment in chat — there is nothing to confirm here.</p>
+    <hr class="auth__rule">
+    <span class="auth__label">Bot IGN</span>
+    <div class="auth__field auth__field--static">
+      <span class="auth__value mono">${escapeText(info.botUsername)}</span>
+    </div>
+    <span class="auth__label">Run this in game</span>
+    <div class="auth__field auth__field--static">
+      <span class="auth__value auth__value--lg mono">${escapeText(info.command)}</span>
+    </div>
+    <p class="auth__note">Use round amounts such as 1M or 5M. DonutSMP shortens other large
+      figures in chat, and the bot can only credit what the receipt actually shows.</p>
+    <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
+
+  $('#depositCopy', host).addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(info.example || info.command);
+      button.textContent = 'Copied';
+      button.dataset.state = 'success';
+    } catch {
+      // Clipboard access is refused in plenty of ordinary situations. The command is on screen.
+      button.textContent = 'Select it above';
+    }
+    setTimeout(() => {
+      if (!button.isConnected) return;
+      button.textContent = 'Copy command';
+      button.dataset.state = '';
+    }, 1800);
+  });
+}
+
+/**
+ * Cash out: the bot pays the player with DonutSMP's own /pay.
+ *
+ * Two steps on purpose. The money leaves the platform and cannot be pulled back from in here, so
+ * the amount is typed on one screen and confirmed against the exact figure and payee on the next.
+ * A single click that both sets and sends an amount is how people send 10M instead of 1M.
+ */
+async function openWithdrawModal() {
+  if (!state.authenticated) {
+    openLoginModal();
+    return;
+  }
+  let host;
+  openModal('Withdraw', (body) => {
+    host = body;
+    body.innerHTML = '<p class="auth__lede">Checking your account…</p>';
+  }, { variant: 'auth' });
+
+  let info;
+  try {
+    info = await cashWithdrawalInfo();
+  } catch (error) {
+    closeModal();
+    showApiError(error);
+    return;
+  }
+  if (!host?.isConnected || !$('#modal').open) return;
+
+  if (info.pending) {
+    paintWithdrawStatus(host, info.pending);
+    pollWithdrawal(info.pending.id, host);
+    return;
+  }
+
+  const minimum = Number(info.minimumMinor);
+  const threshold = Number(info.approvalThresholdMinor);
+
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
+    <p class="auth__lede">The bot pays you in game with <span class="mono">/pay</span>. Your site
+      balance is taken now and sent to your linked account.</p>
+    <hr class="auth__rule">
+    <form id="wdForm" novalidate>
+      <label class="auth__label" for="wdAmount">Amount</label>
+      <div class="auth__field" id="wdField">
+        <span class="auth__prefix">$</span>
+        <input id="wdAmount" class="auth__input" type="text" inputmode="decimal"
+               autocomplete="off" spellcheck="false" placeholder="1m">
+        <button class="auth__max" type="button" id="wdMax">Max</button>
+      </div>
+      <p class="auth__err" id="wdError" role="alert" hidden></p>
+      <p class="auth__note" id="wdHint">Balance ${escapeText(money(state.balance))} ·
+        minimum ${escapeText(money(minimum))}. Over ${escapeText(money(threshold))} an operator
+        approves it first.</p>
+
+      <span class="auth__label">Paying</span>
+      <div class="auth__field auth__field--static">
+        <span class="auth__value mono">${escapeText(info.payeeUsername || state.user?.minecraftUsername || '—')}</span>
+      </div>
+
+      <button class="btn btn--go auth__go" type="submit" id="wdGo" disabled>Continue</button>
+    </form>`;
+
+  const form = $('#wdForm', host);
+  const field = $('#wdField', host);
+  const input = $('#wdAmount', host);
+  const go = $('#wdGo', host);
+  const inlineError = $('#wdError', host);
+
+  const amountOf = () => parseAmount(input.value);
+  const setError = (message) => {
+    inlineError.textContent = message;
+    inlineError.hidden = !message;
+    field.classList.toggle('is-error', Boolean(message));
+  };
+  const sync = () => {
+    const amount = amountOf();
+    go.disabled = !(amount !== null && amount >= minimum && amount <= state.balance);
+  };
+
+  input.addEventListener('input', () => {
+    setError('');
+    sync();
+  });
+  input.addEventListener('blur', () => {
+    const amount = amountOf();
+    if (input.value.trim() === '') return setError('');
+    if (amount === null) return setError('Enter an amount, for example 1m or 500k.');
+    if (amount < minimum) return setError(`The smallest withdrawal is ${money(minimum)}.`);
+    if (amount > state.balance) return setError(`That is more than your ${money(state.balance)} balance.`);
+    setError('');
+  });
+  $('#wdMax', host).addEventListener('click', () => {
+    input.value = String(state.balance);
+    setError('');
+    sync();
+    input.focus();
+  });
+  sync();
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (go.disabled) return;
+    confirmWithdraw(host, amountOf(), info, threshold);
+  });
+  input.focus();
+}
+
+/** Step two: the exact figure and the exact name, with nothing else competing for attention. */
+function confirmWithdraw(host, amount, info, threshold) {
+  const payee = info.payeeUsername || state.user?.minecraftUsername || '—';
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Confirm</h3>
+    <p class="auth__lede">This cannot be undone from the site once the bot has sent it.</p>
+    <hr class="auth__rule">
+    <div class="auth__confirm">
+      <div class="auth__crow"><span>Sending</span><b class="mono">${escapeText(money(amount))}</b></div>
+      <div class="auth__crow"><span>To</span><b class="mono">${escapeText(payee)}</b></div>
+      <div class="auth__crow"><span>Balance after</span><b class="mono">${escapeText(money(state.balance - amount))}</b></div>
+    </div>
+    ${amount > threshold
+      ? `<p class="auth__note">Over ${escapeText(money(threshold))}, so an operator approves it
+         before the bot sends anything. Your balance is held until then.</p>`
+      : ''}
+    <p class="auth__err" id="wdcError" role="alert" hidden></p>
+    <button class="btn btn--go auth__go" type="button" id="wdcSend">Send ${escapeText(money(amount))}</button>
+    <button class="btn auth__back" type="button" id="wdcBack">Back</button>`;
+
+  $('#wdcBack', host).addEventListener('click', () => openWithdrawModal());
+  $('#wdcSend', host).addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const error = $('#wdcError', host);
+    button.disabled = true;
+    button.dataset.state = 'loading';
+    button.textContent = 'Sending…';
+    try {
+      const result = await requestCashWithdrawal(String(amount));
+      await refreshBalance();
+      paintWithdrawStatus(host, result.withdrawal);
+      pollWithdrawal(result.withdrawal.id, host);
+    } catch (failure) {
+      button.dataset.state = '';
+      button.textContent = `Send ${money(amount)}`;
+      button.disabled = false;
+      error.textContent = failure?.message || 'The server refused the withdrawal.';
+      error.hidden = false;
+    }
+  });
+}
+
+function paintWithdrawStatus(host, withdrawal) {
+  const done = ['paid', 'rejected', 'failed', 'manual_review'].includes(withdrawal.status);
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdrawal</h3>
+    <p class="auth__lede">${withdrawal.status === 'paid'
+      ? 'Sent. Check your in-game balance.'
+      : 'You can close this — it carries on without the page open.'}</p>
+    <hr class="auth__rule">
+    <div class="auth__confirm">
+      <div class="auth__crow"><span>Amount</span><b class="mono">${escapeText(money(Number(withdrawal.amountMinor)))}</b></div>
+      <div class="auth__crow"><span>To</span><b class="mono">${escapeText(withdrawal.payeeUsername)}</b></div>
+      <div class="auth__crow"><span>Status</span><b id="wdState">${escapeText(CASH_STATE_TEXT[withdrawal.status] || withdrawal.status)}</b></div>
+    </div>
+    ${done ? '<button class="btn btn--go auth__go" type="button" id="wdDone">Close</button>' : ''}`;
+  const close = $('#wdDone', host);
+  if (close) close.addEventListener('click', () => closeModal());
+}
+
+async function pollWithdrawal(id, host) {
+  if (!host.isConnected || !$('#modal').open) return;
+  let withdrawal;
+  try {
+    withdrawal = (await cashWithdrawalStatus(id)).withdrawal;
+  } catch {
+    setTimeout(() => pollWithdrawal(id, host), 4000);
+    return;
+  }
+  const label = $('#wdState', host);
+  if (label) label.textContent = CASH_STATE_TEXT[withdrawal.status] || withdrawal.status;
+  if (['paid', 'rejected', 'failed', 'manual_review'].includes(withdrawal.status)) {
+    paintWithdrawStatus(host, withdrawal);
+    await refreshBalance().catch(() => undefined);
+    if (withdrawal.status === 'paid') {
+      toast({ kind: 'win', title: 'Withdrawal sent', body: money(Number(withdrawal.amountMinor)) });
+      playSound('coin');
+    }
+    return;
+  }
+  setTimeout(() => pollWithdrawal(id, host), 3000);
 }
 
 const PAY_STATE_TEXT = {
@@ -648,7 +877,7 @@ initTicker(document.getElementById('tickerRoot'));
 
 $('#loginBtn').addEventListener('click', openLoginModal);
 $('#depositBtn').addEventListener('click', openDepositModal);
-$('#withdrawBtn').addEventListener('click', openWithdrawDesk);
+$('#withdrawBtn').addEventListener('click', openWithdrawModal);
 $('#signOutBtn')?.addEventListener('click', async (event) => {
   event.preventDefault();
   try {

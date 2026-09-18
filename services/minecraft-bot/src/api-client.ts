@@ -28,10 +28,21 @@ const withdrawalPayloadSchema = z
   })
   .strict();
 
+/* A payout the gateway has already debited. The amount is a decimal string because it is a
+ * bigint on both sides and must not pass through a JS number on the way: DonutSMP balances run
+ * past 2^53, and a payout that silently rounds is a payout that pays the wrong figure. */
+const cashPayoutPayloadSchema = z
+  .object({
+    withdrawalId: z.uuid(),
+    payee: z.string().regex(/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/),
+    amountMinor: z.string().regex(/^[1-9]\d{0,18}$/),
+  })
+  .strict();
+
 const botJobSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(['withdrawal', 'inventory_resync']),
+    kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout']),
     reference_id: z.uuid(),
     payload: z.unknown(),
     leaseToken: z.string().regex(/^[a-f0-9]{64}$/),
@@ -249,7 +260,14 @@ export class ApiClient {
       if (payload.withdrawalId !== result.job.reference_id) {
         throw new Error('Withdrawal job identifiers do not match');
       }
-      return { ...result.job, payload };
+      return { ...result.job, kind: 'withdrawal', payload };
+    }
+    if (result.job.kind === 'cash_payout') {
+      const payload = cashPayoutPayloadSchema.parse(result.job.payload);
+      if (payload.withdrawalId !== result.job.reference_id) {
+        throw new Error('Cash payout job identifiers do not match');
+      }
+      return { ...result.job, kind: 'cash_payout', payload };
     }
     return { ...result.job, kind: 'inventory_resync', payload: result.job.payload };
   }
@@ -406,4 +424,9 @@ export interface InventoryResyncBotJob extends BotJobBase {
   payload: unknown;
 }
 
-export type BotJob = WithdrawalBotJob | InventoryResyncBotJob;
+export interface CashPayoutBotJob extends BotJobBase {
+  kind: 'cash_payout';
+  payload: { withdrawalId: string; payee: string; amountMinor: string };
+}
+
+export type BotJob = WithdrawalBotJob | InventoryResyncBotJob | CashPayoutBotJob;

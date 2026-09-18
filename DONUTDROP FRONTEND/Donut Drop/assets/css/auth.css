@@ -374,3 +374,108 @@
     margin: 18px 0;
   }
 }
+
+/* ─────────── shared by the deposit and withdrawal cards ───────────
+ *
+ * The same card, in three jobs. Sign-in, deposit and withdraw all use the vocabulary above rather
+ * than each growing its own: a player who has typed their name into one of these has already
+ * learned where the label, the field and the commit sit, and moving them per screen would spend
+ * that for nothing.
+ */
+
+/* A value the player reads rather than types. Still a field, because it is the same row in the
+   same place — it just does not take focus. */
+.auth__field--static {
+  background: var(--bg2);
+  cursor: default;
+}
+.auth__field--static:hover {
+  border-color: var(--line);
+}
+
+.auth__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+.auth__value--lg {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+/* Max sits inside the field, because it is about the value in the field and nowhere else. */
+.auth__max {
+  flex: none;
+  margin-left: 8px;
+  padding: 5px 11px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel3);
+  color: var(--muted);
+  font-family: var(--body);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color 0.14s var(--ease-out, ease-out),
+    border-color 0.14s var(--ease-out, ease-out);
+}
+.auth__max:hover {
+  color: var(--gold);
+  border-color: var(--gold-deep);
+}
+.auth__max:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+/* The confirmation read-out. Three rows, no controls competing with them. */
+.auth__confirm {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel2);
+  padding: 4px 14px;
+}
+.auth__crow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+.auth__crow:last-child {
+  border-bottom: 0;
+}
+.auth__crow span {
+  color: var(--faint);
+}
+.auth__crow b {
+  color: var(--text);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.auth__crow:first-child b {
+  color: var(--gold);
+  font-size: 1.0625rem;
+}
+
+/* The way back out of a confirmation. Quiet on purpose — it is the safe option, not the one being
+   asked for, and a second loud button beside the commit is how people press the wrong one. */
+.auth__back {
+  width: 100%;
+  margin-top: 9px;
+  background: none;
+  border-color: transparent;
+  color: var(--faint);
+}
+.auth__back:hover {
+  background: var(--panel3);
+  border-color: var(--line2);
+  color: var(--text);
+}

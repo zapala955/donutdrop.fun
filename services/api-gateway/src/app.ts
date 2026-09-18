@@ -22,6 +22,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerPayLoginRoutes } from './routes/auth-pay.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerCashDepositRoutes } from './routes/cash-deposits.js';
+import { registerCashWithdrawalRoutes } from './routes/cash-withdrawals.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerDevRoutes } from './routes/dev.js';
 import { registerDiscordControlRoutes } from './routes/discord-control.js';
@@ -181,6 +182,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerCaseRoutes(app, db, config);
   await registerCatalogRoutes(app, db, config);
   await registerCashDepositRoutes(app, db, config);
+  await registerCashWithdrawalRoutes(app, db, config);
   await registerChatRoutes(app, db, config);
   await registerBattleRoutes(app, db, config);
   await registerDuelRoutes(app, db, config);

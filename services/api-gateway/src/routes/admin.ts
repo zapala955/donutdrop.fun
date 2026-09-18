@@ -8,6 +8,7 @@ import { canonicalJson, safeEqualText, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
 
 const catalogCreateSchema = z
@@ -36,6 +37,7 @@ const catalogUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
+const payoutDecisionSchema = z.object({ reason: safeText(3, 256) }).strict();
 const stockSchema = z
   .object({
     catalogItemId: z.uuid(),
@@ -485,6 +487,105 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           details: body,
         });
         return { user: updated.rows[0] };
+      });
+    },
+  );
+
+  /* ─────────────────────── cash payouts awaiting a human ───────────────────────
+   *
+   * Anything over the auto-approval ceiling lands here, along with any payout whose outcome the
+   * bot could not establish. The two share one queue deliberately: both mean money is held and
+   * somebody has to decide what happens to it.
+   */
+
+  app.get('/v1/admin/cash-withdrawals', { preHandler: requireAdminRead }, async () => {
+    const result = await db.query(
+      `SELECT w.id, w.user_id, u.minecraft_username, w.payee_username, w.amount_minor,
+              w.status, w.error_code, w.created_at, w.approved_at
+         FROM cash_withdrawals w JOIN users u ON u.id = w.user_id
+        WHERE w.status IN ('pending_approval', 'manual_review', 'processing')
+        ORDER BY w.created_at LIMIT 200`,
+    );
+    return { withdrawals: result.rows };
+  });
+
+  app.post(
+    '/v1/admin/cash-withdrawals/:id/approve',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(payoutDecisionSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        /* The status guard lives in the UPDATE. Two operators opening the same queue and both
+         * clicking approve is an ordinary Tuesday, and only one of them may queue a job. */
+        const approved = await client.query<{
+          id: string;
+          bot_id: string;
+          payee_username: string;
+          amount_minor: string;
+        }>(
+          `UPDATE cash_withdrawals
+              SET status = 'queued', approved_by = $2, approved_at = now(), error_code = NULL,
+                  updated_at = now()
+            WHERE id = $1 AND status = 'pending_approval'
+            RETURNING id, bot_id, payee_username, amount_minor`,
+          [params.id, actor],
+        );
+        const row = approved.rows[0];
+        if (!row) {
+          conflict('WITHDRAWAL_NOT_PENDING', 'That payout is not waiting for approval');
+          throw new AppError(409, 'WITHDRAWAL_NOT_PENDING', 'Unreachable');
+        }
+        await queueWithdrawalJob(client, row);
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'cash_withdrawal.approve',
+          targetType: 'cash_withdrawal',
+          targetId: params.id,
+          details: { amountMinor: row.amount_minor, reason: body.reason },
+        });
+        return { withdrawal: { id: row.id, status: 'queued' } };
+      });
+    },
+  );
+
+  app.post(
+    '/v1/admin/cash-withdrawals/:id/reject',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(payoutDecisionSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        /* Only a payout still waiting for approval can be rejected. One under manual review may
+         * already have been paid in game, and handing the money back a second time is the mistake
+         * this refuses to let an operator make in one click. */
+        const held = await client.query<{ amount_minor: string }>(
+          `SELECT amount_minor FROM cash_withdrawals
+            WHERE id = $1 AND status = 'pending_approval' FOR UPDATE`,
+          [params.id],
+        );
+        const row = held.rows[0];
+        if (!row) {
+          conflict('WITHDRAWAL_NOT_PENDING', 'That payout is not waiting for approval');
+          throw new AppError(409, 'WITHDRAWAL_NOT_PENDING', 'Unreachable');
+        }
+        await refundWithdrawal(client, params.id, 'REJECTED_BY_ADMIN');
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'rejected', approved_by = $2, approved_at = now(),
+                  updated_at = now()
+            WHERE id = $1`,
+          [params.id, actor],
+        );
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'cash_withdrawal.reject',
+          targetType: 'cash_withdrawal',
+          targetId: params.id,
+          details: { amountMinor: row.amount_minor, reason: body.reason },
+        });
+        return { withdrawal: { id: params.id, status: 'rejected' } };
       });
     },
   );
