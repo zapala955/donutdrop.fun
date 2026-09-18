@@ -27,6 +27,7 @@
  * or did not catch.
  */
 import { state, bus, sendChat, refreshChat, refreshBalance } from './store.js';
+import { censorName } from './profanity.js';
 import { $, el, money, parseAmount, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -326,7 +327,10 @@ function openTipSheet(username) {
     const wrap = el('div', 'tipsheet');
 
     const target = el('div', 'tipsheet__who');
-    target.append(avatarFor(username, 40), Object.assign(el('b'), { textContent: username }));
+    target.append(
+      avatarFor(username, 40),
+      Object.assign(el('b'), { textContent: censorName(username) }),
+    );
 
     const figure = el('b', 'tipsheet__amt mono');
     const field = el('input', 'tipsheet__input mono');
@@ -422,7 +426,9 @@ function avatarFor(username, size = 22) {
   art.addEventListener('error', () => {
     art.remove();
     const initials = el('i');
-    initials.textContent = (username || '?').slice(0, 2).toUpperCase();
+    // The image URL above needs the real username; these two visible letters do not.
+    // One letter, matching the masked name beside it. Two would render the first asterisk.
+    initials.textContent = (censorName(username) || '?').slice(0, 1).toUpperCase();
     wrap.appendChild(initials);
   });
   wrap.appendChild(art);
@@ -440,10 +446,13 @@ function buildMessage(message) {
 
   const avatar = avatarFor(message.author);
   avatar.addEventListener('click', () => openTipSheet(message.author));
-  avatar.title = `Tip ${message.author}`;
+  avatar.title = `Tip ${censorName(message.author)}`;
 
   const who = el('span', 'msg__who');
-  who.textContent = message.author;
+  /* Masked for display only. `message.author` stays the real Mojang username everywhere it is
+   * sent back to the server â€” tipping and the admin timeout endpoints both resolve it against
+   * normalized_username, and a masked name resolves to nobody. */
+  who.textContent = censorName(message.author);
 
   top.append(avatar, who);
 
@@ -501,7 +510,7 @@ function buildHit(activity, value) {
   const top = el('div', 'msg__top');
   top.append(avatarFor(activity.player || 'Steve'));
   const who = el('span', 'msg__who');
-  who.textContent = activity.player || 'Someone';
+  who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);
   if (activity.vip) {
     const tier = el('i', 'msg__badge');
@@ -551,7 +560,7 @@ function buildTip(username, amount, note) {
   const top = el('div', 'msg__top');
   top.append(avatarFor(username));
   const who = el('span', 'msg__who');
-  who.textContent = username;
+  who.textContent = censorName(username);
   const badge = el('i', 'msg__badge msg__badge--tip');
   badge.textContent = 'TIP';
   top.append(who, badge);

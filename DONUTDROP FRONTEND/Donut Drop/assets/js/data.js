@@ -90,7 +90,7 @@ export const BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 /* Crates. Drop odds come from each item's rarity weight inside the pool. */
 export const CRATES = [
   {
-    id: 'starter', art: BLK + 'chest_normal.png', name: 'Starter Crate', price: 35_000, tier: 'common',
+    id: 'starter', art: 'assets/img/items/chest.png', name: 'Starter Crate', price: 35_000, tier: 'common',
     blurb: 'Spawn-kit leftovers. Everyone opens a few.',
     pool: ['redstone', 'slime', 'iron', 'nametag', 'gold', 'gapple', 'obsidian', 'xpbottle', 'diamond'],
   },

@@ -41,7 +41,7 @@ const DECALS = [
   ['items/trident.png', 'Trident'],
   ['block/gilded_blackstone.png', 'Gilded Blackstone'],
   ['block/crying_obsidian.png', 'Crying Obsidian'],
-  ['block/magma.png', 'Magma'],
+  ['items/magma_core.svg', 'Magma Core'],
   ['block/end_stone.png', 'End Stone'],
 ];
 
@@ -902,7 +902,7 @@ function decalPath(asset) {
     && /^(?:items|block)\/[A-Za-z0-9_-]+\.(?:png|gif|jpe?g|webp)$/.test(asset)) {
     return `assets/img/${asset}`;
   }
-  return 'assets/img/block/chest_normal.png';
+  return 'assets/img/items/chest.png';
 }
 
 function riskColor(percent) {

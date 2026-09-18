@@ -837,7 +837,7 @@ function crateArt(round) {
   if (typeof asset === 'string' && /^(?:items|block)\/[A-Za-z0-9_-]+\.(?:png|gif|jpe?g|webp)$/.test(asset)) {
     return `assets/img/${asset}`;
   }
-  return round?.imageUrl || 'assets/img/block/chest_normal.png';
+  return round?.imageUrl || 'assets/img/items/chest.png';
 }
 
 function coin() {

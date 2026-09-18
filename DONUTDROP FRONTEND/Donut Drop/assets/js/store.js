@@ -178,7 +178,7 @@ function normalizeCase(raw) {
     blurb: raw.description || '',
     description: raw.description || '',
     imageUrl: raw.imageUrl || null,
-    art: raw.imageUrl || (artFile ? `assets/img/${artFile}` : 'assets/img/block/chest_normal.png'),
+    art: raw.imageUrl || (artFile ? `assets/img/${artFile}` : 'assets/img/items/chest.png'),
     priceMinor: String(raw.priceMinor),
     price: toSafeNumber(raw.priceMinor),
     totalWeight: String(raw.totalWeight || '0'),

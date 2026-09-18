@@ -111,11 +111,11 @@ const ITEMS: readonly CatalogItem[] = [
    * block sprites, because no Minecraft ITEM sits at this value. */
   {
     name: 'magma_core', display: 'Magma Core', valueMinor: '175000000',
-    imageUrl: 'assets/img/block/magma.png',
+    imageUrl: 'assets/img/items/magma_core.svg',
   },
   {
     name: 'lava_sea_relic', display: 'Lava Sea Relic', valueMinor: '245000000',
-    imageUrl: 'assets/img/block/lava_still.png',
+    imageUrl: 'assets/img/items/nether_sigil.svg',
   },
 
   /* ── the mystery sub-pool ──
@@ -139,7 +139,7 @@ const ITEMS: readonly CatalogItem[] = [
      * box sprite, which the $620,000 ordinary Shulker Box also uses — so a $100,000,000 mystery
      * payload and a drop worth a six-hundredth of it were the same picture. */
     name: 'guardian_cache', display: 'Guardian Cache', valueMinor: '100000000',
-    mystery: true, imageUrl: 'assets/img/block/chest_ender.png',
+    mystery: true, imageUrl: 'assets/img/items/ender_chest.png',
   },
   {
     // Was the totem sprite, which the $6,500,000 Totem of Undying already owns.
@@ -166,20 +166,40 @@ const ITEMS: readonly CatalogItem[] = [
   {
     // No Minecraft item is worth a billion, so the top payloads are explicit cash vaults with
     // sprites of their own rather than blocks pretending to be money.
-    name: 'cash_vault', display: 'Sovereign Cash Vault', valueMinor: '1000000000',
-    mystery: true, imageUrl: 'assets/img/block/gilded_blackstone.png',
+    name: 'cash_vault', display: 'Herobrine Head', valueMinor: '1000000000',
+    mystery: true, imageUrl: 'assets/img/items/herobrine_head.svg',
   },
   /* The multi-billion tail. These exist for the HIGH-ROLLER floors: a 150,000,000 crate floors at
    * 375,000,000, and a pool that stopped at a billion would give it only three payloads to draw
    * from. They are unreachable from a cheap crate, because a sub-pool never reaches more than one
    * order of magnitude above its own floor. */
   {
-    name: 'monarch_reserve', display: "Monarch's Reserve", valueMinor: '1750000000',
-    mystery: true, imageUrl: 'assets/img/block/gold_block.png',
+    name: 'monarch_reserve', display: 'Wither Storm', valueMinor: '1750000000',
+    mystery: true, imageUrl: 'assets/img/items/wither_storm.svg',
   },
   {
-    name: 'dominion_vault', display: 'Dominion Vault', valueMinor: '3000000000',
-    mystery: true, imageUrl: 'assets/img/block/netherite_block.png',
+    name: 'soul_lantern', display: 'Soul Lantern', valueMinor: '450000000',
+    mystery: true, imageUrl: 'assets/img/items/soul_lantern.svg',
+  },
+  {
+    name: 'wither_skull', display: 'Wither Skull', valueMinor: '900000000',
+    mystery: true, imageUrl: 'assets/img/items/wither_skull.svg',
+  },
+  {
+    name: 'end_crystal', display: 'End Crystal', valueMinor: '1350000000',
+    mystery: true, imageUrl: 'assets/img/items/end_crystal.svg',
+  },
+  {
+    name: 'obsidian_shard', display: 'Obsidian Shard', valueMinor: '2200000000',
+    mystery: true, imageUrl: 'assets/img/items/obsidian_shard.svg',
+  },
+  {
+    name: 'netherite_crown', display: 'Netherite Crown', valueMinor: '5000000000',
+    mystery: true, imageUrl: 'assets/img/items/netherite_crown.svg',
+  },
+  {
+    name: 'dominion_vault', display: 'Ender Dragon Skull', valueMinor: '3000000000',
+    mystery: true, imageUrl: 'assets/img/items/ender_dragon_head.svg',
   },
 ];
 
@@ -327,6 +347,11 @@ interface RiskProfile {
 const RISK_PROFILES: readonly RiskProfile[] = [
   { code: 'safe', label: 'Safe', falloff: 0.6, lowMultiple: 0.45, highMultiple: 2.2,
     blurb: 'Tight spread. Most pulls land near what you paid.' },
+  /* The hit-rate profile. A flatter falloff than 'safe' over a band that starts nearer the
+   * price, so weight sits on outcomes at or above what the crate cost: roughly three opens in
+   * ten come back up. The edge is unchanged, so those wins are correspondingly small. */
+  { code: 'steady', label: 'Steady', falloff: 0.25, lowMultiple: 0.5, highMultiple: 2.0,
+    blurb: 'Wins often, wins small. The grinder\u2019s crate.' },
   { code: 'balanced', label: 'Balanced', falloff: 1.1, lowMultiple: 0.25, highMultiple: 6,
     blurb: 'A real floor and a real ceiling. The honest middle.' },
   { code: 'wild', label: 'Wild', falloff: 1.9, lowMultiple: 0.1, highMultiple: 18,
@@ -341,6 +366,7 @@ const RISK_PROFILES: readonly RiskProfile[] = [
 const PRICE_TIERS: readonly number[] = [
   5_000, 15_000, 50_000, 150_000, 500_000,
   1_500_000, 5_000_000, 15_000_000, 50_000_000, 150_000_000,
+  500_000_000,
 ];
 
 /**
@@ -374,6 +400,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Mob Drop', slug: 'mob-drop', asset: 'items/slime_ball.png' },
     degen: { name: 'Coin Toss', slug: 'coin-toss', asset: 'items/gold_nugget.png' },
     jackpot: { name: 'Lucky Dip', slug: 'lucky-dip', asset: 'items/chest.png' },
+    steady: { name: 'Steady Hand', slug: 'steady-hand', asset: 'items/stick.png' },
   },
   // ── 15,000 · the first real dig ──
   {
@@ -382,6 +409,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Ore Vein', slug: 'ore-vein', asset: 'items/redstone.png' },
     degen: { name: 'Cave In', slug: 'cave-in', asset: 'block/deepslate_top.png' },
     jackpot: { name: 'Deep Shaft', slug: 'deep-shaft', asset: 'items/minecart.png' },
+    steady: { name: 'Slow Burn', slug: 'slow-burn', asset: 'items/feather.png' },
   },
   // ── 50,000 · iron and rails ──
   {
@@ -390,6 +418,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Rail Gamble', slug: 'rail-gamble', asset: 'items/tripwire_hook.png' },
     degen: { name: 'Anvil Drop', slug: 'anvil-drop', asset: 'items/iron_sword.png' },
     jackpot: { name: 'Snow Blind', slug: 'snow-blind', asset: 'items/snow_block.png' },
+    steady: { name: 'Even Keel', slug: 'even-keel', asset: 'items/name_tag.png' },
   },
   // ── 150,000 · gold and redstone ──
   {
@@ -398,6 +427,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Piston Trap', slug: 'piston-trap', asset: 'items/tnt.png' },
     degen: { name: 'TNT Run', slug: 'tnt-run', asset: 'block/tnt_side.png' },
     jackpot: { name: 'Powder Keg', slug: 'powder-keg', asset: 'items/spawner.png' },
+    steady: { name: 'Safe Passage', slug: 'safe-passage', asset: 'items/golden_apple.png' },
   },
   // ── 500,000 · diamond and enchanting ──
   {
@@ -406,6 +436,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Bottle Toss', slug: 'bottle-toss', asset: 'items/xp_bottle.png' },
     degen: { name: 'Deep Dark', slug: 'deep-dark', asset: 'block/polished_blackstone.png' },
     jackpot: { name: 'Warden Den', slug: 'warden-den', asset: 'block/crying_obsidian.png' },
+    steady: { name: 'Long Haul', slug: 'long-haul', asset: 'items/emerald.png' },
   },
   // ── 1,500,000 · through the gate ──
   {
@@ -414,6 +445,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Blaze Rod', slug: 'blaze-rod', asset: 'items/lava_bucket.png' },
     degen: { name: 'Lava Dive', slug: 'lava-dive', asset: 'block/lava_still.png' },
     jackpot: { name: 'Fortress Raid', slug: 'fortress-raid', asset: 'items/netherite_sword.png' },
+    steady: { name: 'Sure Thing', slug: 'sure-thing', asset: 'items/diamond_pickaxe.svg' },
   },
   // ── 5,000,000 · basalt and bastions ──
   {
@@ -422,6 +454,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Ghast Tear', slug: 'ghast-tear', asset: 'items/god_apple.png' },
     degen: { name: 'Bastion Run', slug: 'bastion-run', asset: 'block/gilded_blackstone.png' },
     jackpot: { name: 'Wither Fight', slug: 'wither-fight', asset: 'items/totem.png' },
+    steady: { name: 'Iron Nerve', slug: 'iron-nerve', asset: 'items/diamond_sword.svg' },
   },
   // ── 15,000,000 · ancient debris ──
   {
@@ -430,6 +463,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Netherite Cast', slug: 'netherite-cast', asset: 'items/netherite_ingot.png' },
     degen: { name: 'Debris Dig', slug: 'debris-dig', asset: 'block/basalt_top.png' },
     jackpot: { name: 'Smithing Roll', slug: 'smithing-roll', asset: 'items/netherite_pickaxe.png' },
+    steady: { name: 'Cold Steel', slug: 'cold-steel', asset: 'items/diamond_helmet.svg' },
   },
   // ── 50,000,000 · the end ──
   {
@@ -438,6 +472,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Shulker Nest', slug: 'shulker-nest', asset: 'items/shulker_box.gif' },
     degen: { name: 'Void Drop', slug: 'void-drop', asset: 'items/ender_chest.png' },
     jackpot: { name: 'Dragon Fight', slug: 'dragon-fight', asset: 'items/dragon_egg.png' },
+    steady: { name: 'Heavy Hand', slug: 'heavy-hand', asset: 'items/mace.svg' },
   },
   // ── 150,000,000 · the floor of the world ──
   {
@@ -446,6 +481,16 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     wild: { name: 'Elytra Run', slug: 'elytra-run', asset: 'items/elytra.png' },
     degen: { name: 'Trident Toss', slug: 'trident-toss', asset: 'items/trident.png' },
     jackpot: { name: 'Sovereign Vault', slug: 'sovereign-vault', asset: 'items/nether_star.png' },
+    steady: { name: 'Steady Flame', slug: 'steady-flame', asset: 'items/blaze_rod.svg' },
+  },
+  // ── 500,000,000 · the high table ──
+  {
+    safe: { name: 'Vault Floor', slug: 'vault-floor', asset: 'items/netherite_block.png' },
+    steady: { name: 'Crown Draw', slug: 'crown-draw', asset: 'items/golden_crown.svg' },
+    balanced: { name: "King's Ransom", slug: 'kings-ransom', asset: 'items/diamond_block.png' },
+    wild: { name: 'Storm Front', slug: 'storm-front', asset: 'items/netherite_chestplate.png' },
+    degen: { name: 'Skull Market', slug: 'skull-market', asset: 'items/wither_skull.svg' },
+    jackpot: { name: 'Crown Jewel', slug: 'crown-jewel', asset: 'items/netherite_crown.svg' },
   },
 ];
 
