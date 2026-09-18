@@ -5,7 +5,7 @@ import type { BotConfig } from './config.js';
 import type { ApiClient, BotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
-import { parsePaymentMessage } from './payment-chat.js';
+import { parsePaymentMessage, parsePaymentNotice } from './payment-chat.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
@@ -123,9 +123,15 @@ export class MinecraftWorker {
     // gateway checks before it credits anyone; reporting here only starts that check.
     bot._client.on('packet', (data: unknown, meta: unknown) => {
       if (packetName(meta) !== 'system_chat') return;
+      const notice = parsePaymentNotice(data);
+      if (!notice) return;
+      if (notice.payer.toLowerCase() === bot.username.toLowerCase()) return;
+      this.run(
+        this.reportPaymentNotice(notice.payer, notice.displayedAmount),
+        'cash payment observation',
+      );
       const payment = parsePaymentMessage(data);
       if (!payment) return;
-      if (payment.payer.toLowerCase() === bot.username.toLowerCase()) return;
       this.run(this.reportPayment(payment.payer, payment.amount), 'payment observation');
     });
     bot.on('windowClose', () => this.markInventoryDirty());
@@ -183,6 +189,11 @@ export class MinecraftWorker {
   private async reportPayment(payer: string, amount: number): Promise<void> {
     this.log.info({ payer, amount }, 'Observed in-game payment');
     await this.api.reportPayment(payer, amount);
+  }
+
+  private async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
+    this.log.info({ payer, displayedAmount }, 'Observed in-game cash payment receipt');
+    await this.api.reportPaymentNotice(payer, displayedAmount);
   }
 
   private async handleVerifiedPlayerCommand(

@@ -13,6 +13,11 @@ export interface ObservedPayment {
   readonly amount: number;
 }
 
+export interface PaymentNotice {
+  readonly payer: string;
+  readonly displayedAmount: string;
+}
+
 /**
  * Recognizes DonutSMP's "<player> paid you $ <amount>" message.
  *
@@ -25,7 +30,7 @@ export interface ObservedPayment {
  * green. Player chat reaches the bot wrapped in the chat plugin's formatting, so it cannot present
  * this shape without the server choosing to emit it.
  */
-export function parsePaymentMessage(packet: unknown): ObservedPayment | undefined {
+export function parsePaymentNotice(packet: unknown): PaymentNotice | undefined {
   if (packet === null || typeof packet !== 'object') return undefined;
   const record = packet as Record<string, unknown>;
   // An action bar message is a different channel and never carries a payment receipt.
@@ -46,10 +51,20 @@ export function parsePaymentMessage(packet: unknown): ObservedPayment | undefine
   if (senderText === undefined || amountText === undefined) return undefined;
 
   const payer = PAID_YOU_PATTERN.exec(senderText)?.[1];
-  const exact = EXACT_AMOUNT_PATTERN.exec(amountText)?.[1];
-  if (!payer || !exact || !USERNAME_PATTERN.test(payer)) return undefined;
+  if (!payer || !USERNAME_PATTERN.test(payer) || !/^[1-9]\d*(?:\.\d+)?[KMBT]?$/.test(amountText)) {
+    return undefined;
+  }
 
-  return { payer, amount: Number(exact) };
+  return { payer, displayedAmount: amountText };
+}
+
+export function parsePaymentMessage(packet: unknown): ObservedPayment | undefined {
+  const notice = parsePaymentNotice(packet);
+  if (!notice) return undefined;
+  const exact = EXACT_AMOUNT_PATTERN.exec(notice.displayedAmount)?.[1];
+  if (!exact) return undefined;
+
+  return { payer: notice.payer, amount: Number(exact) };
 }
 
 /**

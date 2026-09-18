@@ -186,6 +186,17 @@ export class ApiClient {
     });
   }
 
+  /** Reports the payer even when DonutSMP abbreviated the displayed amount. */
+  async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
+    await this.sendEvent({
+      eventId: randomUUID(),
+      botId: this.config.botId,
+      type: 'cash_payment_observed',
+      payer,
+      displayedAmount,
+    });
+  }
+
   async authorizeDeposit(
     depositCode: string,
     username: string,

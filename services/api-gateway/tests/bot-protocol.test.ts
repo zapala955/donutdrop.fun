@@ -146,6 +146,63 @@ describe('internal bot protocol', () => {
     );
   });
 
+  it('records abbreviated cash receipts for the matching active player deposit', async () => {
+    const config = protocolConfig();
+    const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
+    const client = {
+      query: async (sql: string, values?: readonly unknown[]) => {
+        statements.push(values ? { sql, values } : { sql });
+        if (sql.includes('INSERT INTO inbound_bot_events')) {
+          return { rows: [{ event_id: '90b1771b-da27-44c1-9bf0-676b54d94479' }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 1 };
+      },
+    } as unknown as DbClient;
+    const database = {
+      transaction: async (work: (transactionClient: DbClient) => Promise<unknown>) => work(client),
+    } as unknown as Database;
+    const app = Fastify({ logger: false });
+    await registerMinecraftInternalRoutes(app, database, config);
+    const path = '/internal/v1/minecraft/events';
+    const requestBody = {
+      eventId: '90b1771b-da27-44c1-9bf0-676b54d94479',
+      botId: firstId,
+      type: 'cash_payment_observed',
+      payer: 'PlayerOne',
+      displayedAmount: '1M',
+    };
+    const requestTimestamp = Date.now().toString();
+    const signature = apiHmacHex(
+      firstKey,
+      apiRequestPayload('POST', path, firstId, requestTimestamp, requestBody),
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: path,
+        headers: {
+          'x-bot-id': firstId,
+          'x-bot-timestamp': requestTimestamp,
+          'x-bot-signature': signature,
+        },
+        payload: requestBody,
+      });
+      assert.equal(response.statusCode, 200);
+      assert.ok(
+        statements.some(
+          ({ sql, values }) =>
+            sql.includes('UPDATE cash_deposit_challenges deposit') &&
+            values?.[0] === firstId &&
+            values?.[1] === 'PlayerOne' &&
+            values?.[2] === '1M',
+        ),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('binds each signature to its provisioned bot identity', () => {
     const config = protocolConfig();
     const body = { eventId: '30000000-0000-4000-8000-000000000003', botId: firstId };

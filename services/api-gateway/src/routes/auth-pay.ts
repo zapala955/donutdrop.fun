@@ -135,25 +135,51 @@ export async function registerPayLoginRoutes(
         const payAmount = config.payLoginMinAmount + randomInt(span);
         const challengeId = randomUUID();
         try {
-          await db.query(
-            `INSERT INTO auth_link_challenges
-               (id, requested_username, normalized_username, code_hash, browser_token_hash,
-                bot_id, expires_at, method, pay_amount, bot_balance_before)
-             VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
-                     'payment', $8, $9)`,
-            [
-              challengeId,
-              body.minecraftUsername,
-              body.minecraftUsername.toLowerCase(),
-              // Unused by this method; the column is NOT NULL UNIQUE for the chat-code flow.
-              sha256(randomToken()),
-              sha256(browserToken),
-              selectedBot.id,
-              PAY_CHALLENGE_TTL_MINUTES,
-              payAmount,
-              balanceBefore.toString(),
-            ],
-          );
+          await db.transaction(async (client) => {
+            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8842))', [
+              `payment-lane:${selectedBot.id}`,
+            ]);
+            await client.query(
+              `UPDATE cash_deposit_challenges SET status = 'expired', updated_at = now()
+                WHERE status = 'pending' AND expires_at <= now()`,
+            );
+            await client.query(
+              `UPDATE cash_deposit_challenges SET status = 'manual_review', updated_at = now()
+                WHERE status = 'observed' AND expires_at <= now()`,
+            );
+            const cashDeposit = await client.query(
+              `SELECT 1 FROM cash_deposit_challenges
+                WHERE bot_id = $1 AND status IN ('pending', 'observed')
+                LIMIT 1`,
+              [selectedBot.id],
+            );
+            if (cashDeposit.rowCount) {
+              throw new AppError(
+                409,
+                'PAYMENT_LANE_BUSY',
+                'Another payment is being verified; try again in a moment',
+              );
+            }
+            await client.query(
+              `INSERT INTO auth_link_challenges
+                 (id, requested_username, normalized_username, code_hash, browser_token_hash,
+                  bot_id, expires_at, method, pay_amount, bot_balance_before)
+               VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
+                       'payment', $8, $9)`,
+              [
+                challengeId,
+                body.minecraftUsername,
+                body.minecraftUsername.toLowerCase(),
+                // Unused by this method; the column is NOT NULL UNIQUE for the chat-code flow.
+                sha256(randomToken()),
+                sha256(browserToken),
+                selectedBot.id,
+                PAY_CHALLENGE_TTL_MINUTES,
+                payAmount,
+                balanceBefore.toString(),
+              ],
+            );
+          });
           reply.setCookie(linkCookieName(config), browserToken, {
             path: '/',
             httpOnly: true,

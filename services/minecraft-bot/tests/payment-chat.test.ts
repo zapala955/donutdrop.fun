@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parsePaymentMessage } from '../src/payment-chat.js';
+import { parsePaymentMessage, parsePaymentNotice } from '../src/payment-chat.js';
 
 /**
  * Every fixture below is a real DonutSMP system_chat packet, captured from the live server by
@@ -490,10 +490,18 @@ test('reads an exact payment of 999, the largest unabbreviated amount', () => {
 test('refuses an abbreviated amount rather than guessing what "1.2K" meant', () => {
   // The player actually paid 1234. The message cannot say so, so no amount may be inferred.
   assert.equal(parsePaymentMessage(paidTwelveHundred), undefined);
+  assert.deepEqual(parsePaymentNotice(paidTwelveHundred), {
+    payer: 'misterofthex',
+    displayedAmount: '1.2K',
+  });
 });
 
 test('refuses "1K" even though the real amount was a round 1000', () => {
   assert.equal(parsePaymentMessage(paidOneThousand), undefined);
+  assert.deepEqual(parsePaymentNotice(paidOneThousand), {
+    payer: 'misterofthex',
+    displayedAmount: '1K',
+  });
 });
 
 test('ignores an unrelated three-part server message', () => {

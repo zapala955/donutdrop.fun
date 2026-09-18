@@ -580,8 +580,21 @@ export async function sellInventoryItem(item, quantity = 1) {
   return result;
 }
 
-export async function createDeposit() {
-  return api.post('/v1/deposits', {}, { idempotencyKey: idempotencyKey() });
+export async function createCashDeposit(amountMinor) {
+  return api.post(
+    '/v1/cash-deposits',
+    { amountMinor: String(amountMinor) },
+    { idempotencyKey: idempotencyKey() },
+  );
+}
+
+export async function cashDepositStatus(id) {
+  const result = await api.get('/v1/cash-deposits/' + encodeURIComponent(id));
+  if (result.deposit?.status === 'credited') {
+    await refreshBalance(false);
+    emit('cash-deposit');
+  }
+  return result;
 }
 
 export async function withdrawInventoryItem(item, quantity = 1) {

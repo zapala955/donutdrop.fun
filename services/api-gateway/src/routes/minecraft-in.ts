@@ -96,6 +96,11 @@ const paymentEvent = eventBase.extend({
   // message abbreviates, so a larger figure could not have been read from it truthfully.
   amount: z.number().int().min(1).max(999),
 });
+const cashPaymentEvent = eventBase.extend({
+  type: z.literal('cash_payment_observed'),
+  payer: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  displayedAmount: z.string().regex(/^[1-9]\d*(?:\.\d+)?[KMBT]?$/).max(32),
+});
 const botEventSchema = z.discriminatedUnion('type', [
   heartbeatEvent,
   linkEvent,
@@ -103,6 +108,7 @@ const botEventSchema = z.discriminatedUnion('type', [
   snapshotEvent,
   jobResultEvent,
   paymentEvent,
+  cashPaymentEvent,
 ]);
 const claimSchema = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const depositAuthorizationSchema = eventBase.extend({
@@ -263,6 +269,9 @@ export async function registerMinecraftInternalRoutes(
             break;
           case 'payment_observed':
             await processPaymentObserved(client, event);
+            break;
+          case 'cash_payment_observed':
+            await processCashPaymentObserved(client, event);
             break;
         }
         return { accepted: true, duplicate: false };
@@ -781,6 +790,25 @@ async function processPaymentObserved(
   await client.query(
     'UPDATE auth_link_challenges SET observed_payment_at = now() WHERE id = $1',
     [challenge.id],
+  );
+}
+
+/**
+ * Records who the DonutSMP server says paid. Large receipts are abbreviated, so the exact amount
+ * is verified later against the API balance by the browser's authenticated status request.
+ */
+async function processCashPaymentObserved(
+  client: DbClient,
+  event: z.infer<typeof cashPaymentEvent>,
+): Promise<void> {
+  await client.query(
+    `UPDATE cash_deposit_challenges deposit
+        SET status = 'observed', displayed_amount = $3, observed_at = now(), updated_at = now()
+       FROM users account
+      WHERE deposit.user_id = account.id AND deposit.bot_id = $1
+        AND account.normalized_username = lower($2)
+        AND deposit.status = 'pending' AND deposit.expires_at > now()`,
+    [event.botId, event.payer, event.displayedAmount],
   );
 }
 

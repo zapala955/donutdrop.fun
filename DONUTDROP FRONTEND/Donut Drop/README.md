@@ -30,9 +30,10 @@ override it. The backend origin and cookie settings must match the deployed fron
 ## Connected surfaces
 
 - Minecraft account linking, cookie session, CSRF token, and logout.
+- Cash deposits through an exact DonutSMP `/pay` challenge and API-verified bot balance delta.
 - Public server-configured case catalog and published integer-weight odds.
 - Atomic case opening with a backend-returned result driving the existing reel/cutscene.
-- Custody inventory with server-quoted sell and physical withdrawal actions.
+- Custody inventory with server-quoted sell and separately gated physical withdrawal actions.
 - Item-to-item upgrader using owned inventory, server stock, locked values, and backend RNG.
 - Header balance and account/profile views backed by API snapshots.
 - Recent case/upgrader activity feed polled from the public endpoint.

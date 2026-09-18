@@ -121,20 +121,23 @@ compromise.
 ## Transfer launch gate
 
 Both `MINECRAFT_TRANSFERS_ENABLED` and `BOT_TRANSFERS_ENABLED` remain forced to `false`, and the
-bundled adapter refuses transfers. Account linking and inventory observation work, but deposits and
-withdrawals fail closed until a DonutSMP-specific atomic transfer adapter is implemented, reviewed,
-and explicitly wired into both processes. Rotate a quarantined bot's credential before using the
-admin release API. The initial catalog is empty; this deployment adds no items.
+bundled adapter refuses physical item transfers. Account linking, cash deposits through DonutSMP
+`/pay`, and inventory observation work without those flags. Physical item deposits and withdrawals
+continue to fail closed until a DonutSMP-specific atomic item-transfer adapter is implemented,
+reviewed, and explicitly wired into both processes. Cash deposits serialize one active payment per
+bot so an abbreviated chat receipt can be verified against one exact API balance delta. Rotate a
+quarantined bot's credential before using the admin release API. The initial catalog is empty; this
+deployment adds no items.
 
 Compose isolates bot control traffic, but a Docker bridge is not a destination allowlist. Before
 enabling any transfer adapter, enforce bot egress at the host firewall or a dedicated egress proxy,
 allowing only the reviewed Microsoft authentication endpoints, DNS/NTP dependencies, and the
 configured DonutSMP endpoint. Deny access to cloud metadata and private management networks.
 
-The API also needs outbound HTTPS for payment-login balance verification against
+The API also needs outbound HTTPS for payment-login and cash-deposit balance verification against
 `api.donutsmp.net` (and for Discord OAuth/webhooks if those optional features are enabled). Apply
 the same host-firewall or dedicated-proxy policy to `API_EGRESS_NETWORK_CIDR`; in particular, deny
-cloud metadata and private management ranges. Removing API egress disables payment login.
+cloud metadata and private management ranges. Removing API egress disables both payment flows.
 
 ## Backup launch gate
 
