@@ -5,7 +5,14 @@ import type { BotConfig } from './config.js';
 import type { ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
-import { describeSystemChat, parsePaymentMessage, parsePaymentNotice } from './payment-chat.js';
+import {
+  describeSystemChat,
+  displayedAmountBounds,
+  parseOutgoingPayment,
+  parsePaymentMessage,
+  parsePaymentNotice,
+  type OutgoingPayment,
+} from './payment-chat.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
@@ -13,6 +20,8 @@ const MIN_DEPOSIT_TRANSFER_WINDOW_MS = 20_000;
 const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
 /** How long after a payout the server's reply is worth logging. */
 const PAYOUT_CHAT_CAPTURE_MS = 8_000;
+/** How long to wait for the server to confirm a payout before giving up on knowing. */
+const PAYOUT_CONFIRM_MS = 8_000;
 
 interface JobClaimState {
   readonly bot: Bot;
@@ -45,6 +54,8 @@ export class MinecraftWorker {
   private claimBlockReason: string | undefined = 'startup';
   /** While set, system chat is logged verbatim so a payout's server reply can be read back. */
   private payoutChatCaptureUntil = 0;
+  /** The payout waiting on the server's confirmation, if one is in flight. */
+  private pendingPayout: { payee: string; settle: (receipt: OutgoingPayment) => void } | undefined;
 
   constructor(
     private readonly config: BotConfig,
@@ -147,6 +158,16 @@ export class MinecraftWorker {
       if (Date.now() < this.payoutChatCaptureUntil) {
         const described = describeSystemChat(data);
         if (described) this.log.info({ chat: described }, 'system chat after payout');
+      }
+      /* The server confirming that this bot paid somebody. Matched before the incoming receipt
+       * because the two have the same shape and only the leading text distinguishes them. */
+      const outgoing = parseOutgoingPayment(data);
+      if (outgoing) {
+        const waiting = this.pendingPayout;
+        if (waiting && outgoing.payee.toLowerCase() === waiting.payee.toLowerCase()) {
+          waiting.settle(outgoing);
+        }
+        return;
       }
       const notice = parsePaymentNotice(data);
       if (!notice) return;
@@ -596,16 +617,20 @@ export class MinecraftWorker {
    */
   private async sendCashPayout(job: CashPayoutBotJob, claimState: JobClaimState): Promise<void> {
     const { payee, amountMinor } = job.payload;
+    let receipt: OutgoingPayment | undefined;
     try {
       if (!this.isConnectionLive(claimState)) throw new Error('PAYOUT_NOT_SENT');
       // Re-checked immediately before the write: a disconnect between the guard above and this
       // line would otherwise send the command into a dead socket and call it delivered.
       const bot = this.bot;
       if (!bot || bot !== claimState.bot) throw new Error('PAYOUT_NOT_SENT');
-      /* Opened before the command, because the server can answer within the same tick. */
+
+      /* Armed before the command, because the server can answer within the same tick. */
+      const confirmation = this.awaitPayoutReceipt(payee);
       this.payoutChatCaptureUntil = Date.now() + PAYOUT_CHAT_CAPTURE_MS;
       bot.chat(`/pay ${payee} ${amountMinor}`);
       this.log.info({ jobId: job.id, payee, amountMinor }, 'cash payout sent');
+      receipt = await confirmation;
     } catch (error) {
       const code =
         error instanceof Error && error.message === 'PAYOUT_NOT_SENT'
@@ -614,6 +639,33 @@ export class MinecraftWorker {
       await this.api.completeJob(job, 'failed', { retryable: false, errorCode: code });
       return;
     }
+
+    /* Nothing came back, or what came back does not cover what was asked for.
+     *
+     * Neither is reported as PAYOUT_NOT_SENT, because that is the one code the gateway refunds on
+     * and the command did reach the server. An unknown or short outcome goes to a human instead:
+     * refunding might pay twice, and marking it paid is what let a bot without the funds settle a
+     * withdrawal it never made. */
+    if (!receipt) {
+      this.log.error({ jobId: job.id, payee, amountMinor }, 'cash payout was never confirmed');
+      await this.api.completeJob(job, 'failed', {
+        retryable: false,
+        errorCode: 'PAYOUT_UNCONFIRMED',
+      });
+      return;
+    }
+    if (!coversRequestedAmount(receipt.displayedAmount, amountMinor)) {
+      this.log.error(
+        { jobId: job.id, payee, amountMinor, displayed: receipt.displayedAmount },
+        'cash payout confirmed for a different amount',
+      );
+      await this.api.completeJob(job, 'failed', {
+        retryable: false,
+        errorCode: 'PAYOUT_AMOUNT_MISMATCH',
+      });
+      return;
+    }
+
     try {
       await this.api.completeJob(job, 'completed');
     } catch (error) {
@@ -625,6 +677,25 @@ export class MinecraftWorker {
         'Cash payout sent but could not be acknowledged; manual review required',
       );
     }
+  }
+
+  /** Resolves with the server's confirmation for this payee, or undefined if none arrives. */
+  private awaitPayoutReceipt(payee: string): Promise<OutgoingPayment | undefined> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingPayout = undefined;
+        resolve(undefined);
+      }, PAYOUT_CONFIRM_MS);
+      timer.unref();
+      this.pendingPayout = {
+        payee,
+        settle: (received) => {
+          clearTimeout(timer);
+          this.pendingPayout = undefined;
+          resolve(received);
+        },
+      };
+    });
   }
 
   private async executeJob(job: BotJob, claimState: JobClaimState): Promise<void> {
@@ -703,6 +774,25 @@ export class MinecraftWorker {
 }
 
 /** Packet metadata is untyped at this boundary, so the name is read defensively. */
+/**
+ * Whether an abbreviated confirmation can be the amount that was asked for.
+ *
+ * "383K" stands for anything in [383000, 384000), so the requested figure has to fall inside that
+ * interval. A bot that could only afford part of the payout reports a smaller number, whose
+ * interval will not contain what was requested — which is exactly the case this exists to catch.
+ */
+function coversRequestedAmount(displayed: string, requestedMinor: string): boolean {
+  const bounds = displayedAmountBounds(displayed);
+  if (!bounds) return false;
+  let requested: bigint;
+  try {
+    requested = BigInt(requestedMinor);
+  } catch {
+    return false;
+  }
+  return requested >= bounds.low && requested < bounds.low + bounds.step;
+}
+
 function packetName(meta: unknown): string {
   if (meta === null || typeof meta !== 'object') return '';
   const name = (meta as Record<string, unknown>)['name'];

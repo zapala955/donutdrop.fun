@@ -32,6 +32,9 @@ type WorkerHarness = {
     rawMessage: string,
   ): Promise<void>;
   pollJobs(): Promise<void>;
+  pendingPayout:
+    | { payee: string; settle: (receipt: { payee: string; displayedAmount: string }) => void }
+    | undefined;
   snapshot(): Promise<void>;
   invalidateSnapshotState(): void;
   finishTransferReconciliation(): Promise<void>;
@@ -391,6 +394,23 @@ const payoutJob = {
   leaseExpiresAt: new Date(Date.now() + 120_000).toISOString(),
 };
 
+/**
+ * Runs one poll and answers it the way the server would.
+ *
+ * `displayed` is what DonutSMP echoes back — abbreviated, as it really is. Passing null answers
+ * with silence, which is the case where the bot must refuse to call a payout done.
+ */
+async function runPayout(harness: WorkerHarness, displayed: string | null): Promise<void> {
+  const poll = harness.pollJobs();
+  for (let tick = 0; tick < 50 && !harness.pendingPayout; tick += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  if (displayed !== null) {
+    harness.pendingPayout?.settle({ payee: 'q9w', displayedAmount: displayed });
+  }
+  await poll;
+}
+
 function payoutHarness(api: ApiClient): { harness: WorkerHarness; chats: string[] } {
   const chats: string[] = [];
   const bot = {
@@ -436,7 +456,7 @@ describe('cash payout worker', () => {
     // The exact state that stalled a real payout: connected, paying attention, no usable snapshot.
     harness.snapshotHealthy = false;
 
-    await harness.pollJobs();
+    await runPayout(harness, '100K');
 
     assert.deepEqual(chats, ['/pay q9w 100000']);
     assert.equal(completed?.outcome, 'completed');
@@ -454,7 +474,7 @@ describe('cash payout worker', () => {
     harness.snapshotHealthy = false;
     (harness.bot as unknown as { currentWindow: unknown }).currentWindow = { id: 1 };
 
-    await harness.pollJobs();
+    await runPayout(harness, '100K');
 
     assert.deepEqual(chats, ['/pay q9w 100000']);
   });
@@ -487,9 +507,71 @@ describe('cash payout worker', () => {
 
     const { harness, chats } = payoutHarness(api);
     harness.snapshotHealthy = false;
-    await harness.pollJobs();
+    await runPayout(harness, '9007199254740993');
 
     assert.deepEqual(chats, ['/pay q9w 9007199254740993']);
+  });
+
+  it('refuses to call a payout done when the server never confirms it', async () => {
+    /* The case that prompted all of this: a bot without the funds fired /pay, nothing happened,
+     * and the withdrawal was marked paid anyway while the player's balance was already gone. */
+    let completed: { outcome: string; options: { errorCode?: string } | undefined } | undefined;
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness } = payoutHarness(api);
+    harness.snapshotHealthy = true;
+
+    await runPayout(harness, null);
+
+    assert.equal(completed?.outcome, 'failed');
+    assert.equal(completed?.options?.errorCode, 'PAYOUT_UNCONFIRMED');
+    // Never PAYOUT_NOT_SENT: the command did reach the server, so refunding could pay twice.
+    assert.notEqual(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
+  });
+
+  it('refuses a confirmation that is smaller than what was asked for', async () => {
+    /* A bot with part of the money pays part of it. The abbreviation "50K" stands for
+     * [50000, 51000), which cannot contain the 100000 that was requested. */
+    let completed: { outcome: string; options: { errorCode?: string } | undefined } | undefined;
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness } = payoutHarness(api);
+    harness.snapshotHealthy = true;
+
+    await runPayout(harness, '50K');
+
+    assert.equal(completed?.outcome, 'failed');
+    assert.equal(completed?.options?.errorCode, 'PAYOUT_AMOUNT_MISMATCH');
+  });
+
+  it('accepts an abbreviation whose interval contains the exact amount', async () => {
+    /* 100450 really is "100.4K" on this server, and 100.4K stands for [100400, 100500). Refusing
+     * that would send every unrounded payout to manual review. */
+    let completed: { outcome: string; options: { errorCode?: string } | undefined } | undefined;
+    const job = { ...payoutJob, payload: { ...payoutJob.payload, amountMinor: '100450' } };
+    const api = {
+      claimJob: async () => job,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness } = payoutHarness(api);
+    harness.snapshotHealthy = true;
+
+    await runPayout(harness, '100.4K');
+
+    assert.equal(completed?.outcome, 'completed');
   });
 
   it('reports PAYOUT_NOT_SENT, not a guess, when the connection dies before the command', async () => {

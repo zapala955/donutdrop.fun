@@ -3,6 +3,7 @@
 // Bedrock payment on the floor — the receipt would parse as "not a payment" and never be reported.
 const USERNAME_PATTERN = /^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/;
 const PAID_YOU_PATTERN = /^(\.?[A-Za-z0-9_]{2,16}) paid you $/;
+const YOU_PAID_PATTERN = /^You paid (\.?[A-Za-z0-9_]{2,16}) $/;
 // Only an unabbreviated amount is accepted. DonutSMP renders a thousand and above as "1K" or
 // "1.2K", which cannot be mapped back to the exact figure, so such a message is not evidence of
 // any particular amount and is refused rather than guessed at.
@@ -14,6 +15,11 @@ const CURRENCY_TEXT = '$ ';
 export interface ObservedPayment {
   readonly payer: string;
   readonly amount: number;
+}
+
+export interface OutgoingPayment {
+  readonly payee: string;
+  readonly displayedAmount: string;
 }
 
 export interface PaymentNotice {
@@ -59,6 +65,70 @@ export function parsePaymentNotice(packet: unknown): PaymentNotice | undefined {
   }
 
   return { payer, displayedAmount: amountText };
+}
+
+/**
+ * Recognizes the server's own confirmation that THIS bot paid someone: "You paid <player> $ <n>".
+ *
+ * Structurally identical to the receipt a recipient sees, and matched just as strictly, because it
+ * is the only evidence a payout actually happened. Without it the bot fires /pay and assumes,
+ * which marks a withdrawal paid whether or not the bot had the money.
+ */
+export function parseOutgoingPayment(packet: unknown): OutgoingPayment | undefined {
+  if (packet === null || typeof packet !== 'object') return undefined;
+  const record = packet as Record<string, unknown>;
+  if (unwrap(record['isActionBar']) === true) return undefined;
+
+  const segments = componentSegments(record['content'] ?? record['message']);
+  if (!segments || segments.length !== 3) return undefined;
+
+  const [lead, currency, amount] = segments;
+  if (!lead || !currency || !amount) return undefined;
+  if (colorOf(lead) !== TEXT_COLOR || colorOf(amount) !== TEXT_COLOR) return undefined;
+  if (colorOf(currency) !== CURRENCY_COLOR) return undefined;
+  if (textOf(currency) !== CURRENCY_TEXT) return undefined;
+
+  const leadText = textOf(lead);
+  const amountText = textOf(amount);
+  if (leadText === undefined || amountText === undefined) return undefined;
+
+  const payee = YOU_PAID_PATTERN.exec(leadText)?.[1];
+  if (!payee || !USERNAME_PATTERN.test(payee)) return undefined;
+  if (!/^[1-9]\d*(?:\.\d+)?[KMBT]?$/.test(amountText)) return undefined;
+
+  return { payee, displayedAmount: amountText };
+}
+
+/**
+ * The interval of true values an abbreviated display can stand for: [low, low + step).
+ *
+ * "383K" is not 383000 exactly — it is anything from 383000 up to but not including 384000, and
+ * "1.2K" narrows that to a hundred. Knowing the interval is what lets a payout be confirmed
+ * without inventing a rounding rule: a bot that could only afford part of the amount reports a
+ * smaller figure, whose interval will not contain what was asked for.
+ */
+export function displayedAmountBounds(
+  displayed: string,
+): { readonly low: bigint; readonly step: bigint } | undefined {
+  const match = /^([1-9]\d*)(?:\.(\d+))?([KMBT])?$/.exec(displayed);
+  if (!match) return undefined;
+  const scales: Record<string, bigint> = {
+    '': 1n,
+    K: 1_000n,
+    M: 1_000_000n,
+    B: 1_000_000_000n,
+    T: 1_000_000_000_000n,
+  };
+  const unit = scales[match[3] ?? ''];
+  if (unit === undefined) return undefined;
+  const fraction = match[2] ?? '';
+  const denominator = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(`${match[1]}${fraction}`) * unit;
+  if (numerator % denominator !== 0n) return undefined;
+  const step = unit / denominator;
+  // A display finer than one whole unit cannot bound anything usefully.
+  if (step < 1n) return undefined;
+  return { low: numerator / denominator, step };
 }
 
 export function parsePaymentMessage(packet: unknown): ObservedPayment | undefined {
