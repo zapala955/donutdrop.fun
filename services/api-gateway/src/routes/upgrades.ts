@@ -130,6 +130,7 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
     minMultiplierBps: config.minMultiplierBps,
     maxMultiplierBps: config.maxMultiplierBps,
     maxWinChancePpm: config.maxWinChancePpm,
+    maxStakeMinor: config.upgradeMaxStakeMinor.toString(),
     currency: null,
     itemValuesAreFixed: true,
     // The upgrader takes either a custody lot or cash off the wallet. The client needs to know
@@ -235,6 +236,13 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
 
         if (body.balanceStake) {
           stakeValue = BigInt(body.balanceStake.balanceMinor);
+          if (stakeValue > config.upgradeMaxStakeMinor) {
+            throw new AppError(
+              400,
+              'STAKE_TOO_LARGE',
+              `The most a single upgrade may stake is ${config.upgradeMaxStakeMinor.toString()}`,
+            );
+          }
           await client.query(
             `INSERT INTO user_wallets(user_id, balance_minor) VALUES ($1, 0)
              ON CONFLICT (user_id) DO NOTHING`,
@@ -579,9 +587,8 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
          * than stringified: String() on an unexpected object would silently produce
          * "[object Object]" and BigInt would then throw inside a settled round's response. */
         const rawPayout = round['target_value_minor'];
-        const payout = typeof rawPayout === 'string' || typeof rawPayout === 'number'
-          ? BigInt(rawPayout)
-          : 0n;
+        const payout =
+          typeof rawPayout === 'string' || typeof rawPayout === 'number' ? BigInt(rawPayout) : 0n;
         const stake = settled.stakeValue;
         void announceWin(
           config,

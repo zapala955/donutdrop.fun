@@ -615,3 +615,22 @@ test('refuses a name carrying more than the one leading dot Floodgate adds', () 
   assert.equal(parsePaymentMessage(forged), undefined);
   assert.equal(parsePaymentNotice(forged), undefined);
 });
+
+test('reads a deposit receipt in billions', () => {
+  /* The scale ladder runs to T, but nothing had ever exercised B on the deposit path. A billion
+   * arriving as an unparsed notice would be a payment the bot saw and never reported. */
+  const billions: unknown = {
+    isActionBar: false,
+    content: {
+      text: '',
+      extra: [
+        { color: 'white', text: 'q9w paid you ' },
+        { color: '#00FF00', text: '$ ' },
+        { color: 'white', text: '1.5B' },
+      ],
+    },
+  };
+  assert.deepEqual(parsePaymentNotice(billions), { payer: 'q9w', displayedAmount: '1.5B' });
+  // Abbreviated, so there is no exact figure to take — the gateway expands the displayed one.
+  assert.equal(parsePaymentMessage(billions), undefined);
+});

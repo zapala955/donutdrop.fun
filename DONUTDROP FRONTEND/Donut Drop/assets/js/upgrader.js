@@ -278,7 +278,20 @@ const STAKE_STEPS = [
   ['+$100K', 100_000],
   ['+$1M', 1_000_000],
   ['+$10M', 10_000_000],
+  // Added with the billion ceiling: reaching it from zero in ten-million steps is a hundred
+  // presses, which is not a control, it is a chore.
+  ['+$100M', 100_000_000],
 ];
+
+/* The ceiling the server enforces, or no ceiling if it has not said yet.
+ *
+ * Read from the config the upgrader already fetches rather than written here, because a limit
+ * typed in two places is a limit that disagrees with itself the first time one of them changes.
+ * Until it arrives the balance is the only clamp, which is exactly what it was before. */
+function maxStake() {
+  const published = Number(state.upgradeConfig?.maxStakeMinor ?? 0);
+  return Number.isFinite(published) && published > 0 ? published : Infinity;
+}
 
 function buildChips() {
   const chips = $('#stakeChips', root);
@@ -309,7 +322,7 @@ function buildChips() {
 function setStake(value) {
   const balance = Math.trunc(state.balance);
   stakeInputValid = true;
-  cashStake = Math.max(0, Math.min(Math.trunc(Number(value) || 0), balance));
+  cashStake = Math.max(0, Math.min(Math.trunc(Number(value) || 0), balance, maxStake()));
   const input = $('#stakeIn', root);
   if (input) input.value = formatAmountInput(cashStake);
   dropIneligibleTarget();

@@ -461,6 +461,13 @@ const environmentSchema = z
      * that got past config would otherwise be permanent on that duel. */
     SKILL_DUEL_ENABLED: booleanString,
     SKILL_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    /* The most a single upgrade may risk.
+     *
+     * Previously there was no ceiling at all: a stake was clamped to the player's balance and
+     * nothing else, so the largest possible bet was however much the largest account happened to
+     * be holding. The house carries the other side of an upgrade, and an unbounded stake is an
+     * unbounded liability on one roll. */
+    UPGRADE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -1097,6 +1104,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     physicalCustodyEnabled: env.PHYSICAL_CUSTODY_ENABLED,
     donutsmpApiBaseUrl: env.DONUTSMP_API_BASE_URL,
     donutsmpApiKey: env.DONUTSMP_API_KEY,
+    upgradeMaxStakeMinor: BigInt(env.UPGRADE_MAX_STAKE_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

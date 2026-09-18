@@ -1,6 +1,6 @@
 /* app.js — entry point: shell wiring, hash router, home + crates + inventory. */
 import {
-  RARITY, IMG, UPGRADER,
+  RARITY, IMG,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -44,6 +44,18 @@ import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
 
+/** The biggest multiplier the server will quote, as a player would say it. */
+function topMultiplierLabel() {
+  const bps = Number(state.upgradeConfig?.maxMultiplierBps ?? 0);
+  return Number.isFinite(bps) && bps > 10_000 ? `${Math.floor(bps / 10_000)}×` : '—';
+}
+
+/** The upgrader's published stake ceiling, or an em dash before the server has said. */
+function maxStakeLabel() {
+  const published = Number(state.upgradeConfig?.maxStakeMinor ?? 0);
+  return Number.isFinite(published) && published > 0 ? money(published) : '—';
+}
+
 /** A countable thing's size, or an em dash while it is still unknown. */
 function count(collection) {
   const size = Array.isArray(collection)
@@ -82,8 +94,7 @@ function mountHome(view) {
     { ac: '#ffaa00', h: 'Crates',      art: 'chest.png',       href: '#/crates',
       stats: [[count(state.cases), 'CRATES'], [count(RARITY), 'RARITIES']] },
     { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '#/upgrader',
-      stats: [[money(UPGRADER.stakes[0]), 'MIN STAKE'],
-              [money(UPGRADER.stakes[UPGRADER.stakes.length - 1]), 'MAX STAKE']] },
+      stats: [[maxStakeLabel(), 'MAX STAKE'], [topMultiplierLabel(), 'TOP PAYOUT']] },
     { ac: '#ffd700', h: 'Piggy Bank',  art: 'gold_block.png',  href: '#/piggy',
       stats: [['FIXED', 'RETURN'], ['NO', 'RISK']] },
     { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '#/war',
@@ -497,8 +508,9 @@ async function openDepositModal() {
     <div class="auth__field auth__field--static">
       <span class="auth__value auth__value--lg mono">${escapeText(info.command)}</span>
     </div>
-    <p class="auth__note">Use round amounts such as 1M or 5M. DonutSMP shortens other large
-      figures in chat, and the bot can only credit what the receipt actually shows.</p>
+    <p class="auth__note">Round amounts only &mdash; 1M, 250M, 1B. DonutSMP shortens large figures
+      in chat, so a payment of 1,234,567,890 arrives as &ldquo;1.2B&rdquo; and is credited as
+      1,200,000,000. The bot can only credit what the receipt shows.</p>
     <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
 
   $('#depositCopy', host).addEventListener('click', async (event) => {
