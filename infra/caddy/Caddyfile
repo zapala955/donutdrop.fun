@@ -1,5 +1,22 @@
 {
 	admin off
+
+	# ── who is allowed to say who the visitor is ──
+	#
+	# Cloudflare terminates TLS in front of this proxy, so the peer on every connection is one of
+	# its edges rather than a player. Naming those ranges trusted is what lets {client_ip} resolve
+	# to the visitor instead of to Cloudflare, and {client_ip} is what everything downstream keys
+	# on: nginx's rate limit zone, the API's per-IP budgets, and the hashed address in the audit
+	# log. Without it every player shares one bucket, and five sign-in attempts from one person
+	# lock out everybody behind the same Cloudflare data centre.
+	#
+	# CF-Connecting-IP rather than X-Forwarded-For: Cloudflare sets both, but X-Forwarded-For is a
+	# chain a client can prepend to, and CF-Connecting-IP is a single value Cloudflare writes
+	# itself.
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
 }
 
 www.donutdrop.fun {
@@ -9,12 +26,47 @@ www.donutdrop.fun {
 donutdrop.fun {
 	encode zstd gzip
 
-	reverse_proxy 127.0.0.1:8080 {
-		# Never pass client-supplied forwarding headers into the trusted Docker edge.
-		header_up -Forwarded
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
-		header_up Host {host}
+	# ── only Cloudflare may reach this origin ──
+	#
+	# A proxy in front of a server does not make the server unroutable. This machine's address is
+	# public, and until this block existed anyone who learned it could send a signup, a login or a
+	# withdrawal straight to the origin and skip every Cloudflare rule, every bot check and every
+	# WAF decision in one hop. Turning a protection on in a dashboard means nothing while the door
+	# behind it is still open.
+	#
+	# Matched on remote_ip, which is the real TCP peer — deliberately not client_ip, which is
+	# derived from a header and would let a forged CF-Connecting-IP walk straight through the
+	# thing meant to stop it.
+	#
+	# The two address families are separate lines because the conditions inside a named matcher
+	# are ANDed: a request is refused only when it is in neither list. Refresh both from
+	# https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6 — last checked
+	# 2026-09-18, and infra/vps/check-cloudflare-ips.sh reports drift.
+	#
+	# The ACME path is exempt so a certificate renewal can never be gated on the proxy in front of
+	# it; that route only ever serves a token this server was told to publish minutes earlier.
+	#
+	# TAKING DONUTDROP.FUN OFF CLOUDFLARE (grey cloud in DNS) MAKES THIS REFUSE EVERY REQUEST.
+	# Comment out the `handle @direct` block first, reload Caddy, and only then change DNS.
+	@direct {
+		not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+		not remote_ip 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		not path /.well-known/acme-challenge/*
+	}
+	handle @direct {
+		respond "This origin is reachable only through Cloudflare." 403
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8080 {
+			# Never pass client-supplied forwarding headers into the trusted Docker edge.
+			header_up -Forwarded
+			# The visitor, resolved through the trusted_proxies list above — not the Cloudflare
+			# edge that happens to be carrying them.
+			header_up X-Real-IP {client_ip}
+			header_up X-Forwarded-For {client_ip}
+			header_up X-Forwarded-Proto {scheme}
+			header_up Host {host}
+		}
 	}
 }
