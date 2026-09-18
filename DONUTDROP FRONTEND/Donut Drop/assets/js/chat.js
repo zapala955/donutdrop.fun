@@ -14,10 +14,10 @@
  * NOTHING IN THIS LOG IS INVENTED
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * Every line is a server fact: a stored message, a settled round, a recorded tip, a real pot. There
- * are no simulated players, no scripted banter and no fake wins. The one simulated figure anywhere
- * on this platform is the online counter in the header, which says so in its own module. A chat
- * that pads itself with invented conversation is a chat where the real messages stop meaning
- * anything, and on a site where the next line might be a $50M win that matters more than usual.
+ * are no simulated players, no scripted banter and no fake wins — and since the header's invented
+ * online counter was removed, nothing anywhere on this platform is simulated any more. A chat that
+ * pads itself with invented conversation is a chat where the real messages stop meaning anything,
+ * and on a site where the next line might be a $50M win that matters more than usual.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * INNERHTML IS NEVER USED HERE
@@ -31,7 +31,6 @@ import { $, el, money, parseAmount, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api } from './api.js';
-import { bindOnlineCount } from './online-count.js';
 
 const POLL_MS = 6000;
 const RAIN_POLL_MS = 8000;
@@ -59,10 +58,6 @@ export function initChat() {
 
   initDock();
   initRain();
-
-  /* The header counter. It is the only simulated number on the site and it is bound to a text node
-   * rather than re-rendering the badge, so a three-digit figure changing cannot reflow the rail. */
-  bindOnlineCount($('#onlineCount'));
 
   if (form) {
     form.addEventListener('submit', onSubmit);

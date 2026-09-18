@@ -178,35 +178,3 @@ export const ARENA_NOTE = {
   blurb: 'Your buy-in becomes your snake — more money, longer body. Eat what is on the floor to grow what you are carrying, and whatever dies near you is yours if you get there first.',
   rules: 'Two ways out with the money: steer through one of the four moving gates on the wall, or hold a straight line for three seconds. Turning or boosting resets the channel, so extracting means telling the room exactly where you are going.',
 };
-
-export const STAKES = [10_000, 50_000, 250_000, 1_000_000, 5_000_000];
-
-export const PLAYERS = [
-  'xX_CreeperAw_Xx', 'notalt', 'diamond_addict', 'BastionBrute', 'pearl_clutch', 'ClutchOrKick',
-  'shaft_miner', 'netherite_diff', 'endermain', 'TotemPop_', 'raid_farmer', 'kelp', '360noscope',
-  'stackordie', 'obsidian_', 'void_walker', 'GappleGod', 'tnt_dupe', 'shulker_hoard', 'anvil_drop',
-];
-
-export const RANKS = [
-  { name: 'BRONZE III', color: '#c08457' }, { name: 'BRONZE I', color: '#c08457' },
-  { name: 'SILVER II', color: '#b6c2c9' }, { name: 'GOLD I', color: '#fbbf24' },
-  { name: 'GOLD III', color: '#fbbf24' }, { name: 'DIAMOND', color: '#38bdf8' },
-];
-
-export const CHAT_LINES = [
-  'just hit 5x on the upgrader', 'who wants a 1v1 for 500k', 'bro the egg is 150m now',
-  'lost 3 stacks in cart circuit lol', 'rain when', 'serpent is free money if you dont boost',
-  'pulled a beacon from a raid crate', 'gg', 'someone teach me chunk claim',
-  'i have 14k what should i do', '5x7', 'yes', 'bet', 'anyone selling elytra',
-  'that spawner pull was insane', 'nether crate is cursed today', 'up 12m today lets gooo',
-];
-
-export const START = {
-  balance: 12_400_000, level: 37, xp: 620, xpNext: 1000, keys: 3,
-  /* Synthetic referrals so the invite page is not an empty shell in the mockup. */
-  refs: [
-    { name: 'kelp', active: true, joined: '3 weeks ago' },
-    { name: 'obsidian_', active: true, joined: '9 days ago' },
-    { name: 'tnt_dupe', active: false, joined: '2 months ago' },
-  ],
-};

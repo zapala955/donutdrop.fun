@@ -243,8 +243,8 @@ function celebrate(win) {
  * animating on the compositor is how a celebration turns into a stutter.
  *
  * Seeded from an integer counter rather than Math.random for the same reason the arena's particles
- * are — the platform's one simulated figure is the online counter, and keeping chance out of
- * everything else makes that boundary easy to check.
+ * are: nothing on this platform is simulated, and keeping chance out of the decoration too makes
+ * that easy to check rather than something you have to take on trust.
  */
 function rainCoins(canvas) {
   const context = canvas.getContext('2d');

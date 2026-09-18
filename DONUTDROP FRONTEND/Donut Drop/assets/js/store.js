@@ -563,6 +563,61 @@ export async function refreshBalance(notify = true) {
   return state.balanceMinor;
 }
 
+/* ─────────── money that arrives from outside the browser ───────────
+ *
+ * Every other credit on this platform is the answer to something this tab asked for: you open a
+ * crate, the response carries the payout. A deposit is not like that. Somebody pays the bot in
+ * game, the bot reports the chat receipt and the gateway credits the account — all of it finishes
+ * without this tab being involved, so there is no response to react to and nothing to await. The
+ * only way the page finds out is by asking, which is what this does.
+ *
+ * The ledger is polled rather than the balance, because a balance alone cannot say what moved. A
+ * player who deposits 1M while a duel settles sees one number change and has to guess which event
+ * it was; the ledger names it, and the toast can too.
+ */
+const DEPOSIT_KINDS = new Set(['cash_deposit', 'pay_login_deposit']);
+
+/** The newest row already accounted for. Null means "not yet established for this session". */
+let depositWatermark = null;
+
+/**
+ * Returns deposits credited since the previous call, oldest first.
+ *
+ * The first call after a login only sets the watermark and reports nothing. History is not news,
+ * and announcing every past deposit the moment somebody signs in would train people to dismiss the
+ * toast that actually matters.
+ */
+export async function pollDeposits() {
+  if (!state.authenticated) {
+    depositWatermark = null;
+    return [];
+  }
+  const result = await api.get('/v1/balance/transactions?limit=25');
+  const rows = result.transactions || [];
+  if (!rows.length) return [];
+
+  if (depositWatermark === null) {
+    depositWatermark = rows[0].id;
+    return [];
+  }
+  if (rows[0].id === depositWatermark) return [];
+
+  const fresh = [];
+  for (const row of rows) {
+    if (row.id === depositWatermark) break;
+    if (DEPOSIT_KINDS.has(row.kind)) fresh.push(row);
+  }
+  depositWatermark = rows[0].id;
+
+  /* The newest row carries the balance the server computed after it, so the pill can be corrected
+   * from what we already fetched instead of racing a second request against the next round. */
+  state.balanceMinor = String(rows[0].balance_after_minor ?? state.balanceMinor);
+  state.balance = toSafeNumber(state.balanceMinor);
+  emit('balance');
+
+  return fresh.reverse();
+}
+
 export async function sellInventoryItem(item, quantity = 1) {
   const result = await api.post(
     '/v1/inventory/' + encodeURIComponent(item.lotId) + '/sell',

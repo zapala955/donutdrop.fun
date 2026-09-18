@@ -5,7 +5,7 @@ import {
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
-  cashDepositInfo, refreshActivity, refreshBalance,
+  cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage,
@@ -37,7 +37,7 @@ import { mountFair } from './fair.js';
 import { initTicker } from './ticker.js';
 import { initChat } from './chat.js';
 import { initVaultJackpot } from './vault-jackpot.js';
-import { initAudioEngine, setMuted, isMuted } from './audio-engine.js';
+import { initAudioEngine, setMuted, isMuted, playSound } from './audio-engine.js';
 import { mountHero3d } from './hero3d.js';
 import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
@@ -679,6 +679,38 @@ setInterval(() => {
   if (state.authenticated) refreshes.push(refreshBalance());
   Promise.allSettled(refreshes).catch(() => undefined);
 }, 15_000);
+
+/* Deposits land while the player is staring at the page waiting for them, so they get their own
+ * beat rather than sharing the slow one above. Six seconds is the same cadence the chat rail
+ * already polls at, and the two together stay well inside the gateway's 120-a-minute budget. */
+const DEPOSIT_POLL_MS = 6000;
+/* A backlog is announced, not dumped: if a run of deposits landed while the tab was hidden, the
+ * first few are named and the rest are counted. Twenty toasts is not twenty times the information. */
+const MAX_DEPOSIT_TOASTS = 3;
+
+setInterval(async () => {
+  if (document.hidden || !state.authenticated) return;
+  let credited;
+  try {
+    credited = await pollDeposits();
+  } catch {
+    return; // A missed tick costs six seconds; the watermark is untouched, so nothing is lost.
+  }
+  if (!credited.length) return;
+
+  for (const deposit of credited.slice(0, MAX_DEPOSIT_TOASTS)) {
+    toast({
+      kind: 'win',
+      title: deposit.kind === 'pay_login_deposit' ? 'Sign-in payment credited' : 'Deposit credited',
+      body: money(Number(deposit.amountMinor ?? deposit.amount_minor ?? 0)),
+    });
+  }
+  const hidden = credited.length - MAX_DEPOSIT_TOASTS;
+  if (hidden > 0) {
+    toast({ kind: 'win', title: 'More deposits credited', body: `and ${hidden} more` });
+  }
+  playSound('coin');
+}, DEPOSIT_POLL_MS);
 
 /* the animation test bench — hidden until Ctrl+Alt+D or ?dev=1 */
 initDevMenu(document.getElementById('devRoot'));

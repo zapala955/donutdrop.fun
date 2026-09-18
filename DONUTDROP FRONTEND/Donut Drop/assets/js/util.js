@@ -1,5 +1,5 @@
 /* util.js — formatting, DOM helpers, shared item markup. */
-import { RARITY, PLAYERS, RANKS } from './data.js';
+import { RARITY } from './data.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -111,19 +111,6 @@ export function itemTile(item, opts = {}) {
     (value ? '<div class="tile__val">' + money(item.value) + '</div>' : '') +
     (sub ? '<div class="tile__sub">' + sub + '</div>' : '');
   return n;
-}
-
-/* Deterministic-ish fake player identity for feeds and chat. */
-export function fakePlayer() {
-  const name = pick(PLAYERS);
-  const rank = pick(RANKS);
-  return { name, rank };
-}
-
-/* Mock provably-fair commitment shown before every roll. */
-export function fairSeed() {
-  const hex = (n) => Array.from({ length: n }, () => '0123456789abcdef'[(Math.random() * 16) | 0]).join('');
-  return { server: hex(40), client: hex(16), nonce: (Math.random() * 99999) | 0 };
 }
 
 /* Pixel-art sprites must never be smoothed; enforce at the element level too. */

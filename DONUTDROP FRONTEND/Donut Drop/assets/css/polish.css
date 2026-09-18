@@ -38,37 +38,6 @@
 
 /* ═════════════════════════ 1 · the chat rail ═════════════════════════ */
 
-/* ── the counter ──
-   It was rendering the word LIVE because the old build wrote a status string into the slot the
-   number now owns. The badge is a dot, a figure and a label, on one baseline, in a tabular font so
-   a three-digit count changing cannot nudge the label sideways. */
-.chat__online {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--glass);
-  border: 1px solid var(--ob-line);
-  font-size: .625rem;
-}
-.chat__online i {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #35d07f;
-  box-shadow: 0 0 8px rgba(53, 208, 127, .9);
-  animation: pulseDot 2.4s ease-in-out infinite;
-  flex: 0 0 auto;
-}
-.chat__online b {
-  color: var(--text); font-weight: 800; font-size: .75rem;
-  font-family: var(--mono); font-variant-numeric: tabular-nums;
-}
-.chat__online em {
-  font-style: normal; letter-spacing: .16em; color: var(--faint); font-size: .5625rem;
-}
-@keyframes pulseDot {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .45; }
-}
-
 .chat__head {
   background: linear-gradient(180deg, rgba(18, 18, 22, .9), rgba(10, 10, 12, .7));
   border-bottom: 1px solid var(--ob-line);
@@ -313,8 +282,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hero::after,
-  .vjp__fill,
-  .chat__online i { animation: none; }
+  .vjp__fill { animation: none; }
   .promo,
   .top .btn--go,
   .top .btn--withdraw,

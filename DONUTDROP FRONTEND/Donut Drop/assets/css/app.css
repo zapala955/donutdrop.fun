@@ -353,9 +353,6 @@ img { display: block; max-width: 100%; }
   padding: 9px 13px; font-size: .75rem; letter-spacing: .14em; color: var(--faint);
   border-bottom: 1px solid var(--line);
 }
-.chat__online { display: flex; align-items: center; gap: 4px; }
-.chat__online i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
-.chat__online b { color: var(--muted); font-weight: 600; }
 .chat__log { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
 .chat__log::-webkit-scrollbar { width: 6px; }
 .chat__log::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; }
