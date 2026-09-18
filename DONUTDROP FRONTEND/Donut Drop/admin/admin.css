@@ -96,6 +96,11 @@ body {
 .btn--danger:hover:not(:disabled) { background: rgba(224, 86, 63, .32); border-color: var(--danger); }
 
 /* ── the gate (pre-session) ── */
+/* The page toggles `hidden` to swap between its three states, and an author `display` beats the
+   browser's [hidden] { display: none }. Without this the console renders underneath a gate that
+   says it is still verifying the link — which is exactly what it did. */
+[hidden] { display: none !important; }
+
 .gate { display: grid; place-items: center; min-height: 70vh; padding: var(--pad); }
 .gate__card {
   width: min(520px, 100%);
