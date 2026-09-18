@@ -239,3 +239,51 @@ ${detail}`);
     }
   });
 });
+
+describe('the admin console is never served stale', () => {
+  const nginx = () =>
+    readFile(path.resolve(import.meta.dirname, '../../../infra/nginx/nginx.conf'), 'utf8');
+
+  it('caches its script exactly as it caches the markup that loads it', async () => {
+    /* The bug this exists for.
+     *
+     * /admin/index.html was no-store and /admin/admin.js was "max-age=0, must-revalidate". The
+     * markup was therefore always fresh while the script it loads could be answered from a cache,
+     * so a deploy could land new HTML wired to old JavaScript. That fails in total silence: the
+     * new button renders, the handler that would bind it never arrives, and clicking does nothing
+     * at all — no error, no console output, nothing to search for.
+     *
+     * "must-revalidate" did not prevent it because it is a promise to the browser, and a CDN in
+     * front of the origin may cache the response and rewrite the max-age it passes on. The two
+     * files have to carry the SAME instruction, and it has to be the one nothing caches.
+     */
+    const conf = await nginx();
+    const block = (pattern: RegExp): string => {
+      const start = conf.search(pattern);
+      assert.ok(start >= 0, `no location block matching ${pattern}`);
+      const open = conf.indexOf('{', start);
+      return conf.slice(open, conf.indexOf('}', open));
+    };
+    const cacheControl = (body: string): string => {
+      const found = /add_header\s+Cache-Control\s+"([^"]*)"/.exec(body);
+      assert.ok(found, 'a location block sets no Cache-Control');
+      return found[1] ?? '';
+    };
+
+    const markup = cacheControl(block(/location ~ \^\/admin\/\(\?:index\\.html\)\?\$/));
+    const bundle = cacheControl(block(/location ~ \^\/admin\/\(\?:admin\\.js\|admin\\.css\)\$/));
+    assert.equal(bundle, markup, 'the admin script and its HTML disagree about caching');
+    assert.equal(bundle, 'no-store');
+  });
+
+  it('asks for its bundle by a versioned url', async () => {
+    /* Belt to the header's braces, and the only half that helps while a cache already holds a
+     * copy: a changed URL is a key nothing has an answer for. */
+    const html = await readFile(path.join(frontend, 'admin/index.html'), 'utf8');
+    const scripts = [...html.matchAll(/<script[^>]+src="(admin\.js[^"]*)"/g)].map((m) => m[1]);
+    const styles = [...html.matchAll(/<link[^>]+href="(admin\.css[^"]*)"/g)].map((m) => m[1]);
+    assert.equal(scripts.length, 1, 'expected exactly one admin.js script tag');
+    assert.equal(styles.length, 1, 'expected exactly one admin.css link tag');
+    for (const asset of [...scripts, ...styles]) assert.match(asset ?? '', /\?v=\d+$/, asset);
+  });
+});
