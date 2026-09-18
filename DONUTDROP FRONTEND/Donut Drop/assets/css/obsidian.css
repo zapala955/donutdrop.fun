@@ -726,32 +726,11 @@ html {
    What replaced the paragraphs. Three shapes, one material: a figure in mono over a label in
    letterspaced caps, so the eye lands on the number first and reads the unit second. */
 
-/* The hero's three guarantees. */
-.herostats {
-  list-style: none;
-  margin: 0 0 22px;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ob-gap);
-}
-.herostats li {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  /* A chip is never allowed to be wider than the column it sits in: below that it wraps its own
-     label rather than pushing the hero sideways. */
-  max-width: 100%;
-  min-width: 0;
-  flex-wrap: wrap;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: rgba(18, 18, 22, .72);
-  border: 1px solid var(--ob-line);
-  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .06);
-}
-.herostats b    { color: var(--gold-bright); font-size: .875rem; font-weight: 800; letter-spacing: .04em; }
-.herostats span { color: var(--muted); font-size: .75rem; }
+
+/* The chip row that stood between the headline and the buttons carried 22px of its own bottom
+   margin, so removing it left the CTA sitting 14px under a display headline — tight enough to read
+   as a mistake. This is that spacing, minus the chips. */
+.hero__cta { margin-top: 12px; }
 
 /* The promo cards' three-slot strip. */
 .statstrip {
