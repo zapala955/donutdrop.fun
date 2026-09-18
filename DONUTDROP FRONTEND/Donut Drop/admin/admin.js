@@ -357,6 +357,40 @@ async function loadItems() {
   );
 }
 
+/**
+ * Publishes the upgrader's fixed prize ladder: fifty-one denominations from $100K to $10B.
+ *
+ * The prices are fixed in the server's code and nothing about them is sent from here — this posts
+ * a reason and nothing else. A console that could name the figures would be the bulk price-setting
+ * tool the catalogue rules exist to prevent, and the reason field is what makes a publish at 3am
+ * answerable at 9am.
+ *
+ * Safe to press twice. Rungs already at the right price are left alone, and a publish that changed
+ * nothing writes no audit entry.
+ */
+async function publishLadder() {
+  const reason = await confirmAction(
+    'Publish the upgrader prize ladder: 51 fixed denominations from $100K to $10B. '
+      + 'Prices already correct are left alone, but every rung is re-enabled — '
+      + 'including any you switched off by hand.',
+  );
+  if (!reason) return;
+  const button = $('publishLadder');
+  button.disabled = true;
+  try {
+    const result = await api.post('/v1/admin/catalog-ladder', { reason });
+    toast(
+      result.created + ' created, ' + result.repriced + ' repriced, '
+        + result.unchanged + ' already at the right price.',
+    );
+    await show('items');
+  } catch (error) {
+    toast(error.message || 'Could not publish the ladder.', 'bad');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 const LOADERS = {
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
@@ -457,6 +491,7 @@ async function start() {
   for (const button of document.querySelectorAll('[data-refresh]')) {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }
+  $('publishLadder').addEventListener('click', () => void publishLadder());
   $('playerSearch').addEventListener('submit', (event) => {
     event.preventDefault();
     void show('players');

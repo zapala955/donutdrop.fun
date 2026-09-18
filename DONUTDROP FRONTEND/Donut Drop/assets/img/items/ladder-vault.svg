@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="Vault">
+  <!-- Tier 4 - $100M to $800M. A vault door: money that is kept rather than carried. The arch is
+       the silhouette cue; nothing else on the ladder has a rounded top over a flat base. -->
+  <g fill="#2a2a32">
+    <rect x="5" y="1" width="6" height="1"/><rect x="3" y="2" width="10" height="1"/>
+    <rect x="2" y="3" width="12" height="12"/>
+  </g>
+  <g fill="#585868">
+    <rect x="5" y="2" width="6" height="1"/><rect x="3" y="3" width="10" height="11"/>
+  </g>
+  <g fill="#8a6500">
+    <rect x="6" y="4" width="4" height="1"/><rect x="5" y="5" width="6" height="6"/>
+    <rect x="6" y="11" width="4" height="1"/>
+  </g>
+  <g fill="#ffd700">
+    <rect x="6" y="5" width="4" height="6"/><rect x="5" y="6" width="6" height="4"/>
+  </g>
+  <g fill="#ffaa00">
+    <rect x="7" y="7" width="2" height="2"/><rect x="7" y="2" width="2" height="3"/>
+  </g>
+  <g fill="#fff3a8"><rect x="6" y="6" width="1" height="2"/></g>
+</svg>

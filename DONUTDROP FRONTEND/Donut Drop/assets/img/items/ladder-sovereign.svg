@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="Sovereign">
+  <!-- The ceiling - $10,000,000,000. The only rung nothing can be upgraded out of, so it gets art
+       of its own rather than a sixth coin. A crown: the shape is legible at tile size and shares
+       no silhouette with the five tiers below it. -->
+  <g fill="#8a6500">
+    <rect x="1" y="3" width="2" height="9"/><rect x="13" y="3" width="2" height="9"/>
+    <rect x="7" y="1" width="2" height="11"/>
+    <rect x="3" y="7" width="2" height="5"/><rect x="11" y="7" width="2" height="5"/>
+    <rect x="5" y="5" width="2" height="7"/><rect x="9" y="5" width="2" height="7"/>
+    <rect x="1" y="12" width="14" height="3"/>
+  </g>
+  <g fill="#ffd700">
+    <rect x="1" y="4" width="2" height="7"/><rect x="13" y="4" width="2" height="7"/>
+    <rect x="7" y="2" width="2" height="9"/>
+    <rect x="3" y="8" width="2" height="3"/><rect x="11" y="8" width="2" height="3"/>
+    <rect x="5" y="6" width="2" height="5"/><rect x="9" y="6" width="2" height="5"/>
+    <rect x="1" y="12" width="14" height="2"/>
+  </g>
+  <g fill="#ffaa00">
+    <rect x="1" y="13" width="14" height="1"/><rect x="1" y="11" width="14" height="1"/>
+  </g>
+  <g fill="#fff3a8">
+    <rect x="1" y="12" width="14" height="1"/>
+    <rect x="7" y="2" width="1" height="4"/><rect x="1" y="4" width="1" height="3"/>
+  </g>
+  <g fill="#ff5a5a"><rect x="7" y="7" width="2" height="2"/></g>
+  <g fill="#66e0ff"><rect x="3" y="12" width="1" height="1"/><rect x="12" y="12" width="1" height="1"/></g>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="Reserve">
+  <!-- Tier 5 - $1B to $8B. A pallet of bullion, stacked in a pyramid: the widest silhouette on the
+       ladder, and the only one that is wider at the bottom than at the top. -->
+  <g fill="#8a6500">
+    <rect x="0" y="11" width="16" height="4"/>
+    <rect x="2" y="7" width="12" height="4"/>
+    <rect x="4" y="3" width="8" height="4"/>
+  </g>
+  <g fill="#ffd700">
+    <rect x="1" y="12" width="4" height="2"/><rect x="6" y="12" width="4" height="2"/>
+    <rect x="11" y="12" width="4" height="2"/>
+    <rect x="3" y="8" width="4" height="2"/><rect x="9" y="8" width="4" height="2"/>
+    <rect x="6" y="4" width="4" height="2"/>
+  </g>
+  <g fill="#ffaa00">
+    <rect x="1" y="14" width="4" height="1"/><rect x="6" y="14" width="4" height="1"/>
+    <rect x="11" y="14" width="4" height="1"/>
+    <rect x="3" y="10" width="4" height="1"/><rect x="9" y="10" width="4" height="1"/>
+    <rect x="6" y="6" width="4" height="1"/>
+  </g>
+  <g fill="#fff3a8">
+    <rect x="1" y="12" width="4" height="1"/><rect x="6" y="12" width="4" height="1"/>
+    <rect x="11" y="12" width="4" height="1"/>
+    <rect x="3" y="8" width="4" height="1"/><rect x="9" y="8" width="4" height="1"/>
+    <rect x="6" y="4" width="4" height="1"/>
+  </g>
+</svg>

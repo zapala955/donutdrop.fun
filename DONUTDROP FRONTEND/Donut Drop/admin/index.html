@@ -100,6 +100,9 @@
     <section class="panel" data-panel="items" hidden>
       <div class="panel__head">
         <h2>Observed items</h2>
+        <!-- The upgrader's fixed prize ladder is set here rather than in a migration or a seed
+             file, because every catalogue price has to carry an operator and a reason. -->
+        <button class="btn" type="button" id="publishLadder">Publish upgrade ladder</button>
         <button class="btn" type="button" data-refresh="items">Refresh</button>
       </div>
       <div class="tablewrap"><table class="grid" id="itemTable"></table></div>

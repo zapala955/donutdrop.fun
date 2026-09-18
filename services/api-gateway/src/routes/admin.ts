@@ -10,6 +10,17 @@ import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
+import {
+  LADDER_CEILING_MINOR,
+  LADDER_FLOOR_MINOR,
+  UPGRADE_LADDER,
+  ladderMetadataFor,
+} from '../lib/upgrade-ladder.js';
+
+/* The ladder is one standing thing rather than a row, so every publish audits against the same
+ * target and reads back as one object's history. `audit_log.target_id` is a varchar, so this can
+ * say what it is rather than being a uuid somebody has to look up. */
+const LADDER_ID = 'upgrade-ladder';
 
 const catalogCreateSchema = z
   .object({
@@ -37,6 +48,10 @@ const catalogUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
+/* The ladder's prices are fixed in code, so the operator supplies nothing but the reason. There is
+ * deliberately no way to pass values here: a publish that could be handed arbitrary figures would
+ * be the bulk price-setting endpoint the catalogue rules exist to prevent. */
+const catalogLadderSchema = z.object({ reason: safeText(3, 256) }).strict();
 const payoutDecisionSchema = z.object({ reason: safeText(3, 256) }).strict();
 const stockSchema = z
   .object({
@@ -239,6 +254,153 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       return reply.code(201).send({ item: result });
     },
   );
+
+  /**
+   * Publishes the upgrader's fixed-price ladder: fifty-one denominations, $100K to $10B.
+   *
+   * WHY THIS IS A ROUTE AND NOT A MIGRATION OR A SEED FILE
+   * -----------------------------------------------------
+   * Both of those paths are closed on purpose. `scripts/seed.ts` refuses to load a catalogue from
+   * disk and `tests/empty-catalog.test.ts` asserts that no migration inserts `catalog_items`,
+   * because `unit_value_minor` is the figure the house pays out on: a price with no authenticated
+   * actor behind it is a payout nobody can be asked about. Fifty-one prices deserve that rule more
+   * than one does, not less — so the ladder goes through the same admin session, the same reason
+   * field and the same price-history table as a hand-created item.
+   *
+   * WHY ONE AUDIT ENTRY AND NOT FIFTY-ONE
+   * -------------------------------------
+   * Fifty-one entries would be identical but for the target id, and the thing worth proving is
+   * that ONE operator set THIS whole ladder at THIS moment for THIS reason. That is one event, and
+   * one hash-chained record of it carries every rung's fingerprint and value. The per-item
+   * provenance the price-history table exists for is still written per item.
+   *
+   * REPLAYING IS SAFE
+   * -----------------
+   * Rows are keyed by a fingerprint derived from the value under our own namespace, so this can
+   * only ever touch rungs it created — never an item a bot observed or an operator typed. A second
+   * publish with nothing changed writes no price history and no audit entry at all, which is why
+   * it needs no idempotency key: there is no second effect to suppress.
+   */
+  app.post('/v1/admin/catalog-ladder', { preHandler: guards.requireAdmin }, async (request) => {
+    const body = parseWith(catalogLadderSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const existing = await client.query<{
+        fingerprint: string;
+        id: string;
+        unit_value_minor: string;
+      }>(
+        `SELECT fingerprint, id, unit_value_minor FROM catalog_items
+          WHERE fingerprint = ANY($1::char(64)[]) FOR UPDATE`,
+        [UPGRADE_LADDER.map((rung) => rung.fingerprint)],
+      );
+      const byFingerprint = new Map(existing.rows.map((row) => [row.fingerprint, row]));
+
+      let created = 0;
+      let repriced = 0;
+      let unchanged = 0;
+      for (const rung of UPGRADE_LADDER) {
+        const metadata = JSON.stringify(ladderMetadataFor(rung));
+        const previous = byFingerprint.get(rung.fingerprint);
+        const itemId = previous?.id ?? randomUUID();
+        if (previous) {
+          /* `price_updated_at` only moves when the price does. It is what the client shows as the
+           * age of a quote, and a republish that changed nothing must not make every rung look
+           * freshly repriced. */
+          const changed = previous.unit_value_minor !== rung.unitValueMinor;
+          await client.query(
+            `UPDATE catalog_items SET
+               minecraft_name = $2, display_name = $3, image_url = $4,
+               unit_value_minor = $5, enabled = true, metadata = $6::jsonb,
+               price_updated_at = CASE WHEN $7::boolean THEN now() ELSE price_updated_at END,
+               updated_at = now()
+             WHERE id = $1`,
+            [
+              itemId,
+              rung.minecraftName,
+              rung.displayName,
+              rung.imageUrl,
+              rung.unitValueMinor,
+              metadata,
+              changed,
+            ],
+          );
+          if (changed) {
+            await client.query(
+              `INSERT INTO catalog_price_history
+                 (id, catalog_item_id, old_unit_value_minor, new_unit_value_minor, actor_user_id,
+                  reason)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                randomUUID(),
+                itemId,
+                previous.unit_value_minor,
+                rung.unitValueMinor,
+                actor,
+                body.reason,
+              ],
+            );
+            repriced += 1;
+          } else {
+            unchanged += 1;
+          }
+          continue;
+        }
+        await client.query(
+          `INSERT INTO catalog_items
+             (id, fingerprint, minecraft_name, display_name, image_url, unit_value_minor, enabled,
+              metadata, price_updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, true, $7::jsonb, now())`,
+          [
+            itemId,
+            rung.fingerprint,
+            rung.minecraftName,
+            rung.displayName,
+            rung.imageUrl,
+            rung.unitValueMinor,
+            metadata,
+          ],
+        );
+        await client.query(
+          `INSERT INTO catalog_price_history
+             (id, catalog_item_id, old_unit_value_minor, new_unit_value_minor, actor_user_id,
+              reason)
+           VALUES ($1, $2, NULL, $3, $4, $5)`,
+          [randomUUID(), itemId, rung.unitValueMinor, actor, body.reason],
+        );
+        created += 1;
+      }
+
+      const summary = {
+        created,
+        repriced,
+        unchanged,
+        total: UPGRADE_LADDER.length,
+        floorMinor: LADDER_FLOOR_MINOR.toString(),
+        ceilingMinor: LADDER_CEILING_MINOR.toString(),
+      };
+      /* Nothing moved, so nothing is recorded. An audit log that fills with "an operator looked at
+       * this and it was already correct" is one nobody reads when something did change. */
+      if (created || repriced) {
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'catalog.ladder_publish',
+          targetType: 'catalog_ladder',
+          targetId: LADDER_ID,
+          details: {
+            reason: body.reason,
+            ...summary,
+            rungs: UPGRADE_LADDER.map((rung) => ({
+              fingerprint: rung.fingerprint,
+              displayName: rung.displayName,
+              unitValueMinor: rung.unitValueMinor,
+            })),
+          },
+        });
+      }
+      return summary;
+    });
+  });
 
   app.patch('/v1/admin/catalog-items/:id', { preHandler: guards.requireAdmin }, async (request) => {
     const body = parseWith(catalogUpdateSchema, request.body);

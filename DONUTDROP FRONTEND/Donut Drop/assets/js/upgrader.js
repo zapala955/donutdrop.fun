@@ -35,6 +35,7 @@ let cashStake = 0;                  // minor units
  * NO stake at all until it reads as something again. */
 let stakeInputValid = true;
 let target = null;                  // the catalogue item being chased
+let band = 0;                       // index into BANDS; 0 is everything
 let spinning = false;
 let needleDeg = 0;
 let root = null;
@@ -84,6 +85,40 @@ function chancePpm() {
   const raw = (stakeMinor() * edge * 1_000_000n) / (targetValue() * 10_000n);
   const cap = BigInt(state.upgradeConfig.maxWinChancePpm);
   return Number(raw > cap ? cap : raw);
+}
+
+/* The payout bands the picker groups by.
+ *
+ * The catalogue carries fifty-one fixed denominations, so a stake anywhere in the middle of the
+ * ladder puts twenty-odd legal targets on screen at once. The question a player is actually asking
+ * of that grid is not which artefact — every one of them pays cash and nothing else — but how far
+ * they are reaching. These chips ask it once, above the tiles, instead of leaving it implicit in
+ * twenty percentages.
+ *
+ * The bounds are multiples of the stake and not fixed prices, because the same tile is a short
+ * reach at one stake and a longshot at another. `All` is first because it is the honest default:
+ * a filter that starts narrowed hides targets the player never asked to hide. */
+const BANDS = [
+  ['All', 0, Infinity],
+  ['Under 3x', 0, 3],
+  ['3-10x', 3, 10],
+  ['10-30x', 10, 30],
+  ['Over 30x', 30, Infinity],
+];
+
+/** The eligible targets inside one band. Index 0 is every eligible target, unfiltered. */
+function bandTargets(index) {
+  const options = eligibleTargets();
+  if (index === 0) return options;
+  const entry = BANDS[index];
+  if (!entry) return options;
+  const [, low, high] = entry;
+  const source = Number(stakeMinor());
+  if (!source) return [];
+  return options.filter((item) => {
+    const multiple = item.value / source;
+    return multiple >= low && multiple < high;
+  });
 }
 
 /* The multiplier window the server enforces. Showing a target it would refuse is worse than
@@ -204,6 +239,7 @@ function build() {
         <button class="ihint" type="button" aria-label="Each percentage is the real chance at that payout with the stake you have set."
                 data-tip="Each percentage is the real chance at that payout with the stake you have set."></button>
       </h2>
+      <div class="bandrail" id="upgBands" role="group" aria-label="Filter targets by payout"></div>
       <div class="pickgrid" id="upgCat"></div>
     </section>`;
 
@@ -404,7 +440,7 @@ function pickTarget() {
     $('#stakeIn', root)?.focus();
     return;
   }
-  const options = eligibleTargets();
+  const options = bandTargets(band);
   openModal('What are you chasing?', (body) => {
     body.innerHTML = options.length
       ? '<div class="pickgrid" id="pt"></div>'
@@ -550,9 +586,66 @@ function hintText() {
   return `Chance = (stake ÷ payout) × (1 − ${edge}% edge), capped at ${cap}%.`;
 }
 
+/**
+ * Why nothing is in range, and what stake would fix it.
+ *
+ * "Nothing is in range for that stake" is true and useless: it leaves the player guessing at a
+ * number in a range five orders of magnitude wide. The server only accepts a target between
+ * minMultiplierBps and maxMultiplierBps of the stake, so given the catalogue's cheapest and
+ * dearest rows the workable stake range is arithmetic, and saying it costs nothing.
+ *
+ * Returns a sentence, or null when the range is genuinely unknowable (no config, no catalogue).
+ */
+function outOfRangeReason() {
+  const config = state.upgradeConfig;
+  if (!config || !state.catalog.length) return null;
+  const source = Number(stakeMinor());
+  const min = Number(config.minMultiplierBps) / 10_000;
+  const max = Number(config.maxMultiplierBps) / 10_000;
+  if (!(source > 0) || !(min > 0) || !(max > min)) return null;
+  const values = state.catalog.map((item) => item.value).filter((value) => value > 0);
+  if (!values.length) return null;
+  const cheapest = Math.min(...values);
+  const dearest = Math.max(...values);
+
+  // Too small: even the top of the catalogue is under the smallest payout this stake may chase.
+  if (dearest < source * min) {
+    const ceiling = Math.floor(dearest / min);
+    return 'The biggest prize is ' + money(dearest) + '. Drop your stake to ' + money(ceiling)
+      + ' or less.';
+  }
+  // Too large the other way: the cheapest row is still more than this stake may reach.
+  if (cheapest > source * max) {
+    const floor = Math.ceil(cheapest / max);
+    return 'The cheapest prize is ' + money(cheapest) + '. Raise your stake to ' + money(floor)
+      + ' or more.';
+  }
+  return null;
+}
+
+function paintBands(counts) {
+  const rail = $('#upgBands', root);
+  if (!rail) return;
+  rail.replaceChildren();
+  BANDS.forEach(([label], index) => {
+    const count = counts[index];
+    const chip = el('button', 'bandchip');
+    chip.type = 'button';
+    /* The count is part of the label, not a badge. An empty band that looks pressable is a dead
+     * click, and one that is merely dimmed does not say why. */
+    chip.textContent = label + ' (' + count + ')';
+    chip.setAttribute('aria-pressed', String(index === band));
+    chip.disabled = count === 0 && index !== band;
+    chip.addEventListener('click', () => { band = index; paintCatalog(); });
+    rail.appendChild(chip);
+  });
+}
+
 function paintCatalog() {
   const grid = $('#upgCat', root);
+  const rail = $('#upgBands', root);
   grid.innerHTML = '';
+  if (rail) rail.replaceChildren();
   /* Logged out is checked FIRST, and it is a different sentence.
    *
    * The catalogue only loads for an authenticated session, so a logged-out player used to fall
@@ -573,10 +666,19 @@ function paintCatalog() {
   }
   const options = eligibleTargets();
   if (!options.length) {
-    grid.innerHTML = '<p class="card__p">Nothing is in range for that stake.</p>';
+    const message = el('p', 'card__p');
+    message.textContent = outOfRangeReason() ?? 'Nothing is in range for that stake.';
+    grid.appendChild(message);
     return;
   }
-  options.forEach((item) => {
+
+  /* A band the stake has emptied falls back to All rather than showing a filtered blank.
+   * A sticky filter that silently hides every target is indistinguishable from a broken page. */
+  const counts = BANDS.map((entry, index) => bandTargets(index).length);
+  if (counts[band] === 0) band = 0;
+  paintBands(counts);
+
+  bandTargets(band).forEach((item) => {
     const button = el('button');
     button.type = 'button';
     if (target && target.catalogItemId === item.catalogItemId) button.dataset.on = '1';

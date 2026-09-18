@@ -98,18 +98,43 @@ export function oddsFor(items) {
     .sort((a, b) => a.p - b.p);
 }
 
-/* One item tile. `size` drives the art box; used in reels, grids and results. */
+/* One item tile. `size` drives the art box; used in reels, grids and results.
+ *
+ * Built as nodes rather than as a string of markup. `item.name` and `item.img` are
+ * catalog_items.display_name and .image_url — values that arrive over the network and are written
+ * by whoever can reach the admin API, so interpolating them into HTML made this a stored-XSS sink
+ * on every surface that draws a tile, which is nearly all of them. Setting .textContent and .src
+ * closes the attribute-breakout half; safeImage() closes the `javascript:` half that assignment
+ * alone would leave open. */
 export function itemTile(item, opts = {}) {
   const { value = true, sub = null, size = 'md' } = opts;
   const r = RARITY[item.rarity];
   const n = el('div', 'tile tile--' + size);
   n.style.setProperty('--rar', r.color);
   n.dataset.rarity = item.rarity;
-  n.innerHTML =
-    '<div class="tile__art"><img src="' + item.img + '" alt="" loading="lazy" draggable="false"></div>' +
-    '<div class="tile__name">' + item.name + '</div>' +
-    (value ? '<div class="tile__val">' + money(item.value) + '</div>' : '') +
-    (sub ? '<div class="tile__sub">' + sub + '</div>' : '');
+
+  const art = el('div', 'tile__art');
+  const img = el('img');
+  img.src = safeImage(item.img);
+  img.alt = '';
+  img.loading = 'lazy';
+  img.draggable = false;
+  art.append(img);
+
+  const name = el('div', 'tile__name');
+  name.textContent = item.name;
+  n.append(art, name);
+
+  if (value) {
+    const figure = el('div', 'tile__val');
+    figure.textContent = money(item.value);
+    n.append(figure);
+  }
+  if (sub) {
+    const line = el('div', 'tile__sub');
+    line.textContent = sub;
+    n.append(line);
+  }
   return n;
 }
 

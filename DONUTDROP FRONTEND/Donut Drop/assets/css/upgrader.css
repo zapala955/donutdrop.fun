@@ -376,6 +376,36 @@
 
 
 /* ═════════ the catalogue ═════════ */
+/* The payout-band rail.
+ *
+ * Its own class rather than the stake row's `.qchips`, which obsidian.css pins to a rigid three
+ * columns because six stake chips divide into two even rows there. Five band chips do not, and
+ * borrowing that grid would have left a two-chip orphan row under a three-chip one.
+ *
+ * A wrapping flex row is right here for the opposite reason: the chips carry counts, so their
+ * labels differ in width and an even grid would stretch "All (31)" to the width of "Under 3x (7)".
+ * Sized so every chip clears the 44px touch target on its short axis with the row gap around it. */
+.bandrail {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 0 0 12px;
+}
+.bandchip {
+  min-height: 36px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-s);
+  background: var(--u-panel); color: var(--muted);
+  font: 600 .72rem/1 var(--mono); letter-spacing: .04em;
+  white-space: nowrap; cursor: pointer;
+  transition: color .14s, border-color .14s, background-color .14s;
+}
+.bandchip:hover:not(:disabled) { color: var(--text); border-color: var(--u-gold-deep); }
+.bandchip:active:not(:disabled) { transform: translateY(1px); }
+/* Never animated in: a focus ring that fades is a focus ring that is not there yet. */
+.bandchip:focus-visible { outline: 2px solid var(--u-gold); outline-offset: 2px; }
+.bandchip:disabled { opacity: .38; cursor: default; }
+.bandchip[aria-pressed="true"] {
+  color: var(--u-ink); border-color: transparent; font-weight: 800;
+  background: var(--u-gold);
+}
 .pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(112px, 100%), 1fr)); gap: 8px; }
 .pickgrid button { cursor: pointer; border: 0; padding: 0; background: none; font: inherit; }
 .pickgrid .tile { transition: transform .16s var(--u-ease), border-color .16s, box-shadow .2s; }
@@ -416,7 +446,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bay[data-loaded="1"] .bay__art img { animation: none; }
   .wheel.is-spinning .wheel__ring { animation: none; }
-  .bay, .chips .btn, .mults button, #pullBtn, .pickgrid .tile { transition: none; }
+  .bay, .chips .btn, .mults button, #pullBtn, .pickgrid .tile, .bandchip { transition: none; }
 }
 
 

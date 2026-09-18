@@ -269,19 +269,46 @@ export async function refreshActivity(notify = true) {
   return state.activities;
 }
 
+/* The catalogue, whole.
+ *
+ * The server caps a page at a hundred items and orders them cheapest first, so one request
+ * silently drops everything above the hundredth-cheapest row. With the upgrader's fifty-one fixed
+ * denominations sitting on top of the observed catalogue, what a single request drops is the
+ * entire top of the ladder — the half players are actually aiming at, and the half a truncation
+ * gives no sign of having removed.
+ *
+ * Paging until a short page comes back is the only version of this that stays correct the next
+ * time the catalogue grows. The page ceiling below is a runaway guard rather than a size limit: a
+ * server that kept answering with full pages would otherwise spin here forever. */
+const CATALOG_PAGE = 100;
+const CATALOG_MAX_PAGES = 20;
+
+async function fetchCatalogItems() {
+  const items = [];
+  for (let page = 0; page < CATALOG_MAX_PAGES; page += 1) {
+    const result = await api.get(
+      '/v1/catalog/items?limit=' + CATALOG_PAGE + '&offset=' + page * CATALOG_PAGE,
+    );
+    const batch = result.items || [];
+    items.push(...batch);
+    if (batch.length < CATALOG_PAGE) break;
+  }
+  return items.map((item) => normalizeItem(item));
+}
+
 export async function refreshPrivate(notify = true) {
   if (!state.authenticated) return;
   const [balance, inventory, catalog, fairness, upgradeConfig] = await Promise.all([
     api.get('/v1/balance'),
     api.get('/v1/inventory'),
-    api.get('/v1/catalog/items?limit=100'),
+    fetchCatalogItems(),
     api.get('/v1/fairness/current'),
     api.get('/v1/upgrades/config'),
   ]);
   state.balanceMinor = String(balance.balanceMinor || '0');
   state.balance = toSafeNumber(state.balanceMinor);
   state.inventory = (inventory.items || []).map((item) => normalizeItem(item, true));
-  state.catalog = (catalog.items || []).map((item) => normalizeItem(item));
+  state.catalog = catalog;
   state.fairness = fairness;
   state.upgradeConfig = upgradeConfig;
   await Promise.all([
@@ -692,8 +719,7 @@ async function refreshInventory(notify = true) {
 }
 
 async function refreshCatalog(notify = true) {
-  const result = await api.get('/v1/catalog/items?limit=100');
-  state.catalog = (result.items || []).map((item) => normalizeItem(item));
+  state.catalog = await fetchCatalogItems();
   if (notify) emit('catalog');
 }
 
