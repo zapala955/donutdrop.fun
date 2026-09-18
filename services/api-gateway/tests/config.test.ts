@@ -30,6 +30,7 @@ describe('configuration', () => {
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
+    assert.equal(config.gameCurrencyOnly, false);
   });
 
   it('requires HTTPS in production', () => {
@@ -106,6 +107,9 @@ describe('configuration', () => {
       ALLOWED_COUNTRIES: 'PL',
     };
     assert.doesNotThrow(() => loadConfig(production));
+    assert.doesNotThrow(() =>
+      loadConfig({ ...production, ALLOWED_COUNTRIES: '', GAME_CURRENCY_ONLY: 'true' }),
+    );
     assert.throws(() => loadConfig({ ...production, IP_HASH_KEY: production.AUDIT_LOG_HMAC_KEY }));
     assert.throws(() =>
       loadConfig({

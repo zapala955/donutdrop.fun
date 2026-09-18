@@ -347,7 +347,7 @@ export async function registerMinecraftInternalRoutes(
           intent.normalized_username === body.username.toLowerCase() &&
           intent.minecraft_identity === body.identity &&
           intent.expires_at.getTime() > now + 30_000 &&
-          isDepositEligible(intent, config.allowedCountries, now) &&
+          isDepositEligible(intent, config.allowedCountries, now, config.gameCurrencyOnly) &&
           botIsSafe;
 
         let storedResponse: z.infer<typeof storedDepositAuthorizationSchema> = {
@@ -709,7 +709,7 @@ async function processDeposit(
     intent.expires_at.getTime() <= now ||
     intent.lease_expires_at === null ||
     intent.lease_expires_at.getTime() <= now ||
-    !isDepositEligible(intent, config.allowedCountries, now) ||
+    !isDepositEligible(intent, config.allowedCountries, now, config.gameCurrencyOnly) ||
     !botIsSafe
   ) {
     await quarantineDeposit(client, intent.id, event.botId);

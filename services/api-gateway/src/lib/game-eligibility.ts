@@ -34,19 +34,23 @@ export async function assertGameEligible(
   if (!user || user.status !== 'active') {
     throw new AppError(403, 'ACCOUNT_NOT_ACTIVE', 'Account is not active');
   }
-  if (!user.terms_accepted_at || !user.age_verified_at || !user.country_code) {
+  if (
+    !config.gameCurrencyOnly &&
+    (!user.terms_accepted_at || !user.age_verified_at || !user.country_code)
+  ) {
     throw new AppError(
       403,
       'COMPLIANCE_INCOMPLETE',
       'Age, location, and terms verification are required',
     );
   }
-  if (user.kyc_status !== 'verified') {
+  if (!config.gameCurrencyOnly && user.kyc_status !== 'verified') {
     throw new AppError(403, 'KYC_REQUIRED', 'Identity verification is required');
   }
   if (
+    !config.gameCurrencyOnly &&
     config.allowedCountries.size &&
-    !config.allowedCountries.has(user.country_code.toLowerCase())
+    !config.allowedCountries.has(user.country_code?.toLowerCase() ?? '')
   ) {
     throw new AppError(403, 'COUNTRY_NOT_ALLOWED', 'Service is not available in this country');
   }

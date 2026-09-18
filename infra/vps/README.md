@@ -42,6 +42,10 @@ sudoedit /opt/donutdrop/shared/donutdrop.env
 Set the real bot UUID, Microsoft login identifier, exact Minecraft username, country allowlist,
 and any reviewed feature flags. `APP_ORIGIN` must remain exactly `https://donutdrop.fun`.
 
+`GAME_CURRENCY_ONLY=true` disables the country, age, terms, and KYC profile for deployments that
+use only DonutSMP game currency. Suspensions, closed accounts, cooldowns, and self-exclusion still
+apply. Set it to `false` before integrating any currency or item with off-server monetary value.
+
 Generate the secret files once. This command does not print any generated value:
 
 ```bash
@@ -54,7 +58,7 @@ sudo BOT_ID='replace-with-bot-uuid' \
 The script prompts for the DonutSMP API key without echoing it.
 
 The generated secret directory is root-owned with mode `0700`. Individual files are read-only but
-world-readable *inside their dedicated container mount* because local Docker Compose preserves
+world-readable _inside their dedicated container mount_ because local Docker Compose preserves
 host ownership for file-backed secrets and the services run under different non-root UIDs. The
 root-only parent directory prevents other VPS users from traversing to those files on the host.
 Do not loosen the directory permissions.

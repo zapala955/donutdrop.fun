@@ -98,6 +98,51 @@ function currentAdminTotp(secret: Buffer): string {
 }
 
 describe('identity and compliance hardening', () => {
+  it('activates only pending-compliance sessions in game-currency-only mode', async () => {
+    const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
+    const database = {
+      query: async (sql: string, values?: readonly unknown[]) => {
+        statements.push(values ? { sql, values } : { sql });
+        if (sql.includes('FROM sessions s')) {
+          return result([
+            {
+              session_id: 'game-session-id',
+              user_id: 'game-user-id',
+              minecraft_identity: 'game-player-identity',
+              minecraft_username: 'GamePlayer',
+              role: 'player',
+              status: 'pending_compliance',
+              csrf_hash: Buffer.alloc(32),
+              admin_mfa_verified_at: null,
+              admin_mfa_key_fingerprint: null,
+            },
+          ]);
+        }
+        if (sql.includes("SET status = 'active'")) return result([{ status: 'active' }]);
+        return result([]);
+      },
+    } as unknown as Database;
+    const guards = createAuthGuards(
+      database,
+      loadConfig({ ...configInput, GAME_CURRENCY_ONLY: 'true' }),
+    );
+    const request = {
+      cookies: { du_session: 'signed-cookie' },
+      unsignCookie: () => ({ valid: true, renew: false, value: 'session-token' }),
+    } as unknown as FastifyRequest;
+
+    await guards.authenticate(request);
+
+    assert.equal(request.authUser?.status, 'active');
+    assert.ok(
+      statements.some(
+        ({ sql, values }) =>
+          sql.includes("WHERE id = $1 AND status = 'pending_compliance'") &&
+          values?.[0] === 'game-user-id',
+      ),
+    );
+  });
+
   it('demotes an admin removed from the allowlist and revokes every stale session', async () => {
     const statements: string[] = [];
     const database = {

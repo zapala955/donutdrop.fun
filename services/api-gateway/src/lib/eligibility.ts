@@ -20,19 +20,24 @@ export function isDepositEligible(
   state: DepositEligibilityState | undefined,
   allowedCountries: ReadonlySet<string>,
   nowMs = Date.now(),
+  gameCurrencyOnly = false,
 ): boolean {
-  if (
-    !state ||
-    state.status !== 'active' ||
-    !state.country_code ||
-    !state.terms_accepted_at ||
-    !state.age_verified_at ||
-    state.kyc_status !== 'verified'
-  ) {
-    return false;
-  }
-  if (allowedCountries.size > 0 && !allowedCountries.has(state.country_code.trim().toLowerCase())) {
-    return false;
+  if (!state || state.status !== 'active') return false;
+  if (!gameCurrencyOnly) {
+    if (
+      !state.country_code ||
+      !state.terms_accepted_at ||
+      !state.age_verified_at ||
+      state.kyc_status !== 'verified'
+    ) {
+      return false;
+    }
+    if (
+      allowedCountries.size > 0 &&
+      !allowedCountries.has(state.country_code.trim().toLowerCase())
+    ) {
+      return false;
+    }
   }
   return (
     !restrictionIsActive(state.cooldown_until, nowMs) &&
