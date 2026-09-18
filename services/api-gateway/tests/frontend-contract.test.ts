@@ -160,6 +160,49 @@ ${detail}`);
     assert.match(renderer, /createTexture/);
   });
 
+  it('keeps the meta policy and the header policy in step', async () => {
+    /* Two policies are served: a <meta> in the page and a header from nginx. A browser enforces
+     * BOTH, so the effective policy is their intersection — widening one alone blocks the thing
+     * anyway, which is how the sign-in challenge came to be allowed by the page and refused by the
+     * header at the same time. Whatever one admits beyond 'self', the other has to admit too. */
+    const html = await source('index.html');
+    /* The tag's own content, not the page. A long comment above it explains the policy in prose
+     * and names the same directives, which a looser match reads as the policy itself. */
+    const metaPolicy =
+      /http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.ok(metaPolicy, 'no Content-Security-Policy meta tag');
+    const headers = await readFile(
+      path.resolve(import.meta.dirname, '../../../infra/nginx/security-headers.conf'),
+      'utf8',
+    );
+
+    const origins = (policy: string, directive: string): Set<string> => {
+      const found = new RegExp(`${directive} ([^;"]*)`).exec(policy);
+      return new Set(
+        (found?.[1] ?? '')
+          .split(/\s+/)
+          .filter((token) => token.startsWith('https://') || token.startsWith('wss://')),
+      );
+    };
+
+    for (const directive of ['script-src', 'frame-src']) {
+      const inPage = origins(metaPolicy, directive);
+      const inHeader = origins(headers, directive);
+      for (const origin of inPage) {
+        assert.ok(
+          inHeader.has(origin),
+          `${directive} allows ${origin} in index.html but not in security-headers.conf`,
+        );
+      }
+      for (const origin of inHeader) {
+        assert.ok(
+          inPage.has(origin),
+          `${directive} allows ${origin} in security-headers.conf but not in index.html`,
+        );
+      }
+    }
+  });
+
   it('forbids inline script with a content security policy', async () => {
     const html = await source('index.html');
     assert.match(html, /http-equiv="Content-Security-Policy"/);
