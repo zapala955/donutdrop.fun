@@ -350,7 +350,7 @@ const RISK_PROFILES: readonly RiskProfile[] = [
   /* The hit-rate profile. A flatter falloff than 'safe' over a band that starts nearer the
    * price, so weight sits on outcomes at or above what the crate cost: roughly three opens in
    * ten come back up. The edge is unchanged, so those wins are correspondingly small. */
-  { code: 'steady', label: 'Steady', falloff: 0.25, lowMultiple: 0.5, highMultiple: 2.0,
+  { code: 'steady', label: 'Steady', falloff: 0.3, lowMultiple: 0.15, highMultiple: 1.5,
     blurb: 'Wins often, wins small. The grinder\u2019s crate.' },
   { code: 'balanced', label: 'Balanced', falloff: 1.1, lowMultiple: 0.25, highMultiple: 6,
     blurb: 'A real floor and a real ceiling. The honest middle.' },
