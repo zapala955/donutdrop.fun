@@ -19,7 +19,7 @@ docker compose --env-file "$env_file" -f "$compose_file" up -d --build --remove-
 # whatever it parsed at startup. That is how a security header stayed stale through three deploys
 # that all reported success. A reload costs nothing and picks the changes up; if the container was
 # only just created and is not ready for a signal yet, recreating it does the same job.
-docker compose --env-file "$env_file" -f "$compose_file" exec -T nginx nginx -s reload 2>/dev/null \n  || docker compose --env-file "$env_file" -f "$compose_file" up -d --force-recreate nginx
+docker compose --env-file "$env_file" -f "$compose_file" exec -T nginx nginx -s reload 2>/dev/null || docker compose --env-file "$env_file" -f "$compose_file" up -d --force-recreate nginx
 
 for attempt in $(seq 1 60); do
   if curl --fail --silent --show-error http://127.0.0.1:8080/health/ready >/dev/null; then
