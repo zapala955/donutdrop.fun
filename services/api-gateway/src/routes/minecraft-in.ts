@@ -13,6 +13,7 @@ import { canonicalJson, safeEqualBuffer, sha256, sha256Hex } from '../lib/crypto
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
+import { MINECRAFT_USERNAME_PATTERN, platformIdentityFor } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { creditWallet } from '../lib/wallet.js';
 
@@ -21,7 +22,7 @@ const DATABASE_BIGINT_MAX = 9_223_372_036_854_775_807n;
 const eventBase = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const heartbeatEvent = eventBase.extend({
   type: z.literal('heartbeat'),
-  username: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  username: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   serverHost: z.string().min(1).max(255),
   online: z.boolean(),
   snapshotHealthy: z.boolean(),
@@ -30,7 +31,7 @@ const heartbeatEvent = eventBase.extend({
 const linkEvent = eventBase.extend({
   type: z.literal('link_confirmation'),
   code: z.string().regex(/^[A-Z2-9]{10}$/),
-  username: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  username: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   identity: z.string().regex(/^mc:[a-f0-9]{32}$/),
   serverObserved: z.literal(true),
 });
@@ -43,7 +44,7 @@ const transferItem = z
 const depositEvent = eventBase.extend({
   type: z.literal('deposit_confirmed'),
   depositCode: z.string().regex(/^[A-Z2-9]{12}$/),
-  username: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  username: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   identity: z.string().regex(/^mc:[a-f0-9]{32}$/),
   leaseId: normalizedUuid,
   leaseToken: z.string().regex(/^[a-f0-9]{64}$/),
@@ -93,14 +94,14 @@ const jobResultEvent = eventBase.extend({
 });
 const paymentEvent = eventBase.extend({
   type: z.literal('payment_observed'),
-  payer: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  payer: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   // Only amounts DonutSMP renders exactly are accepted. At a thousand and above the payment
   // message abbreviates, so a larger figure could not have been read from it truthfully.
   amount: z.number().int().min(1).max(999),
 });
 const cashPaymentEvent = eventBase.extend({
   type: z.literal('cash_payment_observed'),
-  payer: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  payer: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   displayedAmount: z
     .string()
     .regex(/^[1-9]\d*(?:\.\d+)?[KMBT]?$/)
@@ -118,7 +119,7 @@ const botEventSchema = z.discriminatedUnion('type', [
 const claimSchema = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const depositAuthorizationSchema = eventBase.extend({
   depositCode: z.string().regex(/^[A-Z2-9]{12}$/),
-  username: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+  username: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   identity: z.string().regex(/^mc:[a-f0-9]{32}$/),
 });
 const storedDepositAuthorizationSchema = z.discriminatedUnion('authorized', [
@@ -636,7 +637,7 @@ async function processLinkConfirmation(
   await client.query(
     `UPDATE auth_link_challenges SET confirmed_identity = $2, confirmed_username = $3, confirmed_at = now()
       WHERE id = $1`,
-    [challenge.id, event.identity, event.username],
+    [challenge.id, platformIdentityFor(event.username, event.identity), event.username],
   );
 }
 

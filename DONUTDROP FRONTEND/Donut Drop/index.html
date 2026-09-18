@@ -57,6 +57,8 @@
      about what a container looks like. One material at three weights, and gold as light rather
      than paint. -->
 <link rel="stylesheet" href="assets/css/polish.css" />
+<!-- the sign-in card; last so it can restyle the shared modal shell for one variant -->
+<link rel="stylesheet" href="assets/css/auth.css" />
 <link rel="icon" href="assets/img/items/ender_chest.png" />
 </head>
 <body>
@@ -575,7 +577,7 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<dialog class="modal" id="modal">
+<dialog class="modal" id="modal" aria-labelledby="modalTitle">
   <header class="modal__bar">
     <h2 id="modalTitle">—</h2>
     <button class="modal__x" id="modalClose" aria-label="Close">✕</button>

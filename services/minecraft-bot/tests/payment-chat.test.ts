@@ -9,474 +9,474 @@ import { parsePaymentMessage, parsePaymentNotice } from '../src/payment-chat.js'
  */
 
 const paidOne: unknown = {
-  "content": {
-    "type": "compound",
-    "value": {
-      "extra": {
-        "type": "list",
-        "value": {
-          "type": "compound",
-          "value": [
+  content: {
+    type: 'compound',
+    value: {
+      extra: {
+        type: 'list',
+        value: {
+          type: 'compound',
+          value: [
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "misterofthex paid you "
+              text: {
+                type: 'string',
+                value: 'misterofthex paid you ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "#00FF00"
+              color: {
+                type: 'string',
+                value: '#00FF00',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "$ "
+              text: {
+                type: 'string',
+                value: '$ ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
+              italic: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "1"
-              }
-            }
-          ]
-        }
+              text: {
+                type: 'string',
+                value: '1',
+              },
+            },
+          ],
+        },
       },
-      "text": {
-        "type": "string",
-        "value": ""
-      }
-    }
+      text: {
+        type: 'string',
+        value: '',
+      },
+    },
   },
-  "isActionBar": false
+  isActionBar: false,
 };
 const paidTwelveHundred: unknown = {
-  "content": {
-    "type": "compound",
-    "value": {
-      "extra": {
-        "type": "list",
-        "value": {
-          "type": "compound",
-          "value": [
+  content: {
+    type: 'compound',
+    value: {
+      extra: {
+        type: 'list',
+        value: {
+          type: 'compound',
+          value: [
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "misterofthex paid you "
+              text: {
+                type: 'string',
+                value: 'misterofthex paid you ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "#00FF00"
+              color: {
+                type: 'string',
+                value: '#00FF00',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "$ "
+              text: {
+                type: 'string',
+                value: '$ ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
+              italic: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "1.2K"
-              }
-            }
-          ]
-        }
+              text: {
+                type: 'string',
+                value: '1.2K',
+              },
+            },
+          ],
+        },
       },
-      "text": {
-        "type": "string",
-        "value": ""
-      }
-    }
+      text: {
+        type: 'string',
+        value: '',
+      },
+    },
   },
-  "isActionBar": false
+  isActionBar: false,
 };
 const paidNineNineNine: unknown = {
-  "content": {
-    "type": "compound",
-    "value": {
-      "extra": {
-        "type": "list",
-        "value": {
-          "type": "compound",
-          "value": [
+  content: {
+    type: 'compound',
+    value: {
+      extra: {
+        type: 'list',
+        value: {
+          type: 'compound',
+          value: [
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "misterofthex paid you "
+              text: {
+                type: 'string',
+                value: 'misterofthex paid you ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "#00FF00"
+              color: {
+                type: 'string',
+                value: '#00FF00',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "$ "
+              text: {
+                type: 'string',
+                value: '$ ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
+              italic: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "999"
-              }
-            }
-          ]
-        }
+              text: {
+                type: 'string',
+                value: '999',
+              },
+            },
+          ],
+        },
       },
-      "text": {
-        "type": "string",
-        "value": ""
-      }
-    }
+      text: {
+        type: 'string',
+        value: '',
+      },
+    },
   },
-  "isActionBar": false
+  isActionBar: false,
 };
 const paidOneThousand: unknown = {
-  "content": {
-    "type": "compound",
-    "value": {
-      "extra": {
-        "type": "list",
-        "value": {
-          "type": "compound",
-          "value": [
+  content: {
+    type: 'compound',
+    value: {
+      extra: {
+        type: 'list',
+        value: {
+          type: 'compound',
+          value: [
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "misterofthex paid you "
+              text: {
+                type: 'string',
+                value: 'misterofthex paid you ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "#00FF00"
+              color: {
+                type: 'string',
+                value: '#00FF00',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "$ "
+              text: {
+                type: 'string',
+                value: '$ ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
+              italic: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "1K"
-              }
-            }
-          ]
-        }
+              text: {
+                type: 'string',
+                value: '1K',
+              },
+            },
+          ],
+        },
       },
-      "text": {
-        "type": "string",
-        "value": ""
-      }
-    }
+      text: {
+        type: 'string',
+        value: '',
+      },
+    },
   },
-  "isActionBar": false
+  isActionBar: false,
 };
 const shardReward: unknown = {
-  "content": {
-    "type": "compound",
-    "value": {
-      "extra": {
-        "type": "list",
-        "value": {
-          "type": "compound",
-          "value": [
+  content: {
+    type: 'compound',
+    value: {
+      extra: {
+        type: 'list',
+        value: {
+          type: 'compound',
+          value: [
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "You earned "
+              text: {
+                type: 'string',
+                value: 'You earned ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "#B34BFF"
+              color: {
+                type: 'string',
+                value: '#B34BFF',
               },
-              "obfuscated": {
-                "type": "byte",
-                "value": 0
+              obfuscated: {
+                type: 'byte',
+                value: 0,
               },
-              "strikethrough": {
-                "type": "byte",
-                "value": 0
+              strikethrough: {
+                type: 'byte',
+                value: 0,
               },
-              "underlined": {
-                "type": "byte",
-                "value": 0
+              underlined: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "1 Shard "
+              text: {
+                type: 'string',
+                value: '1 Shard ',
               },
-              "bold": {
-                "type": "byte",
-                "value": 0
+              bold: {
+                type: 'byte',
+                value: 0,
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
-              }
+              italic: {
+                type: 'byte',
+                value: 0,
+              },
             },
             {
-              "color": {
-                "type": "string",
-                "value": "white"
+              color: {
+                type: 'string',
+                value: 'white',
               },
-              "italic": {
-                "type": "byte",
-                "value": 0
+              italic: {
+                type: 'byte',
+                value: 0,
               },
-              "text": {
-                "type": "string",
-                "value": "for playing the server"
-              }
-            }
-          ]
-        }
+              text: {
+                type: 'string',
+                value: 'for playing the server',
+              },
+            },
+          ],
+        },
       },
-      "text": {
-        "type": "string",
-        "value": ""
-      }
-    }
+      text: {
+        type: 'string',
+        value: '',
+      },
+    },
   },
-  "isActionBar": false
+  isActionBar: false,
 };
 
 test('reads an exact payment of 1', () => {
@@ -560,4 +560,58 @@ test('refuses an action bar message carrying payment-shaped text', () => {
     },
   };
   assert.equal(parsePaymentMessage(actionBar), undefined);
+});
+
+/* ── Bedrock payers ──
+ *
+ * These use the plain component form rather than a captured NBT packet. The dot is the only thing
+ * under test: DonutSMP composes a Bedrock receipt exactly as it composes a Java one, and refusing
+ * the name would drop the payment silently instead of crediting it. */
+
+test('reads a payment from a Floodgate (Bedrock) player', () => {
+  const bedrock: unknown = {
+    isActionBar: false,
+    content: {
+      text: '',
+      extra: [
+        { color: 'white', text: '.Gamertag paid you ' },
+        { color: '#00FF00', text: '$ ' },
+        { color: 'white', text: '250' },
+      ],
+    },
+  };
+  assert.deepEqual(parsePaymentMessage(bedrock), { payer: '.Gamertag', amount: 250 });
+  assert.deepEqual(parsePaymentNotice(bedrock), { payer: '.Gamertag', displayedAmount: '250' });
+});
+
+test('reports an abbreviated Bedrock receipt as a notice, same as a Java one', () => {
+  const bedrock: unknown = {
+    isActionBar: false,
+    content: {
+      text: '',
+      extra: [
+        { color: 'white', text: '.Gamertag paid you ' },
+        { color: '#00FF00', text: '$ ' },
+        { color: 'white', text: '1.2K' },
+      ],
+    },
+  };
+  assert.equal(parsePaymentMessage(bedrock), undefined);
+  assert.deepEqual(parsePaymentNotice(bedrock), { payer: '.Gamertag', displayedAmount: '1.2K' });
+});
+
+test('refuses a name carrying more than the one leading dot Floodgate adds', () => {
+  const forged: unknown = {
+    isActionBar: false,
+    content: {
+      text: '',
+      extra: [
+        { color: 'white', text: '..Gamertag paid you ' },
+        { color: '#00FF00', text: '$ ' },
+        { color: 'white', text: '250' },
+      ],
+    },
+  };
+  assert.equal(parsePaymentMessage(forged), undefined);
+  assert.equal(parsePaymentNotice(forged), undefined);
 });

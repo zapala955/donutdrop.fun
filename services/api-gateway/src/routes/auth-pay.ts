@@ -7,6 +7,7 @@ import { randomToken, safeEqualText, sha256 } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { resolveMinecraftAccount } from '../lib/minecraft-identity.js';
+import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 
 /**
@@ -23,7 +24,7 @@ import { parseWith } from '../lib/validation.js';
  */
 
 const startSchema = z
-  .object({ minecraftUsername: z.string().regex(/^[A-Za-z0-9_]{3,16}$/) })
+  .object({ minecraftUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN) })
   .strict();
 const statusSchema = z.object({ challengeId: z.uuid() }).strict();
 

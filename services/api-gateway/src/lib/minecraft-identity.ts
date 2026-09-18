@@ -1,4 +1,9 @@
 import { AppError } from './errors.js';
+import {
+  MINECRAFT_USERNAME_PATTERN,
+  bedrockIdentityFor,
+  isBedrockUsername,
+} from './minecraft-username.js';
 
 /**
  * Resolves a Minecraft username to its canonical account UUID.
@@ -11,7 +16,6 @@ import { AppError } from './errors.js';
  * recycled name resolves to a different account rather than silently inheriting the old one's.
  */
 
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,16}$/;
 const UUID_PATTERN = /^[a-f0-9]{32}$/;
 const REQUEST_TIMEOUT_MS = 8_000;
 const PROFILE_URL = 'https://api.mojang.com/users/profiles/minecraft/';
@@ -26,8 +30,14 @@ export interface MinecraftAccount {
 export async function resolveMinecraftAccount(
   username: string,
 ): Promise<MinecraftAccount | undefined> {
-  if (!USERNAME_PATTERN.test(username)) {
+  if (!MINECRAFT_USERNAME_PATTERN.test(username)) {
     throw new AppError(400, 'INVALID_USERNAME', 'Invalid Minecraft username');
+  }
+
+  // Bedrock names have no Mojang profile to resolve. Asking anyway would 404 and read as "no such
+  // account", turning every Bedrock login into a dead end.
+  if (isBedrockUsername(username)) {
+    return { identity: bedrockIdentityFor(username), username };
   }
 
   const controller = new AbortController();
@@ -70,7 +80,8 @@ export async function resolveMinecraftAccount(
   const record = payload as Record<string, unknown>;
   const id = typeof record['id'] === 'string' ? record['id'].toLowerCase() : undefined;
   const name = typeof record['name'] === 'string' ? record['name'] : undefined;
-  if (!id || !name || !UUID_PATTERN.test(id) || !USERNAME_PATTERN.test(name)) return undefined;
+  if (!id || !name || !UUID_PATTERN.test(id) || !MINECRAFT_USERNAME_PATTERN.test(name))
+    return undefined;
 
   return { identity: `mc:${id}`, username: name };
 }

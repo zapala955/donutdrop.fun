@@ -107,7 +107,7 @@ export class MinecraftWorker {
       const player = Object.values(bot.players).find(
         (candidate) => candidate.uuid.toLowerCase().replaceAll('-', '') === chat.normalizedUuid,
       );
-      if (!player || !/^[A-Za-z0-9_]{3,16}$/.test(player.username)) {
+      if (!player || !/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/.test(player.username)) {
         this.log.warn(
           { senderUuid: chat.normalizedUuid },
           'Ignored verified chat whose sender was absent from the player list',

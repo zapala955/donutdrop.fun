@@ -1,0 +1,376 @@
+/* Hallmark · component: sign-in modal · genre: atmospheric · theme: project system
+ * paper: obsidian (--panel) · accent: nether lava gold (--gold-bright / --gold-body)
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass · no new colour tokens invented — every value below resolves through app.css
+ *
+ * Why a separate sheet: the sign-in card is the only modal on the site that drops the title bar
+ * and carries its own heading, so its rules would sit awkwardly inside the shared .modal block in
+ * app.css. Loading it last also means it can restyle the shared shell for one variant without
+ * raising specificity anywhere else.
+ */
+
+/* ─────────── the shell, in sign-in dress ─────────── */
+
+.modal[data-variant='auth'] {
+  width: min(468px, calc(100vw - 26px));
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+/* The bar keeps the close button and the accessible name; it loses the visible heading, because
+   the card draws its own at display size a few pixels below. Two headings would be one too many. */
+.modal[data-variant='auth'] .modal__bar {
+  border-bottom: 0;
+  padding: 12px 12px 0;
+  justify-content: flex-end;
+  background: none;
+}
+.modal[data-variant='auth'] .modal__bar h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.modal[data-variant='auth'] .modal__body {
+  padding: 4px 28px 28px;
+}
+
+/* ─────────── heading block ─────────── */
+
+.auth__title {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 5.4vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 10px;
+  /* A long word in a narrow viewport breaks inside itself rather than pushing the card wider. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.auth__lede {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 38ch;
+}
+
+.auth__rule {
+  height: 1px;
+  border: 0;
+  background: var(--line);
+  margin: 22px 0;
+}
+
+/* ─────────── the field ─────────── */
+
+.auth__label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 9px;
+}
+
+.auth__field {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 14px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  transition:
+    border-color 0.14s var(--ease-out, ease-out),
+    box-shadow 0.14s var(--ease-out, ease-out);
+}
+.auth__field:hover {
+  border-color: var(--line2);
+}
+/* The ring lands on the wrapper, not the bare input, so the icon and the dot prefix are inside it
+   rather than sitting orphaned outside a box that claims to be focused. It appears instantly. */
+.auth__field:focus-within {
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px rgba(255, 170, 0, 0.14);
+}
+.auth__field.is-error {
+  border-color: var(--red);
+}
+.auth__field.is-error:focus-within {
+  box-shadow: 0 0 0 3px rgba(255, 34, 34, 0.16);
+}
+
+.auth__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  color: var(--faint);
+  transition: color 0.14s var(--ease-out, ease-out);
+}
+.auth__field:focus-within .auth__icon {
+  color: var(--gold);
+}
+
+/* Shown only while the Bedrock box is ticked. It is the literal character that will be sent, so
+   the player can see the name they are about to claim rather than being told about it. */
+.auth__prefix {
+  flex: none;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--gold);
+  margin-right: 1px;
+}
+.auth__prefix[hidden] {
+  display: none;
+}
+
+.auth__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 0.9375rem;
+}
+.auth__input::placeholder {
+  color: var(--faint);
+}
+.auth__input:focus {
+  outline: none;
+}
+.auth__input:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.auth__err {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  color: var(--red);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+.auth__err[hidden] {
+  display: none;
+}
+
+/* ─────────── the two agreements ─────────── */
+
+.auth__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.auth__check {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* The real control stays in the layout and keeps every native behaviour — label click, space bar,
+   form participation, screen-reader state. Only its painting is replaced. */
+.auth__check input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.auth__box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: var(--panel3);
+  display: grid;
+  place-items: center;
+  transition:
+    background-color 0.14s var(--ease-out, ease-out),
+    border-color 0.14s var(--ease-out, ease-out);
+}
+.auth__box::after {
+  content: '';
+  width: 10px;
+  height: 5px;
+  border-left: 2px solid #0a0a0c;
+  border-bottom: 2px solid #0a0a0c;
+  transform: translateY(-1px) rotate(-45deg) scale(0.6);
+  opacity: 0;
+  transition:
+    opacity 0.12s var(--ease-out, ease-out),
+    transform 0.12s var(--ease-out, ease-out);
+}
+.auth__check:hover .auth__box {
+  border-color: var(--gold-deep);
+}
+.auth__check input:checked + .auth__box {
+  background: var(--gold-body);
+  border-color: transparent;
+}
+.auth__check input:checked + .auth__box::after {
+  opacity: 1;
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+.auth__check input:focus-visible + .auth__box {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+/* The press has to hang off the label. The real checkbox is a zero-size absolute box that the
+   pointer never lands on, so `input:active` would never fire. */
+.auth__check:active .auth__box {
+  transform: translateY(1px);
+}
+.auth__check input:disabled + .auth__box {
+  opacity: 0.45;
+}
+.auth__check input:disabled ~ .auth__txt {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.auth__txt a {
+  color: var(--gold);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
+.auth__txt a:hover {
+  color: var(--gold-bright);
+}
+.auth__txt .mono {
+  color: var(--text);
+}
+
+/* ─────────── referral disclosure ─────────── */
+
+.auth__ref {
+  margin-top: 16px;
+}
+.auth__ref > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  list-style: none;
+  cursor: pointer;
+  color: var(--gold);
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 2px 0;
+}
+.auth__ref > summary::-webkit-details-marker {
+  display: none;
+}
+.auth__ref > summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.14s var(--ease-out, ease-out);
+}
+.auth__ref[open] > summary::before {
+  transform: rotate(90deg);
+}
+.auth__ref > summary:hover {
+  color: var(--gold-bright);
+}
+.auth__ref > summary:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.auth__refbody {
+  margin-top: 10px;
+}
+.auth__note {
+  color: var(--faint);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin: 7px 0 0;
+}
+
+/* ─────────── the commit ─────────── */
+
+.auth__go {
+  width: 100%;
+  height: 52px;
+  margin-top: 22px;
+  font-size: 1rem;
+}
+
+/* Loading and success are driven from data-state so the button can say what it is doing without
+   the label having to be rewritten by three different call sites. */
+.auth__go[data-state='loading'] {
+  cursor: progress;
+}
+.auth__go[data-state='loading']::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  border: 2px solid rgba(10, 10, 12, 0.35);
+  border-top-color: #0a0a0c;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+}
+.auth__go[data-state='success'] {
+  filter: none;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Spatial motion collapses; the spinner keeps turning because it is a progress readout, not
+   decoration — freezing it would claim the request had stalled. */
+@media (prefers-reduced-motion: reduce) {
+  .auth__field,
+  .auth__icon,
+  .auth__box,
+  .auth__box::after,
+  .auth__ref > summary::before {
+    transition-duration: 0.01ms;
+  }
+  .auth__go[data-state='loading']::before {
+    animation-duration: 1.6s;
+  }
+}
+
+/* ─────────── narrow viewports ─────────── */
+
+@media (max-width: 420px) {
+  .modal[data-variant='auth'] .modal__body {
+    padding: 4px 18px 22px;
+  }
+  .auth__rule {
+    margin: 18px 0;
+  }
+}

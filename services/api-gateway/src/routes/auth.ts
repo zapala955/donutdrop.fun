@@ -13,13 +13,14 @@ import {
   sessionCookieOptions,
 } from '../lib/auth.js';
 import { MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
+import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
 import { creditWallet } from '../lib/wallet.js';
 
 const startSchema = z
   .object({
-    minecraftUsername: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+    minecraftUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN),
   })
   .strict();
 const challengeStatusSchema = z

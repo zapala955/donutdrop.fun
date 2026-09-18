@@ -79,6 +79,23 @@ export function captureReferralCode() {
   }
 }
 
+/**
+ * Accepts a code typed into the sign-in modal rather than one arriving on an invite link.
+ *
+ * Stored rather than sent, because attaching a referrer needs a session and at the moment this is
+ * typed there is not one yet. It joins the same queue a `?ref=` link uses, and flushPendingCode
+ * spends it on the first referral mount after login.
+ */
+export function setPendingReferralCode(code) {
+  const clean = String(code ?? '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6,16}$/.test(clean)) return false;
+  pendingCode = clean;
+  try {
+    sessionStorage.setItem('donutdrop:ref', clean);
+  } catch { /* private browsing; the in-memory copy still covers this session */ }
+  return true;
+}
+
 async function flushPendingCode() {
   if (!pendingCode || attaching || !state.authenticated || !state.referrals) return;
   // Already attached to somebody. The backend refuses a second referrer anyway; not asking keeps

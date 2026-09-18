@@ -9,7 +9,7 @@ const API_CLOCK_SKEW_MS = 60_000;
 const withdrawalPayloadSchema = z
   .object({
     withdrawalId: z.uuid(),
-    player: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
+    player: z.string().regex(/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/),
     playerIdentity: z.string().regex(/^mc:[a-f0-9]{32}$/),
     deliveryCodeHash: z.string().regex(/^[a-f0-9]{64}$/),
     items: z

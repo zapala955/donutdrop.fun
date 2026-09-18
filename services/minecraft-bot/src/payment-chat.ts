@@ -1,5 +1,8 @@
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,16}$/;
-const PAID_YOU_PATTERN = /^([A-Za-z0-9_]{3,16}) paid you $/;
+// Bedrock players reach DonutSMP through Floodgate, which gives them a dotted name (`.Gamertag`)
+// truncated to Minecraft's 16-character ceiling. Refusing the dot here would silently drop every
+// Bedrock payment on the floor — the receipt would parse as "not a payment" and never be reported.
+const USERNAME_PATTERN = /^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/;
+const PAID_YOU_PATTERN = /^(\.?[A-Za-z0-9_]{2,16}) paid you $/;
 // Only an unabbreviated amount is accepted. DonutSMP renders a thousand and above as "1K" or
 // "1.2K", which cannot be mapped back to the exact figure, so such a message is not evidence of
 // any particular amount and is refused rather than guessed at.

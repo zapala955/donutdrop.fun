@@ -20,7 +20,7 @@ import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
 import { mountSlither } from './slither.js';
-import { mountReferrals, captureReferralCode } from './referrals.js';
+import { mountReferrals, captureReferralCode, setPendingReferralCode } from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
 import { mountRakeback } from './rakeback.js';
 import { mountDaily } from './daily.js';
@@ -212,27 +212,148 @@ function showFairness() {
   });
 }
 
+/* The two shapes a name can take on the way in.
+ *
+ * Java is the plain 3–16 rule. Bedrock players reach DonutSMP through its Floodgate bridge, which
+ * prepends a dot and truncates the result to Minecraft's 16-character ceiling — so the part the
+ * player types is capped at 15, and the dot is added by the checkbox rather than by them. */
+const JAVA_NAME = /^[A-Za-z0-9_]{3,16}$/;
+const BEDROCK_NAME = /^[A-Za-z0-9_]{2,15}$/;
+const REFERRAL_CODE = /^[A-Z0-9]{6,16}$/;
+
+const PERSON_ICON =
+  '<svg class="auth__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"' +
+  ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
 function openLoginModal() {
   if (state.authenticated) {
     toast({ kind: 'win', title: 'Already linked', body: state.user.minecraftUsername });
     return;
   }
-  openModal('Sign in with /pay', (body) => {
-    body.innerHTML = `<p>Enter your public Minecraft username. You prove the account is yours by paying the bot an exact amount in game. The payment is credited to your balance.</p>
-      <form id="linkForm"><div class="modal__label">Minecraft username</div>
-      <div class="modal__row"><input id="linkUsername" minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" required autocomplete="username">
-      <button class="btn btn--go" type="submit">Get my amount</button></div></form>
+  openModal('Sign In or Sign Up', (body) => {
+    body.innerHTML = `<h3 class="auth__title" aria-hidden="true">Sign In or Sign Up</h3>
+      <p class="auth__lede">Log in with your Minecraft username, then verify your account by
+        paying the bot an exact amount in game. The payment lands in your balance.</p>
+      <hr class="auth__rule">
+      <form id="linkForm" novalidate>
+        <label class="auth__label" for="linkUsername">Minecraft username</label>
+        <div class="auth__field" id="linkField">
+          ${PERSON_ICON}
+          <span class="auth__prefix" id="linkPrefix" hidden>.</span>
+          <input id="linkUsername" class="auth__input" type="text" maxlength="16" required
+                 autocomplete="username" autocapitalize="none" spellcheck="false"
+                 placeholder="Enter your minecraft username…">
+        </div>
+        <p class="auth__err" id="linkError" role="alert" hidden></p>
+
+        <div class="auth__checks">
+          <label class="auth__check">
+            <input type="checkbox" id="linkTerms">
+            <span class="auth__box" aria-hidden="true"></span>
+            <span class="auth__txt">I agree to all <a href="#/terms">Terms &amp; Conditions</a>.</span>
+          </label>
+          <label class="auth__check">
+            <input type="checkbox" id="linkBedrock">
+            <span class="auth__box" aria-hidden="true"></span>
+            <span class="auth__txt">I play Bedrock Edition (adds a <span class="mono">.</span> before your name)</span>
+          </label>
+        </div>
+
+        <details class="auth__ref">
+          <summary>Have a referral code?</summary>
+          <div class="auth__refbody">
+            <div class="auth__field">
+              <input id="linkRef" class="auth__input" type="text" maxlength="16"
+                     autocapitalize="characters" spellcheck="false" placeholder="e.g. DONUT2026">
+            </div>
+            <p class="auth__note">Six to sixteen letters and numbers. It is applied for you once
+              the account is linked.</p>
+          </div>
+        </details>
+
+        <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
+      </form>
       <div id="linkProgress" role="status"></div>`;
-    $('#linkForm', body).addEventListener('submit', async (event) => {
+
+    const form = $('#linkForm', body);
+    const field = $('#linkField', body);
+    const input = $('#linkUsername', body);
+    const prefix = $('#linkPrefix', body);
+    const terms = $('#linkTerms', body);
+    const bedrock = $('#linkBedrock', body);
+    const referral = $('#linkRef', body);
+    const go = $('#linkGo', body);
+    const inlineError = $('#linkError', body);
+
+    const typedName = () => input.value.trim();
+    const referralCode = () => referral.value.trim().toUpperCase();
+    const nameValid = () =>
+      bedrock.checked ? BEDROCK_NAME.test(typedName()) : JAVA_NAME.test(typedName());
+    const referralValid = () => referralCode() === '' || REFERRAL_CODE.test(referralCode());
+
+    const setError = (message) => {
+      inlineError.textContent = message;
+      inlineError.hidden = !message;
+      field.classList.toggle('is-error', Boolean(message));
+    };
+
+    /* Continue stays disabled until the form could actually succeed. A button that is enabled and
+     * then rejects the click is a worse answer than one that says up front it is not ready. */
+    const sync = () => {
+      prefix.hidden = !bedrock.checked;
+      input.maxLength = bedrock.checked ? 15 : 16;
+      go.disabled = !(nameValid() && terms.checked && referralValid());
+    };
+
+    input.addEventListener('input', () => {
+      // Somebody who knows the convention will type the dot themselves. Take that as the answer to
+      // the question the checkbox asks, rather than failing them on it.
+      if (input.value.startsWith('.')) {
+        input.value = input.value.slice(1);
+        bedrock.checked = true;
+      }
+      setError('');
+      sync();
+    });
+    input.addEventListener('blur', () => {
+      if (!typedName() || nameValid()) {
+        setError('');
+        return;
+      }
+      setError(
+        bedrock.checked
+          ? 'After the dot, Bedrock names are 2–15 letters, numbers or underscores.'
+          : 'Minecraft names are 3–16 letters, numbers or underscores.',
+      );
+    });
+    bedrock.addEventListener('change', () => {
+      if (bedrock.checked) input.value = input.value.slice(0, 15);
+      setError('');
+      sync();
+    });
+    terms.addEventListener('change', sync);
+    referral.addEventListener('input', sync);
+    sync();
+
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const username = $('#linkUsername', body).value.trim();
-      const submit = $('#linkForm button', body);
-      submit.disabled = true;
+      if (go.disabled) return;
+      const username = (bedrock.checked ? '.' : '') + typedName();
+      const code = referralCode();
+      go.disabled = true;
+      go.dataset.state = 'loading';
+      go.textContent = 'Checking…';
       try {
         const challenge = await startLogin(username);
+        // Held, not sent: attaching a referrer needs a session, and there is none until the
+        // payment lands. The referral panel spends it on the first mount after login.
+        if (code) setPendingReferralCode(code);
+        go.dataset.state = 'success';
+        form.hidden = true;
         $('#linkProgress', body).innerHTML = `<p>Run this exact command in game:</p>
           <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(challenge.instruction)}</p>
-          <p class="card__p">Pay exactly $${escapeText(String(challenge.payAmount))} \u2014 the amount is what identifies you, so a different amount will not sign you in.</p>
+          <p class="card__p">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
           <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
           <div id="linkFinish" hidden>
             <button class="btn btn--go" type="button" id="linkComplete">Finish login</button>
@@ -240,11 +361,15 @@ function openLoginModal() {
           </div>`;
         pollLink(challenge.challengeId, body);
       } catch (error) {
-        showApiError(error);
-        submit.disabled = false;
+        go.dataset.state = '';
+        go.textContent = 'Continue';
+        go.disabled = false;
+        setError(error?.message || 'Could not start the login.');
       }
     });
-  });
+
+    input.focus();
+  }, { variant: 'auth' });
 }
 
 async function openDepositModal() {
