@@ -163,9 +163,13 @@ only needed to fill in real values.
 One entry in `DISCORD_OPERATORS_JSON` means one operator. Nobody else can mint an admin link, in
 that guild or any other.
 
-Then set in `/opt/donutdrop/shared/donutdrop.env`:
+Then set in `/opt/donutdrop/shared/donutdrop.env`. `ADMIN_MINECRAFT_IDS` is the one that is easy
+to miss: the operator has to be an administrator in its own right, and the gateway refuses to boot
+if a Discord mapping points at an identity that is not listed there. A Discord mapping is
+permission to *use* an administrator identity, never permission to become one.
 
 ```
+ADMIN_MINECRAFT_IDS=mc:the-identity-from-above
 DISCORD_CONTROL_ENABLED=true
 DISCORD_APPLICATION_ID=<application id>
 DISCORD_GUILD_ID=<the one guild the bot is pinned to>
