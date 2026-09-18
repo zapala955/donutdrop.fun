@@ -332,8 +332,8 @@ services:
       # path later and quietly change nothing. Internal by design: these routes are signature-gated
       # rather than session-gated and must never be reachable from the public network.
       API_INTERNAL_BASE_URL: http://api:3001
-      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:?Set the Discord application id}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?Set the Discord guild id the bot is pinned to}
+      DISCORD_APPLICATION_ID: '${DISCORD_APPLICATION_ID:-}'
+      DISCORD_GUILD_ID: '${DISCORD_GUILD_ID:-}'
       DISCORD_ALERT_CHANNEL_ID: '${DISCORD_ALERT_CHANNEL_ID:-}'
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       DISCORD_CONTROL_HMAC_KEY_FILE: /run/secrets/discord_control_hmac_key
@@ -420,12 +420,15 @@ secrets:
     file: ${AUDIT_CHECKPOINT_HMAC_KEY_FILE:?Set AUDIT_CHECKPOINT_HMAC_KEY_FILE}
   bot_webhook_secret:
     file: ${BOT_WEBHOOK_SECRET_FILE:?Set BOT_WEBHOOK_SECRET_FILE}
+  # Defaulted rather than required. Compose interpolates every variable in the file before it
+  # applies profiles, so a `:?` here made the Discord files mandatory for the entire stack — the
+  # API would not start, and `docker compose exec postgres` would not even run.
   discord_bot_token:
-    file: ${DISCORD_BOT_TOKEN_FILE:?Set DISCORD_BOT_TOKEN_FILE}
+    file: ${DISCORD_BOT_TOKEN_FILE:-/opt/donutdrop/shared/secrets/discord-bot-token}
   discord_control_hmac_key:
-    file: ${DISCORD_CONTROL_HMAC_KEY_FILE:?Set DISCORD_CONTROL_HMAC_KEY_FILE}
+    file: ${DISCORD_CONTROL_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/discord-control-hmac-key}
   discord_operators_json:
-    file: ${DISCORD_OPERATORS_JSON_FILE:?Set DISCORD_OPERATORS_JSON_FILE}
+    file: ${DISCORD_OPERATORS_JSON_FILE:-/opt/donutdrop/shared/secrets/discord-operators.json}
 
 volumes:
   postgres-data:

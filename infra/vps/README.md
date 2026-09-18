@@ -143,19 +143,22 @@ sudo docker compose --env-file /opt/donutdrop/shared/donutdrop.env \
   -c "SELECT minecraft_identity FROM users WHERE normalized_username = lower('YOUR_MC_NAME')"
 ```
 
-Write the Discord secrets. `prepare-secrets.sh` rewrites every secret file, so pass the same
-`BOT_ID` and `BOT_USERNAME` the first run used — otherwise the bot credentials stop matching the
-provisioned Minecraft account and the bot cannot authenticate:
+Write the Discord secrets with the script that adds them to an existing deployment.
+`prepare-secrets.sh` is not the one to use here: it mints every credential the platform owns and
+refuses to run twice, because a second run would rotate the database passwords and the bot webhook
+secret out from under a live stack.
 
 ```bash
-BOT_ID="$(sudo sed -n 's/^BOT_ID=//p' /opt/donutdrop/shared/donutdrop.env)"
-BOT_USERNAME="$(sudo sed -n 's/^MINECRAFT_EXPECTED_USERNAME=//p' /opt/donutdrop/shared/donutdrop.env)"
-
-sudo BOT_ID="$BOT_ID" BOT_USERNAME="$BOT_USERNAME" \
-  DISCORD_BOT_TOKEN='paste-the-token-here' \
-  DISCORD_OPERATORS_JSON='{"YOUR_DISCORD_USER_ID":"mc:the-identity-from-above"}' \
-  ./infra/vps/prepare-secrets.sh
+sudo DISCORD_BOT_TOKEN='paste-the-token-here' \
+     DISCORD_OPERATORS_JSON='{"YOUR_DISCORD_USER_ID":"mc:the-identity-from-above"}' \
+     ./infra/vps/prepare-discord-secrets.sh
 ```
+
+Re-running it is safe. Anything already on disk is kept unless a new value is passed, so rotating
+the token later cannot blank the allowlist or change the HMAC key the gateway and bot share.
+
+On a brand-new deployment `prepare-secrets.sh` writes these three files itself, and this step is
+only needed to fill in real values.
 
 One entry in `DISCORD_OPERATORS_JSON` means one operator. Nobody else can mint an admin link, in
 that guild or any other.
