@@ -380,6 +380,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
           '024_runtime_readiness.sql',
           '025_pay_login_wallet_credit.sql',
           '026_cash_payment_deposits.sql',
+          '027_passive_cash_receipts.sql',
         ],
       );
 
@@ -438,7 +439,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await assertRuntimeDatabaseRole(runtime);
         await assert.doesNotReject(runtime.query('SELECT count(*) FROM audit_log'));
         const readiness = await runtime.query<{ ready: boolean }>(
-          'SELECT public.donut_schema_ready_v26() AS ready',
+          'SELECT public.donut_schema_ready_v27() AS ready',
         );
         assert.equal(readiness.rows[0]?.ready, true);
 

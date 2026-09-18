@@ -14,8 +14,10 @@ import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { parseWith } from '../lib/validation.js';
+import { creditWallet } from '../lib/wallet.js';
 
 const normalizedUuid = z.uuid().transform((value) => value.toLowerCase());
+const DATABASE_BIGINT_MAX = 9_223_372_036_854_775_807n;
 const eventBase = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const heartbeatEvent = eventBase.extend({
   type: z.literal('heartbeat'),
@@ -99,7 +101,10 @@ const paymentEvent = eventBase.extend({
 const cashPaymentEvent = eventBase.extend({
   type: z.literal('cash_payment_observed'),
   payer: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
-  displayedAmount: z.string().regex(/^[1-9]\d*(?:\.\d+)?[KMBT]?$/).max(32),
+  displayedAmount: z
+    .string()
+    .regex(/^[1-9]\d*(?:\.\d+)?[KMBT]?$/)
+    .max(32),
 });
 const botEventSchema = z.discriminatedUnion('type', [
   heartbeatEvent,
@@ -766,10 +771,8 @@ async function processDeposit(
 
 /**
  * Records that a payment matching a pending login was seen in chat.
- *
- * Deliberately does not confirm the login. The message is unsigned system chat, and the only
- * evidence that money actually moved is the bot's real balance, which is read from the DonutSMP
- * API outside this transaction. Marking the observation is what lets that check run.
+ * Confirmation is completed by the browser's status request, which resolves the current UUID for
+ * the username carried by the strictly parsed DonutSMP system receipt.
  */
 async function processPaymentObserved(
   client: DbClient,
@@ -787,28 +790,96 @@ async function processPaymentObserved(
   // People pay the bot for reasons that have nothing to do with logging in. An unmatched payment
   // is ordinary, not an error, and must not fail the event or trigger a bot retry.
   if (!challenge) return;
-  await client.query(
-    'UPDATE auth_link_challenges SET observed_payment_at = now() WHERE id = $1',
-    [challenge.id],
-  );
+  await client.query('UPDATE auth_link_challenges SET observed_payment_at = now() WHERE id = $1', [
+    challenge.id,
+  ]);
+}
+
+interface LinkedCashUserRow {
+  id: string;
+}
+
+/** Expands the amount DonutSMP chose to show in its server-authored payment receipt. */
+function displayedPaymentAmount(displayed: string): bigint | undefined {
+  const match = /^([1-9]\d*)(?:\.(\d+))?([KMBT])?$/.exec(displayed);
+  if (!match) return undefined;
+  const scales: Record<string, bigint> = {
+    '': 1n,
+    K: 1_000n,
+    M: 1_000_000n,
+    B: 1_000_000_000n,
+    T: 1_000_000_000_000n,
+  };
+  const fraction = match[2] ?? '';
+  const denominator = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(`${match[1]}${fraction}`) * scales[match[3] ?? '']!;
+  if (numerator % denominator !== 0n) return undefined;
+  const amount = numerator / denominator;
+  return amount > 0n && amount <= DATABASE_BIGINT_MAX ? amount : undefined;
 }
 
 /**
- * Records who the DonutSMP server says paid. Large receipts are abbreviated, so the exact amount
- * is verified later against the API balance by the browser's authenticated status request.
+ * Attributes one structurally verified, server-authored receipt to a linked player. DonutSMP
+ * abbreviates large amounts, so this deliberately credits the value shown in chat; information
+ * omitted by that display cannot be recovered in chat-only mode.
  */
 async function processCashPaymentObserved(
   client: DbClient,
   event: z.infer<typeof cashPaymentEvent>,
 ): Promise<void> {
+  const amount = displayedPaymentAmount(event.displayedAmount);
+
+  let status: 'credited' | 'login_payment' | 'unlinked' | 'manual_review' = 'manual_review';
+  let userId: string | undefined;
+  let walletBalanceAfter: string | undefined;
+
+  if (amount !== undefined) {
+    const login = await client.query<{ id: string }>(
+      `SELECT id FROM auth_link_challenges
+        WHERE method = 'payment' AND bot_id = $1
+          AND normalized_username = lower($2) AND pay_amount = $3
+          AND completed_at IS NULL AND confirmed_at IS NULL AND expires_at > now()
+        ORDER BY created_at LIMIT 1 FOR UPDATE`,
+      [event.botId, event.payer, amount.toString()],
+    );
+    if (login.rowCount) {
+      status = 'login_payment';
+    } else {
+      const account = await client.query<LinkedCashUserRow>(
+        'SELECT id FROM users WHERE normalized_username = lower($1) LIMIT 1 FOR UPDATE',
+        [event.payer],
+      );
+      userId = account.rows[0]?.id;
+      if (userId) {
+        walletBalanceAfter = await creditWallet(
+          client,
+          userId,
+          amount,
+          'cash_deposit',
+          event.eventId,
+        );
+        status = 'credited';
+      } else {
+        status = 'unlinked';
+      }
+    }
+  }
+
   await client.query(
-    `UPDATE cash_deposit_challenges deposit
-        SET status = 'observed', displayed_amount = $3, observed_at = now(), updated_at = now()
-       FROM users account
-      WHERE deposit.user_id = account.id AND deposit.bot_id = $1
-        AND account.normalized_username = lower($2)
-        AND deposit.status = 'pending' AND deposit.expires_at > now()`,
-    [event.botId, event.payer, event.displayedAmount],
+    `INSERT INTO cash_payment_receipts
+       (event_id, bot_id, payer_username, displayed_amount, amount_minor, user_id, status,
+        wallet_balance_after_minor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      event.eventId,
+      event.botId,
+      event.payer,
+      event.displayedAmount,
+      amount?.toString() ?? null,
+      userId ?? null,
+      status,
+      walletBalanceAfter ?? null,
+    ],
   );
 }
 
@@ -842,8 +913,7 @@ async function processSnapshot(
   const countsMatch =
     !config.physicalCustodyEnabled ||
     [...keys].every((key) => (expected.get(key) ?? 0n) === (supplied.get(key) ?? 0n));
-  const capacitySafe =
-    !config.physicalCustodyEnabled || event.occupiedSlots < event.capacitySlots;
+  const capacitySafe = !config.physicalCustodyEnabled || event.occupiedSlots < event.capacitySlots;
   const matched = countsMatch && capacitySafe;
   const totalsObject = Object.fromEntries(
     [...supplied.entries()]

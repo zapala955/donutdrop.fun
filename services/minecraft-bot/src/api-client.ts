@@ -172,9 +172,6 @@ export class ApiClient {
 
   /**
    * Reports an observed in-game payment so the gateway can match it to a pending login.
-   *
-   * Only the payer and an exact amount are sent. The gateway re-reads the bot's real balance from
-   * the DonutSMP API before acting on this, because the message behind it is unsigned system chat.
    */
   async reportPayment(payer: string, amount: number): Promise<void> {
     await this.sendEvent({
@@ -186,7 +183,7 @@ export class ApiClient {
     });
   }
 
-  /** Reports the payer even when DonutSMP abbreviated the displayed amount. */
+  /** Reports a general cash receipt; the signed POST retries the same event object on failure. */
   async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
     await this.sendEvent({
       eventId: randomUUID(),

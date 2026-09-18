@@ -124,20 +124,23 @@ Both `MINECRAFT_TRANSFERS_ENABLED` and `BOT_TRANSFERS_ENABLED` remain forced to 
 bundled adapter refuses physical item transfers. Account linking, cash deposits through DonutSMP
 `/pay`, and inventory observation work without those flags. Physical item deposits and withdrawals
 continue to fail closed until a DonutSMP-specific atomic item-transfer adapter is implemented,
-reviewed, and explicitly wired into both processes. Cash deposits serialize one active payment per
-bot so an abbreviated chat receipt can be verified against one exact API balance delta. Rotate a
-quarantined bot's credential before using the admin release API. The initial catalog is empty; this
-deployment adds no items.
+reviewed, and explicitly wired into both processes. Cash payment receipts are processed in order
+and matched to the payer's linked account directly from DonutSMP's structured system chat; no
+deposit challenge is required. Because DonutSMP abbreviates non-round large values in chat, the
+displayed value is the amount credited (for example, `1.2K` credits 1,200). Unlinked receipts are
+retained for review. Rotate a quarantined bot's credential before using the admin release API. The
+initial catalog is empty; this deployment adds no items.
 
 Compose isolates bot control traffic, but a Docker bridge is not a destination allowlist. Before
 enabling any transfer adapter, enforce bot egress at the host firewall or a dedicated egress proxy,
 allowing only the reviewed Microsoft authentication endpoints, DNS/NTP dependencies, and the
 configured DonutSMP endpoint. Deny access to cloud metadata and private management networks.
 
-The API also needs outbound HTTPS for payment-login and cash-deposit balance verification against
-`api.donutsmp.net` (and for Discord OAuth/webhooks if those optional features are enabled). Apply
-the same host-firewall or dedicated-proxy policy to `API_EGRESS_NETWORK_CIDR`; in particular, deny
-cloud metadata and private management ranges. Removing API egress disables both payment flows.
+The API also needs outbound HTTPS to resolve Minecraft identities during login (and for Discord
+OAuth/webhooks if those optional features are enabled). Apply the same host-firewall or
+dedicated-proxy policy to `API_EGRESS_NETWORK_CIDR`; in particular, deny cloud metadata and
+private management ranges. DonutSMP payment acceptance itself is based only on structured chat
+receipts and does not query the DonutSMP stats API.
 
 ## Backup launch gate
 

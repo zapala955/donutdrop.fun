@@ -32,6 +32,7 @@ export class MinecraftWorker {
   private connectionController: AbortController | undefined;
   private readonly lastPlayerCommandAt = new Map<string, number>();
   private recentCommandTimes: number[] = [];
+  private paymentReports: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly config: BotConfig,
@@ -118,21 +119,15 @@ export class MinecraftWorker {
         'verified player command',
       );
     });
-    // Login by payment. This is system chat, so it says who the server claims paid and how
-    // much, and proves neither. The API reports the bot's real balance, and that is what the
-    // gateway checks before it credits anyone; reporting here only starts that check.
+    // Cash deposits and login by payment. The structured system-chat message is the source for
+    // ordinary deposits; the separate payment-login flow performs its own exact verification.
     bot._client.on('packet', (data: unknown, meta: unknown) => {
       if (packetName(meta) !== 'system_chat') return;
       const notice = parsePaymentNotice(data);
       if (!notice) return;
       if (notice.payer.toLowerCase() === bot.username.toLowerCase()) return;
-      this.run(
-        this.reportPaymentNotice(notice.payer, notice.displayedAmount),
-        'cash payment observation',
-      );
       const payment = parsePaymentMessage(data);
-      if (!payment) return;
-      this.run(this.reportPayment(payment.payer, payment.amount), 'payment observation');
+      this.queuePaymentReport(notice.payer, notice.displayedAmount, payment?.amount);
     });
     bot.on('windowClose', () => this.markInventoryDirty());
     bot.on('kicked', (reason) =>
@@ -194,6 +189,19 @@ export class MinecraftWorker {
   private async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
     this.log.info({ payer, displayedAmount }, 'Observed in-game cash payment receipt');
     await this.api.reportPaymentNotice(payer, displayedAmount);
+  }
+
+  /** Preserve the order in which DonutSMP delivered payment receipts. */
+  private queuePaymentReport(payer: string, displayedAmount: string, exactAmount?: number): void {
+    this.paymentReports = this.paymentReports
+      .catch(() => undefined)
+      .then(async () => {
+        await this.reportPaymentNotice(payer, displayedAmount);
+        if (exactAmount !== undefined) await this.reportPayment(payer, exactAmount);
+      })
+      .catch((error: unknown) => {
+        this.log.error({ err: error }, 'payment observation failed');
+      });
   }
 
   private async handleVerifiedPlayerCommand(

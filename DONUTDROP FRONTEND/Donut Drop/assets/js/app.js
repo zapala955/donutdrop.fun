@@ -5,10 +5,10 @@ import {
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
-  createCashDeposit, cashDepositStatus, refreshActivity,
+  cashDepositInfo, refreshActivity, refreshBalance,
 } from './store.js';
 import {
-  $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount, formatAmountInput,
+  $, $$, el, money, itemTile, reduceMotion, safeImage,
 } from './util.js';
 import {
   toast, initModal, initWallet, fairSheet, broadcast,
@@ -252,84 +252,24 @@ async function openDepositModal() {
     openLoginModal();
     return;
   }
+  let modalBody;
   openModal('Deposit DonutSMP money', (body) => {
-    body.innerHTML = `<p>Choose how much in-game money to add. You will pay the bot with one
-      DonutSMP <span class="mono">/pay</span> command, and the exact amount will be credited to
-      your site balance.</p>
-      <form id="cashDepositForm">
-        <div class="modal__label">Amount</div>
-        <div class="modal__row">
-          <input id="cashDepositAmount" inputmode="decimal" autocomplete="off"
-                 value="${formatAmountInput(1_000_000)}" required>
-          <button class="btn btn--go" type="submit">Create deposit</button>
-        </div>
-        <p class="card__p" id="cashDepositHint">Examples: 500k, 1m, 10m</p>
-      </form>
-      <div id="cashDepositProgress" role="status"></div>`;
-    $('#cashDepositForm', body).addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const amount = parseAmount($('#cashDepositAmount', body).value);
-      const hint = $('#cashDepositHint', body);
-      if (!amount || amount < 1) {
-        hint.textContent = 'Enter an amount of at least $1.';
-        return;
-      }
-      const button = $('#cashDepositForm button', body);
-      button.disabled = true;
-      try {
-        const result = await createCashDeposit(String(amount));
-        const depositAmount = Number(result.deposit.amountMinor);
-        $('#cashDepositForm', body).hidden = true;
-        $('#cashDepositProgress', body).innerHTML = `<p>Run this exact command in game:</p>
-          <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(result.instruction)}</p>
-          <p class="card__p">Send exactly ${escapeText(money(depositAmount))}. Do not send another
-            payment until this deposit finishes.</p>
-          <div class="kv"><span>status</span><span id="cashDepositState">waiting for payment</span></div>
-          <p class="card__p" id="cashDepositError" role="alert" hidden></p>`;
-        pollCashDeposit(result.deposit.id, body);
-      } catch (error) {
-        showApiError(error);
-        button.disabled = false;
-      }
-    });
+    modalBody = body;
+    body.innerHTML = '<p class="card__p">Loading payment bot…</p>';
   });
-}
-
-const CASH_DEPOSIT_STATE_TEXT = {
-  pending: 'waiting for payment',
-  observed: 'payment seen, verifying exact balance',
-  credited: 'credited to your balance',
-  expired: 'expired, create a new deposit',
-  manual_review: 'received but needs manual review',
-};
-
-async function pollCashDeposit(id, body) {
-  if (!body.isConnected || !$('#modal').open) return;
   try {
-    const result = await cashDepositStatus(id);
-    const deposit = result.deposit;
-    const status = $('#cashDepositState', body);
-    if (status) status.textContent = CASH_DEPOSIT_STATE_TEXT[deposit.status] || deposit.status;
-    if (deposit.status === 'credited') {
-      toast({ kind: 'win', title: 'Deposit credited', body: money(Number(deposit.amountMinor)) });
-      return;
-    }
-    if (deposit.status === 'expired' || deposit.status === 'manual_review') {
-      const error = $('#cashDepositError', body);
-      error.hidden = false;
-      error.textContent = deposit.status === 'expired'
-        ? 'No payment was confirmed before the timer expired.'
-        : 'The bot received a payment, but the exact balance change was ambiguous. Contact support; do not pay again.';
-      return;
-    }
+    const info = await cashDepositInfo();
+    if (!modalBody?.isConnected || !$('#modal').open) return;
+    modalBody.innerHTML = `<p>Pay any amount from your linked Minecraft account. It will be
+      credited automatically when the bot sees the payment in chat. Use round amounts such as
+      1M or 5M because DonutSMP shortens other large values.</p>
+      <div class="kv"><span>Bot IGN</span><span class="mono">${escapeText(info.botUsername)}</span></div>
+      <div class="modal__label">Command</div>
+      <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(info.command)}</p>`;
   } catch (error) {
-    const inline = $('#cashDepositError', body);
-    if (inline) {
-      inline.hidden = false;
-      inline.textContent = error?.message || 'Could not check the deposit yet.';
-    }
+    closeModal();
+    showApiError(error);
   }
-  setTimeout(() => pollCashDeposit(id, body), 1_500);
 }
 
 const PAY_STATE_TEXT = {
@@ -609,7 +549,10 @@ paintAuthChrome();
 captureReferralCode();
 bootstrap().catch(showApiError);
 setInterval(() => {
-  if (!document.hidden) refreshActivity().catch(() => undefined);
+  if (document.hidden) return;
+  const refreshes = [refreshActivity()];
+  if (state.authenticated) refreshes.push(refreshBalance());
+  Promise.allSettled(refreshes).catch(() => undefined);
 }, 15_000);
 
 /* the animation test bench — hidden until Ctrl+Alt+D or ?dev=1 */

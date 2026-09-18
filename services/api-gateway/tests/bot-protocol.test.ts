@@ -146,7 +146,10 @@ describe('internal bot protocol', () => {
     );
   });
 
-  it('records abbreviated cash receipts for the matching active player deposit', async () => {
+  it('credits the server-chat amount from an abbreviated receipt to the linked player', async (t) => {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+      throw new Error('cash receipt processing must not call the DonutSMP API');
+    });
     const config = protocolConfig();
     const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
     const client = {
@@ -154,6 +157,13 @@ describe('internal bot protocol', () => {
         statements.push(values ? { sql, values } : { sql });
         if (sql.includes('INSERT INTO inbound_bot_events')) {
           return { rows: [{ event_id: '90b1771b-da27-44c1-9bf0-676b54d94479' }], rowCount: 1 };
+        }
+        if (sql.includes('FROM auth_link_challenges')) return { rows: [], rowCount: 0 };
+        if (sql.includes('SELECT id FROM users')) {
+          return { rows: [{ id: '30000000-0000-4000-8000-000000000003' }], rowCount: 1 };
+        }
+        if (sql.includes('UPDATE user_wallets')) {
+          return { rows: [{ balance_minor: '1200' }], rowCount: 1 };
         }
         return { rows: [], rowCount: 1 };
       },
@@ -169,7 +179,7 @@ describe('internal bot protocol', () => {
       botId: firstId,
       type: 'cash_payment_observed',
       payer: 'PlayerOne',
-      displayedAmount: '1M',
+      displayedAmount: '1.2K',
     };
     const requestTimestamp = Date.now().toString();
     const signature = apiHmacHex(
@@ -189,13 +199,23 @@ describe('internal bot protocol', () => {
         payload: requestBody,
       });
       assert.equal(response.statusCode, 200);
+      assert.equal(fetchMock.mock.callCount(), 0);
       assert.ok(
         statements.some(
           ({ sql, values }) =>
-            sql.includes('UPDATE cash_deposit_challenges deposit') &&
-            values?.[0] === firstId &&
-            values?.[1] === 'PlayerOne' &&
-            values?.[2] === '1M',
+            sql.includes('INSERT INTO wallet_transactions') &&
+            values?.[2] === '1200' &&
+            values?.[4] === 'cash_deposit' &&
+            values?.[5] === requestBody.eventId,
+        ),
+      );
+      assert.ok(
+        statements.some(
+          ({ sql, values }) =>
+            sql.includes('INSERT INTO cash_payment_receipts') &&
+            values?.[2] === 'PlayerOne' &&
+            values?.[3] === '1.2K' &&
+            values?.[6] === 'credited',
         ),
       );
     } finally {

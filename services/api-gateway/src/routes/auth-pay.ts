@@ -5,7 +5,6 @@ import type { AppConfig } from '../config.js';
 import { linkCookieName } from '../lib/auth.js';
 import { randomToken, safeEqualText, sha256 } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
-import { DonutSmpApi, MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
 import { AppError } from '../lib/errors.js';
 import { resolveMinecraftAccount } from '../lib/minecraft-identity.js';
 import { parseWith } from '../lib/validation.js';
@@ -18,16 +17,9 @@ import { parseWith } from '../lib/validation.js';
  * exactly in chat: at a thousand and above the payment message abbreviates ("1234" arrives as
  * "1.2K") and the nonce stops being legible.
  *
- * Two facts shape the rest of this. The payment message is unsigned system chat, so it can say
- * who paid but proves nothing; and the bot's balance, read from the DonutSMP API, is exact. So
- * chat is treated only as a prompt to go and check, and a login is confirmed against the balance.
- *
- * Confirmation deliberately happens on the browser's polling request rather than when the bot
- * reports the message, because reading the balance is a network call and has no business running
- * inside the bot event's serializable transaction.
- *
- * Once confirmed, the challenge is completed by the existing POST /v1/auth/link/complete, which
- * only requires confirmed_at, confirmed_identity and confirmed_username to be set.
+ * The bot strictly matches DonutSMP's structured system-chat receipt. Once that exact nonce is
+ * observed, the browser's polling request resolves the public Minecraft identity and confirms the
+ * challenge. Completion remains in POST /v1/auth/link/complete.
  */
 
 const startSchema = z
@@ -43,7 +35,6 @@ interface ChallengeStatusRow {
   id: string;
   requested_username: string;
   pay_amount: number | null;
-  bot_balance_before: string | null;
   observed_payment_at: Date | null;
   confirmed_at: Date | null;
   completed_at: Date | null;
@@ -57,7 +48,6 @@ export async function registerPayLoginRoutes(
   config: AppConfig,
 ) {
   const provisionedBotIds = [...config.botCredentials.keys()];
-  const donutsmp = new DonutSmpApi(config);
 
   const requireWebsiteOrigin = async (request: FastifyRequest): Promise<void> => {
     const origin = request.headers.origin;
@@ -109,18 +99,6 @@ export async function registerPayLoginRoutes(
       if (!selectedBot) {
         throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
       }
-      if (!donutsmp.configured) {
-        throw new AppError(
-          503,
-          'PAY_LOGIN_UNAVAILABLE',
-          'Payment login is not configured on this server',
-        );
-      }
-
-      // Read before issuing. The recorded figure has to predate the payment for the later
-      // comparison to mean anything at all.
-      const balanceBefore = await donutsmp.fetchMoneyMinor(selectedBot.username);
-
       // Expired challenges keep holding their amount, so the uniqueness guarantee never depends
       // on a clock comparison inside an index predicate. Clearing them frees those amounts.
       await db.query(
@@ -140,32 +118,11 @@ export async function registerPayLoginRoutes(
               `payment-lane:${selectedBot.id}`,
             ]);
             await client.query(
-              `UPDATE cash_deposit_challenges SET status = 'expired', updated_at = now()
-                WHERE status = 'pending' AND expires_at <= now()`,
-            );
-            await client.query(
-              `UPDATE cash_deposit_challenges SET status = 'manual_review', updated_at = now()
-                WHERE status = 'observed' AND expires_at <= now()`,
-            );
-            const cashDeposit = await client.query(
-              `SELECT 1 FROM cash_deposit_challenges
-                WHERE bot_id = $1 AND status IN ('pending', 'observed')
-                LIMIT 1`,
-              [selectedBot.id],
-            );
-            if (cashDeposit.rowCount) {
-              throw new AppError(
-                409,
-                'PAYMENT_LANE_BUSY',
-                'Another payment is being verified; try again in a moment',
-              );
-            }
-            await client.query(
               `INSERT INTO auth_link_challenges
                  (id, requested_username, normalized_username, code_hash, browser_token_hash,
-                  bot_id, expires_at, method, pay_amount, bot_balance_before)
+                  bot_id, expires_at, method, pay_amount)
                VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
-                       'payment', $8, $9)`,
+                       'payment', $8)`,
               [
                 challengeId,
                 body.minecraftUsername,
@@ -176,7 +133,6 @@ export async function registerPayLoginRoutes(
                 selectedBot.id,
                 PAY_CHALLENGE_TTL_MINUTES,
                 payAmount,
-                balanceBefore.toString(),
               ],
             );
           });
@@ -216,8 +172,8 @@ export async function registerPayLoginRoutes(
     const query = parseWith(statusSchema, request.query);
     const browserToken = readLinkCookie(request);
     const result = await db.query<ChallengeStatusRow>(
-      `SELECT c.id, c.requested_username, c.pay_amount, c.bot_balance_before,
-              c.observed_payment_at, c.confirmed_at, c.completed_at,
+      `SELECT c.id, c.requested_username, c.pay_amount, c.observed_payment_at,
+              c.confirmed_at, c.completed_at,
               c.expires_at <= now() AS expired, b.username AS bot_username
          FROM auth_link_challenges c JOIN bot_accounts b ON b.id = c.bot_id
         WHERE c.id = $1 AND c.browser_token_hash = $2 AND c.method = 'payment'`,
@@ -238,21 +194,11 @@ export async function registerPayLoginRoutes(
     if (challenge.expired) return { ...base, state: 'expired' };
     if (!challenge.observed_payment_at) return { ...base, state: 'waiting' };
 
-    // Chat said a payment happened. Check whether the money did.
-    const expected = challenge.pay_amount;
-    const before = challenge.bot_balance_before;
-    if (expected === null || before === null) {
+    if (challenge.pay_amount === null) {
       throw new AppError(500, 'CHALLENGE_INVALID', 'Login challenge is missing payment details');
     }
-    const current = await donutsmp.fetchMoneyMinor(challenge.bot_username);
-    if (current < BigInt(before) + BigInt(expected) * MONEY_MINOR_SCALE) {
-      // Seen but not settled. The balance may not have caught up yet, so this stays pending
-      // rather than failing the challenge outright.
-      return { ...base, state: 'verifying' };
-    }
 
-    // The payment message carries a name, not an account. Names are reassignable, so the UUID
-    // behind it is resolved and stored instead.
+    // The receipt carries a name, not an account. Names are reassignable, so store its current UUID.
     const account = await resolveMinecraftAccount(challenge.requested_username);
     if (!account) {
       throw new AppError(

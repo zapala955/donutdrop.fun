@@ -21,9 +21,9 @@ export interface PaymentNotice {
 /**
  * Recognizes DonutSMP's "<player> paid you $ <amount>" message.
  *
- * This is system chat: the server composes it and, unlike player chat, nothing signs it to a
- * sender. It is therefore treated as a hint about who paid, never as proof that money moved. The
- * API-side balance check is what establishes that, so this parser's only job is to be precise.
+ * This is system chat: the server composes it and, unlike player chat, it is not attributed to a
+ * player sender. Ordinary deposits trust this structured server receipt, so this parser matches
+ * its component shape and formatting strictly.
  *
  * Precision is why the whole component structure is matched rather than the rendered string. The
  * real message is exactly three parts, and the currency part carries the server's own bright

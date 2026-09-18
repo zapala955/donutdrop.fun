@@ -30,7 +30,8 @@ override it. The backend origin and cookie settings must match the deployed fron
 ## Connected surfaces
 
 - Minecraft account linking, cookie session, CSRF token, and logout.
-- Cash deposits through an exact DonutSMP `/pay` challenge and API-verified bot balance delta.
+- Passive cash deposits from a linked Minecraft account through server-authored DonutSMP `/pay`
+  chat receipts.
 - Public server-configured case catalog and published integer-weight odds.
 - Atomic case opening with a backend-returned result driving the existing reel/cutscene.
 - Custody inventory with server-quoted sell and separately gated physical withdrawal actions.
