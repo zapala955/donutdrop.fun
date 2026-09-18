@@ -166,6 +166,17 @@ describe('cash withdrawals', () => {
     assert.match(eligibility.sql, /limits\.self_excluded_until/);
   });
 
+  it('offers a payout to a bot that cannot move items', async () => {
+    /* The claim route used to require transfer_capable before handing out ANY job, so a bot with
+     * item transfers deliberately off received { job: null } on every poll forever, with no error
+     * at either end: a queued payout was indistinguishable from an empty queue. Liveness is all a
+     * /pay needs; item capability now only decides which kinds are visible. */
+    const source = await readFile(path.join(process.cwd(), 'src/routes/minecraft-in.ts'), 'utf8');
+    assert.match(source, /AS live,/);
+    assert.match(source, /AS item_capable/);
+    assert.match(source, /AND \(kind = 'cash_payout' OR \$2::boolean\)/);
+  });
+
   it('debits the wallet before the bot is ever told to pay', async () => {
     const { statements } = await post({ balance: 5_000_000n }, '1000000');
     const debit = statements.findIndex(({ sql }) =>
