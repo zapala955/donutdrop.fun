@@ -189,6 +189,31 @@ unless `--profile discord` is passed. The token never belongs in the repository 
 `donutdrop.env`: it is read from `/opt/donutdrop/shared/secrets/discord-bot-token`, mounted
 read-only, and a token that has been pasted anywhere else should be regenerated before use.
 
+## 7. Sign-in challenge (Cloudflare Turnstile)
+
+Optional. Off unless configured, and half-configured is refused at boot rather than ignored.
+
+Create a widget in the Cloudflare dashboard under Turnstile for donutdrop.fun. It gives a site key,
+which is public and rendered into the page, and a secret key, which is what proves a challenge was
+actually solved and lives in a secret file beside the others.
+
+**Run this before the deploy, not after.** The API mounts the secret file whether or not a
+challenge is configured, so a deployment whose secrets predate Turnstile has nothing to bind and
+every container refuses to start:
+
+```bash
+cd /opt/donutdrop/app
+git pull --ff-only origin main
+sudo ./infra/vps/set-turnstile.sh 0xSITEKEY 0xSECRETKEY
+sudo COMPOSE_ENV_FILE=/opt/donutdrop/shared/donutdrop.env ./infra/vps/deploy.sh
+```
+
+Running it with no keys is enough to unblock a deploy on its own: it writes a placeholder that
+cannot verify anything, which is the correct state while TURNSTILE_ENABLED is off.
+
+Turn the challenge off again with `sudo ./infra/vps/set-turnstile.sh --off`; the keys stay in
+place.
+
 ## Launch gates that deployment cannot automate
 
 A clean production database intentionally has an empty item and case catalogue. Direct production

@@ -44,6 +44,16 @@ cp "$env_file" "$backup/env"
 [[ -f "$secret_file" ]] && cp "$secret_file" "$backup/secret"
 
 umask 077
+
+# Created before anything else touches compose. The API mounts this file whether or not a challenge
+# is configured, so a deployment that has never set one still needs it present or every container
+# refuses to start on a bind mount that is not there.
+if [[ ! -f "$secret_file" ]]; then
+  printf '%s' 'disabled-no-turnstile' > "$secret_file"
+  chmod 0444 "$secret_file"
+  echo "Created $secret_file"
+fi
+
 if [[ "${1:-}" == "--off" ]]; then
   set_env TURNSTILE_ENABLED false
   echo "Challenge disabled. The site key and secret are left in place."
@@ -93,7 +103,14 @@ if [[ "$validation" != *"CONFIG OK"* ]]; then
 fi
 
 echo "Applying..."
-compose up -d --force-recreate api > /dev/null 2>&1
+# Not suppressed, and not assumed. A restart that fails silently while this script prints success
+# is how a challenge came to be reported as on while the API was not running at all.
+if ! compose up -d --force-recreate api; then
+  echo >&2
+  echo "The API did not come back up. The configuration above is written and valid, so this is" >&2
+  echo "something else — check: docker compose logs --tail=40 api" >&2
+  exit 1
+fi
 
 echo
 if [[ "${1:-}" == "--off" ]]; then
