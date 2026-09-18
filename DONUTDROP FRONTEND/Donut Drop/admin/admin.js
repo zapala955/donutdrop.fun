@@ -385,7 +385,11 @@ async function publishLadder() {
     );
     await show('items');
   } catch (error) {
-    toast(error.message || 'Could not publish the ladder.', 'bad');
+    /* Status and code, not just the message. An ApiError always carries a message — 'Request
+     * failed' when the response had no JSON body — so the `||` fallback that used to be here could
+     * never fire, and a route that is not deployed yet reported itself as a generic failure with
+     * nothing in it to act on. A 404 here means the API container is older than the console. */
+    toast(error.status + ' ' + error.code + ': ' + error.message, 'bad');
   } finally {
     button.disabled = false;
   }

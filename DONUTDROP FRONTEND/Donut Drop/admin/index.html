@@ -120,7 +120,11 @@
     <input class="confirm__input" id="confirmReason" name="reason" type="text"
            minlength="3" maxlength="256" required autocomplete="off" />
     <div class="confirm__actions">
-      <button class="btn btn--ghost" type="submit" value="cancel">Cancel</button>
+      <!-- formnovalidate, because the reason field beside it is `required`. Without this the
+           browser runs constraint validation on Cancel too and refuses to submit, so an operator
+           who opens the dialog and thinks better of it cannot close it without first inventing a
+           reason for the thing they have decided not to do. -->
+      <button class="btn btn--ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
       <button class="btn btn--danger" type="submit" value="go" id="confirmGo">Confirm</button>
     </div>
   </form>
