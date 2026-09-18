@@ -329,19 +329,43 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           [row.id],
         );
         if (challenge.method === 'payment') {
-          if (!Number.isInteger(challenge.pay_amount) || (challenge.pay_amount ?? 0) <= 0) {
+          // A user may have paid more than one challenge after an earlier completion returned a
+          // 500. Reconcile every confirmed payment for the same immutable Minecraft identity;
+          // each challenge ID is its own ledger idempotency key.
+          const payments = await client.query<{ id: string; pay_amount: number | null }>(
+            `SELECT id, pay_amount FROM auth_link_challenges
+              WHERE method = 'payment' AND confirmed_identity = $1
+                AND confirmed_at IS NOT NULL AND completed_at IS NULL
+              ORDER BY confirmed_at, id FOR UPDATE`,
+            [minecraftIdentity],
+          );
+          if (!payments.rows.some((payment) => payment.id === challenge.id)) {
             throw new AppError(
               500,
               'CHALLENGE_INVALID',
               'Login challenge is missing payment details',
             );
           }
-          await creditWallet(
-            client,
-            row.id,
-            BigInt(challenge.pay_amount!) * MONEY_MINOR_SCALE,
-            'pay_login_deposit',
-            challenge.id,
+          for (const payment of payments.rows) {
+            if (!Number.isInteger(payment.pay_amount) || (payment.pay_amount ?? 0) <= 0) {
+              throw new AppError(
+                500,
+                'CHALLENGE_INVALID',
+                'Login challenge is missing payment details',
+              );
+            }
+            await creditWallet(
+              client,
+              row.id,
+              BigInt(payment.pay_amount!) * MONEY_MINOR_SCALE,
+              'pay_login_deposit',
+              payment.id,
+            );
+          }
+          await client.query(
+            `UPDATE auth_link_challenges SET completed_at = now()
+              WHERE id = ANY($1::uuid[])`,
+            [payments.rows.map((payment) => payment.id)],
           );
         }
         await client.query(

@@ -303,16 +303,23 @@ describe('identity and compliance hardening', () => {
     );
   });
 
-  it('completes and credits a confirmed payment exactly once after its timer expires', async () => {
+  it('completes and credits every confirmed payment after its timer expires', async () => {
     const { app, handlers } = captureApp();
     const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
     const challengeId = '10000000-0000-4000-8000-000000000061';
+    const earlierChallengeId = '10000000-0000-4000-8000-000000000060';
     const userId = '10000000-0000-4000-8000-000000000062';
     const database = {
       transaction: async (work: (client: DbClient) => Promise<unknown>) =>
         work({
           query: async (sql: string, values?: readonly unknown[]) => {
             statements.push(values ? { sql, values } : { sql });
+            if (sql.includes("method = 'payment' AND confirmed_identity")) {
+              return result([
+                { id: earlierChallengeId, pay_amount: 170 },
+                { id: challengeId, pay_amount: 160 },
+              ]);
+            }
             if (sql.includes('FROM auth_link_challenges') && sql.includes('FOR UPDATE')) {
               return result([
                 {
@@ -374,9 +381,26 @@ describe('identity and compliance hardening', () => {
     assert.ok(
       statements.some(
         ({ sql, values }) =>
+          sql.includes('WHERE id = ANY($1::uuid[])') &&
+          Array.isArray(values?.[0]) &&
+          values[0].includes(challengeId) &&
+          values[0].includes(earlierChallengeId),
+      ),
+    );
+    assert.ok(
+      statements.some(
+        ({ sql, values }) =>
           sql.includes('INSERT INTO wallet_transactions') &&
           values?.[4] === 'pay_login_deposit' &&
           values?.[5] === challengeId,
+      ),
+    );
+    assert.ok(
+      statements.some(
+        ({ sql, values }) =>
+          sql.includes('INSERT INTO wallet_transactions') &&
+          values?.[4] === 'pay_login_deposit' &&
+          values?.[5] === earlierChallengeId,
       ),
     );
     const creditIndex = statements.findIndex(({ sql }) => sql.includes('UPDATE user_wallets'));
