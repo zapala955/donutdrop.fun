@@ -211,10 +211,17 @@ export async function registerCashWithdrawalRoutes(
         );
         if (replayed.rows[0]) return { row: replayed.rows[0], replay: true };
 
+        /* The two restriction timestamps live on responsible_limits, not on users. Every account
+         * gets a row there when its login completes, so the inner join cannot drop a real player;
+         * an account somehow missing one returns no row and is refused rather than waved through. */
         const account = await client.query<DepositEligibilityState>(
-          `SELECT status, country_code, terms_accepted_at, age_verified_at, kyc_status,
-                  cooldown_until, self_excluded_until
-             FROM users WHERE id = $1 FOR UPDATE`,
+          `SELECT account.status, account.country_code, account.terms_accepted_at,
+                  account.age_verified_at, account.kyc_status, limits.cooldown_until,
+                  limits.self_excluded_until
+             FROM users account
+             JOIN responsible_limits limits ON limits.user_id = account.id
+            WHERE account.id = $1
+            FOR UPDATE OF account, limits`,
           [userId],
         );
         if (

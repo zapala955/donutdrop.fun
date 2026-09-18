@@ -69,7 +69,7 @@ function fakeDb(options: { balance: bigint; botOnline?: boolean; insertConflict?
     if (sql.includes('FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key')) {
       return result([]);
     }
-    if (sql.includes('FROM users WHERE id = $1')) {
+    if (sql.includes('FROM users account')) {
       return result([
         {
           status: 'active',
@@ -152,6 +152,18 @@ describe('cash withdrawals', () => {
       sql,
       /GRANT SELECT, INSERT, UPDATE ON TABLE cash_withdrawals TO donut_api_runtime/,
     );
+  });
+
+  it('reads the restriction timestamps from the table that actually has them', async () => {
+    /* cooldown_until and self_excluded_until are on responsible_limits. Selecting them from users
+     * parses fine in TypeScript and fails only against a real database, which is exactly how it
+     * reached production: every test here used a fake that answered whatever it was asked. */
+    const { statements } = await post({ balance: 5_000_000n }, '1000000');
+    const eligibility = statements.find(({ sql }) => sql.includes('cooldown_until'));
+    assert.ok(eligibility, 'no eligibility query was issued');
+    assert.match(eligibility.sql, /JOIN responsible_limits/);
+    assert.match(eligibility.sql, /limits\.cooldown_until/);
+    assert.match(eligibility.sql, /limits\.self_excluded_until/);
   });
 
   it('debits the wallet before the bot is ever told to pay', async () => {
