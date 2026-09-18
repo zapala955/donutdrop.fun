@@ -174,7 +174,8 @@ DISCORD_GUILD_ID=<the one guild the bot is pinned to>
 Register the slash commands once, then bring the profile up:
 
 ```bash
-npm run commands:register --workspace @donut/discord-bot
+# The compiled registrar ships inside the image, so this needs no Node on the host.
+sudo docker compose --env-file /opt/donutdrop/shared/donutdrop.env   -f infra/docker/compose.yml --profile discord run --rm discord-bot   node services/discord-bot/dist/scripts/register-commands.js
 sudo docker compose --env-file /opt/donutdrop/shared/donutdrop.env \
   -f infra/docker/compose.yml --profile discord up -d --build
 ```
