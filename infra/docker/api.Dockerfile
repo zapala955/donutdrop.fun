@@ -9,6 +9,12 @@ RUN npm ci --ignore-scripts
 COPY packages/provably-fair packages/provably-fair
 COPY packages/db packages/db
 COPY services/api-gateway services/api-gateway
+# Incremental state from the host must never decide what this image emits.
+# A .tsbuildinfo that says "already built" makes tsc skip the emit, and dist is not in
+# the context to make up for it, so the build silently produces nothing and the next
+# workspace fails to resolve it. .dockerignore drops these; this makes the image build
+# independent of that file being right.
+RUN find . -name '*.tsbuildinfo' -not -path './node_modules/*' -delete
 RUN npm run build --workspace @donut/provably-fair && npm run build --workspace @donut/api
 
 FROM node:22.23.2-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
