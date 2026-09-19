@@ -35,6 +35,7 @@ type WorkerHarness = {
   pendingPayout:
     | { payee: string; settle: (receipt: { payee: string; displayedAmount: string }) => void }
     | undefined;
+  payoutConfirmMs: number;
   snapshot(): Promise<void>;
   invalidateSnapshotState(): void;
   finishTransferReconciliation(): Promise<void>;
@@ -401,14 +402,32 @@ const payoutJob = {
  * with silence, which is the case where the bot must refuse to call a payout done.
  */
 async function runPayout(harness: WorkerHarness, displayed: string | null): Promise<void> {
-  const poll = harness.pollJobs();
-  for (let tick = 0; tick < 50 && !harness.pendingPayout; tick += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
+  /* A REF'D timer for the duration, which is the whole point of this function.
+   *
+   * The worker's confirmation timeout is unref'd so a pending payout cannot hold the process open
+   * at shutdown. That means it only fires while something else keeps the event loop alive — a real
+   * bot always has a socket; a test waiting on nothing else does not. Without this the `displayed
+   * === null` case has no pending work at all once pollJobs parks, node exits, and the runner
+   * reports "Promise resolution is still pending but the event loop has already resolved" and
+   * cancels every sibling test with it.
+   *
+   * It passed locally anyway, because other suites in the same process happened to keep the loop
+   * busy. That is luck, not a passing test, and CI ran it on a quieter loop and said so. */
+  const keepAlive = setInterval(() => undefined, 20);
+  try {
+    const poll = harness.pollJobs();
+    /* Generous, because this waits on real async work and a loaded runner is slower than a laptop.
+     * Overshooting costs nothing: the loop exits as soon as pendingPayout appears. */
+    for (let tick = 0; tick < 500 && !harness.pendingPayout; tick += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    if (displayed !== null) {
+      harness.pendingPayout?.settle({ payee: 'q9w', displayedAmount: displayed });
+    }
+    await poll;
+  } finally {
+    clearInterval(keepAlive);
   }
-  if (displayed !== null) {
-    harness.pendingPayout?.settle({ payee: 'q9w', displayedAmount: displayed });
-  }
-  await poll;
 }
 
 function payoutHarness(api: ApiClient): { harness: WorkerHarness; chats: string[] } {
@@ -439,6 +458,9 @@ function payoutHarness(api: ApiClient): { harness: WorkerHarness; chats: string[
   const harness = worker as unknown as WorkerHarness;
   harness.bot = bot;
   harness.connectionController = new AbortController();
+  /* Milliseconds, not the production eight seconds. The unconfirmed-payout case has to actually
+   * wait this out, and nothing is learned by waiting eight seconds to learn it. */
+  harness.payoutConfirmMs = 25;
   return { harness, chats };
 }
 

@@ -56,6 +56,14 @@ export class MinecraftWorker {
   private payoutChatCaptureUntil = 0;
   /** The payout waiting on the server's confirmation, if one is in flight. */
   private pendingPayout: { payee: string; settle: (receipt: OutgoingPayment) => void } | undefined;
+  /* How long to wait for the server to confirm a payout, as a field rather than the bare constant.
+   *
+   * The timer behind it is unref'd, deliberately: a payout waiting on a confirmation must not hold
+   * the process open for eight seconds when somebody asks the bot to shut down. The consequence is
+   * that the timer only fires if something ELSE is keeping the event loop alive — true of a running
+   * bot, which always has a socket, and not true of a test whose only pending work is this wait.
+   * Tests set this to a few milliseconds and hold the loop open themselves. */
+  private payoutConfirmMs = PAYOUT_CONFIRM_MS;
 
   constructor(
     private readonly config: BotConfig,
@@ -758,7 +766,7 @@ export class MinecraftWorker {
       const timer = setTimeout(() => {
         this.pendingPayout = undefined;
         resolve(undefined);
-      }, PAYOUT_CONFIRM_MS);
+      }, this.payoutConfirmMs);
       timer.unref();
       this.pendingPayout = {
         payee,
