@@ -19,22 +19,27 @@
 /* ─────────── names ─────────── */
 
 /**
- * Masks a display name down to its first character: `Notch` reads as `N****`.
+ * Masks a display name down to its first character and a fixed run of stars: `Notch` and `q9w` both
+ * read as `N********` and `q********`.
  *
- * This is what the server already does for the public activity feed (see MASKED_NAME in
- * routes/activity.ts), so chat now matches it. No word list, nothing to evade, and no innocent
- * name wrongly flagged.
+ * Matches what the server does for every public surface (lib/masked-name.ts), and the two must
+ * agree or the client contradicts the mask the API already applied.
+ *
+ * THE WIDTH IS FIXED ON PURPOSE. This used to pad to the real length, which keeps rows visually
+ * distinct and leaks the thing the mask exists to hide: among a few hundred regulars a name's
+ * length plus its initial often names somebody outright, and it is what lets a watcher follow one
+ * player from line to line. A one-character name is masked too, for the same reason — returning it
+ * as-is announced that the name was one character long.
  *
  * Iterating with the spread operator yields whole code points, so a name whose first character is
- * an astral one is not cut in half into a broken surrogate. A one-character name is returned
- * as-is: there is nothing after the first letter to hide, and padding it to a fixed width would
- * invent length the name does not have.
+ * an astral one is not cut in half into a broken surrogate.
  */
+const MASK_WIDTH = 8;
+
 export function censorName(value) {
   if (!value) return '';
   const characters = [...String(value)];
-  if (characters.length <= 1) return characters.join('');
-  return characters[0] + '*'.repeat(characters.length - 1);
+  return characters[0] + '*'.repeat(MASK_WIDTH);
 }
 
 /* ─────────── message bodies ─────────── */

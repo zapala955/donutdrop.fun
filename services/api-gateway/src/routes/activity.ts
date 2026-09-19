@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { levelFor } from '../lib/vip.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 
 /**
@@ -34,11 +35,13 @@ const activityQuery = z
  * Usernames are masked to a first character and a run of asterisks.
  *
  * The feed is public and the rounds are not: showing who lost how much, to anyone who loads the
- * page, is a privacy problem dressed up as social proof. The length is preserved so rows stay
- * visually distinct; nothing else about the name survives.
+ * page, is a privacy problem dressed up as social proof.
+ *
+ * The length used to be preserved so rows stayed visually distinct. It is fixed now: a name's
+ * length is a strong identifier among a few hundred regulars, and it was the detail that let a
+ * watcher follow one player down the feed. See lib/masked-name.ts.
  */
-const MASKED_NAME = `left(u.minecraft_username, 1)
-        || repeat('*', greatest(length(u.minecraft_username) - 1, 0))`;
+const MASKED_NAME = maskedName('u.minecraft_username');
 
 export async function registerActivityRoutes(
   app: FastifyInstance,

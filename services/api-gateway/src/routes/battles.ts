@@ -30,6 +30,7 @@ import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { safeText } from '../lib/sanitize.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 import { LOBBY_SOCKET_BUDGET, createSocketBudget } from '../lib/socket-limit.js';
 
@@ -155,7 +156,9 @@ export async function registerBattleRoutes(
       pot_minor: string | null; winning_team: number | null; created_at: Date;
       started_at: Date | null; settled_at: Date | null; expires_at: Date; host_name: string;
     }>(
-      `SELECT b.*, u.minecraft_username AS host_name
+      /* The host is named to everyone browsing the lobby list, so the name is masked in the
+       * query and the real one never leaves. See lib/masked-name.ts. */
+      `SELECT b.*, ${maskedName('u.minecraft_username')} AS host_name
          FROM battles b JOIN users u ON u.id = b.host_user_id
         WHERE b.code = $1`,
       [code],
@@ -169,8 +172,13 @@ export async function registerBattleRoutes(
         display_name: string; staked_minor: string; total_drop_minor: string | null;
         payout_minor: string | null; client_seed: string;
       }>(
-        `SELECT seat, team, user_id, is_bot, display_name, staked_minor,
-                total_drop_minor, payout_minor, client_seed
+        /* Masked here too, which also covers the fairness panel: it lists a client seed per
+         * seat and labelled each one with the player's real name, so verifying a battle meant
+         * reading the names of everyone in it. `display_name` stays raw in the table — an audit
+         * of who actually played needs it — and is masked on the way out. */
+        `SELECT seat, team, user_id, is_bot,
+                ${maskedName('display_name')} AS display_name,
+                staked_minor, total_drop_minor, payout_minor, client_seed
            FROM battle_players WHERE battle_id = $1 ORDER BY seat`,
         [battle.id],
       ),

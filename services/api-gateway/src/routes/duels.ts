@@ -21,6 +21,7 @@ import {
 import { DuelHub } from '../lib/duel-hub.js';
 import { AppError } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 import { LOBBY_SOCKET_BUDGET, createSocketBudget } from '../lib/socket-limit.js';
 
@@ -195,8 +196,12 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
     };
   }
 
+  /* Both players are named to any spectator who opens the arena, so both are masked in the query.
+   * The same leak as the battle lobby, in the same shape. See lib/masked-name.ts. */
   const SELECT_DUEL = `
-    SELECT d.*, h.minecraft_username AS host_name, o.minecraft_username AS opponent_name
+    SELECT d.*,
+           ${maskedName('h.minecraft_username')} AS host_name,
+           ${maskedName('o.minecraft_username')} AS opponent_name
       FROM duel_lobbies d
       JOIN users h ON h.id = d.host_user_id
       LEFT JOIN users o ON o.id = d.opponent_user_id`;
