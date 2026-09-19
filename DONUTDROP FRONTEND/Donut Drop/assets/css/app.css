@@ -741,23 +741,6 @@ canvas.play {
 .streak__d.on .streak__n { color: var(--gold); }
 .streak__m { font-size: .75rem; color: var(--faint); }
 
-/* tier progress track */
-.track { margin-top: 16px; }
-.track__line { height: 4px; border-radius: 4px; background: var(--panel3); overflow: hidden; margin-bottom: 14px; }
-.track__line i { display: block; height: 100%; background: linear-gradient(90deg, var(--green2), var(--green)); }
-.track__stops { display: grid; grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); gap: 8px; }
-.track__stop {
-  display: flex; flex-direction: column; gap: 2px; padding: 11px 12px;
-  border-radius: var(--r-s); background: var(--panel2); border: 1px solid var(--line);
-}
-.track__stop b { font-size: .875rem; color: var(--muted); }
-.track__stop span:not(.track__dot) { font-size: .75rem; color: var(--faint); }
-.track__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--panel3); margin-bottom: 4px; }
-.track__stop.done .track__dot { background: var(--win); }
-.track__stop.done b { color: var(--text); }
-.track__stop.now { border-color: var(--green); background: var(--green-lo); }
-.track__pct { color: var(--green) !important; font-weight: 800; }
-
 /* numbered how-it-works list */
 .how { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
 .how li {
@@ -1322,36 +1305,3 @@ kbd {
 }
 
 
-/* The level track: what the next level is worth, in money.
- *
- * No panel around it. It began as a bordered, beveled card holding three more
- * bordered, beveled boxes — three levels of edge treatment inside one
- * component, which is noise however well the slots are justified. The label row
- * and the spacing group these perfectly well on their own, and dropping the
- * wrapper lets the slots read as slots rather than as cards inside a card. */
-.track {
-  margin-top: 16px;
-  display: grid; gap: 8px;
-}
-.track__lead { display: flex; align-items: center; gap: 12px; }
-.track__lv { font-size: .75rem; letter-spacing: .12em; color: var(--green); flex: none; }
-.track__bar {
-  flex: 1; height: 8px; min-width: 0; border-radius: 4px;
-  background: var(--bg2);
-  box-shadow: inset -1px -1px 0 var(--bev-hi), inset 1px 1px 0 var(--bev-lo);
-  overflow: hidden;
-}
-.track__bar i {
-  display: block; height: 100%; border-radius: 4px;
-  background: linear-gradient(90deg, var(--green2), var(--green));
-}
-.track__pc { font-size: .75rem; color: var(--faint); flex: none; }
-.track__rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 8px; }
-.track__r {
-  display: grid; gap: 4px; padding: 10px 12px;
-  background: var(--bg2); border-radius: var(--r-s);
-  box-shadow: inset -2px -2px 0 var(--bev-hi), inset 2px 2px 0 var(--bev-lo);
-}
-.track__k { font-size: .75rem; color: var(--muted); }
-.track__v { font-size: 1rem; font-weight: 800; color: var(--text); display: flex; align-items: baseline; gap: 8px; }
-.track__v em { font-style: normal; font-size: .75rem; font-weight: 600; color: var(--green); }

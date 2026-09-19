@@ -125,7 +125,7 @@ body::after {
 
 /* ═════════ the glass recipe ═════════ */
 .card, .promo, .gamecard, .stage, .queue, .lvl, .board__r, .faq__i,
-.strk, .menu, .how li, .track__r, .tiers__r, .crate, .totals__one {
+.strk, .menu, .how li, .tiers__r, .crate, .totals__one {
   background-image: var(--grid), var(--gl-1);
   background-color: transparent;
   border: 1px solid var(--gl-line);
@@ -143,7 +143,7 @@ body::after {
 .mat-lava    { background-image: var(--grid), var(--mat-lava); }
 
 /* recessed things read as cut into the surface, not raised off it */
-.tile, .stakebox, .stakes__own, .code, .chat__list, .play, .track__bar {
+.tile, .stakebox, .stakes__own, .code, .chat__list, .play {
   background-image: var(--gl-sunk);
   border: 1px solid rgba(0,0,0,.55);
   box-shadow: inset 0 1px 3px rgba(0,0,0,.68), inset 0 -1px 0 var(--gl-hi);
@@ -260,48 +260,6 @@ body::after {
 .totals__k { font-size: .75rem; letter-spacing: .15em; }
 .totals__nm { font-size: .75rem; letter-spacing: .01em; }
 .totals__v { font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-
-/* ═════════ the level track: a neon rail ═════════
-   It was a flat green fill in a grey slot. It is the only live number on the
-   page, so it gets the only real piece of light on the page: a lit core inside
-   a dark rail, with a sheen that travels the filled part and nothing else. */
-.track__bar { height: 10px; border-radius: 4px; position: relative; }
-.track__bar i {
-  /* Full width, scaled to the level. The fill ratio arrives as --fill so the
-     rail animates a transform; animating width here relayouts the whole row. */
-  position: relative; border-radius: 4px; overflow: hidden;
-  width: 100%; transform: scaleX(var(--fill, 0)); transform-origin: left;
-  /* --emerald was never defined, so this whole declaration was invalid and the fill painted
-     nothing at all. Now the lava ramp, which is what the rest of the site uses. */
-  background: linear-gradient(90deg, #a35f00, #ffaa00 62%, var(--gold-bright));
-  box-shadow: 0 0 6px -1px rgba(255, 170, 0, .22),
-              0 0 13px -6px rgba(255, 170, 0, .22),
-              inset 0 1px 0 rgba(255,255,255,.35);
-  transition: transform .8s var(--ease);
-}
-/* The sheen lives inside the scaled fill, so it inherits the squash. Undoing it
-   here keeps the highlight the same physical width at any level — without this
-   the sweep is five times too wide at level 20% and hairline at 100%. */
-.track__bar i::after {
-  content: ""; position: absolute; inset: 0;
-  transform: scaleX(calc(1 / max(var(--fill, 1), .04))); transform-origin: left;
-  background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.5) 50%, transparent 80%);
-  background-size: 220% 100%;
-  animation: railpulse 2.6s var(--ease-io) infinite;
-}
-@keyframes railpulse { from { background-position: 160% 0; } to { background-position: -60% 0; } }
-
-.track__lv {
-  /* --emerald is not a token on this site; the level label was inheriting its colour by
-     accident. Gold, like every other figure that means "your standing". */
-  font-size: .75rem; letter-spacing: .16em; color: var(--gold);
-  text-shadow: 0 0 14px color-mix(in srgb, var(--gold) 55%, transparent);
-}
-.track__pc { font-size: .75rem; letter-spacing: .04em; color: var(--muted); font-variant-numeric: tabular-nums; }
-.track__r { padding: 13px 15px; border-radius: var(--r-s); }
-.track__k { font-size: .75rem; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
-.track__v { font-size: 1rem; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.track__v em { font-size: .75rem; letter-spacing: .02em; }
 
 /* ═════════ surfaces the component sheet missed ═════════ */
 .hero, .wallethero, .prof, .board, .tiers, .faq, .log, .rwpage > section {
@@ -794,7 +752,6 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .cut { animation: none; }
   .cut__flash, .cut__copy { transition: none; }
-  .track__bar i::after { animation: none; }
-  .promo, .promo__art, .promo h3::after, .track__bar i,
+  .promo, .promo__art, .promo h3::after,
   .crate, .crate__art, .promo::before, .gamecard::before, .crate::before { transition: none; }
 }

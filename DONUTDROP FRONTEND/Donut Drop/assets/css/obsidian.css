@@ -391,7 +391,6 @@ html {
 .cashpill__n,
 .wallet__pill b,
 .statstrip__v,
-.track__v,
 .stats__v,
 .acct__v,
 .vip__threshold,
@@ -407,7 +406,6 @@ html {
    clipping, which is the overflow half of the same bug. */
 .kv span,
 .facts dd,
-.track__r > *,
 .log .o,
 .msg__who,
 .reflist__n,
@@ -867,7 +865,6 @@ html {
 .feed__row,
 .msg,
 .log li,
-.track__r,
 .kv { min-width: 0; }
 
 /* A dropdown must never be taller than the space under it. These are re-parented to <body> and
@@ -916,36 +913,6 @@ h1, h2, h3, .phead h1, .card__h { overflow-wrap: break-word; }
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    12b. COMPOSITION
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
-
-/* ── the account strip ──
- *
- * `.track` carried `margin-top` and nothing else, so the row inside it — "ACCOUNT · Link your
- * Minecraft identity to load your balance" — floated between two card grids with no container of
- * its own, reading as a caption that had come loose from something. It is a panel like everything
- * else around it now. */
-.track {
-  margin-top: var(--ob-gap-lg);
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(22, 22, 27, .72), rgba(10, 10, 12, .86));
-  border: 1px solid var(--ob-line);
-  box-shadow: inset 0 1px 0 rgba(255, 225, 160, .05);
-}
-.track__lead {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  min-width: 0;
-}
-.track__lv {
-  font-size: .625rem;
-  font-weight: 800;
-  letter-spacing: .18em;
-  color: var(--gold-bright);
-  flex: none;
-}
-.track__lead > span:not(.track__lv) { color: var(--muted); font-size: .875rem; min-width: 0; }
 
 /* ── the chat rail, with nothing in it ──
  *

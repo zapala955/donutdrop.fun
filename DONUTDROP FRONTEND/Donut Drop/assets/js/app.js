@@ -115,28 +115,6 @@ function mountHome(view) {
   };
   paintPromos();
 
-  const paintAccount = () => {
-    const panel = $('#levelTrack', view);
-    if (!panel) return;
-    /* Cash economy: there are no inventory lots to count. What a player actually has committed is
-     * whatever the Piggy Bank is holding under lock, so that is the second figure. */
-    const lockedMinor = () => (state.piggyDeposits ?? [])
-      .filter((deposit) => deposit.state === 'open')
-      .reduce((sum, deposit) => sum + (deposit.principal || 0), 0);
-    panel.innerHTML = state.authenticated ? `
-      <div class="track__lead">
-        <span class="track__lv mono">${escapeText(state.user?.minecraftUsername || 'PLAYER')}</span>
-        <span class="track__bar"><i style="--fill:1"></i></span>
-        <span class="track__pc mono">LIVE</span>
-      </div>
-      <div class="track__rows">
-        <div class="track__r"><span class="track__k">Server balance</span><span class="track__v mono">${money(state.balance)}</span></div>
-        <div class="track__r"><span class="track__k">Piggy Bank locked</span><span class="track__v mono">${money(lockedMinor())}</span></div>
-        <div class="track__r"><span class="track__k">Account status</span><span class="track__v mono">${escapeText(state.user?.status || 'unknown')}</span></div>
-      </div>` : `
-      <div class="track__lead"><span class="track__lv mono">ACCOUNT</span><span>Link your Minecraft identity to load your balance.</span></div>`;
-  };
-
   /* The game grid that used to be built here is gone, and so is its markup. It rendered the same
    * four products the promo row above it already renders, which made the homepage read as padded.
    * See the comment where the grid stood in index.html. */
@@ -249,12 +227,10 @@ function mountHome(view) {
     }
   };
 
-  paintAccount();
   paintActivity();
   bus.addEventListener('change', () => {
     if (!view.isConnected) return;
     paintPromos();
-    paintAccount();
     paintActivity();
   });
 }
