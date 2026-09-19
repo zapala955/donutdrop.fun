@@ -19,6 +19,7 @@ import { registerBattleRoutes } from './routes/battles.js';
 import { registerCommunityRoutes } from './routes/community.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerPayLoginRoutes } from './routes/auth-pay.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerCashDepositRoutes } from './routes/cash-deposits.js';
@@ -168,8 +169,15 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
     },
   });
 
-  app.addHook('onSend', async (_request, reply) => {
-    reply.header('cache-control', 'no-store');
+  app.addHook('onSend', async (request, reply) => {
+    /* no-store is the right default for every JSON answer this API gives: they are all about one
+     * account at one moment, and a cached one is a wrong one. The avatar route is the single
+     * exception — an image keyed on a stable id, which sets its own long cache-control and would
+     * otherwise be re-fetched on every chat poll. It opts out by name rather than by sniffing the
+     * header the handler set, so the exemption is a list a reader can check. */
+    if (request.routeOptions.url !== '/v1/avatars/:id') {
+      reply.header('cache-control', 'no-store');
+    }
     reply.header('content-language', 'en');
     reply.header('x-content-type-options', 'nosniff');
   });
@@ -178,6 +186,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerAuthRoutes(app, db, config);
   await registerPayLoginRoutes(app, db, config);
   await registerAccountRoutes(app, db, config);
+  await registerAvatarRoutes(app, db);
   await registerActivityRoutes(app, db, config);
   await registerCaseRoutes(app, db, config);
   await registerCatalogRoutes(app, db, config);

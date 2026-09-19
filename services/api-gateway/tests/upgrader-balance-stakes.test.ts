@@ -102,7 +102,10 @@ describe('upgrader cash stakes', () => {
     const upgrader = await readFile(path.join(frontend, 'assets/js/upgrader.js'), 'utf8');
 
     assert.match(upgrader, /function stakeMinor\(\)/);
-    assert.match(upgrader, /await runBalanceUpgrade\(wagered\.toString\(\), destination\)/);
+    /* Not pinned to the full argument list. This test is about the figure the stake is priced
+       from, and pinning the call broke it when the settlement gained a defer option that has
+       nothing to do with pricing. */
+    assert.match(upgrader, /await runBalanceUpgrade\(\s*wagered\.toString\(\), destination/);
     // The quote and the eligible-target window must both read stakeMinor(), never a mode-specific
     // value, or the two modes can be priced differently from the server.
     assert.match(upgrader, /const raw = \(stakeMinor\(\) \* edge \* 1_000_000n\)/);

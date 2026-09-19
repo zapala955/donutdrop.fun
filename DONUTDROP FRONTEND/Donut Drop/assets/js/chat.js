@@ -31,7 +31,7 @@ import { censorName, censorText } from './profanity.js';
 import { $, el, money, parseAmount, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { api } from './api.js';
+import { api, API_BASE_URL } from './api.js';
 
 const POLL_MS = 6000;
 const RAIN_POLL_MS = 8000;
@@ -316,7 +316,7 @@ async function sendTip(username, amountMinor, note) {
 }
 
 /** The modal behind an avatar click. Same endpoint, fewer keystrokes. */
-function openTipSheet(username) {
+function openTipSheet(userId, username) {
   if (!state.authenticated) {
     toast({ kind: 'lose', title: 'Log in first', body: 'Tips come out of your balance.' });
     return;
@@ -328,7 +328,7 @@ function openTipSheet(username) {
 
     const target = el('div', 'tipsheet__who');
     target.append(
-      avatarFor(username, 40),
+      avatarFor(userId, username, 40),
       Object.assign(el('b'), { textContent: censorName(username) }),
     );
 
@@ -406,30 +406,60 @@ function drainBigHits() {
 }
 
 /**
- * A player's head, from mc-heads.net.
+ * A player's head, from this origin, by internal id.
  *
- * This is the one third-party image on the site and it costs something: the CSP has to allow that
- * origin, and every rendered line tells mc-heads which Minecraft usernames are in this chat. It is
- * a public username on a public skin service either way, but it is a leak and it is worth knowing
- * about. `onerror` falls back to initials so a blocked or down CDN degrades to the treatment the
- * duel screen already uses rather than to a broken-image icon on every line.
+ * It used to be an <img> pointed straight at `mc-heads.net/avatar/<username>/<size>`. That put the
+ * player's real Minecraft name in a URL, on a page that masks that name in every visible place:
+ * right-clicking the head and opening it in a new tab read it out of the address bar, and devtools
+ * showed it without even that. The mask beside it was decoration. It also meant every rendered
+ * line was the viewer's own browser telling mc-heads.net which players were in this chat, on every
+ * poll.
+ *
+ * The id is a uuid that means nothing outside our database — it does not resolve to a name at
+ * Mojang and it is not a credential — and it was already in the chat payload. The server resolves
+ * it privately and fetches upstream by account UUID. See routes/avatars.ts.
+ *
+ * This is not anonymity: `message.author` is still the real name in the payload, because tipping
+ * and the moderation endpoints resolve against it. It closes the URL, which is the part that was
+ * handing the name to people who were not looking for it.
+ *
+ * `onerror` falls back to initials, so a miss — a Bedrock player with no Mojang head, upstream
+ * down, the proxy refusing — degrades to the treatment the duel screen already uses rather than to
+ * a broken-image icon on every line.
  */
-function avatarFor(username, size = 22) {
+function avatarFor(userId, name, size = 22) {
   const wrap = el('span', 'msg__av');
   wrap.style.setProperty('--av', `${size}px`);
+
+  /* One letter, matching the masked name beside it. Two would render the first asterisk. */
+  const initials = () => {
+    const mark = el('i');
+    mark.textContent = (censorName(name) || '?').slice(0, 1).toUpperCase();
+    wrap.appendChild(mark);
+    return wrap;
+  };
+
+  /* No id, no head.
+   *
+   * The drop cards and tip lines have only a name, and the name they have is already masked by the
+   * server — the activity feed is public and deliberately does not say who lost what. There is
+   * nothing to look a head up by that would not mean un-masking it first, so those lines get the
+   * letter tile. */
+  if (!userId) return initials();
+
   const art = document.createElement('img');
   art.width = size;
   art.height = size;
   art.loading = 'lazy';
   art.alt = '';
-  art.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/${size}`;
+  /* This origin, by internal id. It used to be `mc-heads.net/avatar/<username>/<size>`, which put
+   * the player's real name in a URL one right-click away on a page that masks it everywhere else,
+   * and told mc-heads who was in the chat on every poll. The id means nothing outside our own
+   * database; the server resolves it privately. See routes/avatars.ts. */
+  art.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(userId)}?s=${size}`;
   art.addEventListener('error', () => {
     art.remove();
-    const initials = el('i');
-    // The image URL above needs the real username; these two visible letters do not.
-    // One letter, matching the masked name beside it. Two would render the first asterisk.
-    initials.textContent = (censorName(username) || '?').slice(0, 1).toUpperCase();
-    wrap.appendChild(initials);
+    initials();
   });
   wrap.appendChild(art);
   return wrap;
@@ -444,8 +474,8 @@ function buildMessage(message) {
 
   const top = el('div', 'msg__top');
 
-  const avatar = avatarFor(message.author);
-  avatar.addEventListener('click', () => openTipSheet(message.author));
+  const avatar = avatarFor(message.authorId, message.author);
+  avatar.addEventListener('click', () => openTipSheet(message.authorId, message.author));
   avatar.title = `Tip ${censorName(message.author)}`;
 
   const who = el('span', 'msg__who');
@@ -511,7 +541,7 @@ function buildHit(activity, value) {
   const line = el('div', 'msg msg--hit');
 
   const top = el('div', 'msg__top');
-  top.append(avatarFor(activity.player || 'Steve'));
+  top.append(avatarFor(null, activity.player || 'Steve'));
   const who = el('span', 'msg__who');
   who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);
@@ -553,7 +583,7 @@ function buildHit(activity, value) {
 function buildTip(username, amount, note) {
   const line = el('div', 'msg msg--tip');
   const top = el('div', 'msg__top');
-  top.append(avatarFor(username));
+  top.append(avatarFor(null, username));
   const who = el('span', 'msg__who');
   who.textContent = censorName(username);
   const badge = el('i', 'msg__badge msg__badge--tip');

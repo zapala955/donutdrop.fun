@@ -56,7 +56,13 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(crates, /Math\.random/);
     // every outcome is awaited from the server, never computed here
     assert.match(crates, /await requestCaseOpen\(crate\)/);
-    assert.match(upgrader, /await runBalanceUpgrade\(wagered\.toString\(\), destination\)/);
+    /* The arguments are not the point and pinning them broke this when the settlement was made
+       deferrable. What matters is that the outcome is AWAITED FROM THE SERVER here and that the
+       module holds no source of chance, which the assertions above and below cover. */
+    assert.match(upgrader, /await runBalanceUpgrade\(\s*wagered\.toString\(\), destination/);
+    /* And that whatever it defers, it still settles: a deferred round that is never settled is a
+       balance that never updates. */
+    assert.match(upgrader, /response\.settle\(\)/);
   });
 
   it('exposes the cash-only routes and API base configuration', async () => {
