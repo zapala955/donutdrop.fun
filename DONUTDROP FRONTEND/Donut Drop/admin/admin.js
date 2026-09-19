@@ -549,21 +549,24 @@ function renderPlayerActions(user, data) {
     });
   }
 
-  lever(user.role === 'admin' ? 'Remove admin' : 'Make admin', 'danger', async () => {
-    const making = user.role !== 'admin';
-    const reason = await confirmAction(
-      making
-        ? `Give ${user.minecraft_username} administrator access? They will be able to do `
-          + 'everything on this page, including to your account.'
-        : `Remove ${user.minecraft_username}'s administrator access?`,
-    );
-    if (!reason) return false;
-    await api.patch(`/v1/admin/users/${id}/role`, {
-      role: making ? 'admin' : 'player',
-      reason,
-    });
-    toast(making ? 'Now an administrator.' : 'Administrator access removed.', 'ok');
-  });
+  /* No role lever, because one here cannot work.
+   *
+   * A button used to write `users.role` and report success. The write never survived: the API
+   * re-derives the role from ADMIN_MINECRAFT_IDS on every request and puts the row back, revoking
+   * the target's sessions on the way. The grant lasted until their next request and the only thing
+   * it achieved was logging them out.
+   *
+   * So the role is stated, not offered, and the note says where the change actually lives. A
+   * disabled button would imply the power exists somewhere in this console; it does not. */
+  const note = document.createElement('p');
+  note.className = 'sheet__note';
+  note.textContent =
+    user.role === 'admin'
+      ? 'Administrator. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — remove '
+        + 'the identity from that variable and restart to revoke.'
+      : 'Player. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — an administrator '
+        + 'also needs an ADMIN_TOTP_SECRETS entry, and the API will not start without one.';
+  host.append(note);
 }
 
 async function loadBots() {

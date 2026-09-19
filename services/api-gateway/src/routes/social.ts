@@ -37,7 +37,13 @@ import { safePublicText } from '../lib/sanitize.js';
 
 const tipSchema = z
   .object({
+    /* The name stays, because `/tip <name> 5m` is a real command and somebody typing a name means
+     * whoever holds that name. */
     toUsername: z.string().regex(/^[A-Za-z0-9_]{1,16}$/),
+    /* And an id wins when the caller has one. Clicking a head in chat means "that person", not
+     * "whoever is called that now" — and Minecraft names are reassignable, so the two can differ.
+     * Optional because only the avatar path knows an id; the typed command never will. */
+    toUserId: z.uuid().optional(),
     amountMinor: z.string().regex(/^[1-9][0-9]{0,18}$/),
     /* safePublicText, not a bare string. A tip note is one account's typing rendered inside
      * another account's page, which is the exact case this helper documents itself as being for.
@@ -390,11 +396,16 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       }
 
       return db.transaction(async (client) => {
-        const target = await client.query<{ id: string; minecraft_username: string }>(
-          `SELECT id, minecraft_username FROM users
-            WHERE normalized_username = lower($1::varchar) AND status = 'active'`,
-          [body.toUsername],
-        );
+        const target = body.toUserId
+          ? await client.query<{ id: string; minecraft_username: string }>(
+              `SELECT id, minecraft_username FROM users WHERE id = $1 AND status = 'active'`,
+              [body.toUserId],
+            )
+          : await client.query<{ id: string; minecraft_username: string }>(
+              `SELECT id, minecraft_username FROM users
+                WHERE normalized_username = lower($1::varchar) AND status = 'active'`,
+              [body.toUsername],
+            );
         const recipient = target.rows[0];
         if (!recipient) throw new AppError(404, 'NO_SUCH_PLAYER', 'No active player by that name');
         if (recipient.id === fromUserId) {

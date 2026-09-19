@@ -57,11 +57,32 @@ describe('admin player management', () => {
     assert.match(endpoint, /UPDATE sessions SET revoked_at = now\(\)/);
   });
 
-  it('stops an administrator locking or demoting themselves', async () => {
-    /* Both are how a console ends up with nobody able to open it. */
+  it('stops an administrator locking themselves out', async () => {
+    /* How a console ends up with nobody able to open it. */
     const source = await routes('admin');
     assert.match(source, /CANNOT_LOCK_SELF/);
-    assert.match(source, /CANNOT_DEMOTE_SELF/);
+  });
+
+  it('offers no role endpoint, because one here cannot work', async () => {
+    /* A lever wrote users.role and reported success. authenticate() re-derives the role from
+     * ADMIN_MINECRAFT_IDS on every request and puts the row back, revoking the target's sessions
+     * on the way, so the grant lasted until their next request and only logged them out.
+     *
+     * This asserts the absence AND that the reason survives next to it. Without the note the gap
+     * looks like an oversight and the next person fills it back in. */
+    const source = await routes('admin');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.doesNotMatch(code, /users\/:id\/role/);
+    assert.doesNotMatch(code, /userRoleSchema/);
+    assert.match(source, /THERE IS NO ROLE ENDPOINT/);
+    assert.match(source, /ADMIN_MINECRAFT_IDS/);
+
+    const console_ = await readFile(
+      path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/Donut Drop/admin/admin.js'),
+      'utf8',
+    );
+    assert.doesNotMatch(console_, /Make admin|Remove admin/);
+    assert.match(console_, /not editable here/);
   });
 });
 

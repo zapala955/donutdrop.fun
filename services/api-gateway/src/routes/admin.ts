@@ -88,19 +88,13 @@ const userStatusSchema = z
   })
   .strict();
 
-/* A role change is separated for the same reason a payout is: it is the one edit that can hand
- * somebody else every power on this page. */
-const userRoleSchema = z
-  .object({
-    role: z.enum(['player', 'admin']),
-    reason: safeText(3, 256),
-  })
-  .strict();
-
 /* Signed rather than an amount plus a direction. A direction flag is one inverted boolean away
  * from crediting what was meant to be taken back, and the sign is unambiguous in the audit entry.
- * Capped at a hundred million major units per call: a slipped keystroke should not be able to
- * mint a fortune, and a genuinely larger correction can be made twice with two reasons. */
+ *
+ * Thirteen digits, so just under ten trillion per call. That is a ceiling against a slipped
+ * keystroke running away entirely, not a policy limit — it is far above any correction anybody
+ * should be making, and the real control is that every move writes a ledger row and an audit
+ * entry naming who did it and why. */
 const balanceAdjustSchema = z
   .object({
     amountMinor: z
@@ -348,41 +342,22 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     });
   });
 
-  app.patch('/v1/admin/users/:id/role', { preHandler: guards.requireAdmin }, async (request) => {
-    const params = parseWith(idSchema, request.params);
-    const body = parseWith(userRoleSchema, request.body);
-    const actor = requireActor(request.authUser?.id);
-    /* Demoting yourself is how a console ends up with no administrators at all. */
-    if (params.id === actor && body.role !== 'admin') {
-      conflict('CANNOT_DEMOTE_SELF', 'An administrator cannot remove their own access');
-    }
-    return db.transaction(async (client) => {
-      const current = await client.query<{ role: string; status: string }>(
-        'SELECT role, status FROM users WHERE id = $1 FOR UPDATE',
-        [params.id],
-      );
-      const user = current.rows[0];
-      if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
-      /* Admin powers on an account that is not in good standing is a contradiction, and the
-       * account-status endpoint is the right place to fix it first. */
-      if (body.role === 'admin' && user.status !== 'active') {
-        conflict('ACCOUNT_NOT_ACTIVE', 'Only an active account can be made an administrator');
-      }
-      const updated = await client.query<AdminEntityRow>(
-        `UPDATE users SET role = $2, updated_at = now() WHERE id = $1
-          RETURNING id, minecraft_username, role, status`,
-        [params.id, body.role],
-      );
-      await appendAudit(client, config, {
-        actorUserId: actor,
-        action: `user.role.${body.role}`,
-        targetType: 'user',
-        targetId: params.id,
-        details: { reason: body.reason, from: user.role },
-      });
-      return { user: updated.rows[0] };
-    });
-  });
+  /* THERE IS NO ROLE ENDPOINT, AND THERE CANNOT USEFULLY BE ONE.
+   *
+   * A console lever wrote `users.role` here and reported success. It never took effect:
+   * `authenticate()` re-derives the role from ADMIN_MINECRAFT_IDS on every single request and
+   * corrects the row back, revoking the target's sessions on the way past (see lib/auth.ts). So
+   * the grant lasted until the promoted account's next request, and its only lasting effect was
+   * logging them out.
+   *
+   * Config is the source of truth on purpose: an administrator also needs a TOTP secret in
+   * ADMIN_TOTP_SECRETS, and config refuses to boot unless every listed admin has one. Both are
+   * read at startup, so no runtime write can produce an administrator who can actually sign in.
+   * Promotion means editing the environment and restarting — deliberately harder than clicking a
+   * button, for the one change that hands somebody every power on this page.
+   *
+   * The console shows the role read-only and says this instead of pretending otherwise.
+   */
 
   /* Ends every live session for an account without changing what the account is allowed to do.
    * The case this is for is a shared or stolen cookie, where the person is not in trouble and

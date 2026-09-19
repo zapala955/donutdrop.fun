@@ -291,7 +291,7 @@ async function onSubmit(event) {
 
 /* ═════════════════════════ tipping ═════════════════════════ */
 
-async function sendTip(username, amountMinor, note) {
+async function sendTip(username, amountMinor, note, userId) {
   if (!amountMinor || amountMinor <= 0) {
     toast({ kind: 'lose', title: 'BAD AMOUNT', body: 'Try /tip name 5m' });
     return;
@@ -299,6 +299,10 @@ async function sendTip(username, amountMinor, note) {
   try {
     const result = await api.post('/v1/social/tip', {
       toUsername: username,
+      /* Sent when we have it — the avatar path does, the typed command does not. The server
+       * prefers it, so clicking a head tips that person rather than whoever holds their name by
+       * the time the request lands. */
+      ...(userId ? { toUserId: userId } : {}),
       amountMinor: String(amountMinor),
       ...(note ? { note } : {}),
     });
@@ -367,7 +371,7 @@ function openTipSheet(userId, username) {
     go.textContent = '💸 TIP CASH';
     go.addEventListener('click', () => {
       go.disabled = true;
-      void sendTip(username, amount).then(closeModal);
+      void sendTip(username, amount, undefined, userId).then(closeModal);
     });
 
     wrap.append(target, figure, field, chips, go);

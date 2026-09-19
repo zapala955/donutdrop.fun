@@ -155,10 +155,26 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
      */
     keyGenerator(request) {
       const raw = request.cookies?.[sessionCookieName(config)];
+      /* The SIGNATURE is checked before the value is trusted as a bucket key.
+       *
+       * Reading the cookie raw made this trivially bypassable: any attacker-chosen string is a
+       * distinct key, so sending a fresh random session cookie on every request bought a fresh
+       * budget every time and defeated every limit on the API — including the deliberately tight
+       * ones on login and on the admin link redemption.
+       *
+       * Unsigning is an HMAC and no database round trip, which keeps the property that mattered
+       * about reading it raw: this still runs before authentication and never becomes the
+       * expensive work it exists to bound. It is an identity hint, never an authorisation
+       * decision — but a hint an attacker can mint at will is not a limit. */
       if (typeof raw === 'string' && raw.length > 0) {
-        // Hashed so a session token never lands in a Redis key or a rate-limit log line.
-        return 'u:' + createHash('sha256').update(raw).digest('hex').slice(0, 32);
+        const unsigned = request.unsignCookie(raw);
+        if (unsigned.valid && unsigned.value) {
+          // Hashed so a session token never lands in a Redis key or a rate-limit log line.
+          return 'u:' + createHash('sha256').update(unsigned.value).digest('hex').slice(0, 32);
+        }
       }
+      /* No cookie, or one this server did not sign. Both fall to the address, which an attacker
+       * cannot rotate for free. */
       return 'ip:' + request.ip;
     },
     addHeaders: {

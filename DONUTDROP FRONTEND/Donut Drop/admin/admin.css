@@ -314,6 +314,16 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* A statement, not a control. Sits inside the lever panel because it answers the question the
+   levers around it raise — "can I change this one?" — and the honest answer is "not from here". */
+.sheet__note {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: .75rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* The levers. Wrapped rather than scrolled: an action that has slid out of sight is an action
    nobody knows they have. */
 .sheet__actions {
