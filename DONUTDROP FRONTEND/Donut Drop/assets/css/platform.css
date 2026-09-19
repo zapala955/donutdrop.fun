@@ -1914,10 +1914,17 @@ html, body { overflow-x: clip; }
   position: relative;
   overflow: hidden;
   min-width: 0;
-  height: 104px;
+  height: 118px;
   border-radius: 8px;
   background: var(--b-obsidian);
   border: 1px solid rgba(255, 255, 255, .05);
+  transition: box-shadow .35s ease, border-color .35s ease;
+}
+/* The one beat that says "this reel has stopped". Set by the animation when the travel hits 1,
+   so it reads at the same instant on every client rather than on a per-reel timer. */
+.seat__reel[data-landed="1"] {
+  border-color: rgba(255, 170, 0, .34);
+  box-shadow: inset 0 0 22px -10px var(--b-gold);
 }
 .seat__track { display: flex; gap: 8px; height: 100%; padding: 6px; will-change: transform; }
 .seat__tile {
@@ -1927,10 +1934,29 @@ html, body { overflow-x: clip; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
+  padding: 4px;
   border-radius: 8px;
   background: rgba(255, 255, 255, .03);
   border: 1px solid rgba(255, 255, 255, .05);
+  overflow: hidden;
+}
+/* The rarity bled up from the floor of the tile, matching the solo reel's read, so a legendary is
+   recognisable at speed without anything on the tile having to be legible. */
+.seat__tile[data-rarity="common"] {
+  background: linear-gradient(0deg, rgba(143, 160, 173, .16), transparent 62%), rgba(255, 255, 255, .03);
+}
+.seat__tile[data-rarity="uncommon"] {
+  background: linear-gradient(0deg, rgba(127, 212, 255, .2), transparent 62%), rgba(255, 255, 255, .03);
+}
+.seat__tile[data-rarity="rare"] {
+  background: linear-gradient(0deg, rgba(255, 215, 0, .22), transparent 62%), rgba(255, 255, 255, .03);
+}
+.seat__tile[data-rarity="epic"] {
+  background: linear-gradient(0deg, rgba(255, 34, 34, .24), transparent 62%), rgba(255, 255, 255, .03);
+}
+.seat__tile[data-rarity="legendary"] {
+  background: linear-gradient(0deg, rgba(255, 170, 0, .3), transparent 62%), rgba(255, 255, 255, .03);
 }
 .seat__tile[data-win="1"] {
   background:
@@ -1938,8 +1964,20 @@ html, body { overflow-x: clip; }
     rgba(0, 0, 0, .5);
   border-color: rgba(255, 170, 0, .45);
 }
-.seat__tile img { width: 44px; height: 44px; object-fit: contain; image-rendering: pixelated; }
-.seat__tileval { font-size: .625rem; color: var(--b-gold-hi); white-space: nowrap; }
+.seat__tile img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+/* Naming the drop is what makes the reel readable. One line, clipped: a wrapped name would change
+   the tile's height mid-strip and the measured stride with it. */
+.seat__tilename {
+  max-width: 100%;
+  font-size: .5625rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--b-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seat__tileval { font-size: .625rem; font-weight: 800; color: var(--b-gold-hi); white-space: nowrap; }
 .seat__marker {
   position: absolute;
   top: 0; bottom: 0; left: 50%;
@@ -1979,7 +2017,9 @@ html, body { overflow-x: clip; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .seat__track { transition: none; }
+  /* The reel's travel is driven by rAF, not by a transition, so it is stilled in battles.js —
+     each round simply opens already landed on its winner. These are the CSS-side flourishes. */
+  .seat__reel { transition: none; }
   .arena__round, .btl__chip, .btl__sw, .btl__sw::after { transition: none; }
 }
 

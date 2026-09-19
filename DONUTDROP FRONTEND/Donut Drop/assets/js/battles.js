@@ -27,13 +27,43 @@
  * and lobby codes are all server-supplied values.
  */
 import { api, API_BASE_URL } from './api.js';
-import { state, bus, refreshBalance, refreshCases } from './store.js';
-import { $, el, money, safeImage, grouped } from './util.js';
+import { state, bus, refreshBalance, refreshCases, normalizeItem } from './store.js';
+import { $, el, money, safeImage, grouped, reduceMotion } from './util.js';
+import { bezier, span } from './fx.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 
-const TILE_COUNT = 24;
+const TILE_COUNT = 32;
+const WIN_AT = 26;                 // the winner, with six tiles of runway left behind it
 const RECONNECT_MS = 2_000;
+
+/* Mirrors of the server's own timing (battle-engine.ts). They are used for exactly one thing:
+ * reconstructing a clock for a client that reached the arena without one. The socket's anchor
+ * always wins the moment it lands, so these can only ever be a few milliseconds out. */
+const ROUND_MS = 6_000;
+const START_LEAD_MS = 2_500;
+
+/* The spin, as fractions of one round.
+ *
+ * Lifted from the solo reel (reel.js) so a battle and a solo open feel like the same machine: a
+ * constant-speed race nothing is legible during, a long front-loaded brake that sheds almost all
+ * the distance, a crawl that inches the last tile-width at walking pace, and then a beat of dwell
+ * ON the winner so it can actually be read before the next round snaps in.
+ *
+ * The previous curve was a bare `1 - (1 - p) ** 3` across the whole round. That sheds its speed
+ * immediately and then asymptotes, which reads as a number being assigned rather than a wheel
+ * being stopped by friction — and it left no dwell at all, so the winning tile was replaced at the
+ * same instant it arrived.
+ *
+ * Every one of these is a pure function of progress, so the lockstep invariant this file is built
+ * on survives untouched: two clients at the same instant still compute the same offset. */
+const P_RACE = 0.22;
+const P_BRAKE = 0.62;
+const P_LAND = 0.84;
+const RACE_END = 0.55;
+const BRAKE_END = 0.984;
+const BRAKE = bezier(0.04, 0.62, 0.10, 1.00);
+const CRAWL = bezier(0.25, 0.55, 0.45, 1.00);
 
 /* View state. Kept in the module rather than the DOM so a repaint driven by a balance change
  * cannot reset which lobby the player was looking at. */
@@ -168,6 +198,7 @@ function handle(message) {
       if (message.code === view.code) {
         view.fast = message.fast;
         view.schedule = { startsAt: message.startsAt, roundMs: message.roundMs };
+        patchArena();
         startAnimation();
       }
       break;
@@ -198,6 +229,13 @@ async function refreshLobbies() {
 async function openBattle(code, quiet = false) {
   try {
     const result = await api.get(`/v1/battles/${encodeURIComponent(code)}`);
+    /* A different battle means a different clock. Carrying the last one over would animate this
+     * battle against the previous battle's anchor — which, for a battle that has already ended,
+     * reads as the reels being skipped entirely. A quiet reconnect to the SAME battle keeps it. */
+    if (view.code !== code) {
+      view.schedule = null;
+      view.fast = false;
+    }
     view.screen = 'arena';
     view.code = code;
     applyBattle(result.battle);
@@ -232,12 +270,86 @@ function goLobby() {
   paint();
 }
 
+/* ────────────────────────── the clock, and what it is allowed to show ──────────────────────────
+ *
+ * The server settles a battle the instant the last seat fills — payouts, winning team, revealed
+ * seeds and all — and broadcasts that settled battle BEFORE it broadcasts the start. The REST
+ * payload does the same and carries no schedule at all, which is what a player who took the last
+ * seat, or who reloaded mid-battle, is holding when they reach the arena.
+ *
+ * So `status === 'settled'` answers "has the server finished?", never "has the player watched it
+ * happen?". Painting from it printed the profit before a single reel had turned. Everything the
+ * result touches is gated on the local clock passing the end of the schedule instead — the same
+ * pure function of Date.now() that drives the reels, so what the player is told and what the
+ * player is shown can never disagree.
+ */
+
+/** The anchor to animate against, reconstructed when the socket has not delivered one yet. */
+function scheduleFor(battle = view.battle) {
+  if (view.schedule) return view.schedule;
+  if (!battle?.startedAt) return null;
+  /* The server stamps `started_at` immediately before it announces the start, so this lands within
+   * a few milliseconds of the real anchor. `roundMs` assumes a normal roll; a fast lobby corrects
+   * itself the moment `battle:speed` or `battle:start` arrives and replaces this wholesale. */
+  const started = Date.parse(battle.startedAt);
+  if (!Number.isFinite(started)) return null;
+  return { startsAt: started + START_LEAD_MS, roundMs: ROUND_MS };
+}
+
+function spinEndsAt(battle = view.battle) {
+  const schedule = scheduleFor(battle);
+  if (!schedule || !battle?.rounds?.length) return null;
+  return schedule.startsAt + schedule.roundMs * battle.rounds.length;
+}
+
+/** True once the last reel has stopped — the only moment the result may reach the screen. */
+function isRevealed(battle = view.battle) {
+  if (!battle || battle.status !== 'settled') return false;
+  const end = spinEndsAt(battle);
+  if (end === null) return true;   // an archived battle with no recoverable clock
+  return Date.now() >= end;
+}
+
+/** True while the reels are turning, or waiting out the lead-in before they do. */
+function isSpinning(battle = view.battle) {
+  if (!battle || battle.status === 'lobby') return false;
+  const end = spinEndsAt(battle);
+  return end !== null && Date.now() < end;
+}
+
 /* ─────────────────────────── painting ─────────────────────────── */
 
 function paint() {
   if (!root?.isConnected) return;
-  if (view.screen === 'arena' && view.battle) paintArena();
-  else paintLobby();
+  if (view.screen === 'arena' && view.battle) {
+    /* A full repaint during a spin tears the strip out from under the animation. Every socket
+     * message that touches this battle — a watcher count, a lobby echo, the settled payload that
+     * arrives seconds before anyone is meant to see it — would otherwise rebuild every reel
+     * mid-flight, which is what made the items appear to flicker and change. While the reels are
+     * turning the arena is patched in place instead. */
+    if (isSpinning() && showsLiveBoard()) patchArena();
+    else paintArena();
+    return;
+  }
+  paintLobby();
+}
+
+/* Whether the arena on screen is already the board this battle is spinning on. It is not enough to
+ * ask whether an arena exists: the lobby-to-running transition swaps "Waiting for a player…"
+ * placeholders for real seats and drops the waiting bar, so that one has to repaint. Everything
+ * after it — watcher counts, lobby echoes, the settled payload — must not. */
+function showsLiveBoard() {
+  const arena = root.querySelector('.arena');
+  return arena?.dataset.phase === 'run'
+    && Number(arena.dataset.seats) === view.battle.seats.length;
+}
+
+/** The only things that can legitimately change while the reels are turning. */
+function patchArena() {
+  const fast = $('#arenaFast', root);
+  if (!fast || !view.battle) return;
+  fast.setAttribute('aria-checked', String(view.fast));
+  fast.disabled = !view.battle.isHost;
 }
 
 function paintLobby() {
@@ -452,7 +564,9 @@ function paintCreator() {
 
 function paintArena() {
   const battle = view.battle;
-  const settled = battle.status === 'settled';
+  /* Not `battle.status === 'settled'`. See the clock section above: the server settles before the
+   * spin, so the status is true several seconds before the player is meant to know anything. */
+  const revealed = isRevealed(battle);
 
   root.innerHTML = `
     <div class="arena">
@@ -472,6 +586,10 @@ function paintArena() {
       <div class="arena__fair" id="arenaFair"></div>
     </div>`;
 
+  const arena = root.querySelector('.arena');
+  arena.dataset.phase = battle.status === 'lobby' ? 'lobby' : 'run';
+  arena.dataset.seats = String(battle.seats.length);
+
   $('#arenaFmt', root).textContent =
     `${formatLabel(battle)} · ${battle.mode === 'crazy' ? 'Crazy — lowest wins' : 'Highest wins'}`;
   $('#arenaCode', root).textContent = battle.code;
@@ -490,7 +608,7 @@ function paintArena() {
 
   const fast = $('#arenaFast', root);
   fast.setAttribute('aria-checked', String(view.fast));
-  fast.disabled = !battle.isHost || settled;
+  fast.disabled = !battle.isHost || revealed;
   fast.addEventListener('click', async () => {
     try {
       await api.post(`/v1/battles/${battle.code}/speed`, { fast: !view.fast });
@@ -515,7 +633,7 @@ function paintArena() {
   const board = $('#arenaBoard', root);
   board.dataset.seats = String(battle.seatCount);
   for (const seat of battle.seats) {
-    board.appendChild(buildSeat(battle, seat, settled));
+    board.appendChild(buildSeat(battle, seat, revealed));
   }
   for (let index = battle.seats.length; index < battle.seatCount; index += 1) {
     const empty = el('div', 'seat seat--empty');
@@ -529,17 +647,17 @@ function paintArena() {
     board.appendChild(empty);
   }
 
-  paintFairness(battle, settled);
-  if (!settled && battle.status === 'lobby') paintWaiting(battle);
+  paintFairness(battle, revealed);
+  if (battle.status === 'lobby') paintWaiting(battle);
   startAnimation();
 }
 
-function buildSeat(battle, seat, settled) {
+function buildSeat(battle, seat, revealed) {
   const cell = el('div', 'seat');
   cell.dataset.seat = String(seat.seat);
   cell.dataset.team = String(seat.team);
   cell.dataset.you = seat.isYou ? '1' : '0';
-  if (settled) {
+  if (revealed) {
     cell.dataset.won = battle.winningTeam === seat.team && Number(seat.payoutMinor) > 0 ? '1' : '0';
   }
 
@@ -560,12 +678,17 @@ function buildSeat(battle, seat, settled) {
   track.dataset.seat = String(seat.seat);
   reel.append(track, el('i', 'seat__marker'));
 
+  /* The running total starts at zero and is counted up by the animation as each round lands. It
+   * used to open on `totalDropMinor` — the settled, final figure — which handed the player the
+   * answer while the reels were still spinning. */
   const total = el('div', 'seat__total mono');
   total.dataset.seat = String(seat.seat);
-  total.append(coin(), document.createTextNode(money(Number(seat.totalDropMinor ?? 0))));
+  total.append(coin(), document.createTextNode(
+    money(revealed ? Number(seat.totalDropMinor ?? 0) : 0),
+  ));
 
   const won = el('div', 'seat__won mono');
-  if (settled && Number(seat.payoutMinor) > 0) {
+  if (revealed && Number(seat.payoutMinor) > 0) {
     won.textContent = `+${money(Number(seat.payoutMinor))}`;
   }
 
@@ -609,7 +732,10 @@ function paintWaiting(battle) {
   board.parentElement?.insertBefore(bar, board);
 }
 
-function paintFairness(battle, settled) {
+/* The seed reveal is part of the result, so it waits for the result. The revealed seed is in the
+ * payload either way — this is presentation, not secrecy — but printing it beside a reel that is
+ * still turning tells the player the battle is already over. */
+function paintFairness(battle, revealed) {
   const panel = $('#arenaFair', root);
   if (!panel) return;
 
@@ -617,18 +743,18 @@ function paintFairness(battle, settled) {
     ['Server seed hash', battle.fairness.serverSeedHash],
     ['Nonce', String(battle.fairness.nonce)],
   ];
-  if (settled) {
+  if (revealed) {
     rows.push(['Server seed', battle.fairness.serverSeedReveal]);
     rows.push(['Combined seed', battle.fairness.combinedSeedHash]);
     for (const seat of battle.seats) rows.push([`Client seed · ${seat.name}`, seat.clientSeed]);
   }
 
   const head = el('h3', 'arena__fairhead');
-  head.textContent = settled ? 'Verify this battle' : 'Committed before anyone joined';
+  head.textContent = revealed ? 'Verify this battle' : 'Committed before anyone joined';
   panel.appendChild(head);
 
   const note = el('p', 'arena__fairnote');
-  note.textContent = settled
+  note.textContent = revealed
     ? battle.fairness.formula
     : 'The server seed hash is published now and the seed itself is revealed when the battle ends.';
   panel.appendChild(note);
@@ -653,106 +779,270 @@ function paintFairness(battle, settled) {
  */
 function startAnimation() {
   if (frame) cancelAnimationFrame(frame);
+  frame = 0;
+
   const battle = view.battle;
-  if (!battle || !view.schedule || battle.status === 'lobby') return;
+  if (!battle || battle.status === 'lobby') return;
 
   const tracks = [...root.querySelectorAll('.seat__track')];
   if (!tracks.length) return;
 
-  // Build each reel's tile strip once, from the crate pool it is actually rolling.
   const byRound = new Map();
-  for (const result of battle.results) {
+  for (const result of battle.results ?? []) {
     if (!byRound.has(result.round)) byRound.set(result.round, new Map());
     byRound.get(result.round).set(result.seat, result);
   }
 
+  const totalRounds = battle.rounds.length;
+  const schedule = scheduleFor(battle);
+
+  /* No recoverable clock at all — an archived battle opened cold from a link. Park every reel on
+   * its final item instead of leaving a row of empty slots where the spin would have been. */
+  if (!schedule) {
+    /* Only a SETTLED battle may be parked on its last round. Anything else with no clock is a
+     * battle whose start has not been announced yet, and parking that one on the winner would
+     * give away the result that the rest of this file goes to some length to hold back. */
+    const parked = battle.status === 'settled';
+    const round = parked ? totalRounds - 1 : 0;
+    dress(tracks, byRound, battle, round);
+    markRound(round);
+    for (const track of tracks) settle(track, parked ? 1 : 0);
+    paintTotals(battle, parked ? totalRounds : 0, byRound);
+    reveal(battle, false);
+    return;
+  }
+
+  /* Reduced motion keeps the round-by-round pacing — that is information, not decoration — but
+   * drops the travel: each reel is simply already on its winner when the round begins. The CSS
+   * rule that claimed to handle this targeted a `transition` the track has never had. */
+  const calm = reduceMotion();
   let lastRound = -1;
+  let lastLanded = -1;
+  /* Whether this loop ever rendered a frame that was still running. Opening a link to a battle
+   * that ended last week finishes on frame one — that is a replay, and a replay must not fire the
+   * jackpot sound and the "you took the pot" toast at someone who is just reading the history. */
+  let watched = false;
+
   const tick = () => {
-    const now = Date.now();
-    const { startsAt, roundMs } = view.schedule;
-    const elapsed = now - startsAt;
-    const totalRounds = battle.rounds.length;
-
-    if (elapsed < 0) {
-      frame = requestAnimationFrame(tick);
-      return;
-    }
-
-    const index = Math.min(totalRounds - 1, Math.floor(elapsed / roundMs));
-    const progress = Math.min(1, (elapsed % roundMs) / roundMs);
+    const { startsAt, roundMs } = schedule;
+    const elapsed = Date.now() - startsAt;
     const finished = elapsed >= roundMs * totalRounds;
+    const index = elapsed < 0 ? 0 : Math.min(totalRounds - 1, Math.floor(elapsed / roundMs));
+
+    /* Clamped to 1 when finished, never `elapsed % roundMs`. A battle that ended an hour ago has
+     * an arbitrary remainder, which parked the reel at a random offset with an unrelated tile
+     * under the marker — a reel has to REST on its winner, that is the whole point of one. */
+    const progress = finished ? 1 : elapsed < 0 ? 0 : (elapsed % roundMs) / roundMs;
 
     if (index !== lastRound) {
+      const first = lastRound === -1;
       lastRound = index;
-      for (const cell of root.querySelectorAll('.arena__round')) {
-        cell.dataset.active = Number(cell.dataset.index) === index ? '1' : '0';
-      }
-      for (const track of tracks) {
-        const seat = Number(track.dataset.seat);
-        buildStrip(track, byRound.get(index)?.get(seat), battle, index);
-      }
-      if (index > 0) playSound('click');
+      dress(tracks, byRound, battle, index);
+      markRound(index);
+      if (!first) playSound('click');
     }
 
-    /* Ease out toward the winning tile. The easing is a pure function of progress, so two clients
-     * at the same instant compute the same offset to the pixel. */
-    const eased = 1 - (1 - progress) ** 3;
-    const tile = 96;
-    const target = (TILE_COUNT - 4) * tile;
-    for (const track of tracks) {
-      track.style.transform = `translate3d(${-(eased * target)}px, 0, 0)`;
+    /* The lead-in holds every reel at the start of the strip, reduced motion included — parking
+     * a calm reel on its winner before the battle has begun would give round one away. */
+    const eased = elapsed < 0 ? 0 : calm ? 1 : travel(progress);
+    for (const track of tracks) settle(track, eased);
+
+    /* The total ticks up the instant a reel lands, not when the next round starts. */
+    const landed = finished ? totalRounds : index + (eased >= 1 ? 1 : 0);
+    if (landed !== lastLanded) {
+      lastLanded = landed;
+      paintTotals(battle, landed, byRound);
     }
 
     if (finished) {
-      paintTotals(battle);
-      announce(battle);
+      frame = 0;
+      reveal(battle, watched);
       return;
     }
+    watched = true;
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
 }
 
-function buildStrip(track, result, battle, roundIndex) {
+/* The spin curve: race → brake → crawl → dwell, and pure in `progress` so the table stays in
+ * lockstep. The previous curve was a bare `1 - (1 - p) ** 3` across the whole round, which sheds
+ * its speed immediately and then asymptotes — that reads as a number being assigned rather than a
+ * wheel stopped by friction, and it left no dwell at all, so the winning tile was replaced at the
+ * very instant it arrived. */
+function travel(progress) {
+  if (progress >= P_LAND) return 1;
+  if (progress <= P_RACE) return RACE_END * (progress / P_RACE);
+  if (progress <= P_BRAKE) {
+    return RACE_END + (BRAKE_END - RACE_END) * BRAKE(span(progress, [P_RACE, P_BRAKE]));
+  }
+  return BRAKE_END + (1 - BRAKE_END) * CRAWL(span(progress, [P_BRAKE, P_LAND]));
+}
+
+function markRound(index) {
+  for (const cell of root.querySelectorAll('.arena__round')) {
+    cell.dataset.active = Number(cell.dataset.index) === index ? '1' : '0';
+  }
+}
+
+function dress(tracks, byRound, battle, roundIndex) {
+  for (const track of tracks) {
+    const seat = Number(track.dataset.seat);
+    buildStrip(track, byRound.get(roundIndex)?.get(seat), battle, roundIndex, seat);
+  }
+  metrics = null;   // the strip changed; re-measure once, lazily, on the next frame
+}
+
+/* The distance that brings the winning tile's CENTRE under the marker.
+ *
+ * The marker sits at `left: 50%` of the reel. The old constant was `(TILE_COUNT - 4) * 96`, which
+ * puts the winning tile's LEFT EDGE at the track origin — so every reel stopped with the winner
+ * pinned to the far left and an unrelated tile sitting under the marker. It also hardcoded a 96px
+ * stride against an 88px tile and an 8px gap, a coincidence one CSS edit away from breaking.
+ * Measured from the DOM instead, once per round rather than once per frame: the grid gives every
+ * reel the same width, so a single measurement serves the whole table. */
+let metrics = null;
+function settle(track, k) {
+  if (metrics === null) metrics = measure(track);
+  if (metrics === null) return;
+  track.style.transform = `translate3d(${-(k * metrics.total)}px, 0, 0)`;
+  const reel = track.parentElement;
+  if (reel) reel.dataset.landed = k >= 1 ? '1' : '0';
+}
+
+function measure(track) {
+  const reel = track.parentElement;
+  const tile = track.firstElementChild;
+  if (!reel || !tile) return null;
+  const style = getComputedStyle(track);
+  const tileWidth = tile.getBoundingClientRect().width;
+  const reelWidth = reel.getBoundingClientRect().width;
+  if (!tileWidth || !reelWidth) return null;
+  const gap = parseFloat(style.columnGap) || 0;
+  const pad = parseFloat(style.paddingLeft) || 0;
+  return { total: pad + WIN_AT * (tileWidth + gap) + tileWidth / 2 - reelWidth / 2 };
+}
+
+/* A reel is only as wide as its grid column, so a resize invalidates the measurement. */
+window.addEventListener('resize', () => { metrics = null; }, { passive: true });
+
+/* The strip for one seat in one round.
+ *
+ * Two things were wrong here. The WINNING tile was drawn straight from the API payload, whose
+ * `imageUrl` is null for almost every catalogue item because the sprite is resolved client-side
+ * from the Minecraft name — and `safeImage(null)` is a blank pixel, so the one tile that mattered
+ * was the one tile with no picture on it. It now goes through the same normaliser as every other
+ * item on the site. And the fillers were drawn with Math.random(), so every rebuild reshuffled the
+ * whole strip in front of the player; they are now drawn from a seed fixed by battle, seat and
+ * round, so a rebuild reproduces the strip exactly. */
+function buildStrip(track, result, battle, roundIndex, seat) {
   track.innerHTML = '';
   const round = battle.rounds[roundIndex];
   const pool = state.cases.find((entry) => entry.id === round?.caseId)?.drops ?? [];
+  const winner = result?.item ? normalizeItem(result.item) : null;
 
+  /* The catalogue has not landed yet, or this crate is community-made and outside the public
+   * list. Rather than draw thirty blank tiles, fall back to the one item we are certain of. */
+  const fillers = pool.length ? pool : winner ? [winner] : [];
+  if (!pool.length && !state.cases.length) refreshCases().catch(() => undefined);
+
+  const random = seeded(`${battle.code}:${seat}:${roundIndex}`);
   for (let index = 0; index < TILE_COUNT; index += 1) {
-    const tile = el('div', 'seat__tile');
-    const winning = index === TILE_COUNT - 4;
-    const item = winning
-      ? result?.item
-      : pool[Math.floor(Math.random() * Math.max(1, pool.length))];
-    if (winning) tile.dataset.win = '1';
-
-    const art = document.createElement('img');
-    art.src = safeImage(item?.imageUrl ?? item?.img ?? '');
-    art.alt = '';
-    tile.appendChild(art);
-
-    if (winning && result) {
-      const value = el('span', 'seat__tileval mono');
-      value.textContent = money(Number(result.payoutMinor));
-      tile.appendChild(value);
-    }
-    track.appendChild(tile);
+    const winning = index === WIN_AT;
+    track.appendChild(buildTile(
+      winning ? winner : weightedPick(fillers, random),
+      winning,
+      winning ? result : null,
+    ));
   }
 }
 
-function paintTotals(battle) {
+function buildTile(item, winning, result) {
+  const tile = el('div', 'seat__tile');
+  if (winning) tile.dataset.win = '1';
+  if (item?.rarity) tile.dataset.rarity = item.rarity;
+
+  const art = document.createElement('img');
+  /* `img` first: the normaliser already prefers the server URL there and falls back to the local
+   * sprite, whereas `imageUrl` is the raw, usually-null field. The old order had it backwards. */
+  art.src = safeImage(item?.img ?? item?.imageUrl ?? '');
+  art.alt = '';
+  art.loading = 'lazy';
+  tile.appendChild(art);
+
+  /* Naming the drop is what makes a reel readable at all — a 40px sprite flying past is a shape,
+   * not an item. Written with textContent, like every other server string in this file. */
+  const name = el('span', 'seat__tilename');
+  name.textContent = item?.displayName ?? item?.name ?? '';
+  tile.appendChild(name);
+
+  if (winning && result) {
+    const value = el('span', 'seat__tileval mono');
+    value.textContent = money(Number(result.payoutMinor));
+    tile.appendChild(value);
+  }
+  return tile;
+}
+
+/* A strip has to be reproducible: the same battle, seat and round must always draw the same
+ * fillers, or any rebuild reshuffles the reel in front of the player. FNV-1a into xorshift32 is
+ * ample — this decides nothing but which sprites fly past, and the outcome they sit next to was
+ * committed server-side long before any of this ran. */
+function seeded(key) {
+  let hash = 2166136261;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
+  }
+  let seed = hash >>> 0 || 1;
+  return () => {
+    seed ^= seed << 13; seed >>>= 0;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5; seed >>>= 0;
+    return seed / 4294967296;
+  };
+}
+
+/* Fillers follow the crate's real weights. A uniform draw put the legendaries on the reel as often
+ * as the junk, so every crate looked identical while it spun — and made the odds look far better
+ * than they are, which is the kind of lie this codebase goes out of its way not to tell. */
+function weightedPick(items, random) {
+  if (!items.length) return null;
+  let total = 0;
+  for (const item of items) total += Math.max(1, Number(item.weight) || 1);
+  let roll = random() * total;
+  for (const item of items) {
+    roll -= Math.max(1, Number(item.weight) || 1);
+    if (roll <= 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+/* The running total, summed over the rounds that have actually landed. */
+function paintTotals(battle, landedRounds, byRound) {
   for (const seat of battle.seats) {
     const node = root.querySelector(`.seat__total[data-seat="${seat.seat}"]`);
     if (!node) continue;
+    let total = 0n;
+    for (let index = 0; index < landedRounds; index += 1) {
+      const result = byRound.get(index)?.get(seat.seat);
+      if (result) total += BigInt(result.payoutMinor ?? 0);
+    }
     node.innerHTML = '';
-    node.append(coin(), document.createTextNode(money(Number(seat.totalDropMinor ?? 0))));
+    node.append(coin(), document.createTextNode(money(Number(total))));
   }
 }
 
+/* The moment the last reel stops. The arena repaints with the result it has been holding back —
+ * payouts, the winning seat, the revealed seeds — and only then does the toast fire.
+ *
+ * Guarded by code, because that repaint calls startAnimation() again and a finished battle reaches
+ * this line on its very first frame: without the guard it is a 60fps repaint loop. */
 let announced = null;
-function announce(battle) {
-  if (announced === battle.code || battle.status !== 'settled') return;
+function reveal(battle, watched) {
+  if (battle.status !== 'settled' || announced === battle.code) return;
   announced = battle.code;
+  paintArena();
+  if (!watched) return;   // a replay, not a result
 
   const mine = battle.seats.find((seat) => seat.isYou);
   const won = mine && Number(mine.payoutMinor) > 0;
