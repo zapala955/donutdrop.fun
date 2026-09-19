@@ -229,22 +229,31 @@ export function resolveBattle(
     teamTotals.set(entry.team, (teamTotals.get(entry.team) ?? 0n) + entry.totalDropMinor);
   }
 
-  /* A team made entirely of bots cannot win: a bot stakes nothing, so paying one would mint money
-   * out of the pot and hand it to nobody. Its reels still count toward the pot, which is what
-   * makes filling a lobby with bots a real contest rather than a free win. */
-  const eligible = [...teamTotals.keys()].filter((team) =>
-    seatTotals.some((entry) => entry.team === team && !botSeats.has(entry.seat)));
-  if (eligible.length === 0) throw new RangeError('no human team is eligible to win this battle');
+  /* EVERY team competes, bots included.
+   *
+   * This used to narrow the comparison to teams carrying at least one human, on the reasoning that
+   * a bot stakes nothing and so cannot be paid. That is true of PAYING a bot and false of letting
+   * one WIN, and conflating the two made a bot battle unloseable: in a 1v1 the human was the only
+   * team in the comparison, so they won whatever either side rolled, and took a pot that their own
+   * entry had funded only half of. Against three bots it paid four reels for one entry. The comment
+   * that used to sit here claimed this was "a real contest rather than a free win"; it was exactly
+   * a free win, and a repeatable one.
+   *
+   * A bot team can now win. When it does nobody is paid and the house keeps the pot, which is what
+   * happens on every other losing wager on this platform. */
+  if (!seatTotals.some((entry) => !botSeats.has(entry.seat))) {
+    throw new RangeError('a battle needs at least one human seat');
+  }
 
   let best: bigint | null = null;
-  for (const team of eligible) {
+  for (const team of teamTotals.keys()) {
     const total = teamTotals.get(team) ?? 0n;
     if (best === null) best = total;
     else if (mode === 'crazy' ? total < best : total > best) best = total;
   }
 
-  const winners = eligible.filter((team) => (teamTotals.get(team) ?? 0n) === best);
-  const winningTeam = winners[0] ?? eligible[0] ?? 0;
+  const winners = [...teamTotals.keys()].filter((team) => (teamTotals.get(team) ?? 0n) === best);
+  const winningTeam = winners[0] ?? 0;
 
   /* Only human seats on a winning team are paid. A 2v2 with one bot partner pays the whole team
    * share to the human, rather than burning half of it. */
@@ -265,9 +274,16 @@ export function resolveBattle(
     });
   }
 
+  /* The pot is paid out in full, or not at all.
+   *
+   * "Not at all" is the bot-wins case: there is no human on the winning team, so the stakes stay
+   * with the house exactly as they do when a player loses any other wager. Every other case must
+   * still balance to the penny — that check is what stops a battle minting money or losing it, and
+   * relaxing it into an inequality would have quietly permitted both. */
   const paid = [...payouts.values()].reduce((sum, value) => sum + value, 0n);
-  if (paid !== potMinor) {
-    throw new Error(`battle payout ${paid} does not balance against a pot of ${potMinor}`);
+  const expected = winningSeats.length > 0 ? potMinor : 0n;
+  if (paid !== expected) {
+    throw new Error(`battle payout ${paid} does not balance against an expected ${expected}`);
   }
 
   return { winningTeam, winningSeats, potMinor, payouts, teamTotals };
