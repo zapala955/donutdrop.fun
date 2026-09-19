@@ -265,13 +265,40 @@ function entryCard() {
   });
   field.addEventListener('blur', () => paint());
 
+  /* The terms, stated before the buy-in rather than discovered after it.
+   *
+   * Three facts, each a figure: where value comes from, what boosting costs, what leaving costs.
+   * Every one is server-supplied — the fee is the same number snapshotted onto the session, and
+   * the burn rate is derived from the simulation's own constants — so this cannot drift into
+   * quoting terms the pit does not actually apply.
+   *
+   * Placed immediately above the button because that is when it is read. Higher up it competes
+   * with the stake dial, which is the thing a player is actually adjusting; here it is the last
+   * thing between deciding an amount and committing it. */
+  const terms = el('dl', 'entry__terms');
+  const feePct = (Number(board.cashoutFeeBps ?? 0) / 100).toFixed(
+    Number(board.cashoutFeeBps ?? 0) % 100 === 0 ? 0 : 1,
+  );
+  const burnPct = (Number(board.boostBurnBpsPerSecond ?? 0) / 100).toFixed(1);
+  for (const [label, value] of [
+    ['Growth', 'Kills only — no food in the pit'],
+    ['Boost', `−${burnPct}% a second, burned`],
+    ['Cash out', `−${feePct}% of what you carry`],
+  ]) {
+    const key = el('dt', 'entry__termk');
+    key.textContent = label;
+    const val = el('dd', 'entry__termv');
+    val.textContent = value;
+    terms.append(key, val);
+  }
+
   const go = el('button', 'btn btn--go entry__go');
   go.textContent = board.liveSessionId ? 'REJOIN THE PIT' : 'ENTER THE PIT';
   go.addEventListener('click', () => void join(entry, go));
 
   const lb = el('div', 'entry__lb');
 
-  card.append(badges, amount, shape, bar, field, chips, edges, go, lb);
+  card.append(badges, amount, shape, bar, field, chips, edges, terms, go, lb);
   paint();
   return card;
 }

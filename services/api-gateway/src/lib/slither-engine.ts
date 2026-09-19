@@ -66,6 +66,15 @@ const SEGMENT_STEP = 11;
 /** Boost costs 0.5% of current value per second, which at 20Hz is 25 parts in 100 000 per tick. */
 const BOOST_DRAIN_NUMERATOR = 25n;
 const BOOST_DRAIN_DENOMINATOR = 100_000n;
+/**
+ * The same rate as basis points per second, for quoting to a player before they buy in.
+ *
+ * Derived from the two figures above rather than written out again, so the number on the entry
+ * screen cannot drift away from the number the simulation actually charges. 25/100000 per tick at
+ * 20 ticks a second is 0.5% a second, which is 50 bps.
+ */
+export const BOOST_BURN_BPS_PER_SECOND =
+  Number(BOOST_DRAIN_NUMERATOR) * TICK_HZ * (10_000 / Number(BOOST_DRAIN_DENOMINATOR));
 export const BOOST_SPEED_MULTIPLIER = 1.5;
 
 /**
@@ -253,7 +262,11 @@ export class Trail {
 
 /* ═════════════════════════ entities ═════════════════════════ */
 
-export type OrbKind = 'boost' | 'death';
+/* Only deaths put anything on the floor now. Boosting used to drop its drain here too, which
+ * meant a player could grow by hoovering up what other people shed — money gained without a kill.
+ * The kind is kept as a union of one rather than deleted so the wire shape and the renderer's
+ * switch stay honest about what an orb is. */
+export type OrbKind = 'death';
 
 export interface Orb {
   readonly id: number;
@@ -300,7 +313,6 @@ export interface Snake {
    * or ends a snake has to account for it, or the mode leaks a fraction of a percent per boosted
    * second — see `carriedMinor`.
    */
-  drainBucketMinor: bigint;
   /** How long since the socket last spoke. Past ABANDON_GRACE_TICKS the floor takes them. */
   silentTicks: number;
   /** Distance travelled since the last trail point was laid down. */
@@ -347,6 +359,15 @@ export interface TickEvents {
   readonly cashouts: readonly CashoutEvent[];
   /** Value that merged off the floor as a rounding remainder. Always 0; asserted by the tests. */
   readonly leakedMinor: bigint;
+  /**
+   * Value boosting destroyed this tick. Platform revenue, and reported rather than dropped.
+   *
+   * It is not a leak — it is a deliberate sink — but it is the same KIND of thing, so it travels
+   * the same way: named, returned, and added up by the caller. The mode's promise is not that value
+   * is conserved on the floor; it is that no unit is ever unaccounted for. Every unit staked is, at
+   * any instant, on a snake, on the floor, extracted, or burned.
+   */
+  readonly burnedMinor: bigint;
 }
 
 /* ═════════════════════════ spawning ═════════════════════════ */
@@ -433,7 +454,6 @@ export function spawnSnake(
     wantBoost: false,
     wantExtract: false,
     extractTicks: 0,
-    drainBucketMinor: 0n,
     silentTicks: 0,
     sinceLastPoint: 0,
     alive: true,
@@ -499,15 +519,16 @@ export function stepArena(arena: Arena): TickEvents {
   for (const snake of arena.snakes.values()) {
     if (snake.alive) steerAndMove(snake);
   }
+  let burnedMinor = 0n;
   for (const snake of arena.snakes.values()) {
-    if (snake.alive) applyBoostDrain(arena, snake);
+    if (snake.alive) burnedMinor += applyBoostDrain(snake);
   }
   absorbOrbs(arena);
   resolveCollisions(arena, kills);
   resolveExtractions(arena, cashouts);
   const leakedMinor = enforceOrbCap(arena);
 
-  return { kills, cashouts, leakedMinor };
+  return { kills, cashouts, leakedMinor, burnedMinor };
 }
 
 function steerAndMove(snake: Snake): void {
@@ -545,31 +566,31 @@ export function isBoosting(snake: Snake): boolean {
 }
 
 /**
- * Boost costs 0.5% of current value per second, and the cost does not evaporate — it lands on the
- * floor behind the snake where anybody can take it.
+ * Boost costs 0.5% of current value per second, and that value is BURNED.
  *
- * The drain is accumulated into a bucket rather than dropped as an orb per tick, because 0.025% of
- * a $1M snake is $250 and a floor covered in $250 crumbs is unreadable at any zoom level. The
- * bucket empties as one orb once it is worth a fifth of a percent of the snake, so the drop rate is
- * a couple of visible orbs a second whatever the stake.
+ * It used to land on the floor behind the snake for anybody to take. That made boosting a way to
+ * feed other players, and eating what they shed a way to grow without ever killing anyone — which
+ * is the thing this mode is now explicitly not meant to allow. The only way to take value off
+ * another player is to kill them.
+ *
+ * Burned value does not vanish quietly. It is returned as `burnedMinor` and the caller records it
+ * as platform revenue, the same treatment `sweepFloor` gives an orphaned floor. The arena still
+ * never loses track of a unit: every unit staked is, at any moment, on a snake, on the floor,
+ * extracted, or burned. The test asserts exactly that sum.
+ *
+ * NOTE ON THE EDGE. This is a second house margin alongside the cashout fee, and it is one players
+ * pay by playing well — boosting is how you chase and how you escape. It was chosen deliberately;
+ * it is not free, and it is not the 10% on the way out. Anyone tuning the economics should read
+ * these two together rather than either alone.
  */
-function applyBoostDrain(arena: Arena, snake: Snake): void {
-  if (!isBoosting(snake)) return;
+function applyBoostDrain(snake: Snake): bigint {
+  if (!isBoosting(snake)) return 0n;
   let drain = (snake.valueMinor * BOOST_DRAIN_NUMERATOR) / BOOST_DRAIN_DENOMINATOR;
   if (drain < 1n) drain = 1n;
   if (drain > snake.valueMinor) drain = snake.valueMinor;
   snake.valueMinor -= drain;
-  snake.drainBucketMinor += drain;
   resize(snake);
-
-  const orbUnit = snake.valueMinor / 500n;
-  if (snake.drainBucketMinor < (orbUnit > 5_000n ? orbUnit : 5_000n)) return;
-
-  // Dropped at the tail, not under the head: this is mass leaving the back of the snake, and an
-  // orb that spawns on top of its own owner is one the owner instantly re-eats for free.
-  const tail = Math.max(0, snake.trail.length - 1);
-  dropOrb(arena, snake.trail.x(tail), snake.trail.y(tail), snake.drainBucketMinor, 'boost');
-  snake.drainBucketMinor = 0n;
+  return drain;
 }
 
 function dropOrb(arena: Arena, x: number, y: number, valueMinor: bigint, kind: OrbKind): void {
@@ -735,7 +756,6 @@ function resolveCollisions(arena: Arena, kills: KillEvent[]): void {
     const dropped = carriedMinor(death.snake);
     death.snake.alive = false;
     death.snake.valueMinor = 0n;
-    death.snake.drainBucketMinor = 0n;
     scatter(arena, death.snake, dropped);
     if (death.killer && death.killer.alive) death.killer.kills += 1;
     kills.push({
@@ -797,7 +817,6 @@ function resolveExtractions(arena: Arena, cashouts: CashoutEvent[]): void {
     const gross = carriedMinor(snake);
     snake.alive = false;
     snake.valueMinor = 0n;
-    snake.drainBucketMinor = 0n;
     /* Nothing is scattered. This is the whole point of extracting: the value leaves the pit with
      * the player instead of landing on the floor for whoever is nearest. */
     cashouts.push({
@@ -859,11 +878,16 @@ export function sweepFloor(arena: Arena): bigint {
 }
 
 /**
- * Everything a snake is holding, including the drain that has left its value but not yet reached
- * the floor. This — not `valueMinor` — is what a snake pays out or spills.
+ * Everything a snake is holding, which is what it pays out or spills.
+ *
+ * This used to add a drain bucket: value that had left `valueMinor` but had not yet been dropped as
+ * an orb, which a death would otherwise have destroyed silently. Boosting burns now, so the value
+ * leaves on the tick it is spent and there is nothing in flight to carry. Kept as a named concept
+ * rather than inlined, because "what this snake would pay out right now" is the question three
+ * different call sites are asking and it deserves to be asked in one place.
  */
 export function carriedMinor(snake: Snake): bigint {
-  return snake.valueMinor + snake.drainBucketMinor;
+  return snake.valueMinor;
 }
 
 /** The total value the arena is holding, across snakes and floor. The conservation invariant. */

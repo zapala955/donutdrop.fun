@@ -12,6 +12,7 @@ import { openSideBetMarket, settleSideBetMarket } from './sidebets.js';
 import { AppError } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import {
+  BOOST_BURN_BPS_PER_SECOND,
   ARENA_RADIUS,
   EXTRACT_SECONDS,
   MAX_ENTRY_MINOR,
@@ -169,6 +170,10 @@ export async function registerSlitherRoutes(app: FastifyInstance, db: Database, 
   const pending = new Map<string, PendingEntry>();
   let loop: NodeJS.Timeout | null = null;
   let sweptOrphans = false;
+  /* Boost burn, accumulated across the life of one pit. Platform revenue, reported when the pit
+   * empties, beside the swept floor — those two are the whole of what the arena earns beyond the
+   * extraction fee, and a sink nobody totals is a sink nobody can tune. */
+  let burnedThisPitMinor = 0n;
 
   app.addHook('onClose', async () => {
     stopLoop();
@@ -472,6 +477,11 @@ export async function registerSlitherRoutes(app: FastifyInstance, db: Database, 
       app.log.error({ leakedMinor: events.leakedMinor.toString() }, 'arena leaked value');
     }
 
+    /* Counted, not merely allowed to happen. Accumulated rather than logged per tick: at twenty
+     * ticks a second that would be a line a millisecond, and the total is the only figure anyone
+     * wants. */
+    burnedThisPitMinor += events.burnedMinor;
+
     broadcastState();
 
     /* Spectators hold the loop open. Stopping it with an empty pit would freeze the entry screen's
@@ -482,6 +492,13 @@ export async function registerSlitherRoutes(app: FastifyInstance, db: Database, 
        * to exist in a mode whose whole claim is that value is conserved. */
       const swept = sweepFloor(arena);
       if (swept > 0n) app.log.info({ sweptMinor: swept.toString() }, 'arena floor swept');
+      if (burnedThisPitMinor > 0n) {
+        app.log.info(
+          { burnedMinor: burnedThisPitMinor.toString() },
+          'arena boost burn for this pit',
+        );
+      }
+      burnedThisPitMinor = 0n;
       stopLoop();
     }
   }
@@ -662,6 +679,17 @@ export async function registerSlitherRoutes(app: FastifyInstance, db: Database, 
       tickHz: TICK_HZ,
       extractSeconds: EXTRACT_SECONDS,
       maxPlayers: config.slitherMaxPlayers,
+      /* The cut, quoted to the player BEFORE they buy in.
+       *
+       * It was deliberately never sent: at 300 bps the argument was that a figure nobody is shown
+       * cannot be misread. At 1000 it is a tenth of everything a player carries out, and a tenth
+       * taken quietly is the kind of thing that is defensible right up until somebody works it out
+       * for themselves. It is snapshotted onto the session at entry anyway, so the number the
+       * client shows is the number that session will actually be charged. */
+      cashoutFeeBps: config.slitherCashoutFeeBps,
+      /* Boosting burns this fraction of a snake per second. The other half of the cost of playing,
+       * and for the same reason it is stated rather than discovered. */
+      boostBurnBpsPerSecond: BOOST_BURN_BPS_PER_SECOND,
       players: arena.snakes.size,
       leaders: leaderboard(null),
       /** Set when this player is already on the board — a reload drops them back into it. */

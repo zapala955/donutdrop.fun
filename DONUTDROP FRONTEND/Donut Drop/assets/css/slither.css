@@ -403,6 +403,52 @@
 .entry__badges .arena__badge b { font-size: .6875rem; }
 .entry__badges .arena__badge i { font-size: .5rem; }
 
+/* The terms, above the buy-in button.
+ *
+ * A ruled list, not the pill treatment the badges above it use. That is deliberate: a badge is a
+ * status you glance at, and these are conditions you read once and agree to. Sharing their shape
+ * would have made the terms look like another thing to skim.
+ *
+ * The rules are the whole visual device — one hairline per row, no panel, no box. The card is
+ * already a panel and nesting a second one inside it is the noise this page has avoided
+ * everywhere else. Values are gold because they are figures, which is the rule the amount, the
+ * badges and the leaderboard all follow on this screen.
+ *
+ * Not interactive, so there are no states to design: no hover, no focus ring, nothing to press.
+ * It is read, not used.
+ */
+.entry__terms {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 12px;
+  margin: 2px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ob-line);
+}
+.entry__termk,
+.entry__termv {
+  margin: 0;
+  padding: 5px 0;
+  font-size: .6875rem;
+  line-height: 1.35;
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.entry__terms > :nth-last-child(-n + 2) { border-bottom: 0; }
+.entry__termk {
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.entry__termv {
+  /* Right-aligned so the three figures stack into a column the eye can compare, rather than
+     floating at three different x positions after three different labels. */
+  text-align: right;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .entry__amt {
   text-align: center;
   font-size: clamp(1.75rem, 6vw, 2.5rem); font-weight: 900;

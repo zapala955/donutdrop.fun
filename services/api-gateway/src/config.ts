@@ -489,7 +489,7 @@ const environmentSchema = z
      * SLITHER_MAX_PLAYERS bounds the simulation, not the business: every tick is O(players ×
      * body points) and the frame sent to each socket grows with it. */
     SLITHER_ARENA_ENABLED: booleanString,
-    SLITHER_CASHOUT_FEE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    SLITHER_CASHOUT_FEE_BPS: z.coerce.number().int().min(0).max(1_000).default(1_000),
     SLITHER_MAX_PLAYERS: z.coerce.number().int().min(2).max(80).default(40),
     /* ── the vault jackpot ──
      * A share of platform volume set aside into one pot, drawn for on every wager and paid whole to

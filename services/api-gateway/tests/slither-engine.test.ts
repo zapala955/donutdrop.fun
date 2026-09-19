@@ -153,15 +153,20 @@ test('spawns are placed away from everyone already on the board', () => {
   );
 });
 
-test('value is conserved across a long run of ticks with boosting and eating', () => {
-  /* The invariant the whole mode rests on: the arena never creates or destroys money, it only
-   * moves it between snakes and the floor. Three snakes, all boosting, for a thousand ticks. */
+test('every unit staked is always accounted for, across a long run of ticks', () => {
+  /* The invariant the whole mode rests on.
+   *
+   * It used to read "the arena never creates or destroys money". Boosting burns now, so the rule
+   * is one step weaker and no less strict: money is never created, and it is only destroyed where
+   * the engine says so and reports how much. At any instant every unit staked is on a snake, on
+   * the floor, extracted, or burned. Three snakes, all boosting, for a thousand ticks. */
   const arena = createArena();
   const snakes = [join(arena, 100_000_000n), join(arena, 10_000_000n), join(arena, 1_000_000n)];
   const staked = snakes.reduce((total, snake) => total + snake.entryMinor, 0n);
   for (const snake of snakes) snake.wantBoost = true;
 
   let extracted = 0n;
+  let burned = 0n;
   let onTheFloorAtDeath = 0n;
   for (let tick = 0; tick < 1000; tick += 1) {
     // Steer each snake in a slow circle so nobody simply drives into the wall and ends the test.
@@ -171,6 +176,10 @@ test('value is conserved across a long run of ticks with boosting and eating', (
     }
     const events = stepArena(arena);
     assert.equal(events.leakedMinor, 0n, `value leaked on tick ${tick}`);
+    /* A leak is unaccounted loss and must stay zero. A burn is accounted loss and is expected —
+       the difference between the two is the whole point of reporting it. */
+    assert.ok(events.burnedMinor >= 0n);
+    burned += events.burnedMinor;
     for (const cashout of events.cashouts) {
       extracted += cashout.grossMinor;
       arena.snakes.delete(cashout.sessionId);
@@ -180,15 +189,16 @@ test('value is conserved across a long run of ticks with boosting and eating', (
       arena.snakes.delete(kill.victimSessionId);
     }
     assert.equal(
-      arenaValueMinor(arena) + extracted,
+      arenaValueMinor(arena) + extracted + burned,
       staked,
-      `conservation broke on tick ${tick}`,
+      `accounting broke on tick ${tick}`,
     );
   }
   assert.ok(onTheFloorAtDeath >= 0n);
+  assert.ok(burned > 0n, 'three snakes boosting for a thousand ticks must have burned something');
 });
 
-test('boost drains the snake and drops every drained unit onto the floor', () => {
+test('boost drains the snake and burns every drained unit', () => {
   const arena = createArena();
   const snake = join(arena, 50_000_000n);
   snake.wantBoost = true;
@@ -198,10 +208,17 @@ test('boost drains the snake and drops every drained unit onto the floor', () =>
     stepArena(arena);
   }
   assert.ok(snake.valueMinor < 50_000_000n, 'boosting must cost something');
-  // Roughly 0.5% a second for three seconds. Bounded loosely because orbs the snake has looped
-  // back over are its own drain coming straight back.
+  // Roughly 0.5% a second for three seconds. The bound is tight now: nothing comes back, because
+  // the drain is burned rather than dropped where the snake could loop round and re-eat it.
   assert.ok(snake.valueMinor > 45_000_000n, 'boosting must not cost everything');
-  assert.equal(arenaValueMinor(arena), 50_000_000n, 'the drain went onto the floor, not away');
+  /* The drain went AWAY, not onto the floor. That is the change: a boosting player used to feed
+     everyone around them, and eating what they shed was a way to grow without killing anyone. */
+  assert.equal(arena.orbs.size, 0, 'boosting leaves nothing on the floor');
+  assert.equal(
+    arenaValueMinor(arena),
+    snake.valueMinor,
+    'the arena holds exactly what the snake still has',
+  );
 });
 
 test('boost stops working at the floor rather than eating the snake to nothing', () => {
