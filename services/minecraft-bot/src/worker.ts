@@ -173,7 +173,17 @@ export class MinecraftWorker {
       if (!notice) return;
       if (notice.payer.toLowerCase() === bot.username.toLowerCase()) return;
       const payment = parsePaymentMessage(data);
-      this.queuePaymentReport(notice.payer, notice.displayedAmount, payment?.amount);
+      /* Resolved HERE, not inside the queued report.
+       *
+       * The queue preserves receipt order and may drain a moment later, by which time a payer who
+       * paid and logged straight off is no longer in the player list. The UUID has to be read at
+       * the instant the receipt arrives or it is not reliably there at all. */
+      this.queuePaymentReport(
+        notice.payer,
+        notice.displayedAmount,
+        payment?.amount,
+        this.javaUuidFor(bot, notice.payer),
+      );
     });
     bot.on('windowClose', () => this.markInventoryDirty());
     bot.on('kicked', (reason) =>
@@ -245,22 +255,64 @@ export class MinecraftWorker {
     this.snapshotHealthy = false;
   }
 
+  /**
+   * The payer's Java account UUID, from the player list, or undefined.
+   *
+   * Undefined in three cases, all of which the gateway handles by falling back to the name:
+   * the payer is a Bedrock player (dotted name, and their Floodgate UUID is deliberately not an
+   * identity on this site), the payer is not in the list, or the list entry carries something that
+   * is not a UUID. Nothing is inferred — an unresolved payer is reported as unresolved.
+   */
+  private javaUuidFor(bot: Bot, payer: string): string | undefined {
+    // Bedrock identities are name-based here by design; see lib/minecraft-username.ts.
+    if (payer.startsWith('.')) return undefined;
+    const wanted = payer.toLowerCase();
+    const player = Object.values(bot.players).find(
+      (candidate) => candidate?.username?.toLowerCase() === wanted,
+    );
+    const uuid = player?.uuid;
+    if (typeof uuid !== 'string') return undefined;
+    /* Returned WITHOUT dashes, because that is the encoding the account identity uses:
+     * `mc:<32 hex>`, as Mojang's own API returns it. mineflayer reports the dashed canonical form,
+     * so a UUID passed through unchanged would be compared against a value it can never equal, and
+     * every Java deposit would silently stop finding its owner. */
+    const normalized = uuid.toLowerCase().replaceAll('-', '');
+    if (!/^[0-9a-f]{32}$/.test(normalized)) return undefined;
+    /* A Floodgate UUID belongs to a Bedrock player whose name did not start with a dot, which
+     * should not happen — but if it does, attributing it as a Java account would be wrong. They
+     * are allocated from a zeroed prefix, so they are recognisable without a Floodgate lookup. */
+    if (normalized.startsWith('000000000000000')) return undefined;
+    return normalized;
+  }
+
   private async reportPayment(payer: string, amount: number): Promise<void> {
     this.log.info({ payer, amount }, 'Observed in-game payment');
     await this.api.reportPayment(payer, amount);
   }
 
-  private async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
-    this.log.info({ payer, displayedAmount }, 'Observed in-game cash payment receipt');
-    await this.api.reportPaymentNotice(payer, displayedAmount);
+  private async reportPaymentNotice(
+    payer: string,
+    displayedAmount: string,
+    payerUuid?: string,
+  ): Promise<void> {
+    this.log.info(
+      { payer, displayedAmount, payerUuid: payerUuid ?? null },
+      'Observed in-game cash payment receipt',
+    );
+    await this.api.reportPaymentNotice(payer, displayedAmount, payerUuid);
   }
 
   /** Preserve the order in which DonutSMP delivered payment receipts. */
-  private queuePaymentReport(payer: string, displayedAmount: string, exactAmount?: number): void {
+  private queuePaymentReport(
+    payer: string,
+    displayedAmount: string,
+    exactAmount?: number,
+    payerUuid?: string,
+  ): void {
     this.paymentReports = this.paymentReports
       .catch(() => undefined)
       .then(async () => {
-        await this.reportPaymentNotice(payer, displayedAmount);
+        await this.reportPaymentNotice(payer, displayedAmount, payerUuid);
         if (exactAmount !== undefined) await this.reportPayment(payer, exactAmount);
       })
       .catch((error: unknown) => {

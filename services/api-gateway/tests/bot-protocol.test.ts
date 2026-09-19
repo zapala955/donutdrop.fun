@@ -209,13 +209,18 @@ describe('internal bot protocol', () => {
             values?.[5] === requestBody.eventId,
         ),
       );
+      /* Positions shifted when payer_uuid and attributed_by were added to the receipt. This
+         request carries no payerUuid, so the deposit is attributed by name and the UUID column is
+         null — which is the fallback path staying intact, asserted rather than assumed. */
       assert.ok(
         statements.some(
           ({ sql, values }) =>
             sql.includes('INSERT INTO cash_payment_receipts') &&
             values?.[2] === 'PlayerOne' &&
-            values?.[3] === '1.2K' &&
-            values?.[6] === 'credited',
+            values?.[3] === null &&
+            values?.[4] === '1.2K' &&
+            values?.[7] === 'credited' &&
+            values?.[8] === 'username',
         ),
       );
     } finally {

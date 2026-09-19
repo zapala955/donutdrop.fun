@@ -103,6 +103,15 @@ const paymentEvent = eventBase.extend({
 const cashPaymentEvent = eventBase.extend({
   type: z.literal('cash_payment_observed'),
   payer: z.string().regex(MINECRAFT_USERNAME_PATTERN),
+  /* The payer's Java account UUID, as the bot's player list reported it at the moment the receipt
+   * arrived. Optional, and must stay optional: the bot cannot always supply one — the payer may
+   * have left the list already, and a Bedrock payer has no Mojang UUID at all — and during a
+   * rollout the gateway and the bot are briefly different versions. An absent UUID falls back to
+   * the name, which is what this flow has always done. */
+  payerUuid: z
+    .string()
+    .regex(/^[a-f0-9]{32}$/)
+    .optional(),
   displayedAmount: z
     .string()
     .regex(/^[1-9]\d*(?:\.\d+)?[KMBT]?$/)
@@ -870,6 +879,9 @@ async function processCashPaymentObserved(
   let status: 'credited' | 'login_payment' | 'unlinked' | 'manual_review' = 'manual_review';
   let userId: string | undefined;
   let walletBalanceAfter: string | undefined;
+  /* Which key found the account. "Credited by name" is a materially weaker claim than "credited by
+   * UUID", and the receipt records which one happened rather than leaving it to be inferred. */
+  let attributedBy: 'uuid' | 'username' | undefined;
 
   if (amount !== undefined) {
     const login = await client.query<{ id: string }>(
@@ -883,10 +895,28 @@ async function processCashPaymentObserved(
     if (login.rowCount) {
       status = 'login_payment';
     } else {
-      const account = await client.query<LinkedCashUserRow>(
-        'SELECT id FROM users WHERE normalized_username = lower($1) LIMIT 1 FOR UPDATE',
-        [event.payer],
-      );
+      /* UUID first, name only as a fallback.
+       *
+       * Minecraft names are reassignable and an account row keeps its old name until its owner
+       * logs in again, so `normalized_username` is not a reliable key for money arriving from the
+       * server. A player who renamed had their own deposits land as `unlinked`; in the same window
+       * a recycled name's payment could be credited to the previous holder. `minecraft_identity`
+       * is what the account is actually keyed on, and it survives a rename.
+       *
+       * Bedrock deliberately never takes this path. A Floodgate player's identity here is
+       * `bedrock:<name>` because the payment receipt cannot see their Floodgate UUID; matching the
+       * one from the player list would give a single Bedrock player two identities and two
+       * accounts. See lib/minecraft-username.ts. They keep the name guarantee they always had. */
+      const account = event.payerUuid
+        ? await client.query<LinkedCashUserRow>(
+            'SELECT id FROM users WHERE minecraft_identity = $1 LIMIT 1 FOR UPDATE',
+            [`mc:${event.payerUuid}`],
+          )
+        : await client.query<LinkedCashUserRow>(
+            'SELECT id FROM users WHERE normalized_username = lower($1) LIMIT 1 FOR UPDATE',
+            [event.payer],
+          );
+      attributedBy = event.payerUuid ? 'uuid' : 'username';
       userId = account.rows[0]?.id;
       if (userId) {
         walletBalanceAfter = await creditWallet(
@@ -905,17 +935,19 @@ async function processCashPaymentObserved(
 
   await client.query(
     `INSERT INTO cash_payment_receipts
-       (event_id, bot_id, payer_username, displayed_amount, amount_minor, user_id, status,
-        wallet_balance_after_minor)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (event_id, bot_id, payer_username, payer_uuid, displayed_amount, amount_minor, user_id,
+        status, attributed_by, wallet_balance_after_minor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       event.eventId,
       event.botId,
       event.payer,
+      event.payerUuid ?? null,
       event.displayedAmount,
       amount?.toString() ?? null,
       userId ?? null,
       status,
+      attributedBy ?? null,
       walletBalanceAfter ?? null,
     ],
   );

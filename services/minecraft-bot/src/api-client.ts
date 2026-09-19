@@ -206,13 +206,29 @@ export class ApiClient {
   }
 
   /** Reports a general cash receipt; the signed POST retries the same event object on failure. */
-  async reportPaymentNotice(payer: string, displayedAmount: string): Promise<void> {
+  /**
+   * Reports a payment receipt, with the payer's Java account UUID when one is known.
+   *
+   * The UUID is what the gateway attributes the deposit to, because names are reassignable and an
+   * account keeps its old name until its owner logs in again. It is omitted rather than guessed
+   * when the player list could not supply one — a Bedrock payer has no Mojang UUID, and a payer
+   * who left immediately is gone from the list — and the gateway falls back to the name.
+   */
+  async reportPaymentNotice(
+    payer: string,
+    displayedAmount: string,
+    payerUuid?: string,
+  ): Promise<void> {
     await this.sendEvent({
       eventId: randomUUID(),
       botId: this.config.botId,
       type: 'cash_payment_observed',
       payer,
       displayedAmount,
+      /* Omitted entirely rather than sent as null. The request signature covers the canonical body,
+       * so an explicit null would be a different signed payload from no field at all, and the
+       * gateway's schema treats the field as absent-or-present. */
+      ...(payerUuid === undefined ? {} : { payerUuid }),
     });
   }
 
