@@ -459,8 +459,17 @@ export function buildScaledSubPool<T>(
   valueOf: (item: T) => number,
   cratePrice: number,
   exponent: number = INVERSE_WEIGHT_EXPONENT,
+  /**
+   * A floor the caller requires on top of the price-derived one.
+   *
+   * The price-derived floor cannot see the crate it is being built for. A caller that already
+   * knows the dearest ordinary outcome passes it here, so the `?` can never reveal something
+   * worth less than a drop the player can read off the reel. Raising the floor makes the pool
+   * richer, which calculateMysteryOdds then pays for by landing it less often.
+   */
+  minimumFloorMinor = 0,
 ): ScaledSubPool<T> {
-  const floorMinor = mysteryFloorFor(cratePrice);
+  const floorMinor = Math.max(mysteryFloorFor(cratePrice), Math.ceil(minimumFloorMinor));
   const ceiling = floorMinor * POOL_SPAN_MULTIPLE;
 
   const payloads = candidates

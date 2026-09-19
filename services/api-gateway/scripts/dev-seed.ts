@@ -118,6 +118,18 @@ const ITEMS: readonly CatalogItem[] = [
     imageUrl: 'assets/img/items/nether_sigil.svg',
   },
 
+  {
+    name: 'skeleton_skull', display: 'Skeleton Skull', valueMinor: '320000000',
+    imageUrl: 'assets/img/items/skeleton_skull.svg',
+  },
+  {
+    name: 'golden_crown', display: 'Golden Crown', valueMinor: '480000000',
+    imageUrl: 'assets/img/items/golden_crown.svg',
+  },
+  {
+    name: 'ghast_tear', display: 'Ghast Tear', valueMinor: '700000000',
+    imageUrl: 'assets/img/items/ghast_tear.svg',
+  },
   /* ── the mystery sub-pool ──
    *
    * Seven payloads, every one at or above the $100,000,000 floor. Nothing else may ever sit behind
@@ -144,15 +156,15 @@ const ITEMS: readonly CatalogItem[] = [
   {
     // Was the totem sprite, which the $6,500,000 Totem of Undying already owns.
     name: 'warden_trophy', display: 'Warden Trophy', valueMinor: '130000000',
-    mystery: true, imageUrl: 'assets/img/block/blackstone.png',
+    mystery: true, imageUrl: 'assets/img/items/warden_trophy.svg',
   },
   {
     name: 'sculk_reliquary', display: 'Sculk Reliquary', valueMinor: '175000000',
-    mystery: true, imageUrl: 'assets/img/block/crying_obsidian.png',
+    mystery: true, imageUrl: 'assets/img/items/sculk_reliquary.svg',
   },
   {
     name: 'ancient_city_vault', display: 'Ancient City Vault', valueMinor: '250000000',
-    mystery: true, imageUrl: 'assets/img/block/deepslate_top.png',
+    mystery: true, imageUrl: 'assets/img/items/ancient_city_vault.svg',
   },
   {
     // The brief's named payload, at the brief's stated value.
@@ -443,7 +455,7 @@ const CRATE_THEMES: readonly Record<string, CrateTheme>[] = [
     safe: { name: 'Nether Gate', slug: 'nether-gate', asset: 'block/obsidian.png' },
     balanced: { name: 'Soul Forge', slug: 'soul-forge', asset: 'items/obsidian.png' },
     wild: { name: 'Blaze Rod', slug: 'blaze-rod', asset: 'items/lava_bucket.png' },
-    degen: { name: 'Lava Dive', slug: 'lava-dive', asset: 'block/lava_still.png' },
+    degen: { name: 'Lava Dive', slug: 'lava-dive', asset: 'items/magma_core.svg' },
     jackpot: { name: 'Fortress Raid', slug: 'fortress-raid', asset: 'items/netherite_sword.png' },
     steady: { name: 'Sure Thing', slug: 'sure-thing', asset: 'items/diamond_pickaxe.svg' },
   },
@@ -680,22 +692,9 @@ function buildCases(items: readonly CatalogItem[]): GeneratedCase[] {
      *
      * The second is what keeps a 150,000,000 crate honest: its floor triples, so its slot lands
      * roughly a quarter as often as the unscaled engine would have given it. */
-    const scaled = buildScaledSubPool(allPayloads, (entry) => entry.value, price);
-    const subPool = scaled.payloads;
-    const subProbabilities = scaled.probabilities;
-    const rarestShare = subProbabilities.reduce((least, share) => Math.min(least, share), Infinity);
-    const odds = calculateMysteryOdds(price, budgetFraction, scaled.averageValue);
-
     for (const profile of RISK_PROFILES) {
       const theme = tierThemes[profile.code];
       if (theme === undefined) continue;
-
-      /* What the ordinary table has to average, given the slot eats P of every hundred rolls.
-       * At one in ninety thousand this is indistinguishable from 81% of price; at one in eight it
-       * is meaningfully higher, and ignoring the correction would quietly ship a crate returning
-       * well under 90%. Needed before the pool is chosen, because it decides which outcomes the
-       * crate can afford to contain at all. */
-      const ordinaryTarget = odds.ordinaryTargetMinor;
 
       const band = ladder.filter(
         (item) =>
@@ -706,6 +705,42 @@ function buildCases(items: readonly CatalogItem[]): GeneratedCase[] {
         skipped.push({ price, profile: profile.code, band: band.length });
         continue;
       }
+
+      /* ── the scaled sub-pool, then the odds it implies ──
+       *
+       * Built per CRATE, not per tier, because its floor is the strongest of three numbers and
+       * only two of them are known from the price:
+       *
+       *   1. the baseline and high-roller minimums, and 2.5x the crate price, so a mystery hit is
+       *      always at least a two-and-a-half-bagger and never a breakeven;
+       *   2. the dearest ordinary outcome this profile can contain, so the `?` is always strictly
+       *      better than anything the player can already see on the reel.
+       *
+       * The second is why this sits here rather than outside the loop: the band is what decides
+       * it, and the band is per profile. The odds then follow from the pool's own average value,
+       * so a richer pool lands less often and the crate still returns exactly 90%. */
+      const bandTop = band.reduce((dearest, item) => Math.max(dearest, item.value), 0);
+      let scaled;
+      try {
+        scaled = buildScaledSubPool(
+          allPayloads, (entry) => entry.value, price, INVERSE_WEIGHT_EXPONENT, bandTop + 1,
+        );
+      } catch {
+        /* No payload clears this crate's own loot table. Skipping is the honest outcome: the
+         * alternative is a `?` that is not the best thing in the crate. */
+        skipped.push({ price, profile: profile.code, band: -1 });
+        continue;
+      }
+      const subPool = scaled.payloads;
+      const subProbabilities = scaled.probabilities;
+      const rarestShare = subProbabilities.reduce((l, share) => Math.min(l, share), Infinity);
+      const odds = calculateMysteryOdds(price, budgetFraction, scaled.averageValue);
+
+      /* What the ordinary table has to average, given the slot eats P of every hundred rolls.
+       * At one in ninety thousand this is indistinguishable from 81% of price; at one in eight it
+       * is meaningfully higher, and ignoring the correction would quietly ship a crate returning
+       * well under 90%. */
+      const ordinaryTarget = odds.ordinaryTargetMinor;
 
       /* Thinned to a readable table, spread evenly in log value. The band decides what a crate
        * CAN contain; this decides how many of those it actually advertises. */

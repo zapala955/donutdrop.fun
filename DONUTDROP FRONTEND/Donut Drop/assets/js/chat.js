@@ -27,7 +27,7 @@
  * or did not catch.
  */
 import { state, bus, sendChat, refreshChat, refreshBalance } from './store.js';
-import { censorName } from './profanity.js';
+import { censorName, censorText } from './profanity.js';
 import { $, el, money, parseAmount, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -475,8 +475,11 @@ function buildMessage(message) {
 
   const body = el('div', 'msg__body');
   const text = el('span');
-  // textContent, never innerHTML: this is another player's typing.
-  text.textContent = message.body;
+  /* textContent, never innerHTML: this is another player's typing.
+   *
+   * Slurs are masked for display only. The stored row keeps what was actually said, because a
+   * moderator deciding whether to ban somebody needs the real text, not asterisks. */
+  text.textContent = censorText(message.body);
   body.appendChild(text);
 
   line.append(top, body);
