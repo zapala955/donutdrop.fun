@@ -721,11 +721,27 @@ export async function pollDeposits() {
   }
   depositWatermark = rows[0].id;
 
-  /* The newest row carries the balance the server computed after it, so the pill can be corrected
-   * from what we already fetched instead of racing a second request against the next round. */
-  state.balanceMinor = String(rows[0].balance_after_minor ?? state.balanceMinor);
-  state.balance = toSafeNumber(state.balanceMinor);
-  emit('balance');
+  /* The balance shortcut, and the reason it is fenced.
+   *
+   * The newest row carries the balance the server computed after it, so a deposit can correct the
+   * pill from what we already fetched instead of racing a second request. That is sound when the
+   * newest row IS the deposit being announced. It is wrong for anything else, and one case makes
+   * it visibly wrong: a settled round writes TWO ledger rows in ONE database transaction — the win
+   * credit and the stake debit — and Postgres gives both the identical `created_at`, because
+   * `now()` is transaction-start time. The history endpoint orders by `created_at DESC, id DESC`,
+   * so the tiebreak is a random uuid and `rows[0]` is either of them, per round, by coin flip.
+   *
+   * Landing on the credit row reports the balance BEFORE the stake came out: stake 1B to win 1.3B
+   * from a balance of 1B and the pill reads 2.3B instead of 1.3B, and stays wrong until the next
+   * balance poll or a reload. Half of all wins, on a figure players are watching closely.
+   *
+   * So the shortcut is taken only when the newest row is genuinely a deposit. Every other case is
+   * left to refreshBalance, which reads the wallet itself and cannot be ordered wrongly. */
+  if (DEPOSIT_KINDS.has(rows[0].kind)) {
+    state.balanceMinor = String(rows[0].balance_after_minor ?? state.balanceMinor);
+    state.balance = toSafeNumber(state.balanceMinor);
+    emit('balance');
+  }
 
   return fresh.reverse();
 }

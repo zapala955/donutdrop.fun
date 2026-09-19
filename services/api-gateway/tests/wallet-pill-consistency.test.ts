@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { describe, it } from 'node:test';
+
+/*
+ * The wallet pill must never show a balance from the middle of a settled round.
+ *
+ * A round writes two ledger rows in ONE database transaction — the win credit and the stake debit
+ * — and Postgres stamps both with the identical `created_at`, because `now()` is transaction-start
+ * time, not statement time. The history endpoint orders by `created_at DESC, id DESC`, so the
+ * tiebreak between them is a random uuid: which one is "newest" is a coin flip, per round.
+ *
+ * Reading a balance off that row is therefore reading one of two numbers at random, and one of
+ * them is the intermediate figure with the stake not yet taken out.
+ */
+
+const read = (rel: string) => readFile(path.resolve(import.meta.dirname, rel), 'utf8');
+const store = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/store.js');
+const economy = () => read('../src/routes/economy.ts');
+
+describe('the wallet pill', () => {
+  it('only takes a balance from a transaction row when that row is a deposit', async () => {
+    /* The guard this test exists for. Without it, pollDeposits corrects the pill from whichever of
+     * a round's two rows sorted first, which is wrong half the time. */
+    const source = await store();
+    const fn = source.slice(source.indexOf('export async function pollDeposits'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.match(body, /if \(DEPOSIT_KINDS\.has\(rows\[0\]\.kind\)\) \{/);
+    const assignment = body.indexOf('state.balanceMinor = String(rows[0].balance_after_minor');
+    const guard = body.indexOf('if (DEPOSIT_KINDS.has(rows[0].kind))');
+    assert.ok(guard > 0 && assignment > 0, 'both the guard and the assignment must exist');
+    assert.ok(guard < assignment, 'the guard must come before the assignment');
+  });
+
+  it('still advances the watermark for rows it does not take a balance from', async () => {
+    /* Otherwise a round would be re-examined on every poll for ever, and any genuine deposit
+     * behind it would be announced repeatedly. */
+    const source = await store();
+    const fn = source.slice(source.indexOf('export async function pollDeposits'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    const watermark = body.indexOf('depositWatermark = rows[0].id');
+    const guard = body.indexOf('if (DEPOSIT_KINDS.has(rows[0].kind))');
+    assert.ok(watermark > 0 && watermark < guard, 'the watermark advances unconditionally');
+  });
+
+  it('documents the ordering hazard where the reader will meet it', async () => {
+    /* The ordering is a property of the schema, not of this file, so a future reader has no way to
+     * discover it from the code alone. If the explanation goes, the guard looks arbitrary and the
+     * next person deletes it. */
+    const source = await store();
+    assert.match(source, /created_at/);
+    assert.match(source, /transaction-start time|now\(\) is transaction/);
+  });
+});
+
+describe('the transaction history endpoint', () => {
+  it('orders by a key that cannot separate two rows from one transaction', async () => {
+    /* Asserted so the hazard is pinned rather than assumed. If this ever becomes a monotonic
+     * sequence, the guard above can relax — and this test is where somebody will find out. */
+    const source = await economy();
+    assert.match(source, /ORDER BY created_at DESC, id DESC/);
+  });
+});
+
+describe('the hazard itself, as arithmetic', () => {
+  it('shows which of the two rows is the wrong one to read', () => {
+    const opening = 1_000_000_000n; // 1B
+    const stake = 1_000_000_000n; // staked in full
+    const win = 1_300_000_000n; // target
+
+    /* The server credits the win first and debits the stake last, so the two rows carry: */
+    const creditRow = opening + win; // 2.3B — the stake has not come out yet
+    const debitRow = creditRow - stake; // 1.3B — the round is complete
+
+    assert.equal(creditRow, 2_300_000_000n);
+    assert.equal(debitRow, 1_300_000_000n);
+    /* Both are real balances the server computed. Only the second one is the answer, and nothing
+     * in `created_at` distinguishes them. */
+    assert.notEqual(creditRow, debitRow);
+  });
+});
