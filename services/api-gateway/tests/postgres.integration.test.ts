@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readdir } from 'node:fs/promises';
+import path from 'node:path';
 import pg from 'pg';
 import { describe, it } from 'node:test';
 import { assertAuditDatabaseRole, assertRuntimeDatabaseRole } from '../src/lib/database-role.js';
@@ -348,40 +350,29 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
     const owner = new pg.Pool({ connectionString: databaseUrl, max: 1 });
     const testPassword = 'ci-only-runtime-password-4c31a76f';
     try {
+      /* Read from disk, not from a list kept by hand.
+       *
+       * This assertion used to name every migration file as a literal array. It stopped at 027
+       * while the directory went on to 031, so it had been failing since 028 was written — which
+       * nobody discovered, because the CI account was locked and the job never started. A test
+       * that must be edited alongside every migration is a test that silently rots the moment
+       * anything stops watching it.
+       *
+       * Comparing the directory against `schema_migration_checksums` keeps the guarantee the test
+       * name actually claims — every migration on disk has been applied, in order, and nothing was
+       * applied that is not on disk — and it cannot go stale. */
+      const migrationsDirectory = path.resolve(import.meta.dirname, '../../../packages/db/migrations');
+      const onDisk = (await readdir(migrationsDirectory))
+        .filter((name) => name.endsWith('.sql'))
+        .sort();
+      assert.ok(onDisk.length > 0, 'there must be migrations to apply');
+
       const migrations = await owner.query<{ version: string }>(
         'SELECT version FROM schema_migration_checksums ORDER BY version',
       );
       assert.deepEqual(
         migrations.rows.map((row) => row.version),
-        [
-          '001_initial.sql',
-          '002_security_hardening.sql',
-          '003_runtime_readiness.sql',
-          '004_admin_mfa.sql',
-          '005_bot_telemetry_retention.sql',
-          '006_admin_mfa_key_binding.sql',
-          '007_deposit_authorization_leases.sql',
-          '008_cases_wallets_and_sales.sql',
-          '009_pay_login_challenges.sql',
-          '010_upgrader_balance_stakes.sql',
-          '011_vault_yield_and_piggy_bank.sql',
-          '012_cash_only_quests_and_factions.sql',
-          '013_case_rounds_allow_cash_only.sql',
-          '014_chat_messages.sql',
-          '015_battles_and_community_cases.sql',
-          '016_referrals_and_discord.sql',
-          '017_rakeback_races_creators.sql',
-          '018_drop_daily_wager_limit.sql',
-          '019_vip_levels.sql',
-          '020_skill_duels.sql',
-          '021_slither_arena.sql',
-          '022_social_retention_suite.sql',
-          '023_discord_control.sql',
-          '024_runtime_readiness.sql',
-          '025_pay_login_wallet_credit.sql',
-          '026_cash_payment_deposits.sql',
-          '027_passive_cash_receipts.sql',
-        ],
+        onDisk,
       );
 
       const columns = await owner.query<{ table_name: string; column_name: string }>(

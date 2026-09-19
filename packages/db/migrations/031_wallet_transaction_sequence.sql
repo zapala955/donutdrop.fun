@@ -62,6 +62,25 @@ SELECT setval(
   false
 );
 
+-- Belt and braces on the identity's sequence.
+--
+-- PostgreSQL documents an identity column's sequence as an implementation detail of the column:
+-- unlike a `serial`, an inserting role is not supposed to need USAGE on it, and the grant below
+-- should be redundant. It is here anyway because of what it costs to be wrong. Every credit and
+-- every debit on this platform inserts into this table, so a missing sequence privilege would not
+-- degrade something — it would stop the casino taking a single wager, while the readiness probe
+-- kept answering healthy because it only reads. A redundant GRANT costs nothing and is checked by
+-- nobody; the alternative is a silent total outage on a belief about permission semantics.
+DO $grant$
+DECLARE
+  sequence_name text := pg_get_serial_sequence('wallet_transactions', 'seq');
+BEGIN
+  IF sequence_name IS NOT NULL THEN
+    EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %s TO donut_api_runtime', sequence_name);
+  END IF;
+END
+$grant$;
+
 ALTER TABLE wallet_transactions ADD CONSTRAINT wallet_transactions_seq_key UNIQUE (seq);
 -- The shape every reader of this table uses: one account's ledger, newest first.
 CREATE INDEX wallet_transactions_user_seq_idx ON wallet_transactions (user_id, seq DESC);
