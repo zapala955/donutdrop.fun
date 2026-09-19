@@ -542,17 +542,9 @@ function buildHit(activity, value) {
   stack.append(tag, from);
   figure.append(stack);
 
-  /* A route, not a recording. "Replay" takes the viewer to the mode it happened in, which is the
-   * thing they actually want and the only thing the platform can honestly offer — there is no
-   * stored video and a button that implied one would be a lie. */
-  const replay = el('button', 'msg__replay');
-  replay.type = 'button';
-  replay.textContent = 'REPLAY';
-  replay.addEventListener('click', () => {
-    location.hash = activity.kind === 'case' ? '#/crates' : '#/upgrader';
-    playSound('click');
-  });
-  figure.append(replay);
+  /* A REPLAY button stood here. It never replayed anything — there is no stored recording — it
+   * just routed to the mode the win happened in, which is a link wearing a verb it could not
+   * honour. The crate and the upgrader are both one tap away in the nav already. */
 
   line.append(top, figure);
   return line;

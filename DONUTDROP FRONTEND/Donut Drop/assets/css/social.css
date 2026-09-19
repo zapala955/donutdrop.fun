@@ -142,17 +142,6 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
   .msg[data-whale="1"] .msg__who { animation: none; }
 }
 
-.msg__replay {
-  align-self: flex-start;
-  margin-top: 4px;
-  font-size: .5rem; font-weight: 800; letter-spacing: .14em;
-  padding: 3px 8px; border-radius: 999px;
-  border: 1px solid var(--ob-line);
-  background: transparent;
-  color: var(--gold-bright);
-}
-.msg__replay:hover { border-color: var(--ob-line-hi); background: rgba(255, 170, 0, .08); }
-
 .msg--tip { background: linear-gradient(90deg, rgba(127, 216, 255, .07), transparent 62%); }
 
 /* ═════════════════════════ moderation menu ═════════════════════════ */

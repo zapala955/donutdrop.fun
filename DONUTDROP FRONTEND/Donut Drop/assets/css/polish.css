@@ -103,7 +103,6 @@
   font-size: .625rem; letter-spacing: .1em; color: var(--faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.flexwin .msg__replay { margin: 0 0 0 auto; align-self: center; flex: 0 0 auto; }
 
 /* ═════════════════════════ 2 · header ═════════════════════════ */
 
