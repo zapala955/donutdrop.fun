@@ -96,7 +96,42 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run lint
-      - run: npm audit --omit=dev --audit-level=high
+      # The audit CLIENT, not the tree it audits.
+      #
+      # Node 22.23.2 ships npm 10.9.8, which still posts to the legacy quick-audit endpoint. The
+      # registry is retiring that endpoint and now answers 400 with "Invalid package tree, run npm
+      # install to rebuild your package-lock.json" — a misleading message, since the lockfile is
+      # complete and npm 11 audits the same tree without complaint. Reproduced both ways against
+      # this repo before pinning: 10.9.8 fails, 11.6.2 passes.
+      #
+      # Pinned rather than floating, like the node version, the action SHAs and the image digests
+      # around it: a security gate that silently changes version is a gate whose verdict nobody
+      # can reproduce. Installed here rather than at the top of the job so every step before it
+      # keeps using the npm the lockfile was resolved with.
+      - run: npm install -g npm@11.6.2
+      - name: Audit production dependencies
+        run: |
+          # Retried, because this endpoint fails in two unrelated ways and neither is about the
+          # code. It answered 400 for the retired quick-audit route on npm 10, and "we are
+          # currently performing maintenance" on npm 11 minutes later. npm exits non-zero for
+          # "vulnerabilities found" and "could not reach the service" alike and gives no way to
+          # tell them apart, so every failure is retried: a real advisory is still there on the
+          # third attempt, and a registry blip usually is not.
+          #
+          # It still FAILS if the last attempt fails. An audit that shrugs off its own errors is
+          # not a gate, and this one guards the dependency tree of a site that holds balances.
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            if [ "$attempt" = 3 ]; then
+              break
+            fi
+            echo "::warning::dependency audit attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::dependency audit failed three times; the third attempt's output is above"
+          exit 1
       - name: Build final runtime images
         run: |
           docker build --file infra/docker/api.Dockerfile .
