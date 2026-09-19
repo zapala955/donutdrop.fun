@@ -26,6 +26,18 @@ ALTER TABLE cash_payment_receipts
   ADD COLUMN attributed_by varchar(16)
     CHECK (attributed_by IS NULL OR attributed_by IN ('uuid', 'username'));
 
+-- Every receipt credited before this migration was found by name, because that was the only
+-- mechanism there was. Backfilling says so explicitly rather than leaving a null that a later
+-- reader would have to interpret, and it is the truth about those rows, not a placeholder.
+--
+-- This runs BEFORE the constraint below. Postgres validates a new CHECK against existing rows, so
+-- adding the constraint first fails with 23514 on any table that has ever credited a deposit --
+-- which is every production table. The empty-database case is the only one where the order does
+-- not matter, and that is the one case that never ships.
+UPDATE cash_payment_receipts
+   SET attributed_by = 'username'
+ WHERE status = 'credited' AND attributed_by IS NULL;
+
 -- A credited receipt has to say how it found its owner. Anything not credited may leave it null.
 ALTER TABLE cash_payment_receipts
   ADD CONSTRAINT cash_payment_receipts_attribution_check
