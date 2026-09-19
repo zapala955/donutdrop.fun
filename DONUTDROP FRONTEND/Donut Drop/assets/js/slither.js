@@ -41,7 +41,7 @@ import { closeModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { API_BASE_URL, api } from './api.js';
 import { initSideBets, stopSideBets } from './sidebet.js';
-import { createSlitherRenderer } from './slither-renderer.js';
+import { createSlitherRenderer, logStakeRadius, snakeColourCss } from './slither-renderer.js';
 
 /* ═════════════════════════ the numbers this file is built on ═════════════════════════ */
 
@@ -590,6 +590,14 @@ function buildArenaDom() {
   hud.append(value, action);
   stage.append(hud);
 
+  /* Bottom left, the one corner nothing else claims: the board is top right, the spectator panel
+   * top left, the value and the cashout button run along the bottom centre, and the touch boost pad
+   * sits bottom right. Nothing here ever covers anything else. */
+  const map = el('canvas', 'pit__map');
+  map.setAttribute('aria-hidden', 'true');
+  stage.append(map);
+  mountMinimap(map);
+
   const boost = el('button', 'pit__boost');
   boost.type = 'button';
   boost.textContent = 'BOOST';
@@ -625,10 +633,145 @@ function paintHud(frame) {
   /* The board is rebuilt five times a second, not twenty. It is a list of five names that change
    * every few seconds; replacing its DOM on every snapshot is layout work nobody can perceive. */
   hudBeat += 1;
+  if (hudBeat % 2 === 0) paintMinimap(frame);
   if (hudBeat % 4 === 0) {
     const lb = stage.querySelector('.pit__lb');
     if (lb) lb.replaceChildren(leaderboardPanel(frame.leaders, 'TOP FIVE'));
   }
+}
+
+/* ═════════ the minimap ═════════
+ *
+ * The pit is 7200 units across and the camera shows a few hundred of them at a time. Without a map
+ * a player knows only what is already on top of them — and in a mode where the ONLY income is a
+ * kill, the two questions that decide a round are "where is everybody" and "where is the money
+ * somebody just dropped". Both are unanswerable from inside the camera.
+ *
+ * It is a 2D canvas rather than a fourth pass in the WebGL renderer. The renderer's whole frame is
+ * three draw calls and a second camera inside it would mean a second projection, a second cull and
+ * a scissor rect; this is forty dots on a 140px square, ten times a second. The cheap thing here is
+ * also the simple thing.
+ *
+ * Its dots take their colour from `snakeColourCss` — the same function the floor uses — because a
+ * map that assigns its own hues teaches the player a mapping and then breaks it at the moment they
+ * lean on it.
+ */
+
+/** Set by the observer, never read from the DOM inside a paint. */
+let mapWidth = 0;
+let mapObserver = null;
+
+function mountMinimap(canvas) {
+  unmountMinimap();
+  if (typeof ResizeObserver !== 'function') {
+    /* Anything with WebGL2 has this, and this mode already requires WebGL2. Measured once anyway,
+     * because a permanently blank square is a worse failure than a single forced reflow. */
+    mapWidth = canvas.clientWidth;
+    return;
+  }
+  /* Measuring in the paint would be a forced reflow ten times a second — the exact mistake the
+   * renderer's name layer already had to be cured of once. The observer reports the box instead. */
+  mapObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) mapWidth = entry.contentRect.width;
+  });
+  mapObserver.observe(canvas);
+}
+
+function unmountMinimap() {
+  mapObserver?.disconnect();
+  mapObserver = null;
+  mapWidth = 0;
+}
+
+/** A snake's dot, true to the radius it actually has on the floor, with a floor and a ceiling. */
+function mapDotRadius(snake, scale) {
+  const world = Number(snake.radius);
+  const radius = Number.isFinite(world) && world > 0
+    ? world
+    : logStakeRadius(snake.valueMinor, board?.minEntryMinor, board?.maxEntryMinor);
+  return clamp(radius * scale, 1.7, 5);
+}
+
+function paintMinimap(frame) {
+  const canvas = root?.querySelector('.pit__map');
+  if (!canvas || mapWidth < 8) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  /* Capped at 2: past that the extra pixels cost real fill rate and buy nothing on a 140px box. */
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const pixels = Math.round(mapWidth * dpr);
+  if (canvas.width !== pixels) {
+    canvas.width = pixels;
+    canvas.height = pixels;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, mapWidth, mapWidth);
+
+  const centre = mapWidth / 2;
+  const arena = arenaRadius();
+  const scale = (centre - 3) / arena;
+  /* World +y is screen-down in the arena shader, and it is screen-down on a 2D canvas too, so the
+   * two agree with no flip. If that shader's sign ever changes, this has to change with it. */
+  const at = (value) => centre + value * scale;
+
+  ctx.beginPath();
+  ctx.arc(centre, centre, centre - 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, .035)';
+  ctx.fill();
+  /* Red, because the wall is red on the floor. */
+  ctx.strokeStyle = 'rgba(192, 57, 43, .55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  /* The gates: the only way out with the money, so they are the one thing on this map a player
+   * needs to be able to find while being chased. */
+  ctx.fillStyle = '#ffd700';
+  for (const angle of frame.gates ?? []) {
+    ctx.beginPath();
+    ctx.arc(at(Math.cos(angle) * arena), at(Math.sin(angle) * arena), 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* Loot. Dim and small on purpose — a cluster means somebody died there, which is the signal;
+   * an individual orb is not, and drawn any brighter they would out-shout the players. */
+  ctx.fillStyle = 'rgba(255, 170, 0, .5)';
+  for (const orb of frame.orbs ?? []) {
+    ctx.beginPath();
+    ctx.arc(at(Number(orb.x)), at(Number(orb.y)), 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  let you = frame.you ?? null;
+  for (const snake of frame.snakes ?? []) {
+    const head = snake.paths?.[0];
+    if (!head || head.length < 2) continue;
+    if (snake.isYou) {
+      you = snake;
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(at(Number(head[0])), at(Number(head[1])), mapDotRadius(snake, scale), 0, Math.PI * 2);
+    ctx.fillStyle = snakeColourCss(snake);
+    ctx.fill();
+  }
+
+  /* You, last, so nobody is ever drawn over you. A player who cannot find themselves on the map
+   * has to look away from the floor to use it, and looking away is how a stake is lost. */
+  const head = you?.paths?.[0];
+  if (!head || head.length < 2) return;
+  const x = at(Number(head[0]));
+  const y = at(Number(head[1]));
+  const dot = mapDotRadius(you, scale);
+  ctx.beginPath();
+  ctx.arc(x, y, dot + 0.6, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffd700';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, dot + 3.2, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 215, 0, .55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 /**
@@ -672,6 +815,7 @@ function teardownArena() {
   detachInput();
   disconnect();
   destroyScene();
+  unmountMinimap();
   previousFrame = null;
   currentFrame = null;
   if (root?.isConnected) void refresh();

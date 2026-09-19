@@ -83,6 +83,30 @@ describe('the cut', () => {
   });
 });
 
+describe('the arena reads as a pit of distinguishable people', () => {
+  it('draws the floor and the minimap from one colour source', async () => {
+    /* Three surfaces name a snake: its body on the floor, its dot on the minimap, and the label
+     * over its head. If any of them derives its own hue, the map teaches the player a mapping and
+     * then breaks it at the moment they lean on it — which is worse than having no map. One
+     * exported function decides, and everything asks it. */
+    const renderer = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/slither-renderer.js');
+    const client = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/slither.js');
+    assert.match(renderer, /export function snakeColourCss/);
+    assert.match(client, /snakeColourCss\(snake\)/);
+    /* The minimap must not carry a palette of its own. */
+    const map = client.slice(client.indexOf('function paintMinimap'));
+    assert.doesNotMatch(map.slice(0, map.indexOf('\n}')), /PLAYER_PALETTE|hsl\(/);
+  });
+
+  it('keeps the minimap pointing the same way as the floor', async () => {
+    /* The map plots world y straight down the canvas with no flip, which is only correct because
+     * the arena's vertex shader negates y on its way to clip space. Flip that shader and every dot
+     * on the map mirrors, silently and in the one place a player has no way to notice. */
+    const renderer = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/slither-renderer.js');
+    assert.match(renderer, /-pixel\.y \/ \(u_viewport\.y \* 0\.5\)/);
+  });
+});
+
 describe('the entry screen quotes both costs', () => {
   it('sends the fee and the burn to the client', async () => {
     /* The fee used to be deliberately withheld. At 3% that was arguable; at 10% a player is

@@ -302,6 +302,27 @@
 }
 .pit__cashtxt { position: relative; }
 
+/* ── the minimap ──
+   Bottom left — the one corner nothing else claims. It carries the same floating-panel treatment as
+   the leaderboard rather than a solid plate, because it sits over a floor whose brightness changes
+   constantly and a plate would read as a hole cut in the arena.
+
+   Width and height come off one local custom property so the box stays square without relying on
+   aspect-ratio: the canvas's intrinsic ratio changes every time the paint resizes its backing
+   store, and two explicit lengths cannot be argued with. */
+.pit__map {
+  --map: clamp(104px, 13vw, 148px);
+  position: absolute; left: 12px; bottom: 14px;
+  width: var(--map); height: var(--map);
+  border-radius: var(--r-panel);
+  border: 1px solid rgba(255, 215, 0, .12);
+  background: rgba(6, 7, 10, .62);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 18px 44px -28px rgba(0, 0, 0, 1);
+  /* It is a readout, not a control. Clicks belong to the floor underneath. */
+  pointer-events: none;
+}
+
 /* ── boost, on touch only ──
    A keyboard has a space bar and a mouse has a right button. A phone has neither, so it gets a
    thumb pad — and only a phone, because a button that duplicates a key is clutter on a desktop. */
@@ -346,6 +367,9 @@
 }
 
 @media (max-width: 720px) {
+  /* Lifted clear of the HUD. At this width the value and the cashout button are centred across a
+     narrow pit, and a map left at the bottom corner would sit under the number that matters most. */
+  .pit__map { --map: 76px; left: 10px; bottom: 100px; }
   .pit__lb { width: min(200px, 52vw); }
   .pit__lb .arenalb { padding: 8px; }
   .pit__lb .arenalb__pill { display: none; }

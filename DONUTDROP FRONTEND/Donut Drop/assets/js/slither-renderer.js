@@ -10,7 +10,10 @@
 
 const TAU = Math.PI * 2;
 const DPR_CAP = 1.5;
-const MAX_SEGMENTS_PER_RUN = 72;
+/* Raised from 72. At 72 a long snake's segments are spaced far enough apart to read as a string of
+ * beads rather than one body; the silhouette is supposed to be a tube. The cost is linear in a
+ * count that is already culled to the viewport, and the whole frame is still three draw calls. */
+const MAX_SEGMENTS_PER_RUN = 150;
 const CULL_GUARD = 96;
 const VIEW_HALF_WIDTH_MIN = 620;
 const VIEW_HALF_WIDTH_MAX = 880;
@@ -27,10 +30,84 @@ const ITEM_ORB = 1;
 const ITEM_NAME = 2;
 
 const OBSIDIAN = [10 / 255, 10 / 255, 12 / 255];
-const CHARCOAL = [18 / 255, 18 / 255, 22 / 255];
 const GOLD = [1, 170 / 255, 0];
 const GOLD_BRIGHT = [1, 215 / 255, 0];
 const WALL_RED = [192 / 255, 57 / 255, 43 / 255];
+
+/**
+ * One colour per snake.
+ *
+ * Every snake used to be the same dark tube with the same gold outline, which is a look problem and
+ * a real one: in a pit of forty, the thing you most need to answer in a quarter of a second is
+ * "whose tail is that, and is it moving toward me". Identical snakes make that unanswerable, and
+ * the money on the table makes getting it wrong expensive.
+ *
+ * Ten hues, spaced around the wheel and all lifted well clear of the near-black floor so none of
+ * them reads as background at speed. They avoid the 35-50 degree band on purpose: that is gold, and
+ * gold is reserved.
+ */
+const PLAYER_PALETTE = [
+  [0.29, 0.78, 1.00], // ice
+  [0.42, 0.98, 0.58], // lime
+  [1.00, 0.36, 0.52], // rose
+  [0.68, 0.55, 1.00], // violet
+  [0.20, 0.92, 0.85], // aqua
+  [1.00, 0.55, 0.24], // ember
+  [0.98, 0.42, 0.95], // orchid
+  [0.55, 0.85, 0.25], // moss
+  [0.40, 0.62, 1.00], // cobalt
+  [1.00, 0.80, 0.35], // sand
+];
+
+/**
+ * YOUR snake is always gold, and nobody else's ever is.
+ *
+ * The genre convention is that you get a colour like everyone else and find yourself by the camera.
+ * That is not enough here. This arena is gold and obsidian everywhere else on the site, so gold is
+ * the colour a player already reads as "mine" — and when a mistake costs a real stake, the half
+ * second spent locating yourself in a crowd is the half second you needed.
+ */
+function snakePalette(snake) {
+  if (snake.isYou) return { body: GOLD, head: GOLD_BRIGHT };
+  /* FNV-1a over the id, so a snake keeps its colour for its whole life and every client in the pit
+   * independently agrees on it without the server having to say. */
+  let hash = 2166136261;
+  const id = String(snake.id ?? '');
+  for (let index = 0; index < id.length; index += 1) {
+    hash = Math.imul(hash ^ id.charCodeAt(index), 16777619);
+  }
+  const body = PLAYER_PALETTE[(hash >>> 0) % PLAYER_PALETTE.length];
+  return { body, head: [
+    Math.min(1, body[0] * 1.25 + 0.08),
+    Math.min(1, body[1] * 1.25 + 0.08),
+    Math.min(1, body[2] * 1.25 + 0.08),
+  ] };
+}
+
+/* The eye. Not pure white and not pure black — both vibrate against a near-black floor at the
+ * couple-of-pixels size an eye actually renders at, and the pupil has to stay readable as a shape
+ * rather than dissolving into the head behind it. */
+const SCLERA = [0.95, 0.95, 0.97];
+const PUPIL = [0.04, 0.04, 0.06];
+
+/** The body fill: the snake's own colour, dropped most of the way to the floor. */
+function bodyFill(colour, lift) {
+  return [colour[0] * lift, colour[1] * lift, colour[2] * lift];
+}
+
+/**
+ * The same snake's colour, as CSS.
+ *
+ * Exported because the minimap is drawn on a 2D canvas outside this module, and a minimap whose
+ * dots disagree with the floor is worse than no minimap: it teaches the player a mapping and then
+ * breaks it at the moment they rely on it. One function decides a snake's hue, and both surfaces
+ * ask it rather than each deriving its own.
+ */
+export function snakeColourCss(snake) {
+  const { body } = snakePalette(snake);
+  const byte = (channel) => Math.round(Math.min(1, Math.max(0, channel)) * 255);
+  return `rgb(${byte(body[0])} ${byte(body[1])} ${byte(body[2])})`;
+}
 
 /**
  * Constant-cost logarithmic stake sizing used when an older snapshot has no authoritative radius.
@@ -880,6 +957,10 @@ export function createSlitherRenderer(canvas, options) {
       if (!geometry.snake.boosting) continue;
       const run = geometry.blendRuns[0];
       if (!run?.length) continue;
+      /* The glow is the snake's own colour, not gold. Gold on everyone meant a boosting stranger
+       * bearing down on you lit up exactly the way your own snake does, and the one moment you
+       * cannot afford to mistake somebody else for yourself is the moment they are charging. */
+      const glow = snakePalette(geometry.snake).head;
       const radius = geometry.radius + 7;
       const count = Math.min(BOOST_TRAIL_SEGMENTS, run.length / 2);
       for (let index = 0; index < count; index += 1) {
@@ -887,7 +968,7 @@ export function createSlitherRenderer(canvas, options) {
         const y = run[index * 2 + 1];
         if (!pointInViewport(x, y, radius, viewport)) continue;
         const decay = 1 - index / count;
-        addCircle(x, y, radius, GOLD, 0.05 + decay * decay * 0.19, GOLD, 0, 0);
+        addCircle(x, y, radius, glow, 0.05 + decay * decay * 0.19, glow, 0, 0);
       }
     }
   };
@@ -896,14 +977,20 @@ export function createSlitherRenderer(canvas, options) {
     let visibleSegments = 0;
     for (const geometry of state.visibleGeometry) {
       const radius = geometry.radius;
+      const palette = snakePalette(geometry.snake);
+      /* Two fills a segment apart rather than one flat colour. The banding is what makes a body
+       * read as MOVING: a smooth tube of one colour slides past the eye with nothing to track,
+       * and at speed you cannot tell a charging snake from a parked one. */
+      const dark = bodyFill(palette.body, 0.26);
+      const light = bodyFill(palette.body, 0.42);
       for (let runIndex = 0; runIndex < geometry.blendRuns.length; runIndex += 1) {
         const run = geometry.blendRuns[runIndex];
         for (let index = 0; index < run.length / 2; index += 1) {
           const x = run[index * 2];
           const y = run[index * 2 + 1];
           if (!pointInViewport(x, y, radius, viewport)) continue;
-          const fill = (index + runIndex) % 2 === 0 ? OBSIDIAN : CHARCOAL;
-          addCircle(x, y, radius, fill, 1, GOLD, 1, 1);
+          const fill = (index + runIndex) % 2 === 0 ? dark : light;
+          addCircle(x, y, radius, fill, 1, palette.body, 1, 1);
           visibleSegments += 1;
         }
       }
@@ -923,15 +1010,32 @@ export function createSlitherRenderer(canvas, options) {
       const nextX = run[2] ?? x - 1;
       const nextY = run[3] ?? y;
       const angle = Math.atan2(y - nextY, x - nextX);
-      addCircle(x, y, radius * 1.07, CHARCOAL, 1, GOLD, 1, 1.25);
+      const palette = snakePalette(snake);
+      /* Lit brighter than the body it leads, so the head reads as the front even when a snake has
+       * doubled back over itself and both ends are on screen at once. */
+      addCircle(x, y, radius * 1.07, bodyFill(palette.body, 0.62), 1, palette.head, 1, 1.25);
 
-      const eyeRadius = Math.max(1.8, radius * 0.22);
+      /* The eyes.
+       *
+       * They used to be two flat gold discs, which is a face without a gaze: a disc points nowhere,
+       * so the only cue to which way a snake was about to turn was the body behind it — and the
+       * body is history, not intent. A pupil offset toward the heading makes the head announce
+       * where it is going a fraction of a second before it goes there, which is the whole reason
+       * eyes exist on a snake in this genre.
+       *
+       * Four instances a head, in the same batch as everything else. The frame is still three
+       * draw calls however many snakes are on screen. */
+      const eyeRadius = Math.max(1.8, radius * 0.24);
+      const pupilRadius = Math.max(0.9, eyeRadius * 0.52);
       const side = radius * 0.45;
       const forward = radius * 0.44;
+      const gazeX = Math.cos(angle) * eyeRadius * 0.42;
+      const gazeY = Math.sin(angle) * eyeRadius * 0.42;
       for (const flank of [-1, 1]) {
         const eyeX = x + Math.cos(angle) * forward - Math.sin(angle) * side * flank;
         const eyeY = y + Math.sin(angle) * forward + Math.cos(angle) * side * flank;
-        addCircle(eyeX, eyeY, eyeRadius, GOLD_BRIGHT, 1, GOLD_BRIGHT, 0, 0);
+        addCircle(eyeX, eyeY, eyeRadius, SCLERA, 1, PUPIL, 0.35, 1);
+        addCircle(eyeX + gazeX, eyeY + gazeY, pupilRadius, PUPIL, 1, PUPIL, 0, 0);
       }
 
       const extracting = Math.max(0, Math.min(1, Number(snake.extracting) || 0));
@@ -975,6 +1079,14 @@ export function createSlitherRenderer(canvas, options) {
         node.className = 'pit__name';
         node.textContent = item.snake.name;
         node.dataset.you = item.snake.isYou ? '1' : '0';
+        /* Tinted to the snake it belongs to, so the floor, the minimap and the label all say the
+         * same thing about who that is. Written once when the node is born rather than every
+         * frame: a snake's colour is derived from an id that never changes, and the transform is
+         * the only thing on this node that has any business being touched at 60Hz.
+         *
+         * Skipped for your own name — the stylesheet already gives it gold with a matching glow,
+         * and an inline colour here would win the cascade and quietly undo it. */
+        if (!item.snake.isYou) node.style.color = snakeColourCss(item.snake);
         host.append(node);
         state.labelNodes.set(id, node);
       } else if (node.textContent !== item.snake.name) {
