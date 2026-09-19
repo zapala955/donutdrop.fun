@@ -20,8 +20,6 @@ export const state = {
   activities: [],
   fairness: null,
   upgradeConfig: null,
-  vaultConfig: null,
-  piggyDeposits: [],
   chat: { messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0' },
   quests: [],
   questDay: null,
@@ -316,7 +314,7 @@ export async function refreshPrivate(notify = true) {
   state.fairness = fairness;
   state.upgradeConfig = upgradeConfig;
   await Promise.all([
-    refreshVaultConfig(false), refreshPiggy(false), refreshQuests(false), refreshWar(false),
+    refreshQuests(false), refreshWar(false),
     refreshReferrals(false), refreshRakeback(false), refreshVip(false),
   ]);
   if (notify) emit('private');
@@ -492,69 +490,6 @@ export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false 
   return { ...result, settle };
 }
 
-/* ─────────── piggy bank, quests, streak, faction war ───────────
- * Every figure here is server-derived. Nothing counts up locally: a number the browser invents is
- * a number the next refresh contradicts.
- */
-export async function refreshPiggy(notify = true) {
-  if (!state.authenticated) return state.piggyDeposits;
-  const piggy = await api.get('/v1/vault/piggy-bank');
-  state.piggyDeposits = (piggy.deposits || []).map(normalizePiggyDeposit);
-  if (notify) emit('piggy');
-  return state.piggyDeposits;
-}
-
-export async function refreshVaultConfig(notify = true) {
-  if (!state.authenticated) return state.vaultConfig;
-  state.vaultConfig = await api.get('/v1/vault/config');
-  if (notify) emit('piggy');
-  return state.vaultConfig;
-}
-
-function normalizePiggyDeposit(raw) {
-  return {
-    id: raw.id,
-    principalMinor: String(raw.principalMinor || '0'),
-    principal: toSafeNumber(raw.principalMinor),
-    aprBps: Number(raw.aprBps || 0),
-    lockDays: Number(raw.lockDays || 0),
-    maturedPayoutMinor: String(raw.maturedPayoutMinor || '0'),
-    maturedPayout: toSafeNumber(raw.maturedPayoutMinor),
-    payoutMinor: raw.payoutMinor == null ? null : String(raw.payoutMinor),
-    payout: raw.payoutMinor == null ? null : toSafeNumber(raw.payoutMinor),
-    openedAt: raw.openedAt ? new Date(raw.openedAt) : null,
-    unlocksAt: raw.unlocksAt ? new Date(raw.unlocksAt) : null,
-    claimedAt: raw.claimedAt ? new Date(raw.claimedAt) : null,
-    brokenAt: raw.brokenAt ? new Date(raw.brokenAt) : null,
-    state: raw.state || 'open',
-    matured: !!raw.matured,
-  };
-}
-
-export async function openPiggyBank(principalMinor, lockDays) {
-  if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before depositing');
-  const result = await api.post(
-    '/v1/vault/piggy-bank',
-    { principalMinor: String(principalMinor), lockDays: Number(lockDays) },
-    { idempotencyKey: idempotencyKey() },
-  );
-  await Promise.all([refreshBalance(false), refreshPiggy(false)]);
-  emit('piggy-open');
-  return normalizePiggyDeposit(result);
-}
-
-export async function settlePiggyBank(depositId) {
-  if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before claiming');
-  const result = await api.post(
-    '/v1/vault/piggy-bank/' + encodeURIComponent(depositId) + '/settle',
-    {},
-    { idempotencyKey: idempotencyKey() },
-  );
-  await Promise.all([refreshBalance(false), refreshPiggy(false)]);
-  emit('piggy-settle');
-  return normalizePiggyDeposit(result);
-}
-
 /* ─────────── chat ───────────
  * Reads are public so the rail has content before login; writing needs a session. The big-hit
  * threshold comes from the server alongside the messages, so the client never has to guess what
@@ -581,6 +516,10 @@ export async function sendChat(body) {
   return result.message;
 }
 
+/* ─────────── quests, streak, faction war ───────────
+ * Every figure here is server-derived. Nothing counts up locally: a number the browser invents is
+ * a number the next refresh contradicts.
+ */
 export async function refreshQuests(notify = true) {
   if (!state.authenticated) return state.quests;
   const [quests, streak] = await Promise.all([api.get('/v1/quests'), api.get('/v1/streak')]);

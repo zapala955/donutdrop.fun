@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   vault.css — the vault, the piggy bank, the desk
+   vault.css — the vault and the desk
    ═══════════════════════════════════════════════════════════════
    Same room as the upgrader: obsidian floor, gunmetal panels, and gold as the
    only thing that glows. It carries its own tokens for the same reason the
@@ -14,7 +14,7 @@
 
    Zero purple, by rule, and nothing in the 250-335 hue wedge.               */
 
-.vault, .piggycard, .deliverycode {
+.vault, .deliverycode {
   --v-obsidian: #0a0a0c;
   --v-charcoal: #14120c;
   --v-panel:    #17140d;
@@ -130,95 +130,6 @@
 .vaultcard__actions { display: flex; gap: 4px; }
 .vaultcard__actions .btn { flex: 1; }
 
-/* ── the piggy bank ── */
-.card__h--sub { font-size: .875rem; margin: 18px 0 8px; }
-.piggy__form { display: flex; flex-direction: column; gap: 12px; max-width: 460px; }
-.piggy__field { display: flex; flex-direction: column; gap: 4px; }
-.piggy__field > span {
-  font-family: var(--mono); font-size: .625rem; font-weight: 800;
-  letter-spacing: .2em; text-transform: uppercase; color: var(--faint);
-}
-.piggy__field > span b { color: var(--v-gold-bright); }
-
-/* The lock slider: gold up to the thumb, dark after it — filled is committed.
-   Firefox has ::-moz-range-progress and WebKit has nothing equivalent, so the
-   fill is painted as a hard-stop gradient on the track driven by --fill, which
-   the script updates on input. One mechanism, both engines, no drift. */
-.piggy__range {
-  -webkit-appearance: none; appearance: none;
-  --fill: 0%;
-  width: 100%; height: 5px; border-radius: 4px; outline: none;
-  background: transparent;
-  cursor: pointer;
-}
-.piggy__range::-webkit-slider-runnable-track {
-  height: 5px; border-radius: 4px;
-  background:
-    linear-gradient(90deg, var(--v-gold-deep), var(--v-gold-bright)) 0 / var(--fill) 100% no-repeat,
-    rgba(255, 255, 255, .08);
-}
-.piggy__range::-moz-range-track { height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .08); }
-.piggy__range::-moz-range-progress {
-  height: 5px; border-radius: 4px;
-  background: linear-gradient(90deg, var(--v-gold-deep), var(--v-gold-bright));
-}
-.piggy__range::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 17px; height: 17px; border-radius: 50%; margin-top: -6px;
-  background: var(--v-ramp); border: 2px solid #2a1f06;
-  box-shadow: 0 0 7px rgba(255, 170, 0, .22);
-  cursor: grab;
-}
-.piggy__range::-moz-range-thumb {
-  width: 17px; height: 17px; border-radius: 50%; border: 2px solid #2a1f06;
-  background: var(--v-gold); box-shadow: 0 0 7px rgba(255, 170, 0, .22); cursor: grab;
-}
-.piggy__range:focus-visible { outline: 2px solid var(--v-gold); outline-offset: 4px; }
-
-.piggy__quote {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 13px 15px; border-radius: 8px;
-  background: rgba(0, 0, 0, .42);
-  border: 1px solid rgba(255, 170, 0, .14);
-}
-.piggy__row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: .75rem; }
-.piggy__row i {
-  font-style: normal; font-family: var(--mono); font-size: .625rem;
-  letter-spacing: .18em; text-transform: uppercase; color: var(--faint);
-}
-.piggy__row b { font-variant-numeric: tabular-nums; color: var(--text); }
-.piggy__gold {
-  color: var(--v-gold-bright); font-weight: 800; font-size: 1rem;
-  text-shadow: 0 0 8px rgba(255, 170, 0, .22);
-}
-.piggy__note { font-size: .75rem; color: var(--faint); line-height: 1.6; margin: 0; }
-
-.piggy__list { display: flex; flex-direction: column; gap: 8px; }
-.piggycard {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px 15px; border-radius: 8px;
-  background: linear-gradient(180deg, rgba(28, 24, 15, .7), rgba(12, 11, 8, .85));
-  border: 1px solid rgba(255, 255, 255, .05);
-  border-left: 3px solid rgba(255, 255, 255, .1);
-}
-/* the left edge carries the state, so a long list is scannable without reading */
-.piggycard[data-state="open"]    { border-left-color: var(--v-gold); }
-.piggycard[data-state="claimed"] { border-left-color: var(--v-win); }
-.piggycard[data-state="broken"]  { border-left-color: var(--v-crimson); }
-.piggycard__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.piggycard__amount { font-size: 1rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
-.piggycard__terms {
-  font-family: var(--mono); font-size: .625rem; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--faint);
-}
-.piggycard__status { margin-left: auto; font-size: .75rem; }
-.piggycard__wait  { color: var(--muted); }
-.piggycard__wait b { color: var(--v-cyan); }
-.piggycard__ready { color: var(--v-gold-bright); font-weight: 800; text-shadow: 0 0 14px rgba(255,170,0,.45); }
-.piggycard__done  { color: var(--v-win); }
-.piggycard__broke { color: var(--v-crimson); }
-.piggycard .btn { flex: none; }
-
 /* the one-time withdrawal delivery code: gold because it is the thing to copy */
 .deliverycode {
   color: var(--v-gold-bright);
@@ -232,7 +143,6 @@
 @media (max-width: 720px) {
   .vaulthead { padding: 18px; }
   .vaulthead .btn { width: 100%; }
-  .piggycard__status { margin-left: 0; width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

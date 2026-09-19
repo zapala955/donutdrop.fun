@@ -6,7 +6,6 @@ import {
   accrualFactorBps,
   computeYield,
   elapsedWholeDays,
-  piggyMaturedPayoutMinor,
 } from '../src/lib/vault-yield.js';
 
 const migrationPath = path.resolve(
@@ -155,15 +154,6 @@ describe('vault yield accrual', () => {
     assert.equal(result.capped, true);
   });
 
-  it('quotes piggy bank interest simply, fixed, and never below principal', () => {
-    // 120% APR over a 14 day lock on 1_000_000 = 1_000_000 * 12000 * 14 / (10000 * 365)
-    assert.equal(piggyMaturedPayoutMinor(1_000_000n, 12_000, 14), 1_046_027n);
-    // a longer lock pays more
-    assert.equal(piggyMaturedPayoutMinor(1_000_000n, 12_000, 90) > piggyMaturedPayoutMinor(1_000_000n, 12_000, 14), true);
-    // degenerate terms return the principal untouched rather than inventing or destroying money
-    assert.equal(piggyMaturedPayoutMinor(1_000_000n, 0, 14), 1_000_000n);
-    assert.equal(piggyMaturedPayoutMinor(1_000_000n, 12_000, 0), 1_000_000n);
-  });
 });
 
 describe('vault schema and routes', () => {
@@ -180,19 +170,13 @@ describe('vault schema and routes', () => {
     const sql = await readFile(migrationPath, 'utf8');
     assert.match(sql, /CREATE TABLE vault_yield_claims/);
     assert.match(sql, /CREATE TRIGGER vault_yield_claims_append_only/);
-    assert.match(sql, /CREATE TRIGGER piggy_bank_events_append_only/);
+    /* The piggy bank is gone, but these ledger kinds are not, and must not be: the rows they
+       name are still in an append-only table. Migration 032 explains why narrowing this CHECK
+       would fail on exactly the databases that have any. */
     assert.match(
       sql,
       /'vault_yield', 'piggy_open', 'piggy_claim', 'piggy_break'/,
     );
-  });
-
-  it('lets a piggy bank deposit settle exactly once', async () => {
-    const sql = await readFile(migrationPath, 'utf8');
-    assert.match(sql, /CREATE TABLE piggy_bank_deposits/);
-    assert.match(sql, /CHECK \(NOT \(claimed_at IS NOT NULL AND broken_at IS NOT NULL\)\)/);
-    assert.match(sql, /CHECK \(matured_payout_minor >= principal_minor\)/);
-    assert.match(sql, /UNIQUE \(user_id, idempotency_key\)/);
   });
 
   it('pins the readiness probe to the schema the running API expects', async () => {
@@ -208,16 +192,6 @@ describe('vault schema and routes', () => {
     assert.match(health, /donut_schema_ready_v\d+\(\)/);
   });
 
-  it('enforces the minimum lock and checks the wallet under lock before debiting', async () => {
-    const route = await readFile(routePath, 'utf8');
-    assert.match(route, /LOCK_TOO_SHORT/);
-    assert.match(route, /config\.piggyBankMinLockDays/);
-    assert.match(route, /SELECT balance_minor FROM user_wallets WHERE user_id = \$1 FOR UPDATE/);
-    assert.match(route, /INSUFFICIENT_BALANCE/);
-    // breaking early returns principal only; the interest is forfeited, never paid
-    assert.match(route, /matured\s*\n?\s*\?\s*BigInt\(deposit\.matured_payout_minor\)\s*\n?\s*:\s*BigInt\(deposit\.principal_minor\)/);
-  });
-
   it('refuses a daily rate that has no ceiling', async () => {
     const config = await readFile(
       path.resolve(import.meta.dirname, '../src/config.ts'),
@@ -226,7 +200,6 @@ describe('vault schema and routes', () => {
     assert.match(config, /VAULT_YIELD_BPS_PER_DAY/);
     assert.match(config, /VAULT_YIELD_CAP_BPS/);
     assert.match(config, /must be set when a daily vault yield is enabled/);
-    assert.match(config, /PIGGY_BANK_MIN_LOCK_DAYS: z\.coerce\.number\(\)\.int\(\)\.min\(14\)/);
   });
 });
 
@@ -265,5 +238,62 @@ describe('unlimited house stock', () => {
     );
     assert.match(catalog, /CASE WHEN \$7::boolean THEN 1000000000::bigint/);
     assert.match(catalog, /config\.houseStockUnlimited/);
+  });
+});
+
+describe('the piggy bank is gone', () => {
+  it('leaves no route, no config and no client module behind', async () => {
+    const route = await readFile(routePath, 'utf8');
+    const config = await readFile(path.resolve(import.meta.dirname, '../src/config.ts'), 'utf8');
+    assert.doesNotMatch(route, /piggy/i);
+    assert.doesNotMatch(config, /PIGGY_BANK/);
+    await assert.rejects(
+      readFile(
+        path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/Donut Drop/assets/js/piggy.js'),
+        'utf8',
+      ),
+      /ENOENT/,
+    );
+  });
+
+  it('refuses to drop the tables while a deposit still holds money', async () => {
+    /* The routes that could pay an open deposit are already deleted, so a migration that dropped
+     * the table quietly would destroy the only remaining record of a debt. It raises instead: a
+     * failed migration stops the deploy, which is loud and recoverable. */
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/032_remove_piggy_bank.sql'),
+      'utf8',
+    );
+    assert.match(sql, /WHERE claimed_at IS NULL AND broken_at IS NULL/);
+    assert.match(sql, /RAISE EXCEPTION/);
+    assert.match(sql, /DROP TABLE piggy_bank_events;/);
+    assert.match(sql, /DROP TABLE piggy_bank_deposits;/);
+    /* Events reference deposits, so the order is not cosmetic. */
+    assert.ok(
+      sql.indexOf('DROP TABLE piggy_bank_events;') < sql.indexOf('DROP TABLE piggy_bank_deposits;'),
+    );
+  });
+
+  it('leaves the ledger kinds and the quest metric alone', async () => {
+    /* Narrowing either CHECK would be validated against rows that already exist, which is how
+     * migration 030 took production down. */
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/032_remove_piggy_bank.sql'),
+      'utf8',
+    );
+    assert.doesNotMatch(sql, /wallet_transactions_kind_check/);
+    assert.doesNotMatch(sql, /DROP CONSTRAINT/);
+    // an uncompletable quest is switched off rather than left for a player to watch forever
+    assert.match(sql, /UPDATE quest_definitions SET enabled = false WHERE metric = 'piggy_deposits'/);
+  });
+
+  it('pins readiness to the schema without the tables', async () => {
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/032_remove_piggy_bank.sql'),
+      'utf8',
+    );
+    const health = await readFile(path.resolve(import.meta.dirname, '../src/routes/health.ts'), 'utf8');
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v32\(\) RETURNS boolean/);
+    assert.match(health, /donut_schema_ready_v32\(\)/);
   });
 });

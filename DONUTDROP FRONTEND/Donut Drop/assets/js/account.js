@@ -34,6 +34,10 @@ const KIND_LABEL = {
   upgrade_stake: 'Upgrader stake',
   upgrade_win: 'Upgrader win',
   vault_yield: 'Vault yield',
+  /* The piggy bank is gone, but its ledger rows are not: the wallet is append-only, so every
+     deposit, maturity and early break a player ever made is still in their history and still needs
+     a name. Deleting these three would not tidy anything — it would show those rows as 'piggy
+     open' via the raw-kind fallback. They stay for as long as the rows do, which is forever. */
   piggy_open: 'Piggy deposit',
   piggy_claim: 'Piggy matured',
   piggy_break: 'Piggy broken',

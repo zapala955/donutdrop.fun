@@ -37,13 +37,11 @@ export type QuestMetric =
   | 'upgrader_wins'
   | 'cases_opened'
   | 'wagered_minor'
-  | 'piggy_deposits'
   | 'faction_contribution_minor';
 
 export type ContributionSource =
   | 'upgrader'
   | 'case'
-  | 'piggy_bank'
   | 'skill_duel'
   /* The arena buy-in. Counted at the door rather than at the exit: it is at risk from the
    * first tick, and a player who dies with it never gets an exit to be counted at. */

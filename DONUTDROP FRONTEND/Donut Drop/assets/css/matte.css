@@ -302,11 +302,6 @@
    than pushing that span out of position. */
 .card__h .ihint { align-self: center; }
 
-/* The piggy bank's commit row: the button owns the width, the icon rides beside it. Previously a
-   paragraph under the button carried this, which put the one warning that matters below the
-   control it warns about. */
-.piggy__commit { display: flex; align-items: center; gap: 8px; }
-.piggy__commit .btn { flex: 1 1 auto; }
 
 /* The community-crate price head is a label-and-figure pair on one row; the icon joins the label
    end of it rather than the figure. */

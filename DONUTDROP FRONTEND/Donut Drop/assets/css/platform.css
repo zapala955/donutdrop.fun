@@ -23,7 +23,7 @@
    Tables and the ticker are the only horizontal scrollers, and each owns its
    own overflow container.                                                   */
 
-.crates, .piggy, .quests, .war, .fair {
+.crates, .quests, .war, .fair {
   --p-obsidian: #0a0a0c;
   --p-charcoal: #14120c;
   --p-panel:    #17140d;
@@ -987,13 +987,13 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.ucard__hint, .piggy__hint {
+.ucard__hint {
   font-size: .625rem;
   color: var(--faint);
   text-align: center;
   overflow-wrap: anywhere;
 }
-.ucard__hint[data-bad], .piggy__hint[data-bad] { color: var(--p-crimson); }
+.ucard__hint[data-bad] { color: var(--p-crimson); }
 
 /* ════════════════════ quests and streak ════════════════════ */
 .streak {
@@ -1324,33 +1324,6 @@
 .roundrow__val { font-size: .75rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .roundrow__use { white-space: nowrap; }
 
-/* ════════════════════ piggy bank head ════════════════════ */
-.piggyhead { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 22px; min-width: 0; }
-.piggyhead__main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; min-width: 0; }
-.piggyhead__label {
-  font-family: var(--mono);
-  font-size: .625rem;
-  letter-spacing: .24em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.piggyhead__figure {
-  font-family: var(--disp);
-  font-weight: 900;
-  font-size: clamp(1.8rem, 4.4vw, 2.8rem);
-  line-height: 1.05;
-  letter-spacing: -.035em;
-  font-variant-numeric: tabular-nums;
-  background: var(--p-ramp);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.piggyhead__sub { font-size: .75rem; color: #9ca3af; overflow-wrap: anywhere; }
-.piggyhead__side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; min-width: 0; }
-.piggyhead__avail { font-family: var(--mono); font-size: .625rem; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
-.piggyhead__side b { flex: none; font-size: 1.25rem; color: var(--p-cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
-
 /* ════════════════════ narrow ════════════════════ */
 @media (max-width: 720px) {
   .ticker { height: 30px; padding: 0 8px; }
@@ -1488,8 +1461,7 @@ body { padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
 .toast b,
 .toast span,
 .quest__name,
-.faction__name,
-.piggy__row b {
+.faction__name {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -2261,7 +2233,7 @@ html, body { overflow-x: clip; }
 }
 
 /* ════════════════════ navigation ════════════════════
-   Four entries and one call to action. Piggy Bank, Quests, War and Fair left this bar; they are
+   Four entries and one call to action. Quests, War and Fair left this bar; they are
    still live routes and now sit in the account menu under "Play". */
 
 /* ── the Cases disclosure ── */

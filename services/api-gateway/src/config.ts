@@ -383,13 +383,6 @@ const environmentSchema = z
     // here is deliberately low: no lot may ever double itself by sitting still.
     VAULT_YIELD_BPS_PER_DAY: z.coerce.number().int().min(0).max(1000).default(100),
     VAULT_YIELD_CAP_BPS: z.coerce.number().int().min(0).max(10_000).default(3000),
-    // Piggy bank. Cash locked for a fixed term at a rate frozen when the deposit is opened.
-    PIGGY_BANK_ENABLED: booleanString,
-    PIGGY_BANK_APR_BPS: z.coerce.number().int().min(1).max(100_000).default(12_000),
-    PIGGY_BANK_MIN_LOCK_DAYS: z.coerce.number().int().min(14).max(365).default(14),
-    PIGGY_BANK_MAX_LOCK_DAYS: z.coerce.number().int().min(14).max(730).default(90),
-    PIGGY_BANK_MIN_DEPOSIT_MINOR: positiveBigintString.default('10000'),
-    PIGGY_BANK_MAX_OPEN_DEPOSITS: z.coerce.number().int().min(1).max(50).default(10),
     // Developer login. Mints a real session for a disposable test account without the pay-login
     // challenge, so the site can be exercised with no custody bot online. This is an
     // authentication bypass: it is refused outright in production (see the check below), the
@@ -860,14 +853,7 @@ const environmentSchema = z
         });
       }
     }
-    if (env.PIGGY_BANK_MIN_LOCK_DAYS > env.PIGGY_BANK_MAX_LOCK_DAYS) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PIGGY_BANK_MAX_LOCK_DAYS'],
-        message: 'must be at least the minimum lock',
-      });
-    }
-    // A daily rate with no ceiling compounds without bound. Refusing the combination outright is
+        // A daily rate with no ceiling compounds without bound. Refusing the combination outright is
     // safer than shipping a yield that only stops when someone notices the economy has drifted.
     if (env.VAULT_YIELD_BPS_PER_DAY > 0 && env.VAULT_YIELD_CAP_BPS === 0) {
       context.addIssue({
@@ -1025,12 +1011,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     maxWinChancePpm: env.MAX_WIN_CHANCE_PPM,
     vaultYieldBpsPerDay: env.VAULT_YIELD_BPS_PER_DAY,
     vaultYieldCapBps: env.VAULT_YIELD_CAP_BPS,
-    piggyBankEnabled: env.PIGGY_BANK_ENABLED,
-    piggyBankAprBps: env.PIGGY_BANK_APR_BPS,
-    piggyBankMinLockDays: env.PIGGY_BANK_MIN_LOCK_DAYS,
-    piggyBankMaxLockDays: env.PIGGY_BANK_MAX_LOCK_DAYS,
-    piggyBankMinDepositMinor: BigInt(env.PIGGY_BANK_MIN_DEPOSIT_MINOR),
-    piggyBankMaxOpenDeposits: env.PIGGY_BANK_MAX_OPEN_DEPOSITS,
     houseStockUnlimited: env.HOUSE_STOCK_UNLIMITED,
     cashOnlyPlay: env.CASH_ONLY_PLAY,
     chatEnabled: env.CHAT_ENABLED,

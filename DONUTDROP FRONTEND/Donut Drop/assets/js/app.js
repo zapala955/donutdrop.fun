@@ -16,7 +16,6 @@ import {
   openModal, closeModal,
 } from './ui.js';
 import { mountUpgrader } from './upgrader.js';
-import { mountPiggy } from './piggy.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
@@ -95,8 +94,6 @@ function mountHome(view) {
       stats: [[count(state.cases), 'CRATES'], [count(RARITY), 'RARITIES']] },
     { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '#/upgrader',
       stats: [[maxStakeLabel(), 'MAX STAKE'], [topMultiplierLabel(), 'TOP PAYOUT']] },
-    { ac: '#ffd700', h: 'Piggy Bank',  art: 'gold_block.png',  href: '#/piggy',
-      stats: [['FIXED', 'RETURN'], ['NO', 'RISK']] },
     { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '#/war',
       stats: [[count(state.war?.factions), 'SIDES'], ['ONE', 'PRIZE POT']] },
   ];
@@ -810,7 +807,6 @@ const VIEWS = {
   referrals: mountReferrals,
   studio: mountStudio,
   upgrader: mountUpgrader,
-  piggy: mountPiggy,
   quests: mountQuests,
   war: mountWar,
   fairness: mountFair,

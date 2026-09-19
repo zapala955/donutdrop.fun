@@ -71,7 +71,7 @@ describe('frontend/backend contract', () => {
     // The platform runs on cash: there is no inventory to route to any more.
     assert.doesNotMatch(html, /data-route="inventory"/);
     assert.doesNotMatch(html, /data-view="inventory"/);
-    for (const route of ['crates', 'upgrader', 'piggy', 'quests', 'war', 'fairness']) {
+    for (const route of ['crates', 'upgrader', 'quests', 'war', 'fairness']) {
       assert.match(html, new RegExp(`data-route="${route}"`));
       assert.match(html, new RegExp(`data-view="${route}"`));
     }
@@ -227,7 +227,7 @@ ${detail}`);
      * trained someone to ignore this test. So the assertion extracts the template literals that
      * are actually assigned to innerHTML and looks only inside those. */
     const FIELDS = 'name|displayName|blurb|description|player';
-    for (const file of ['crates.js', 'war.js', 'quests.js', 'fair.js', 'piggy.js', 'ticker.js']) {
+    for (const file of ['crates.js', 'war.js', 'quests.js', 'fair.js', 'ticker.js']) {
       const module = await source('assets/js/' + file);
       const markup = [...module.matchAll(/innerHTML\s*(?:\+)?=\s*`([\s\S]*?)`;/g)].map(
         (m) => m[1] ?? '',

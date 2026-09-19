@@ -110,22 +110,3 @@ export function computeYield(input: YieldInput): YieldResult {
     capped: claimedMinor + claimableMinor >= capMinor,
   };
 }
-
-/**
- * Simple interest over the locked term, fixed at the moment the deposit is opened.
- *
- * Simple rather than compounding, and quoted up front: a player locking money away for a fortnight
- * is owed a number they can read before they commit, and a rate the site cannot revise while
- * their money is captive.
- */
-export function piggyMaturedPayoutMinor(
-  principalMinor: bigint,
-  aprBps: number,
-  lockDays: number,
-): bigint {
-  const apr = BigInt(Math.trunc(aprBps));
-  const days = BigInt(Math.trunc(lockDays));
-  if (principalMinor <= 0n || apr <= 0n || days <= 0n) return principalMinor;
-  const interest = (principalMinor * apr * days) / (BPS * 365n);
-  return principalMinor + interest;
-}
