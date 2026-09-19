@@ -71,9 +71,12 @@ export async function registerEconomyRoutes(
     async (request) => {
       const query = parseWith(historyQuery, request.query);
       const result = await db.query(
+        /* By `seq`, not by `created_at`. Two rows from one transaction share a timestamp — now()
+         * is transaction-start time — so the old ordering tie-broke on a random uuid and a round's
+         * credit and debit came back in either order. `seq` is monotonic and cannot tie. */
         `SELECT id, amount_minor, balance_after_minor, kind, reference_id, created_at
            FROM wallet_transactions WHERE user_id = $1
-          ORDER BY created_at DESC, id DESC LIMIT $2`,
+          ORDER BY seq DESC LIMIT $2`,
         [request.authUser?.id, query.limit],
       );
       return { transactions: result.rows };

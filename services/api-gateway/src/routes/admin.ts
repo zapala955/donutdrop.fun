@@ -263,9 +263,11 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         [params.id],
       ),
       db.query<AdminEntityRow>(
+        /* By `seq`, for the same reason the player-facing history is: a shared timestamp makes
+         * `created_at DESC, id DESC` a coin flip between a round's two rows. */
         `SELECT id, amount_minor, balance_after_minor, kind, reference_id, created_at
            FROM wallet_transactions WHERE user_id = $1
-          ORDER BY created_at DESC, id DESC LIMIT 25`,
+          ORDER BY seq DESC LIMIT 25`,
         [params.id],
       ),
       db.query<AdminEntityRow>(
