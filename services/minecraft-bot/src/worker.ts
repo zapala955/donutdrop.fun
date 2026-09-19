@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import mineflayer, { type Bot } from 'mineflayer';
 import type { Logger } from 'pino';
 import type { BotConfig } from './config.js';
-import type { ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
+import type { AdminPayoutBotJob, ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
 import {
@@ -196,6 +196,24 @@ export class MinecraftWorker {
         timer.unref();
       }
     });
+  }
+
+  /* Ends the current connection on purpose.
+   *
+   * It does not reconnect: the `end` handler on every connection already schedules that ten
+   * seconds later, and duplicating it here would open two sockets for one bot. So this quits and
+   * lets the path that already exists bring it back — one reconnect route, not two. */
+  private cycleConnection(reason: string): void {
+    const bot = this.bot;
+    if (!bot) return;
+    this.invalidateSnapshotState();
+    try {
+      bot.quit(reason);
+    } catch (error) {
+      /* Already gone. The `end` handler has fired or is about to, so the reconnect is booked
+       * either way and there is nothing here worth failing over. */
+      this.log.warn({ err: error }, 'quit during operator reconnect threw');
+    }
   }
 
   private schedule(callback: () => void, milliseconds: number): void {
@@ -615,7 +633,10 @@ export class MinecraftWorker {
    * reported as non-retryable and parked for a human, because a retry after an unknown outcome is
    * how a player gets paid twice.
    */
-  private async sendCashPayout(job: CashPayoutBotJob, claimState: JobClaimState): Promise<void> {
+  private async sendCashPayout(
+    job: CashPayoutBotJob | AdminPayoutBotJob,
+    claimState: JobClaimState,
+  ): Promise<void> {
     const { payee, amountMinor } = job.payload;
     let receipt: OutgoingPayment | undefined;
     try {
@@ -703,8 +724,21 @@ export class MinecraftWorker {
      * transfer flag, does not invalidate the snapshot, and does not run the reconciliation
      * afterwards. It is handled before the inventory-strict check below, because holding a
      * payment to the state of an inventory it never opens is what kept one queued indefinitely. */
-    if (job.kind === 'cash_payout') {
+    if (job.kind === 'cash_payout' || job.kind === 'admin_payout') {
       await this.sendCashPayout(job, claimState);
+      return;
+    }
+
+    /* A reconnect is acknowledged BEFORE the connection is cycled, not after.
+     *
+     * Completing it afterwards would mean reporting on a socket that is deliberately being torn
+     * down, and the report would race the teardown it is reporting. Acknowledging first costs the
+     * ability to say the reconnect succeeded — which the heartbeat that follows says better
+     * anyway, and more honestly, since it is observed rather than claimed. */
+    if (job.kind === 'reconnect') {
+      await this.api.completeJob(job, 'completed');
+      this.log.warn({ jobId: job.id }, 'reconnect ordered by an operator');
+      this.cycleConnection('operator reconnect');
       return;
     }
 

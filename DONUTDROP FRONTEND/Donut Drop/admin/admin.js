@@ -54,9 +54,12 @@ class ApiError extends Error {
   }
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, options = {}) {
   const headers = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  /* Minted per call, not per attempt: the point is that the SAME key rides a retry, so a request
+     the server already accepted cannot land twice. */
+  if (options.idempotency) headers['Idempotency-Key'] = crypto.randomUUID();
   if (!['GET', 'HEAD'].includes(method)) {
     const token = csrfToken();
     if (token) headers['X-CSRF-Token'] = token;
@@ -84,7 +87,7 @@ async function request(method, path, body) {
 
 const api = {
   get: (path) => request('GET', path),
-  post: (path, body) => request('POST', path, body),
+  post: (path, body, options) => request('POST', path, body, options),
   patch: (path, body) => request('PATCH', path, body),
 };
 
@@ -166,11 +169,100 @@ function confirmAction(message) {
     const dialog = $('confirm');
     const reason = $('confirmReason');
     $('confirmBody').textContent = message;
+    $('confirmMoney').hidden = true;
     reason.value = '';
     const done = () => {
       dialog.removeEventListener('close', done);
       resolve(
         dialog.returnValue === 'go' && reason.value.trim().length >= 3 ? reason.value.trim() : null,
+      );
+    };
+    dialog.addEventListener('close', done);
+    dialog.showModal();
+  });
+}
+
+/* ═════════════════════════ money ═════════════════════════ */
+
+/**
+ * Reads an operator's amount.
+ *
+ * `250k` and `250000` both mean the same thing, because these balances run to ten figures and
+ * demanding every zero is how one gets typed twice. Returns a BigInt, or null for anything it
+ * cannot read — never 0, because a field that silently becomes zero when you fat-finger it is how
+ * somebody credits nothing and believes they credited a fortune.
+ *
+ * BigInt all the way through: these figures pass 2^53, and a Number here would round the amount
+ * somebody is about to be paid.
+ */
+const SUFFIX = { k: 3, m: 6, b: 9, t: 12 };
+function parseAmount(input, { signed = false } = {}) {
+  const raw = String(input).trim().toLowerCase().replaceAll(',', '').replaceAll('$', '');
+  const match = /^(-?)(\d+)(?:\.(\d+))?([kmbt]?)$/.exec(raw);
+  if (!match) return null;
+  const [, sign, whole, fraction = '', suffix] = match;
+  if (sign && !signed) return null;
+  const zeros = suffix ? SUFFIX[suffix] : 0;
+  /* Decimal shorthand is resolved by shifting digits, not by multiplying a float: `1.1b` through
+   * Number is 1100000000.0000001 on a bad day, and this is somebody's money. */
+  if (fraction.length > zeros) return null;
+  const digits = whole + fraction + '0'.repeat(zeros - fraction.length);
+  const value = BigInt(digits);
+  if (value === 0n) return null;
+  return sign === '-' ? -value : value;
+}
+
+/** Exact and grouped. An operator moving money needs the figure, not an approximation of it. */
+function amountText(minor) {
+  const value = typeof minor === 'bigint' ? minor : BigInt(minor ?? 0);
+  const sign = value < 0n ? '-' : '';
+  const digits = (value < 0n ? -value : value).toString();
+  return sign + '$' + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/**
+ * The same dialog, plus an amount.
+ *
+ * The parsed figure is echoed under the field as it is typed, so the shorthand is never the last
+ * word on what is about to move — the operator confirms against the exact number, not against
+ * their own mental expansion of `1.2b`. Resolves null on cancel or on anything unreadable.
+ */
+function confirmAmount(message, { label = 'Amount', signed = false } = {}) {
+  return new Promise((resolve) => {
+    const dialog = $('confirm');
+    const reason = $('confirmReason');
+    const amount = $('confirmAmount');
+    const echo = $('confirmEcho');
+    $('confirmBody').textContent = message;
+    $('confirmAmountLabel').textContent = label;
+    $('confirmMoney').hidden = false;
+    reason.value = '';
+    amount.value = '';
+    echo.textContent = '';
+    echo.dataset.tone = '';
+
+    const preview = () => {
+      const parsed = amount.value.trim() ? parseAmount(amount.value, { signed }) : null;
+      if (!amount.value.trim()) {
+        echo.textContent = '';
+        echo.dataset.tone = '';
+        return;
+      }
+      echo.textContent = parsed === null ? 'Not a readable amount' : '= ' + amountText(parsed);
+      echo.dataset.tone = parsed === null ? 'bad' : 'ok';
+    };
+    amount.addEventListener('input', preview);
+
+    const done = () => {
+      dialog.removeEventListener('close', done);
+      amount.removeEventListener('input', preview);
+      $('confirmMoney').hidden = true;
+      const parsed = parseAmount(amount.value, { signed });
+      const why = reason.value.trim();
+      resolve(
+        dialog.returnValue === 'go' && why.length >= 3 && parsed !== null
+          ? { amountMinor: parsed.toString(), reason: why }
+          : null,
       );
     };
     dialog.addEventListener('close', done);
@@ -226,25 +318,252 @@ async function loadPlayers(query = '') {
   const data = await api.get(`/v1/admin/users?limit=50${search}`);
   table(
     $('playerTable'),
-    ['Username', 'Status', 'KYC', 'Role', 'Joined', 'ID'],
+    ['Username', 'Status', 'KYC', 'Role', 'Joined', ''],
     data.users ?? [],
     (user) => {
       const tr = document.createElement('tr');
       tr.append(cell(user.minecraft_username));
       const status = document.createElement('td');
-      status.append(
-        pill(
-          user.status,
-          user.status === 'active' ? 'ok' : user.status === 'suspended' ? 'bad' : 'warn',
-        ),
-      );
+      status.append(pill(user.status, statusTone(user.status)));
       tr.append(status);
       const kyc = document.createElement('td');
       kyc.append(pill(user.kyc_status, user.kyc_status === 'verified' ? 'ok' : 'warn'));
-      tr.append(kyc, cell(user.role), cell(user.created_at), cell(user.id, { mono: true }));
+      tr.append(kyc, cell(user.role), cell(user.created_at));
+
+      /* The id column became this button. The raw uuid was taking a third of the row's width to
+         say something an operator never reads and cannot act on; the sheet prints it at the top
+         for the one case where it is wanted. */
+      const actions = document.createElement('td');
+      const manage = document.createElement('button');
+      manage.type = 'button';
+      manage.className = 'btn';
+      manage.textContent = 'Manage';
+      manage.addEventListener('click', () => void openPlayer(user.id));
+      actions.append(manage);
+      tr.append(actions);
       return tr;
     },
   );
+}
+
+function statusTone(status) {
+  if (status === 'active') return 'ok';
+  if (status === 'suspended' || status === 'closed') return 'bad';
+  return 'warn';
+}
+
+/* ═════════════════════════ one player ═════════════════════════ */
+
+/** The account currently open in the sheet, so an action knows what it is acting on. */
+let sheetUserId = null;
+
+async function openPlayer(id) {
+  sheetUserId = id;
+  const data = await api.get(`/v1/admin/users/${encodeURIComponent(id)}`);
+  renderPlayer(data);
+  const sheet = $('playerSheet');
+  if (!sheet.open) sheet.showModal();
+}
+
+/** Re-reads the account and repaints, after an action that changed it. */
+async function refreshPlayer() {
+  if (!sheetUserId) return;
+  renderPlayer(await api.get(`/v1/admin/users/${encodeURIComponent(sheetUserId)}`));
+}
+
+function renderPlayer(data) {
+  const user = data.user;
+  $('sheetName').textContent = user.minecraft_username;
+  $('sheetId').textContent = user.id;
+
+  /* The facts that decide whether to act, in the order an operator asks them: what can this
+     account do, what is it holding, and is anything already restraining it. */
+  const facts = [
+    ['Status', user.status, statusTone(user.status)],
+    ['Role', user.role, user.role === 'admin' ? 'warn' : null],
+    ['Balance', amountText(data.balanceMinor), null],
+    ['KYC', user.kyc_status, user.kyc_status === 'verified' ? 'ok' : 'warn'],
+    ['Age verified', user.age_verified_at ? 'yes' : 'no', user.age_verified_at ? 'ok' : 'warn'],
+    ['Sessions', String((data.sessions ?? []).length), null],
+    ['Last login', user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'never', null],
+    [
+      'Self-excluded',
+      data.selfExcludedUntil ? `until ${new Date(data.selfExcludedUntil).toLocaleString()}` : 'no',
+      data.selfExcludedUntil ? 'bad' : null,
+    ],
+  ];
+  const host = $('sheetFacts');
+  host.replaceChildren();
+  for (const [label, value, tone] of facts) {
+    const item = document.createElement('div');
+    item.className = 'fact';
+    const name = document.createElement('span');
+    name.className = 'fact__k';
+    name.textContent = label;
+    const figure = document.createElement('span');
+    figure.className = 'fact__v';
+    if (tone) {
+      figure.append(pill(value, tone));
+    } else {
+      figure.textContent = value;
+    }
+    item.append(name, figure);
+    host.append(item);
+  }
+
+  renderPlayerActions(user, data);
+
+  table(
+    $('sheetSessions'),
+    ['Started', 'Last seen', 'Expires', 'Agent'],
+    data.sessions ?? [],
+    (session) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(session.created_at),
+        cell(session.last_seen_at),
+        cell(session.expires_at),
+        cell(session.user_agent),
+      );
+      return tr;
+    },
+  );
+
+  table(
+    $('sheetLedger'),
+    ['When', 'Kind', 'Amount', 'Balance after'],
+    data.transactions ?? [],
+    (entry) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(entry.created_at), cell(entry.kind));
+      const amount = document.createElement('td');
+      amount.className = 'mono';
+      amount.dataset.sign = String(entry.amount_minor).startsWith('-') ? 'down' : 'up';
+      amount.textContent = amountText(entry.amount_minor);
+      tr.append(amount, cell(amountText(entry.balance_after_minor), { mono: true }));
+      return tr;
+    },
+  );
+}
+
+function renderPlayerActions(user, data) {
+  const host = $('sheetActions');
+  host.replaceChildren();
+
+  /** One lever. `run` returns false to mean "the operator cancelled", so nothing is reported. */
+  const lever = (text, tone, run) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = tone === 'danger' ? 'btn btn--danger' : 'btn';
+    button.textContent = text;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const acted = await run();
+        if (acted !== false) await refreshPlayer();
+      } catch (error) {
+        toast(`${error.code}: ${error.message}`, 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    host.append(button);
+    return button;
+  };
+
+  const id = encodeURIComponent(user.id);
+
+  if (user.status === 'active') {
+    lever('Suspend', 'danger', async () => {
+      const reason = await confirmAction(
+        `Suspend ${user.minecraft_username}? They cannot wager or sign in, and every live `
+          + 'session ends immediately.',
+      );
+      if (!reason) return false;
+      const result = await api.patch(`/v1/admin/users/${id}/status`, {
+        status: 'suspended',
+        reason,
+      });
+      toast(`Suspended. ${result.sessionsRevoked} session(s) ended.`, 'ok');
+    });
+  } else {
+    lever('Reactivate', null, async () => {
+      const reason = await confirmAction(
+        `Return ${user.minecraft_username} to active? They can wager and sign in again.`,
+      );
+      if (!reason) return false;
+      await api.patch(`/v1/admin/users/${id}/status`, { status: 'active', reason });
+      toast('Account is active.', 'ok');
+    });
+  }
+
+  if (user.status !== 'closed') {
+    lever('Close account', 'danger', async () => {
+      const reason = await confirmAction(
+        `Close ${user.minecraft_username}'s account? This is the heaviest state: no wagering, no `
+          + 'sign-in, all sessions ended. It can be reversed from here, but treat it as final.',
+      );
+      if (!reason) return false;
+      await api.patch(`/v1/admin/users/${id}/status`, { status: 'closed', reason });
+      toast('Account closed.', 'ok');
+    });
+  }
+
+  lever('Credit balance', null, async () => {
+    const answer = await confirmAmount(
+      `Add to ${user.minecraft_username}'s site balance. Currently `
+        + `${amountText(data.balanceMinor)}. Writes an admin_adjustment to the ledger.`,
+      { label: 'Amount to add' },
+    );
+    if (!answer) return false;
+    const result = await api.post(`/v1/admin/users/${id}/balance`, answer);
+    toast(`Credited. New balance ${amountText(result.balanceMinor)}.`, 'ok');
+  });
+
+  lever('Debit balance', 'danger', async () => {
+    const answer = await confirmAmount(
+      `Take from ${user.minecraft_username}'s site balance. Currently `
+        + `${amountText(data.balanceMinor)}. Refused if it would go below zero.`,
+      { label: 'Amount to take' },
+    );
+    if (!answer) return false;
+    /* Sent as a negative. The endpoint takes one signed figure rather than an amount plus a
+       direction flag, because a flag is one inverted boolean away from crediting what was meant
+       to be clawed back. */
+    const result = await api.post(`/v1/admin/users/${id}/balance`, {
+      amountMinor: '-' + answer.amountMinor,
+      reason: answer.reason,
+    });
+    toast(`Debited. New balance ${amountText(result.balanceMinor)}.`, 'ok');
+  });
+
+  if ((data.sessions ?? []).length) {
+    lever('Sign out everywhere', null, async () => {
+      const reason = await confirmAction(
+        `End all ${data.sessions.length} live session(s) for ${user.minecraft_username}? `
+          + 'The account keeps every permission it has — this only ends the sign-ins.',
+      );
+      if (!reason) return false;
+      const result = await api.post(`/v1/admin/users/${id}/sessions/revoke`, { reason });
+      toast(`${result.sessionsRevoked} session(s) ended.`, 'ok');
+    });
+  }
+
+  lever(user.role === 'admin' ? 'Remove admin' : 'Make admin', 'danger', async () => {
+    const making = user.role !== 'admin';
+    const reason = await confirmAction(
+      making
+        ? `Give ${user.minecraft_username} administrator access? They will be able to do `
+          + 'everything on this page, including to your account.'
+        : `Remove ${user.minecraft_username}'s administrator access?`,
+    );
+    if (!reason) return false;
+    await api.patch(`/v1/admin/users/${id}/role`, {
+      role: making ? 'admin' : 'player',
+      reason,
+    });
+    toast(making ? 'Now an administrator.' : 'Administrator access removed.', 'ok');
+  });
 }
 
 async function loadBots() {
@@ -276,6 +595,54 @@ async function loadBots() {
       tr.append(transfers, cell(bot.last_heartbeat_at), cell(bot.open_jobs, { mono: true }));
 
       const actions = document.createElement('td');
+      actions.className = 'rowacts';
+
+      /* Live enough to take an order. The same test the gateway applies before it will queue one,
+         so a button that is enabled here is a button the server will honour. Mirroring the rule
+         rather than guessing keeps the console from offering an action that always fails — the
+         server is still the one that decides. */
+      const live =
+        bot.status === 'online' &&
+        bot.last_heartbeat_at !== null &&
+        Date.now() - new Date(bot.last_heartbeat_at).getTime() < 45_000;
+
+      const rejoin = document.createElement('button');
+      rejoin.type = 'button';
+      rejoin.className = 'btn';
+      rejoin.textContent = 'Rejoin';
+      rejoin.disabled = !live;
+      rejoin.title = live
+        ? 'Drop the connection and come straight back'
+        : 'The bot has not checked in recently enough to be given an order';
+      rejoin.addEventListener('click', async () => {
+        const reason = await confirmAction(
+          `Tell ${bot.username} to reconnect? It drops its connection and rejoins about ten `
+            + 'seconds later. Anything it is part-way through is abandoned.',
+        );
+        if (!reason) return;
+        rejoin.disabled = true;
+        try {
+          await api.post(`/v1/admin/bots/${bot.id}/reconnect`, { reason });
+          toast(`${bot.username} is reconnecting.`, 'ok');
+          await loadBots();
+        } catch (error) {
+          toast(`${error.code}: ${error.message}`, 'bad');
+          rejoin.disabled = false;
+        }
+      });
+
+      const pay = document.createElement('button');
+      pay.type = 'button';
+      pay.className = 'btn';
+      pay.textContent = 'Pay a player';
+      pay.disabled = !live;
+      pay.title = live
+        ? "Send in-game currency from this bot's own balance"
+        : 'The bot has not checked in recently enough to pay anybody';
+      pay.addEventListener('click', () => void payFromBot(bot));
+
+      actions.append(rejoin, pay);
+
       const quarantining = bot.status !== 'quarantined';
       const button = document.createElement('button');
       button.type = 'button';
@@ -304,6 +671,78 @@ async function loadBots() {
       });
       actions.append(button);
       tr.append(actions);
+      return tr;
+    },
+  );
+}
+
+/**
+ * Pays a Minecraft player from a bot's own in-game balance.
+ *
+ * Two prompts on purpose. The payee is asked for first, as plain text, because it is the field a
+ * mistake is unrecoverable in: money sent to a mistyped name on DonutSMP is money gone, and there
+ * is no site record to reverse. The amount and the reason follow in the dialog that echoes the
+ * exact figure back before anything is confirmed.
+ */
+async function payFromBot(bot) {
+  const payee = window.prompt(
+    `Pay which player, from ${bot.username}'s in-game balance?\n\n`
+      + 'Exact Minecraft name. This sends real in-game currency and cannot be reversed.',
+  );
+  if (payee === null) return;
+  const name = payee.trim();
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
+    toast('That is not a Minecraft username.', 'bad');
+    return;
+  }
+  const answer = await confirmAmount(
+    `Pay ${name} from ${bot.username}'s own in-game balance. This does not touch anybody's site `
+      + 'wallet and there is nothing to refund if it fails.',
+    { label: `Amount to send ${name}` },
+  );
+  if (!answer) return;
+  try {
+    const result = await api.post(
+      `/v1/admin/bots/${bot.id}/pay`,
+      { payee: name, ...answer },
+      /* An idempotency key, so a double-click or a retried request cannot pay twice. */
+      { idempotency: true },
+    );
+    toast(`Queued: ${amountText(answer.amountMinor)} to ${name} via ${result.bot}.`, 'ok');
+    await loadBots();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function loadPayouts() {
+  const data = await api.get('/v1/admin/payouts');
+  table(
+    $('payoutTable'),
+    ['When', 'Payee', 'Amount', 'Status', 'Bot', 'Ordered by', 'Reason'],
+    data.payouts ?? [],
+    (payout) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(payout.created_at), cell(payout.payee_username));
+      tr.append(cell(amountText(payout.amount_minor), { mono: true }));
+      const status = document.createElement('td');
+      status.append(
+        pill(
+          payout.status === 'failed' && payout.error_code
+            ? `${payout.status} · ${payout.error_code}`
+            : payout.status,
+          payout.status === 'paid'
+            ? 'ok'
+            : payout.status === 'failed' || payout.status === 'manual_review'
+              ? 'bad'
+              : 'warn',
+        ),
+      );
+      tr.append(status, cell(payout.bot_username), cell(payout.actor_username));
+      const reason = document.createElement('td');
+      reason.className = 'wrap';
+      reason.textContent = payout.reason ?? '—';
+      tr.append(reason);
       return tr;
     },
   );
@@ -398,7 +837,12 @@ async function publishLadder() {
 const LOADERS = {
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
-  bots: loadBots,
+  /* The payout log is the receipt for the Pay button above it, so it is never stale relative to
+     the table it belongs to. */
+  bots: async () => {
+    await loadBots();
+    await loadPayouts();
+  },
   jobs: loadJobs,
   items: loadItems,
 };
@@ -496,6 +940,12 @@ async function start() {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }
   $('publishLadder').addEventListener('click', () => void publishLadder());
+  $('sheetClose').addEventListener('click', () => $('playerSheet').close());
+  /* Esc closes it natively; this clears the account it was pointed at so a later refresh cannot
+     repaint a sheet nobody is looking at. */
+  $('playerSheet').addEventListener('close', () => {
+    sheetUserId = null;
+  });
   $('playerSearch').addEventListener('submit', (event) => {
     event.preventDefault();
     void show('players');

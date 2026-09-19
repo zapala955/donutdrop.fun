@@ -39,10 +39,21 @@ const cashPayoutPayloadSchema = z
   })
   .strict();
 
+/* An operator-ordered payment out of the bot's own balance. Same shape as a cash payout minus
+ * the withdrawal it does not have, and the amount is a decimal string for the same reason: these
+ * figures run past 2^53 and a payout that silently rounds pays the wrong number. */
+const adminPayoutPayloadSchema = z
+  .object({
+    payoutId: z.uuid(),
+    payee: z.string().regex(/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/),
+    amountMinor: z.string().regex(/^[1-9]\d{0,18}$/),
+  })
+  .strict();
+
 const botJobSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout']),
+    kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout', 'admin_payout', 'reconnect']),
     reference_id: z.uuid(),
     payload: z.unknown(),
     leaseToken: z.string().regex(/^[a-f0-9]{64}$/),
@@ -269,7 +280,29 @@ export class ApiClient {
       }
       return { ...result.job, kind: 'cash_payout', payload };
     }
-    return { ...result.job, kind: 'inventory_resync', payload: result.job.payload };
+    if (result.job.kind === 'admin_payout') {
+      const payload = adminPayoutPayloadSchema.parse(result.job.payload);
+      /* The same cross-check the other two payment kinds get. The payload names the row this
+       * money settles and the envelope names it too; if those ever disagree, the safe reading is
+       * that this job is not what it says it is, and nothing gets paid. */
+      if (payload.payoutId !== result.job.reference_id) {
+        throw new Error('Admin payout job identifiers do not match');
+      }
+      return { ...result.job, kind: 'admin_payout', payload };
+    }
+    if (result.job.kind === 'reconnect') {
+      return { ...result.job, kind: 'reconnect', payload: result.job.payload };
+    }
+    /* Explicit, not a fallthrough.
+     *
+     * This used to `return { ...job, kind: 'inventory_resync' }` for anything that was not a
+     * withdrawal or a payout, which meant a kind the schema had not been taught would be
+     * relabelled as an inventory resync and run as one. The enum above is the gate; this line
+     * only ever sees the kind it names. */
+    if (result.job.kind === 'inventory_resync') {
+      return { ...result.job, kind: 'inventory_resync', payload: result.job.payload };
+    }
+    throw new Error('Unsupported job kind');
   }
 
   async completeJob(
@@ -429,4 +462,24 @@ export interface CashPayoutBotJob extends BotJobBase {
   payload: { withdrawalId: string; payee: string; amountMinor: string };
 }
 
-export type BotJob = WithdrawalBotJob | InventoryResyncBotJob | CashPayoutBotJob;
+/* Physically the same act as a cash payout — one /pay command, one receipt to confirm — and the
+ * worker runs both through the same code. It is a separate kind because what the GATEWAY does on
+ * completion differs completely: a cash payout settles a player's withdrawal and may refund their
+ * wallet, an admin payout settles neither and must never touch one. */
+export interface AdminPayoutBotJob extends BotJobBase {
+  kind: 'admin_payout';
+  payload: { payoutId: string; payee: string; amountMinor: string };
+}
+
+/** Drop the connection and come back. Carries no payload and moves no money. */
+export interface ReconnectBotJob extends BotJobBase {
+  kind: 'reconnect';
+  payload: unknown;
+}
+
+export type BotJob =
+  | WithdrawalBotJob
+  | InventoryResyncBotJob
+  | CashPayoutBotJob
+  | AdminPayoutBotJob
+  | ReconnectBotJob;

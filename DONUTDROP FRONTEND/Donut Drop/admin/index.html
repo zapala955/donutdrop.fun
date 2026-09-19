@@ -12,7 +12,7 @@
 <!-- The ?v= is a second belt beside the no-store header nginx sends for these two files: it
      changes the URL, so no layer that already holds a copy can answer for it. Bump it whenever
      this console's behaviour changes in a way a stale copy would hide. -->
-<link rel="stylesheet" href="admin.css?v=2" />
+<link rel="stylesheet" href="admin.css?v=3" />
 </head>
 <body>
 
@@ -90,6 +90,15 @@
         <button class="btn" type="button" data-refresh="bots">Refresh</button>
       </div>
       <div class="tablewrap"><table class="grid" id="botTable"></table></div>
+
+      <!-- Every in-game payment an operator has ordered, newest first. It sits under the bots
+           rather than in a tab of its own because it is the receipt for the button above it:
+           after paying somebody you look here to see whether it actually landed. -->
+      <div class="panel__head panel__head--sub">
+        <h3>Operator payouts</h3>
+        <span class="hint">Paid from the bot's own in-game balance. No site wallet is touched.</span>
+      </div>
+      <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
     </section>
 
     <section class="panel" data-panel="jobs" hidden>
@@ -119,6 +128,18 @@
   <form method="dialog" class="confirm__form">
     <h2 class="confirm__title" id="confirmTitle">Confirm</h2>
     <p class="confirm__body" id="confirmBody"></p>
+    <!-- Shown only for the actions that move money. `1m` is accepted as well as `1000000`,
+         because demanding every zero on a ten-figure balance is an invitation to typo one — and
+         the exact figure is echoed underneath before anything is confirmed, so the shorthand is
+         never the last word on what is about to move. -->
+    <div class="confirm__money" id="confirmMoney" hidden>
+      <label class="confirm__label" for="confirmAmount" id="confirmAmountLabel">Amount</label>
+      <input class="confirm__input" id="confirmAmount" name="amount" type="text"
+             inputmode="decimal" maxlength="24" autocomplete="off"
+             placeholder="e.g. 250000 or 250k" />
+      <output class="confirm__echo" id="confirmEcho" for="confirmAmount"></output>
+    </div>
+
     <label class="confirm__label" for="confirmReason">Reason (recorded in the audit log)</label>
     <input class="confirm__input" id="confirmReason" name="reason" type="text"
            minlength="3" maxlength="256" required autocomplete="off" />
@@ -133,8 +154,37 @@
   </form>
 </dialog>
 
+<!-- One player, everything about them, and every lever that applies to them.
+     A dialog rather than a route: the operator came from a search result and is going straight
+     back to it, and a modal keeps that list underneath instead of making them search twice. -->
+<dialog class="sheet" id="playerSheet" aria-labelledby="sheetName">
+  <div class="sheet__inner">
+    <header class="sheet__head">
+      <div>
+        <h2 class="sheet__name" id="sheetName"></h2>
+        <p class="sheet__id mono" id="sheetId"></p>
+      </div>
+      <button class="btn btn--ghost" type="button" id="sheetClose">Close</button>
+    </header>
+
+    <div class="sheet__facts" id="sheetFacts"></div>
+
+    <div class="sheet__actions" id="sheetActions"></div>
+
+    <section class="sheet__block">
+      <h3 class="sheet__h">Live sessions</h3>
+      <div class="tablewrap"><table class="grid" id="sheetSessions"></table></div>
+    </section>
+
+    <section class="sheet__block">
+      <h3 class="sheet__h">Recent ledger</h3>
+      <div class="tablewrap"><table class="grid" id="sheetLedger"></table></div>
+    </section>
+  </div>
+</dialog>
+
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-<script type="module" src="admin.js?v=2"></script>
+<script type="module" src="admin.js?v=3"></script>
 </body>
 </html>

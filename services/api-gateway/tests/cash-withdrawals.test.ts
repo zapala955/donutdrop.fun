@@ -174,7 +174,14 @@ describe('cash withdrawals', () => {
     const source = await readFile(path.join(process.cwd(), 'src/routes/minecraft-in.ts'), 'utf8');
     assert.match(source, /AS live,/);
     assert.match(source, /AS item_capable/);
-    assert.match(source, /AND \(kind = 'cash_payout' OR \$2::boolean\)/);
+    /* The non-item kinds are named explicitly rather than matched loosely: the point of the
+       assertion is that this list stays a deliberate allowlist. A kind that opens the inventory
+       must never be added to it, because item capability is the only thing keeping such a job
+       away from a bot whose transfers are switched off. */
+    assert.match(
+      source,
+      /AND \(kind IN \('cash_payout', 'admin_payout', 'reconnect'\) OR \$2::boolean\)/,
+    );
   });
 
   it('debits the wallet before the bot is ever told to pay', async () => {

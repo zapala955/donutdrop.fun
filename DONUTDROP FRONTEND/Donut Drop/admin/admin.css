@@ -242,6 +242,101 @@ body {
 .confirm__input { border-radius: var(--r); }
 .confirm__actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
 
+/* ── the amount field ──
+   Shown only for the actions that move money. The echo under it is the real safety feature: it
+   prints the exact figure the shorthand expanded to, so the operator confirms against the number
+   rather than against their own arithmetic. */
+.confirm__money { display: flex; flex-direction: column; gap: 6px; }
+.confirm__echo {
+  min-height: 1.25em;
+  font-family: var(--mono);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.confirm__echo[data-tone="ok"] { color: var(--gold-bright); }
+.confirm__echo[data-tone="bad"] { color: var(--danger); }
+
+/* ── several buttons in one table cell ── */
+.rowacts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* A reason is a sentence, and the grid otherwise forces every cell onto one line. */
+.grid td.wrap { white-space: normal; min-width: 18ch; color: var(--muted); }
+.grid td[data-sign="up"] { color: var(--ok); }
+.grid td[data-sign="down"] { color: var(--danger); }
+
+.panel__head--sub { margin-top: 28px; }
+.panel__head--sub h3 { margin: 0; font-size: .9375rem; letter-spacing: .03em; color: var(--gold); }
+.hint { font-size: .8125rem; color: var(--faint); }
+
+/* ── the player sheet ──
+   Wider than the confirm dialog because it carries two tables, and capped in height so the
+   ledger scrolls inside it rather than pushing the actions off the bottom of the screen — the
+   levers are the reason the sheet is open and must never be the part you have to scroll for. */
+.sheet {
+  width: min(880px, calc(100% - 32px));
+  max-height: min(88vh, 900px);
+  padding: 0;
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r);
+  background: var(--ob-raised);
+  color: var(--ink);
+  overflow: hidden;
+}
+.sheet::backdrop { background: rgba(6, 7, 10, .8); backdrop-filter: blur(3px); }
+.sheet__inner {
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 24px;
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sheet__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.sheet__name { margin: 0; font-size: 1.25rem; color: var(--gold-bright); overflow-wrap: anywhere; }
+.sheet__id { margin: 4px 0 0; font-size: .75rem; color: var(--faint); overflow-wrap: anywhere; }
+
+.sheet__facts {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(168px, 100%), 1fr));
+}
+.fact {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--ob-high);
+}
+.fact__k {
+  font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+}
+.fact__v {
+  font-family: var(--mono); font-size: .9375rem; font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The levers. Wrapped rather than scrolled: an action that has slid out of sight is an action
+   nobody knows they have. */
+.sheet__actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 215, 0, .03);
+}
+
+.sheet__block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sheet__h {
+  margin: 0; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+}
+
+@media (max-width: 560px) {
+  .sheet__inner { padding: 16px; }
+  .sheet__head { flex-direction: column; }
+  /* Full-width levers on a phone: a wrapped row of half-width buttons is where a mis-tap sends
+     money to the wrong place. */
+  .sheet__actions .btn { flex: 1 1 100%; }
+}
+
 /* ── toasts ── */
 .toasts {
   position: fixed; right: 16px; z-index: 20;

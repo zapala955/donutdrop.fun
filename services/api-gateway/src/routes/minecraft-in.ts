@@ -143,7 +143,13 @@ const storedClaimResponseSchema = z
     job: z
       .object({
         id: z.uuid(),
-        kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout']),
+        kind: z.enum([
+          'withdrawal',
+          'inventory_resync',
+          'cash_payout',
+          'admin_payout',
+          'reconnect',
+        ]),
         reference_id: z.uuid(),
         payload: z.unknown(),
         leaseExpiresAt: z.string().datetime({ offset: true }),
@@ -519,7 +525,7 @@ export async function registerMinecraftInternalRoutes(
          * the attempt budget and dead-letter a withdrawal the bot was never able to service. */
         `SELECT id, kind, reference_id, payload FROM bot_jobs
           WHERE bot_id = $1 AND attempts < 5 AND available_at <= now() AND status = 'queued'
-            AND (kind = 'cash_payout' OR $2::boolean)
+            AND (kind IN ('cash_payout', 'admin_payout', 'reconnect') OR $2::boolean)
           ORDER BY available_at, created_at FOR UPDATE SKIP LOCKED LIMIT 1`,
         [body.botId, capability.item_capable],
       );
@@ -554,6 +560,13 @@ export async function registerMinecraftInternalRoutes(
       if (job.kind === 'cash_payout') {
         await client.query(
           `UPDATE cash_withdrawals SET status = 'processing', updated_at = now()
+            WHERE id = $1 AND status = 'queued'`,
+          [job.reference_id],
+        );
+      }
+      if (job.kind === 'admin_payout') {
+        await client.query(
+          `UPDATE admin_payouts SET status = 'processing', updated_at = now()
             WHERE id = $1 AND status = 'queued'`,
           [job.reference_id],
         );
@@ -1088,8 +1101,10 @@ async function processJobResult(
      * inventory, so it is held to liveness alone. Requiring transfer_capable and a matched
      * inventory reconciliation here would dead-letter every payout on a platform where physical
      * item transfer is deliberately switched off. */
+    const cashOnly =
+      job.kind === 'cash_payout' || job.kind === 'admin_payout' || job.kind === 'reconnect';
     const safeBot =
-      job.kind === 'cash_payout'
+      cashOnly
         ? await client.query(
             `SELECT 1 FROM bot_accounts
               WHERE id = $1 AND status = 'online'
@@ -1127,6 +1142,13 @@ async function processJobResult(
           [job.reference_id],
         );
       }
+      if (job.kind === 'admin_payout') {
+        await client.query(
+          `UPDATE admin_payouts SET status = 'manual_review', error_code = 'BOT_STATE_UNSAFE',
+                  updated_at = now() WHERE id = $1 AND status IN ('queued', 'processing')`,
+          [job.reference_id],
+        );
+      }
       return;
     }
     await client.query(
@@ -1141,6 +1163,15 @@ async function processJobResult(
         [job.reference_id],
       );
     }
+    if (job.kind === 'admin_payout') {
+      await client.query(
+        `UPDATE admin_payouts SET status = 'paid', paid_at = now(), updated_at = now()
+          WHERE id = $1 AND status IN ('queued', 'processing')`,
+        [job.reference_id],
+      );
+    }
+    /* A reconnect settles by completing and nothing else. It references no row, moves no money,
+     * and the proof it worked is the heartbeat that follows. */
     return;
   }
   const terminal = !event.retryable || job.attempts >= 5;
@@ -1167,6 +1198,20 @@ async function processJobResult(
         ],
       );
     }
+  }
+  if (job.kind === 'admin_payout') {
+    /* No refund arm, and deliberately no fallback to crediting the site wallet. An admin payout
+     * debited nobody, so there is nothing to give back; the honest outcome of a failed one is a
+     * failed row an operator can see and decide about. */
+    await client.query(
+      `UPDATE admin_payouts SET status = $2, error_code = $3, updated_at = now()
+        WHERE id = $1 AND status IN ('queued', 'processing')`,
+      [
+        job.reference_id,
+        terminal ? 'failed' : 'queued',
+        event.errorCode ?? 'BOT_JOB_FAILED',
+      ],
+    );
   }
   if (job.kind === 'withdrawal') {
     await client.query(

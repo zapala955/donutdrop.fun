@@ -76,6 +76,54 @@ const botQuarantineSchema = z
     reason: safeText(3, 256),
   })
   .strict();
+/* Suspension is its own endpoint rather than a field on the compliance one, because the two ask
+ * different questions. Compliance asks "has this person proven who they are"; this asks "is this
+ * account allowed to trade right now", which is an operator's call and is reversible. The reachable
+ * set deliberately excludes 'self_excluded': that is the player's own decision and an operator
+ * lifting it by hand is the one thing responsible-gaming rules exist to prevent. */
+const userStatusSchema = z
+  .object({
+    status: z.enum(['active', 'suspended', 'closed']),
+    reason: safeText(3, 256),
+  })
+  .strict();
+
+/* A role change is separated for the same reason a payout is: it is the one edit that can hand
+ * somebody else every power on this page. */
+const userRoleSchema = z
+  .object({
+    role: z.enum(['player', 'admin']),
+    reason: safeText(3, 256),
+  })
+  .strict();
+
+/* Signed rather than an amount plus a direction. A direction flag is one inverted boolean away
+ * from crediting what was meant to be taken back, and the sign is unambiguous in the audit entry.
+ * Capped at a hundred million major units per call: a slipped keystroke should not be able to
+ * mint a fortune, and a genuinely larger correction can be made twice with two reasons. */
+const balanceAdjustSchema = z
+  .object({
+    amountMinor: z
+      .string()
+      .regex(/^-?[1-9]\d{0,12}$/, 'A non-zero whole amount in minor units'),
+    reason: safeText(3, 256),
+  })
+  .strict();
+
+/* Paying a player in game out of the bot's own balance. `payee` is a Minecraft name, not a user
+ * id: paying somebody who has never signed into the site is a legitimate operator action. */
+const adminPaySchema = z
+  .object({
+    payee: z
+      .string()
+      .regex(/^[A-Za-z0-9_]{3,16}$/, 'A Minecraft username'),
+    amountMinor: z.string().regex(/^[1-9]\d{0,12}$/),
+    reason: safeText(3, 256),
+  })
+  .strict();
+
+const botReconnectSchema = z.object({ reason: safeText(3, 256) }).strict();
+
 const adminListSchema = z
   .object({
     search: safeText(1, 64).optional(),
@@ -200,6 +248,430 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       [query.search ?? null, query.limit, query.offset],
     );
     return { users: result.rows, limit: query.limit, offset: query.offset };
+  });
+
+  /* Everything about one account on one screen: who they are, what they hold, what they have been
+   * doing, and what is currently signed in as them. Assembled in one round trip because an
+   * operator deciding whether to suspend somebody should not have to click four times to see the
+   * four facts that decide it. */
+  app.get('/v1/admin/users/:id', { preHandler: requireAdminRead }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const [user, wallet, ledger, sessions, limits] = await Promise.all([
+      db.query<AdminEntityRow>(
+        `SELECT id, minecraft_identity, minecraft_username, normalized_username, role, status,
+                country_code, date_of_birth, terms_accepted_at, age_verified_at, kyc_status,
+                created_at, updated_at, last_login_at
+           FROM users WHERE id = $1`,
+        [params.id],
+      ),
+      db.query<{ balance_minor: string }>(
+        'SELECT balance_minor FROM user_wallets WHERE user_id = $1',
+        [params.id],
+      ),
+      db.query<AdminEntityRow>(
+        `SELECT id, amount_minor, balance_after_minor, kind, reference_id, created_at
+           FROM wallet_transactions WHERE user_id = $1
+          ORDER BY created_at DESC, id DESC LIMIT 25`,
+        [params.id],
+      ),
+      db.query<AdminEntityRow>(
+        `SELECT id, user_agent, created_at, last_seen_at, expires_at
+           FROM sessions
+          WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+          ORDER BY last_seen_at DESC LIMIT 25`,
+        [params.id],
+      ),
+      db.query<AdminEntityRow>(
+        'SELECT self_excluded_until FROM responsible_limits WHERE user_id = $1',
+        [params.id],
+      ),
+    ]);
+    if (!user.rows[0]) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+    return {
+      user: user.rows[0],
+      /* No wallet row means a player who has never had a balance, which is zero, not missing. */
+      balanceMinor: wallet.rows[0]?.balance_minor ?? '0',
+      transactions: ledger.rows,
+      sessions: sessions.rows,
+      selfExcludedUntil: limits.rows[0]?.['self_excluded_until'] ?? null,
+    };
+  });
+
+  /* Suspending an account also ends its sessions. Leaving them live means the person keeps a
+   * working page until their cookie expires, which is not what anybody means by "suspend". */
+  app.patch('/v1/admin/users/:id/status', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(userStatusSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    if (params.id === actor && body.status !== 'active') {
+      conflict('CANNOT_LOCK_SELF', 'An administrator cannot suspend or close their own account');
+    }
+    return db.transaction(async (client) => {
+      const current = await client.query<{ status: string; locked: boolean }>(
+        `SELECT u.status,
+                (u.status = 'self_excluded' AND
+                  (r.self_excluded_until IS NULL OR r.self_excluded_until > now())) AS locked
+           FROM users u LEFT JOIN responsible_limits r ON r.user_id = u.id
+          WHERE u.id = $1 FOR UPDATE OF u`,
+        [params.id],
+      );
+      const user = current.rows[0];
+      if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+      /* A live self-exclusion outranks an operator. It is the player's own standing instruction
+       * and the whole point of it is that nobody, including this console, can talk them out of it
+       * before it expires. */
+      if (user.locked && body.status === 'active') {
+        conflict('SELF_EXCLUSION_LOCKED', 'The self-exclusion period has not expired');
+      }
+      const updated = await client.query<AdminEntityRow>(
+        `UPDATE users SET status = $2, updated_at = now() WHERE id = $1
+          RETURNING id, minecraft_username, role, status, kyc_status, age_verified_at`,
+        [params.id, body.status],
+      );
+      let revoked = 0;
+      if (body.status !== 'active') {
+        const killed = await client.query(
+          `UPDATE sessions SET revoked_at = now()
+            WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
+          [params.id],
+        );
+        revoked = killed.rowCount ?? 0;
+      }
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: `user.status.${body.status}`,
+        targetType: 'user',
+        targetId: params.id,
+        details: { reason: body.reason, from: user.status, sessionsRevoked: revoked },
+      });
+      return { user: updated.rows[0], sessionsRevoked: revoked };
+    });
+  });
+
+  app.patch('/v1/admin/users/:id/role', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(userRoleSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    /* Demoting yourself is how a console ends up with no administrators at all. */
+    if (params.id === actor && body.role !== 'admin') {
+      conflict('CANNOT_DEMOTE_SELF', 'An administrator cannot remove their own access');
+    }
+    return db.transaction(async (client) => {
+      const current = await client.query<{ role: string; status: string }>(
+        'SELECT role, status FROM users WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      const user = current.rows[0];
+      if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+      /* Admin powers on an account that is not in good standing is a contradiction, and the
+       * account-status endpoint is the right place to fix it first. */
+      if (body.role === 'admin' && user.status !== 'active') {
+        conflict('ACCOUNT_NOT_ACTIVE', 'Only an active account can be made an administrator');
+      }
+      const updated = await client.query<AdminEntityRow>(
+        `UPDATE users SET role = $2, updated_at = now() WHERE id = $1
+          RETURNING id, minecraft_username, role, status`,
+        [params.id, body.role],
+      );
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: `user.role.${body.role}`,
+        targetType: 'user',
+        targetId: params.id,
+        details: { reason: body.reason, from: user.role },
+      });
+      return { user: updated.rows[0] };
+    });
+  });
+
+  /* Ends every live session for an account without changing what the account is allowed to do.
+   * The case this is for is a shared or stolen cookie, where the person is not in trouble and
+   * suspending them would be the wrong answer. */
+  app.post(
+    '/v1/admin/users/:id/sessions/revoke',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(payoutDecisionSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        const exists = await client.query('SELECT 1 FROM users WHERE id = $1', [params.id]);
+        if (!exists.rowCount) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+        const killed = await client.query(
+          `UPDATE sessions SET revoked_at = now()
+            WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
+          [params.id],
+        );
+        const revoked = killed.rowCount ?? 0;
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'user.sessions.revoke',
+          targetType: 'user',
+          targetId: params.id,
+          details: { reason: body.reason, sessionsRevoked: revoked },
+        });
+        return { sessionsRevoked: revoked };
+      });
+    },
+  );
+
+  /* Moves a player's site balance, up or down, and writes the matching ledger row.
+   *
+   * The ledger entry is the point. A balance edited without one is a number that no longer
+   * reconciles against the sum of its transactions, and the next person to audit this account
+   * cannot tell a correction from a leak. `admin_adjustment` is an existing ledger kind precisely
+   * so operator corrections land somewhere a reconciliation can find them. */
+  app.post('/v1/admin/users/:id/balance', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(balanceAdjustSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    const delta = BigInt(body.amountMinor);
+    return db.transaction(async (client) => {
+      const exists = await client.query('SELECT 1 FROM users WHERE id = $1', [params.id]);
+      if (!exists.rowCount) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+      await client.query(
+        `INSERT INTO user_wallets(user_id, balance_minor) VALUES ($1, 0)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [params.id],
+      );
+      /* The guard is in the WHERE clause, not in a read-then-write. A debit that would take the
+       * balance negative simply matches no row, which is the same mechanism every wager on this
+       * site uses and is safe against two operators debiting at once. */
+      const moved = await client.query<{ balance_minor: string }>(
+        `UPDATE user_wallets
+            SET balance_minor = balance_minor + $2, updated_at = now()
+          WHERE user_id = $1 AND balance_minor + $2 >= 0
+          RETURNING balance_minor`,
+        [params.id, delta.toString()],
+      );
+      if (!moved.rows[0]) {
+        conflict('INSUFFICIENT_FUNDS', 'That debit would take the balance below zero');
+      }
+      const balanceAfter = moved.rows[0].balance_minor;
+      const adjustmentId = randomUUID();
+      await client.query(
+        `INSERT INTO wallet_transactions
+           (id, user_id, amount_minor, balance_after_minor, kind, reference_id)
+         VALUES ($1, $2, $3, $4, 'admin_adjustment', $5)`,
+        [adjustmentId, params.id, delta.toString(), balanceAfter, adjustmentId],
+      );
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: delta > 0n ? 'user.balance.credit' : 'user.balance.debit',
+        targetType: 'user',
+        targetId: params.id,
+        details: {
+          reason: body.reason,
+          amountMinor: delta.toString(),
+          balanceAfterMinor: balanceAfter,
+        },
+      });
+      return { balanceMinor: balanceAfter, adjustmentId };
+    });
+  });
+
+  /* ─────────────────────────── bot control ─────────────────────────── */
+
+  /* Tells a bot to drop its connection and come back.
+   *
+   * The bot reconnects on its own ten seconds after any disconnect, so this is not for a bot that
+   * has fallen over — that fixes itself. It is for one that is nominally connected and not
+   * behaving, where waiting for it to notice is slower than telling it.
+   *
+   * Queued as a bot_job rather than pushed, because the gateway has no channel to the bot process:
+   * the bot claims work by polling. That also means one lease, one attempt counter and one dead
+   * letter path, the same as every other thing a bot is ever told to do. */
+  app.post('/v1/admin/bots/:id/reconnect', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(botReconnectSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const bot = await client.query<{ username: string; status: string }>(
+        'SELECT username, status FROM bot_accounts WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      if (!bot.rows[0]) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+      /* Queueing a second reconnect behind the first would make the bot cycle twice, which is a
+       * slower way to arrive at the same place. */
+      const pending = await client.query(
+        `SELECT 1 FROM bot_jobs
+          WHERE bot_id = $1 AND kind = 'reconnect' AND status IN ('queued', 'leased')`,
+        [params.id],
+      );
+      if (pending.rowCount) {
+        conflict('RECONNECT_ALREADY_QUEUED', 'This bot is already on its way back');
+      }
+      const jobId = randomUUID();
+      await client.query(
+        `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload)
+         VALUES ($1, $2, 'reconnect', $3, '{}'::jsonb)`,
+        [jobId, params.id, jobId],
+      );
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'bot.reconnect',
+        targetType: 'bot_account',
+        targetId: params.id,
+        details: { reason: body.reason, jobId },
+      });
+      return { queued: true, jobId, bot: bot.rows[0].username };
+    });
+  });
+
+  /* Pays a player in game, out of the bot's own DonutSMP balance.
+   *
+   * This is NOT a withdrawal and touches nobody's site wallet. It is the house sending currency
+   * out — a comp, an apology, a refund made good — so there is no debit to take and nothing to
+   * refund if it fails. A failed payout leaves a failed row and a red line in the console, which
+   * is the honest outcome; silently crediting the site balance instead would be inventing a
+   * different payment from the one that was ordered. */
+  app.post('/v1/admin/bots/:id/pay', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(adminPaySchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    const idempotencyKey = requireIdempotencyKey(request.headers['idempotency-key']);
+    return db.transaction(async (client) => {
+      /* Only a bot this deployment actually holds credentials for, and only one the server has
+       * heard from recently. The same test the withdrawal path uses. */
+      const bot = await client.query<{ id: string; username: string; server_host: string }>(
+        `SELECT id, username, server_host FROM bot_accounts
+          WHERE id = $1 AND id = ANY($2::uuid[]) AND status = 'online'
+            AND last_heartbeat_at > now() - interval '45 seconds'
+          FOR UPDATE`,
+        [params.id, provisionedBotIds],
+      );
+      const chosen = bot.rows[0];
+      if (!chosen) conflict('BOT_UNAVAILABLE', 'That bot is not online and able to pay right now');
+      const provisioned = config.botCredentials.get(chosen.id);
+      if (
+        !provisioned ||
+        chosen.username.toLowerCase() !== provisioned.username.toLowerCase() ||
+        chosen.server_host.toLowerCase().replace(/\.$/, '') !== provisioned.serverHost
+      ) {
+        conflict('BOT_UNAVAILABLE', 'That bot does not match its provisioned credentials');
+      }
+      /* Linked to an account when there is one, by normalized name. A payee with no account is
+       * allowed; the link is recorded when it exists so the payment shows on their page. */
+      const payee = await client.query<{ id: string }>(
+        'SELECT id FROM users WHERE normalized_username = lower($1)',
+        [body.payee],
+      );
+
+      /* The replay check runs BEFORE the insert, not in a catch around it.
+       *
+       * A unique violation aborts the whole transaction in Postgres: every statement after it
+       * fails with "current transaction is aborted" until a rollback. So reading the original row
+       * from inside a catch block — the obvious way to write this — cannot work. The conflict is
+       * avoided instead of handled: a matching key is answered here, and the insert below uses ON
+       * CONFLICT DO NOTHING so a request that races another with the same key still never raises. */
+      const replay = await client.query<{ id: string; status: string }>(
+        `SELECT id, status FROM admin_payouts
+          WHERE actor_user_id = $1 AND idempotency_key = $2`,
+        [actor, idempotencyKey],
+      );
+      if (replay.rows[0]) {
+        return {
+          payoutId: replay.rows[0].id,
+          bot: chosen.username,
+          status: replay.rows[0].status,
+          replayed: true,
+        };
+      }
+
+      const payoutId = randomUUID();
+      let inserted;
+      try {
+        inserted = await client.query<{ id: string }>(
+          `INSERT INTO admin_payouts
+             (id, bot_id, actor_user_id, payee_username, payee_user_id, amount_minor, reason,
+              idempotency_key)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (actor_user_id, idempotency_key) DO NOTHING
+           RETURNING id`,
+          [
+            payoutId,
+            chosen.id,
+            actor,
+            body.payee,
+            payee.rows[0]?.id ?? null,
+            body.amountMinor,
+            body.reason,
+            idempotencyKey,
+          ],
+        );
+      } catch (error) {
+        /* The one-live-payout-per-payee index is a partial unique index, which ON CONFLICT cannot
+         * name, so this one still arrives as an error. Nothing is read after it: the transaction
+         * is already aborted and this throws straight out to a rollback. */
+        if (
+          isRecord(error) &&
+          error['code'] === '23505' &&
+          typeof error['constraint'] === 'string' &&
+          error['constraint'].includes('one_live')
+        ) {
+          conflict('PAYOUT_ALREADY_PENDING', 'A payout to that player is already in flight');
+        }
+        throw error;
+      }
+      /* Lost a race with an identical key. The winner's row is the answer, and it is readable
+       * because DO NOTHING raised nothing and the transaction is still healthy. */
+      if (!inserted.rows[0]) {
+        const winner = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM admin_payouts
+            WHERE actor_user_id = $1 AND idempotency_key = $2`,
+          [actor, idempotencyKey],
+        );
+        const existing = winner.rows[0];
+        if (!existing) throw new AppError(500, 'PAYOUT_RACE_UNRESOLVED', 'Could not settle a retry');
+        return {
+          payoutId: existing.id,
+          bot: chosen.username,
+          status: existing.status,
+          replayed: true,
+        };
+      }
+
+      await client.query(
+        `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload)
+         VALUES ($1, $2, 'admin_payout', $3, $4)`,
+        [
+          randomUUID(),
+          chosen.id,
+          payoutId,
+          JSON.stringify({
+            payoutId,
+            payee: body.payee,
+            amountMinor: body.amountMinor,
+          }),
+        ],
+      );
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'bot.pay',
+        targetType: 'admin_payout',
+        targetId: payoutId,
+        details: {
+          reason: body.reason,
+          bot: chosen.username,
+          payee: body.payee,
+          amountMinor: body.amountMinor,
+        },
+      });
+      return { payoutId, bot: chosen.username, status: 'queued' };
+    });
+  });
+
+  app.get('/v1/admin/payouts', { preHandler: requireAdminRead }, async () => {
+    const result = await db.query<AdminEntityRow>(
+      `SELECT p.id, p.payee_username, p.amount_minor, p.status, p.reason, p.error_code,
+              p.paid_at, p.created_at, b.username AS bot_username,
+              a.minecraft_username AS actor_username
+         FROM admin_payouts p
+         JOIN bot_accounts b ON b.id = p.bot_id
+         JOIN users a ON a.id = p.actor_user_id
+        ORDER BY p.created_at DESC LIMIT 100`,
+    );
+    return { payouts: result.rows };
   });
 
   app.get('/v1/admin/jobs', { preHandler: requireAdminRead }, async () => {
