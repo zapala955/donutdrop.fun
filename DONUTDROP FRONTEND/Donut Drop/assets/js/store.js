@@ -263,6 +263,10 @@ export async function refreshCases(notify = true) {
 }
 
 export async function refreshActivity(notify = true) {
+  /* Held for the same reason as the balance: the feed carries the player's own rounds, and one
+   * arriving mid-spin announces the result the wheel has not reached. Other players' wins pausing
+   * for a few seconds is not something anybody can see. */
+  if (liveHolds > 0) return state.activities;
   const result = await api.get('/v1/activity/recent?limit=40');
   state.activities = (result.activities || []).map(normalizeActivity);
   if (notify) emit('activity');
@@ -427,8 +431,20 @@ export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {
 
 /* The same wager with cash as its source of value. The backend debits the wallet instead of
  * consuming a lot, and a win still awards a real item, so the only differences here are the
- * request body and the need to re-read the balance afterwards. */
-export async function runBalanceUpgrade(stakeMinor, targetItem) {
+ * request body and the need to re-read the balance afterwards.
+ *
+ * ── WHY THE SETTLEMENT IS SEPARABLE ──
+ *
+ * The server has decided the round by the time this resolves, but the player has not been told
+ * yet — the upgrader spins its wheel for about four and a half seconds first. Refreshing here
+ * moved the wallet pill, with its win animation, while the wheel was still turning, so the header
+ * gave away the outcome before the wheel reached it. The live feed did the same.
+ *
+ * `defer` hands the caller a `settle` to run at the moment it actually shows the result. It is
+ * idempotent, so a caller that forgets, or one whose animation throws, can call it in a finally
+ * without having to track whether it already ran.
+ */
+export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false } = {}) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before upgrading');
   if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
   const result = await api.post(
@@ -443,12 +459,37 @@ export async function runBalanceUpgrade(stakeMinor, targetItem) {
     },
     { idempotencyKey: idempotencyKey() },
   );
-  await Promise.all([
-    refreshBalance(false), refreshInventory(false), refreshCatalog(false),
-    refreshFairness(false), refreshActivity(false),
-  ]);
-  emit('upgrade');
-  return result;
+
+  /* Taken the instant the server answers, because that is the instant the outcome exists and the
+   * polls become capable of leaking it. */
+  const release = defer ? holdLiveFigures() : () => {};
+
+  let done = false;
+  const settle = async () => {
+    if (done) return;
+    done = true;
+    /* Released before the refreshes below, or they would be suppressed by this round's own hold. */
+    release();
+    /* Applied from the round itself before anything is fetched, so the pill moves on the same
+     * frame as the result rather than a request later. The server writes the win credit first and
+     * the stake debit last, which makes `balance_after_minor` the final figure for the round
+     * whichever way it went — the same trick the deposit watermark uses a few functions down. */
+    const settledBalance = result?.round?.balance_after_minor;
+    if (settledBalance !== null && settledBalance !== undefined) {
+      state.balanceMinor = String(settledBalance);
+      state.balance = toSafeNumber(state.balanceMinor);
+    }
+    emit('upgrade');
+    /* Everything else can arrive whenever it arrives. None of it is the answer to the round. */
+    await Promise.all([
+      refreshBalance(false), refreshInventory(false), refreshCatalog(false),
+      refreshFairness(false), refreshActivity(false),
+    ]);
+    emit('upgrade');
+  };
+
+  if (!defer) await settle();
+  return { ...result, settle };
 }
 
 /* ─────────── piggy bank, quests, streak, faction war ───────────
@@ -590,8 +631,36 @@ export async function caseHistory(limit = 25) {
   return api.get('/v1/cases/history?limit=' + Number(limit));
 }
 
+/* ─────────── holding the figures still while a round plays ───────────
+ *
+ * A wager is decided the moment the server answers, but the player is told by an animation that
+ * takes seconds. In between, two background polls are running: the balance every fifteen seconds
+ * and the activity feed every eight. Either one landing mid-spin prints the outcome before the
+ * animation reaches it — the wallet pill jumps, or the player's own win scrolls past in the feed,
+ * and the spin is left performing suspense about something already on screen.
+ *
+ * A game holds these for the length of its animation and releases them when it shows the result.
+ * A counter rather than a boolean, so two things holding at once cannot have one of them release
+ * early for both. Held state is only ever STALE, never wrong: the release is followed by a real
+ * refresh, so nothing here can leave a figure permanently out of date.
+ */
+let liveHolds = 0;
+
+export function holdLiveFigures() {
+  liveHolds += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    liveHolds = Math.max(0, liveHolds - 1);
+  };
+}
+
 export async function refreshBalance(notify = true) {
   if (!state.authenticated) return state.balanceMinor;
+  /* Not fetched at all while held. Fetching and discarding would be the same outcome at the cost
+   * of a request, and the request is the thing the rate limiter counts. */
+  if (liveHolds > 0) return state.balanceMinor;
   const balance = await api.get('/v1/balance');
   state.balanceMinor = String(balance.balanceMinor || '0');
   state.balance = toSafeNumber(state.balanceMinor);
@@ -628,6 +697,13 @@ export async function pollDeposits() {
     depositWatermark = null;
     return [];
   }
+  /* Skipped whole while a round is playing, and deliberately WITHOUT advancing the watermark.
+   *
+   * This poll corrects the pill from the newest wallet transaction, whatever that transaction is
+   * — and mid-spin the newest one is the round's own stake or win, so it would print the outcome
+   * the animation has not reached. Returning early leaves the watermark where it was, so the next
+   * tick reports any real deposit that landed during the spin rather than swallowing it. */
+  if (liveHolds > 0) return [];
   const result = await api.get('/v1/balance/transactions?limit=25');
   const rows = result.transactions || [];
   if (!rows.length) return [];

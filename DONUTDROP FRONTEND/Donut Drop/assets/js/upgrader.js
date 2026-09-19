@@ -701,7 +701,9 @@ async function pull() {
 
   let response;
   try {
-    response = await runBalanceUpgrade(wagered.toString(), destination);
+    /* Deferred: the wheel spins for four and a half seconds after this resolves, and the wallet
+     * pill must not move until it stops. See runBalanceUpgrade. */
+    response = await runBalanceUpgrade(wagered.toString(), destination, { defer: true });
   } catch (error) {
     spinning = false;
     showError(error);
@@ -745,6 +747,12 @@ async function pull() {
     wheel.classList.remove('is-spinning');
     delete root.dataset.tense;
 
+    /* The money moves HERE, on the frame the wheel stops, alongside the colour, the sound and the
+     * toast. Deliberately not awaited: settle applies the round's own closing balance before its
+     * first await, so the pill is already correct, and the refreshes behind it are reconciliation
+     * that nobody is waiting to read. Awaiting would stall the win behind a network round trip. */
+    void response.settle();
+
     if (won) {
       wheel.classList.add('is-win');
       mid.dataset.state = 'win';
@@ -777,6 +785,11 @@ async function pull() {
   } catch (error) {
     console.error('upgrade animation failed', error);
   }
+
+  /* The safety net. If the animation threw before the line above, the round is still settled and
+   * the player still gets their balance — a broken animation must never cost somebody a payout.
+   * Idempotent, so this is a no-op on the ordinary path. */
+  await response.settle();
 
   spinning = false;
   wheel.classList.remove('is-win', 'is-lose');
