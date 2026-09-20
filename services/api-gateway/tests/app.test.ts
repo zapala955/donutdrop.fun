@@ -55,7 +55,7 @@ describe('API application', () => {
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       assert.equal(ready.statusCode, 200);
       assert.deepEqual(ready.json(), { status: 'ready' });
-      assert.ok(queries.includes('SELECT public.donut_schema_ready_v36() AS ready'));
+      assert.ok(queries.includes('SELECT public.donut_schema_ready_v37() AS ready'));
 
       const missing = await app.inject({ method: 'GET', url: '/not-a-route' });
       assert.equal(missing.statusCode, 404);
@@ -242,11 +242,17 @@ describe('the slither arena is gone', () => {
      * easy to miss: a side-bet market on an arena session could only ever be settled by the arena,
      * so every open market is other people's money with no remaining path to a payout. */
     const sql = await readFile(
-      path.resolve(import.meta.dirname, '../../../packages/db/migrations/033_remove_slither_arena.sql'),
+      path.resolve(
+        import.meta.dirname,
+        '../../../packages/db/migrations/033_remove_slither_arena.sql',
+      ),
       'utf8',
     );
     assert.match(sql, /FROM slither_sessions\s*\n\s*WHERE status = 'alive'/);
-    assert.match(sql, /FROM side_bet_markets\s*\n\s*WHERE kind = 'slither' AND status IN \('open', 'locked'\)/);
+    assert.match(
+      sql,
+      /FROM side_bet_markets\s*\n\s*WHERE kind = 'slither' AND status IN \('open', 'locked'\)/,
+    );
     assert.equal(sql.match(/RAISE EXCEPTION/g)?.length, 2, 'one raise per guard');
     /* Kills reference sessions, so the order is not cosmetic. */
     assert.ok(
@@ -258,14 +264,20 @@ describe('the slither arena is gone', () => {
     /* Narrowing either CHECK would be validated against rows that already exist, which is how
      * migration 030 took production down. */
     const sql = await readFile(
-      path.resolve(import.meta.dirname, '../../../packages/db/migrations/033_remove_slither_arena.sql'),
+      path.resolve(
+        import.meta.dirname,
+        '../../../packages/db/migrations/033_remove_slither_arena.sql',
+      ),
       'utf8',
     );
     assert.doesNotMatch(sql, /wallet_transactions_kind_check/);
     assert.doesNotMatch(sql, /DROP CONSTRAINT/);
     assert.doesNotMatch(sql, /DROP TABLE side_bet/);
     // The two kinds outlive the mode, because the rows naming them do.
-    const wallet = await readFile(path.resolve(import.meta.dirname, '../src/lib/wallet.ts'), 'utf8');
+    const wallet = await readFile(
+      path.resolve(import.meta.dirname, '../src/lib/wallet.ts'),
+      'utf8',
+    );
     assert.match(wallet, /'slither_cashout'/);
     assert.match(wallet, /'slither_refund'/);
   });

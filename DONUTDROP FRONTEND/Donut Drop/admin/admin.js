@@ -89,6 +89,7 @@ const api = {
   get: (path) => request('GET', path),
   post: (path, body, options) => request('POST', path, body, options),
   patch: (path, body) => request('PATCH', path, body),
+  delete: (path, body) => request('DELETE', path, body),
 };
 
 /* ═════════════════════════ chrome ═════════════════════════ */
@@ -154,6 +155,123 @@ function table(node, columns, rows, renderRow) {
     for (const row of rows) body.append(renderRow(row));
   }
   node.append(head, body);
+}
+
+function button(label, handler, { danger = false, disabled = false, title = '' } = {}) {
+  const node = document.createElement('button');
+  node.type = 'button';
+  node.className = danger ? 'btn btn--danger' : 'btn';
+  node.textContent = label;
+  node.disabled = disabled;
+  if (title) node.title = title;
+  node.addEventListener('click', () => {
+    Promise.resolve(handler(node)).catch((error) => {
+      toast(`${error.code || 'ERROR'}: ${error.message || 'Action failed'}`, 'bad');
+      node.disabled = false;
+    });
+  });
+  return node;
+}
+
+function actions(...nodes) {
+  const td = document.createElement('td');
+  td.className = 'rowacts';
+  td.append(...nodes);
+  return td;
+}
+
+function renderStats(host, tiles) {
+  host.replaceChildren();
+  for (const [label, value, alarm = false] of tiles) {
+    const card = document.createElement('div');
+    card.className = 'stat';
+    if (alarm) card.dataset.alarm = '1';
+    const name = document.createElement('span');
+    name.className = 'stat__label';
+    name.textContent = label;
+    const amount = document.createElement('strong');
+    amount.className = 'stat__value';
+    amount.textContent = String(value);
+    card.append(name, amount);
+    host.append(card);
+  }
+}
+
+function prettyJson(value) {
+  return JSON.stringify(value ?? {}, null, 2);
+}
+
+/** A reusable, typed form without HTML interpolation. */
+function editRecord({ title, description = '', fields, submitLabel = 'Save' }) {
+  return new Promise((resolve) => {
+    const dialog = $('editor');
+    const form = $('editorForm');
+    const host = $('editorFields');
+    dialog.returnValue = '';
+    $('editorTitle').textContent = title;
+    $('editorBody').textContent = description;
+    $('editorSave').textContent = submitLabel;
+    host.replaceChildren();
+
+    for (const field of fields) {
+      const label = document.createElement('label');
+      label.className = field.wide ? 'editor__field editor__field--wide' : 'editor__field';
+      const caption = document.createElement('span');
+      caption.className = 'confirm__label';
+      caption.textContent = field.label;
+      let input;
+      if (field.type === 'select') {
+        input = document.createElement('select');
+        for (const optionValue of field.options ?? []) {
+          const option = document.createElement('option');
+          option.value = typeof optionValue === 'object' ? optionValue.value : optionValue;
+          option.textContent = typeof optionValue === 'object' ? optionValue.label : optionValue;
+          input.append(option);
+        }
+      } else if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = field.rows ?? 5;
+      } else {
+        input = document.createElement('input');
+        input.type = field.type === 'checkbox' ? 'checkbox' : field.type || 'text';
+      }
+      input.className = field.type === 'checkbox' ? 'editor__check' : 'confirm__input';
+      input.name = field.name;
+      input.required =
+        field.type === 'checkbox' ? field.required === true : field.required !== false;
+      if (field.type === 'checkbox') input.checked = Boolean(field.value);
+      else input.value = field.value ?? '';
+      if (field.placeholder) input.placeholder = field.placeholder;
+      if (field.min !== undefined) input.min = String(field.min);
+      if (field.max !== undefined) input.max = String(field.max);
+      label.append(caption, input);
+      host.append(label);
+    }
+
+    const done = () => {
+      dialog.removeEventListener('close', done);
+      if (dialog.returnValue !== 'save') {
+        resolve(null);
+        return;
+      }
+      const values = {};
+      for (const field of fields) {
+        const input = form.elements.namedItem(field.name);
+        values[field.name] = field.type === 'checkbox' ? input.checked : input.value.trim();
+      }
+      resolve(values);
+    };
+    dialog.addEventListener('close', done);
+    dialog.showModal();
+  });
+}
+
+function jsonField(raw, name) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    throw new ApiError(0, 'INVALID_JSON', `${name} is not valid JSON`);
+  }
 }
 
 /* ═════════════════════════ confirmation ═════════════════════════ */
@@ -273,44 +391,31 @@ function confirmAmount(message, { label = 'Amount', signed = false } = {}) {
 /* ═════════════════════════ panels ═════════════════════════ */
 
 async function loadOverview() {
-  const [users, bots, jobs] = await Promise.all([
-    api.get('/v1/admin/users?limit=50'),
-    api.get('/v1/admin/bots'),
-    api.get('/v1/admin/jobs'),
+  const { metrics: m } = await api.get('/v1/admin/overview');
+  renderStats($('overviewStats'), [
+    ['Players', m.users_total ?? 0],
+    ['Active players', m.users_active ?? 0],
+    ['Live sessions', m.sessions_live ?? 0],
+    ['Wallet liability', amountText(m.wallet_total_minor ?? 0)],
+    ['Wagered today', amountText(m.wagered_today_minor ?? 0)],
+    ['Enabled cases', m.cases_enabled ?? 0],
+    ['Catalog items', m.catalog_items_enabled ?? 0],
   ]);
-  const botRows = bots.bots ?? [];
-  const jobRows = jobs.jobs ?? [];
-  const quarantined = botRows.filter((bot) => bot.status === 'quarantined').length;
-  const deadLetter = jobRows.filter((job) => job.status === 'dead_letter').length;
-
-  const tiles = [
-    /* The users endpoint pages and reports no grand total, so this counts what a page returned
-       rather than inventing a number. Labelled "recent" so it is not misread as the player base. */
-    ['Recent players', (users.users ?? []).length, false],
-    ['Bots', botRows.length, false],
-    ['Quarantined', quarantined, quarantined > 0],
+  renderStats($('overviewAttention'), [
+    ['Quarantined bots', m.bots_quarantined ?? 0, Number(m.bots_quarantined) > 0],
+    ['Dead-letter jobs', m.jobs_dead_letter ?? 0, Number(m.jobs_dead_letter) > 0],
     [
-      'Open jobs',
-      jobRows.filter((job) => job.status === 'queued' || job.status === 'leased').length,
-      false,
+      'Payouts needing attention',
+      m.withdrawals_attention ?? 0,
+      Number(m.withdrawals_attention) > 0,
     ],
-    ['Dead letter', deadLetter, deadLetter > 0],
-  ];
-  const host = $('overviewStats');
-  host.replaceChildren();
-  for (const [label, value, alarm] of tiles) {
-    const card = document.createElement('div');
-    card.className = 'stat';
-    if (alarm) card.dataset.alarm = '1';
-    const name = document.createElement('span');
-    name.className = 'stat__label';
-    name.textContent = label;
-    const figure = document.createElement('span');
-    figure.className = 'stat__value';
-    figure.textContent = String(value ?? 0);
-    card.append(name, figure);
-    host.append(card);
-  }
+    [
+      'Creator applications',
+      m.creator_applications_pending ?? 0,
+      Number(m.creator_applications_pending) > 0,
+    ],
+    ['Active chat timeouts', m.chat_timeouts_active ?? 0],
+  ]);
 }
 
 async function loadPlayers(query = '') {
@@ -402,7 +507,11 @@ function renderPlayer(data) {
     ['Deposited', amountText(stats.depositedMinor ?? '0'), null],
     ['Withdrawn', amountText(stats.withdrawnMinor ?? '0'), null],
     ['Sessions', String((data.sessions ?? []).length), null],
-    ['Last login', user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'never', null],
+    [
+      'Last login',
+      user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'never',
+      null,
+    ],
   ];
   const host = $('sheetFacts');
   host.replaceChildren();
@@ -488,8 +597,8 @@ function renderPlayerActions(user, data) {
   if (user.status === 'active') {
     lever('Suspend', 'danger', async () => {
       const reason = await confirmAction(
-        `Suspend ${user.minecraft_username}? They cannot wager or sign in, and every live `
-          + 'session ends immediately.',
+        `Suspend ${user.minecraft_username}? They cannot wager or sign in, and every live ` +
+          'session ends immediately.',
       );
       if (!reason) return false;
       const result = await api.patch(`/v1/admin/users/${id}/status`, {
@@ -512,8 +621,8 @@ function renderPlayerActions(user, data) {
   if (user.status !== 'closed') {
     lever('Close account', 'danger', async () => {
       const reason = await confirmAction(
-        `Close ${user.minecraft_username}'s account? This is the heaviest state: no wagering, no `
-          + 'sign-in, all sessions ended. It can be reversed from here, but treat it as final.',
+        `Close ${user.minecraft_username}'s account? This is the heaviest state: no wagering, no ` +
+          'sign-in, all sessions ended. It can be reversed from here, but treat it as final.',
       );
       if (!reason) return false;
       await api.patch(`/v1/admin/users/${id}/status`, { status: 'closed', reason });
@@ -523,8 +632,8 @@ function renderPlayerActions(user, data) {
 
   lever('Credit balance', null, async () => {
     const answer = await confirmAmount(
-      `Add to ${user.minecraft_username}'s site balance. Currently `
-        + `${amountText(data.balanceMinor)}. Writes an admin_adjustment to the ledger.`,
+      `Add to ${user.minecraft_username}'s site balance. Currently ` +
+        `${amountText(data.balanceMinor)}. Writes an admin_adjustment to the ledger.`,
       { label: 'Amount to add' },
     );
     if (!answer) return false;
@@ -534,8 +643,8 @@ function renderPlayerActions(user, data) {
 
   lever('Debit balance', 'danger', async () => {
     const answer = await confirmAmount(
-      `Take from ${user.minecraft_username}'s site balance. Currently `
-        + `${amountText(data.balanceMinor)}. Refused if it would go below zero.`,
+      `Take from ${user.minecraft_username}'s site balance. Currently ` +
+        `${amountText(data.balanceMinor)}. Refused if it would go below zero.`,
       { label: 'Amount to take' },
     );
     if (!answer) return false;
@@ -552,8 +661,8 @@ function renderPlayerActions(user, data) {
   if ((data.sessions ?? []).length) {
     lever('Sign out everywhere', null, async () => {
       const reason = await confirmAction(
-        `End all ${data.sessions.length} live session(s) for ${user.minecraft_username}? `
-          + 'The account keeps every permission it has — this only ends the sign-ins.',
+        `End all ${data.sessions.length} live session(s) for ${user.minecraft_username}? ` +
+          'The account keeps every permission it has — this only ends the sign-ins.',
       );
       if (!reason) return false;
       const result = await api.post(`/v1/admin/users/${id}/sessions/revoke`, { reason });
@@ -574,10 +683,10 @@ function renderPlayerActions(user, data) {
   note.className = 'sheet__note';
   note.textContent =
     user.role === 'admin'
-      ? 'Administrator. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — remove '
-        + 'the identity from that variable and restart to revoke.'
-      : 'Player. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — an administrator '
-        + 'also needs an ADMIN_TOTP_SECRETS entry, and the API will not start without one.';
+      ? 'Administrator. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — remove ' +
+        'the identity from that variable and restart to revoke.'
+      : 'Player. Roles come from ADMIN_MINECRAFT_IDS and are not editable here — an administrator ' +
+        'also needs an ADMIN_TOTP_SECRETS entry, and the API will not start without one.';
   host.append(note);
 }
 
@@ -631,8 +740,8 @@ async function loadBots() {
         : 'The bot has not checked in recently enough to be given an order';
       rejoin.addEventListener('click', async () => {
         const reason = await confirmAction(
-          `Tell ${bot.username} to reconnect? It drops its connection and rejoins about ten `
-            + 'seconds later. Anything it is part-way through is abandoned.',
+          `Tell ${bot.username} to reconnect? It drops its connection and rejoins about ten ` +
+            'seconds later. Anything it is part-way through is abandoned.',
         );
         if (!reason) return;
         rejoin.disabled = true;
@@ -701,8 +810,8 @@ async function loadBots() {
  */
 async function payFromBot(bot) {
   const payee = window.prompt(
-    `Pay which player, from ${bot.username}'s in-game balance?\n\n`
-      + 'Exact Minecraft name. This sends real in-game currency and cannot be reversed.',
+    `Pay which player, from ${bot.username}'s in-game balance?\n\n` +
+      'Exact Minecraft name. This sends real in-game currency and cannot be reversed.',
   );
   if (payee === null) return;
   const name = payee.trim();
@@ -711,8 +820,8 @@ async function payFromBot(bot) {
     return;
   }
   const answer = await confirmAmount(
-    `Pay ${name} from ${bot.username}'s own in-game balance. This does not touch anybody's site `
-      + 'wallet and there is nothing to refund if it fails.',
+    `Pay ${name} from ${bot.username}'s own in-game balance. This does not touch anybody's site ` +
+      'wallet and there is nothing to refund if it fails.',
     { label: `Amount to send ${name}` },
   );
   if (!answer) return;
@@ -734,7 +843,7 @@ async function loadPayouts() {
   const data = await api.get('/v1/admin/payouts');
   table(
     $('payoutTable'),
-    ['When', 'Payee', 'Amount', 'Status', 'Bot', 'Ordered by', 'Reason'],
+    ['When', 'Payee', 'Amount', 'Status', 'Bot', 'Ordered by', 'Reason', ''],
     data.payouts ?? [],
     (payout) => {
       const tr = document.createElement('tr');
@@ -758,6 +867,43 @@ async function loadPayouts() {
       reason.className = 'wrap';
       reason.textContent = payout.reason ?? '—';
       tr.append(reason);
+      const review = payout.status === 'manual_review' || payout.status === 'failed';
+      tr.append(
+        actions(
+          ...(review
+            ? [
+                button('Confirm paid', async () => {
+                  const why = await confirmAction(
+                    'Confirm only after checking the in-game payment receipt.',
+                  );
+                  if (!why) return;
+                  await api.post(`/v1/admin/payouts/${payout.id}/resolve`, {
+                    outcome: 'paid',
+                    reason: why,
+                  });
+                  toast('Payout recorded as paid.');
+                  await loadPayouts();
+                }),
+                button(
+                  'Confirm not paid',
+                  async () => {
+                    const why = await confirmAction(
+                      'Confirm the payment did not land. This does not credit any site wallet.',
+                    );
+                    if (!why) return;
+                    await api.post(`/v1/admin/payouts/${payout.id}/resolve`, {
+                      outcome: 'not_paid',
+                      reason: why,
+                    });
+                    toast('Payout closed as not paid.');
+                    await loadPayouts();
+                  },
+                  { danger: true },
+                ),
+              ]
+            : []),
+        ),
+      );
       return tr;
     },
   );
@@ -767,7 +913,7 @@ async function loadJobs() {
   const data = await api.get('/v1/admin/jobs');
   table(
     $('jobTable'),
-    ['Job', 'Type', 'Status', 'Attempts', 'Last error', 'Updated'],
+    ['Job', 'Type', 'Status', 'Attempts', 'Last error', 'Updated', ''],
     data.jobs ?? [],
     (job) => {
       const tr = document.createElement('tr');
@@ -784,6 +930,25 @@ async function loadJobs() {
         cell(job.attempts, { mono: true }),
         cell(job.last_error_code),
         cell(job.updated_at),
+      );
+      const safeRetry =
+        job.status === 'dead_letter' &&
+        (job.kind === 'inventory_resync' || job.kind === 'reconnect');
+      tr.append(
+        actions(
+          ...(safeRetry
+            ? [
+                button('Retry', async (node) => {
+                  const reason = await confirmAction(`Retry this ${job.kind} control job?`);
+                  if (!reason) return;
+                  node.disabled = true;
+                  await api.post(`/v1/admin/jobs/${job.id}/retry`, { reason });
+                  toast('Job returned to the queue.');
+                  await loadJobs();
+                }),
+              ]
+            : []),
+        ),
       );
       return tr;
     },
@@ -811,6 +976,979 @@ async function loadItems() {
   );
 }
 
+async function loadEconomy() {
+  const search = $('economyQuery').value.trim();
+  const [economy, withdrawalData] = await Promise.all([
+    api.get(`/v1/admin/economy?limit=100${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+    api.get('/v1/admin/cash-withdrawals'),
+  ]);
+  const totals = economy.totals ?? {};
+  renderStats($('economyStats'), [
+    ['Wallet liability', amountText(totals.wallet_total_minor ?? 0)],
+    ['Lifetime ledger credits', amountText(totals.ledger_credits_minor ?? 0)],
+    ['Lifetime ledger debits', amountText(totals.ledger_debits_minor ?? 0)],
+    ['Cash received', amountText(totals.cash_received_minor ?? 0)],
+    ['Cash paid out', amountText(totals.cash_paid_minor ?? 0)],
+  ]);
+  table(
+    $('withdrawalTable'),
+    ['Created', 'Player', 'Payee', 'Amount', 'Status', 'Error', ''],
+    withdrawalData.withdrawals ?? [],
+    (withdrawal) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(withdrawal.created_at),
+        cell(withdrawal.minecraft_username),
+        cell(withdrawal.payee_username),
+        cell(amountText(withdrawal.amount_minor), { mono: true }),
+      );
+      const status = document.createElement('td');
+      status.append(
+        pill(withdrawal.status, withdrawal.status === 'manual_review' ? 'bad' : 'warn'),
+      );
+      tr.append(status, cell(withdrawal.error_code));
+      const buttons = [];
+      if (withdrawal.status === 'pending_approval') {
+        buttons.push(
+          button('Approve', async (node) => {
+            const reason = await confirmAction(
+              `Approve ${amountText(withdrawal.amount_minor)} to ${withdrawal.payee_username}?`,
+            );
+            if (!reason) return;
+            node.disabled = true;
+            await api.post(`/v1/admin/cash-withdrawals/${withdrawal.id}/approve`, { reason });
+            toast('Withdrawal approved and queued.');
+            await loadEconomy();
+          }),
+          button(
+            'Reject & refund',
+            async (node) => {
+              const reason = await confirmAction(
+                `Reject this withdrawal and return ${amountText(withdrawal.amount_minor)} to the wallet?`,
+              );
+              if (!reason) return;
+              node.disabled = true;
+              await api.post(`/v1/admin/cash-withdrawals/${withdrawal.id}/reject`, { reason });
+              toast('Withdrawal rejected and refunded.');
+              await loadEconomy();
+            },
+            { danger: true },
+          ),
+        );
+      }
+      if (withdrawal.status === 'manual_review') {
+        buttons.push(
+          button('Confirm paid', async (node) => {
+            const reason = await confirmAction(
+              'Only confirm paid after checking the DonutSMP receipt. This closes the held payout.',
+            );
+            if (!reason) return;
+            node.disabled = true;
+            await api.post(`/v1/admin/cash-withdrawals/${withdrawal.id}/resolve`, {
+              outcome: 'paid',
+              reason,
+            });
+            toast('Withdrawal recorded as paid.');
+            await loadEconomy();
+          }),
+          button(
+            'Confirm not paid & refund',
+            async (node) => {
+              const reason = await confirmAction(
+                'Only refund after proving the in-game payment did not land. This credits the wallet.',
+              );
+              if (!reason) return;
+              node.disabled = true;
+              await api.post(`/v1/admin/cash-withdrawals/${withdrawal.id}/resolve`, {
+                outcome: 'refund',
+                reason,
+              });
+              toast('Withdrawal refunded.');
+              await loadEconomy();
+            },
+            { danger: true },
+          ),
+        );
+      }
+      tr.append(actions(...buttons));
+      return tr;
+    },
+  );
+  table(
+    $('economyTable'),
+    ['Sequence', 'When', 'Player', 'Kind', 'Change', 'Balance after', 'Reference'],
+    economy.transactions ?? [],
+    (transaction) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(transaction.seq, { mono: true }),
+        cell(transaction.created_at),
+        cell(transaction.minecraft_username),
+        cell(transaction.kind),
+      );
+      const movement = cell(amountText(transaction.amount_minor), { mono: true });
+      movement.dataset.sign = BigInt(transaction.amount_minor) > 0n ? 'up' : 'down';
+      tr.append(
+        movement,
+        cell(amountText(transaction.balance_after_minor), { mono: true }),
+        cell(transaction.reference_id, { mono: true }),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('depositTable'),
+    ['When', 'Payer', 'Amount', 'Status', 'Account', 'Receipt'],
+    economy.deposits ?? [],
+    (deposit) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(deposit.created_at),
+        cell(deposit.payer_username),
+        cell(deposit.amount_minor ? amountText(deposit.amount_minor) : deposit.displayed_amount, {
+          mono: true,
+        }),
+      );
+      const status = document.createElement('td');
+      status.append(pill(deposit.status, deposit.status === 'credited' ? 'ok' : 'warn'));
+      tr.append(status, cell(deposit.minecraft_username), cell(deposit.id, { mono: true }));
+      return tr;
+    },
+  );
+}
+
+let catalogCache = [];
+let botCache = [];
+
+async function loadCatalog() {
+  const [catalog, observed, inventory, bots] = await Promise.all([
+    api.get('/v1/admin/catalog-items'),
+    api.get('/v1/admin/observed-items'),
+    api.get('/v1/admin/inventory?limit=100'),
+    api.get('/v1/admin/bots'),
+  ]);
+  catalogCache = catalog.items ?? [];
+  botCache = bots.bots ?? [];
+  table(
+    $('catalogTable'),
+    ['Name', 'Minecraft ID', 'Price', 'Enabled', 'Available', 'Pending', 'Bots', ''],
+    catalogCache,
+    (item) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(item.display_name),
+        cell(item.minecraft_name, { mono: true }),
+        cell(amountText(item.unit_value_minor), { mono: true }),
+      );
+      const enabled = document.createElement('td');
+      enabled.append(pill(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'ok' : 'warn'));
+      tr.append(
+        enabled,
+        cell(item.available_quantity, { mono: true }),
+        cell(item.pending_quantity, { mono: true }),
+        cell(item.stocked_bots, { mono: true }),
+        actions(
+          button('Edit', () => editCatalogItem(item)),
+          button('Allocate stock', () => allocateStock(item), {
+            disabled: !item.enabled || botCache.length === 0,
+          }),
+        ),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('itemTable'),
+    ['Item', 'Minecraft name', 'Quantity', 'Bot', 'Catalog', 'Last seen', ''],
+    observed.items ?? [],
+    (item) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(item.display_name),
+        cell(item.minecraft_name),
+        cell(item.last_quantity, { mono: true }),
+        cell(item.bot_id, { mono: true }),
+      );
+      const known = document.createElement('td');
+      known.append(pill(item.catalog_item_id ? 'yes' : 'no', item.catalog_item_id ? 'ok' : 'warn'));
+      tr.append(known, cell(item.last_seen_at));
+      tr.append(
+        actions(
+          ...(item.catalog_item_id
+            ? []
+            : [button('Add to catalog', () => createCatalogItem(item))]),
+        ),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('inventoryTable'),
+    ['Updated', 'Item', 'Owner', 'Bot', 'Quantity', 'State', 'Source'],
+    inventory.lots ?? [],
+    (lot) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(lot.updated_at),
+        cell(lot.display_name),
+        cell(lot.owner_username ?? 'House'),
+        cell(lot.bot_username),
+        cell(lot.quantity, { mono: true }),
+      );
+      const state = document.createElement('td');
+      state.append(pill(lot.state, lot.state === 'available' ? 'ok' : 'warn'));
+      tr.append(state, cell(lot.source_type));
+      return tr;
+    },
+  );
+}
+
+async function createCatalogItem(observed = {}) {
+  const values = await editRecord({
+    title: 'Add catalog item',
+    description: 'The fingerprint must be the exact 64-character value reported by a bot.',
+    fields: [
+      { name: 'displayName', label: 'Display name', value: observed.display_name ?? '' },
+      { name: 'minecraftName', label: 'Minecraft item ID', value: observed.minecraft_name ?? '' },
+      { name: 'unitValueMinor', label: 'Unit value', placeholder: '100000' },
+      { name: 'imageUrl', label: 'HTTPS image URL (optional)', required: false },
+      { name: 'fingerprint', label: 'Fingerprint', value: observed.fingerprint ?? '', wide: true },
+      { name: 'enabled', label: 'Enabled', type: 'checkbox', value: false },
+      { name: 'metadata', label: 'Metadata JSON', type: 'textarea', value: '{}', wide: true },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Create item',
+  });
+  if (!values) return;
+  try {
+    await api.post('/v1/admin/catalog-items', {
+      fingerprint: values.fingerprint,
+      minecraftName: values.minecraftName,
+      displayName: values.displayName,
+      imageUrl: values.imageUrl || null,
+      unitValueMinor: parseAmount(values.unitValueMinor)?.toString() ?? values.unitValueMinor,
+      enabled: values.enabled,
+      metadata: jsonField(values.metadata, 'Metadata'),
+      reason: values.reason,
+    });
+    toast('Catalog item created.');
+    await loadCatalog();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function editCatalogItem(item) {
+  const values = await editRecord({
+    title: `Edit ${item.display_name}`,
+    fields: [
+      { name: 'displayName', label: 'Display name', value: item.display_name },
+      { name: 'unitValueMinor', label: 'Unit value', value: item.unit_value_minor },
+      {
+        name: 'imageUrl',
+        label: 'HTTPS image URL (optional)',
+        value: item.image_url ?? '',
+        required: false,
+      },
+      { name: 'enabled', label: 'Enabled', type: 'checkbox', value: item.enabled },
+      {
+        name: 'metadata',
+        label: 'Metadata JSON',
+        type: 'textarea',
+        value: prettyJson(item.metadata),
+        wide: true,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+  });
+  if (!values) return;
+  try {
+    await api.patch(`/v1/admin/catalog-items/${item.id}`, {
+      displayName: values.displayName,
+      imageUrl: values.imageUrl || null,
+      unitValueMinor: parseAmount(values.unitValueMinor)?.toString() ?? values.unitValueMinor,
+      enabled: values.enabled,
+      metadata: jsonField(values.metadata, 'Metadata'),
+      reason: values.reason,
+    });
+    toast('Catalog item updated.');
+    await loadCatalog();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function allocateStock(item) {
+  const values = await editRecord({
+    title: `Allocate ${item.display_name}`,
+    description: 'Allocation cannot exceed the latest physical bot snapshot.',
+    fields: [
+      {
+        name: 'botId',
+        label: 'Bot',
+        type: 'select',
+        options: botCache.map((bot) => ({
+          value: bot.id,
+          label: `${bot.username} - ${bot.status}`,
+        })),
+      },
+      { name: 'quantity', label: 'Quantity', type: 'number', min: 1, max: 100000 },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Allocate stock',
+  });
+  if (!values) return;
+  try {
+    await api.post(
+      '/v1/admin/stock',
+      {
+        catalogItemId: item.id,
+        botId: values.botId,
+        quantity: Number(values.quantity),
+        reason: values.reason,
+      },
+      { idempotency: true },
+    );
+    toast('Stock allocated; the bot will reconcile its next snapshot.');
+    await loadCatalog();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function loadCases() {
+  const data = await api.get('/v1/admin/cases');
+  table(
+    $('caseTable'),
+    ['Name', 'Slug', 'Owner', 'Price', 'Drops', 'Expected return', 'Status', ''],
+    data.cases ?? [],
+    (crate) => {
+      const tr = document.createElement('tr');
+      const expected = (crate.drops ?? []).reduce(
+        (sum, drop) =>
+          sum + BigInt(drop.unitValueMinor) * BigInt(drop.quantity) * BigInt(drop.weight),
+        0n,
+      );
+      const returnBps =
+        BigInt(crate.totalWeight ?? 0) > 0n
+          ? (expected * 10_000n) / (BigInt(crate.totalWeight) * BigInt(crate.priceMinor))
+          : 0n;
+      tr.append(
+        cell(crate.name),
+        cell(crate.slug, { mono: true }),
+        cell(crate.creatorUsername ?? 'First party'),
+        cell(amountText(crate.priceMinor), { mono: true }),
+        cell((crate.drops ?? []).length, { mono: true }),
+        cell(`${returnBps} bps`, { mono: true }),
+      );
+      const status = document.createElement('td');
+      const statusLabel =
+        crate.communityStatus === 'first_party'
+          ? crate.enabled
+            ? 'published'
+            : 'disabled'
+          : crate.communityStatus;
+      status.append(pill(statusLabel, crate.enabled ? 'ok' : 'warn'));
+      tr.append(status, actions(button('Edit', () => editCase(crate))));
+      return tr;
+    },
+  );
+}
+
+function caseFields(crate = {}) {
+  const drops = (crate.drops ?? []).map((drop) => ({
+    catalogItemId: drop.catalogItemId,
+    weight: drop.weight,
+    quantity: drop.quantity,
+  }));
+  return [
+    { name: 'name', label: 'Name', value: crate.name ?? '' },
+    { name: 'slug', label: 'Slug', value: crate.slug ?? '' },
+    { name: 'priceMinor', label: 'Price', value: crate.priceMinor ?? '' },
+    {
+      name: 'imageUrl',
+      label: 'HTTPS image URL (optional)',
+      value: crate.imageUrl ?? '',
+      required: false,
+    },
+    { name: 'enabled', label: 'Published', type: 'checkbox', value: crate.enabled ?? false },
+    ...(crate.communityStatus && crate.communityStatus !== 'first_party'
+      ? [
+          {
+            name: 'communityStatus',
+            label: 'Community status',
+            type: 'select',
+            options: ['draft', 'published', 'retired'],
+            value: crate.communityStatus,
+          },
+          {
+            name: 'royaltyBps',
+            label: 'Creator royalty (bps)',
+            type: 'number',
+            min: 0,
+            max: 200,
+            value: crate.royaltyBps ?? 0,
+          },
+        ]
+      : []),
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      value: crate.description ?? '',
+      wide: true,
+    },
+    {
+      name: 'drops',
+      label: 'Drops JSON: catalogItemId, weight, quantity',
+      type: 'textarea',
+      rows: 9,
+      value: prettyJson(drops.length ? drops : [{ catalogItemId: '', weight: 1, quantity: 1 }]),
+      wide: true,
+    },
+    {
+      name: 'metadata',
+      label: 'Metadata JSON',
+      type: 'textarea',
+      value: prettyJson(crate.metadata),
+      wide: true,
+    },
+    { name: 'reason', label: 'Audit reason', wide: true },
+  ];
+}
+
+async function editCase(crate = null) {
+  const values = await editRecord({
+    title: crate ? `Edit ${crate.name}` : 'Create case',
+    description: 'The server rejects pools outside the configured house-edge range.',
+    fields: caseFields(crate ?? {}),
+    submitLabel: crate ? 'Save case' : 'Create case',
+  });
+  if (!values) return;
+  try {
+    const payload = {
+      slug: values.slug,
+      name: values.name,
+      description: values.description,
+      imageUrl: values.imageUrl || null,
+      priceMinor: parseAmount(values.priceMinor)?.toString() ?? values.priceMinor,
+      enabled: values.enabled,
+      metadata: jsonField(values.metadata, 'Metadata'),
+      drops: jsonField(values.drops, 'Drops'),
+      reason: values.reason,
+      ...(values.communityStatus
+        ? {
+            communityStatus: values.communityStatus,
+            royaltyBps: Number(values.royaltyBps),
+          }
+        : {}),
+    };
+    if (crate) await api.patch(`/v1/admin/cases/${crate.id}`, payload);
+    else await api.post('/v1/admin/cases', payload);
+    toast(crate ? 'Case updated.' : 'Case created.');
+    await loadCases();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function loadModeration() {
+  const data = await api.get('/v1/admin/moderation');
+  table(
+    $('messageTable'),
+    ['When', 'Player', 'Message', 'Status', ''],
+    data.messages ?? [],
+    (message) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(message.created_at), cell(message.minecraft_username));
+      const body = cell(message.body);
+      body.className = 'wrap';
+      tr.append(body);
+      const status = document.createElement('td');
+      status.append(
+        pill(
+          message.deleted_at ? `deleted by ${message.deleted_by_username ?? 'admin'}` : 'visible',
+          message.deleted_at ? 'warn' : 'ok',
+        ),
+      );
+      tr.append(
+        status,
+        actions(
+          ...(message.deleted_at
+            ? []
+            : [
+                button(
+                  'Delete',
+                  async (node) => {
+                    const reason = await confirmAction(
+                      `Remove this message from ${message.minecraft_username}? The row is retained.`,
+                    );
+                    if (!reason) return;
+                    node.disabled = true;
+                    await api.delete(`/v1/chat/${message.id}`, { reason });
+                    toast('Message removed.');
+                    await loadModeration();
+                  },
+                  { danger: true },
+                ),
+              ]),
+        ),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('timeoutTable'),
+    ['Issued', 'Player', 'Until', 'Reason', 'Issued by', 'Status', ''],
+    data.timeouts ?? [],
+    (timeout) => {
+      const active = !timeout.lifted_at && new Date(timeout.expires_at) > new Date();
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(timeout.created_at),
+        cell(timeout.minecraft_username),
+        cell(timeout.expires_at),
+        cell(timeout.reason),
+        cell(timeout.issued_by_username),
+      );
+      const status = document.createElement('td');
+      status.append(
+        pill(active ? 'active' : timeout.lifted_at ? 'lifted' : 'expired', active ? 'bad' : 'ok'),
+      );
+      tr.append(
+        status,
+        actions(
+          ...(active
+            ? [
+                button('Lift', async () => {
+                  const reason = await confirmAction(
+                    `Lift ${timeout.minecraft_username}'s chat timeout?`,
+                  );
+                  if (!reason) return;
+                  await api.delete(
+                    `/v1/chat/timeouts/${encodeURIComponent(timeout.minecraft_username)}`,
+                    { reason },
+                  );
+                  toast('Timeout lifted.');
+                  await loadModeration();
+                }),
+              ]
+            : []),
+        ),
+      );
+      return tr;
+    },
+  );
+}
+
+async function issueTimeout() {
+  const values = await editRecord({
+    title: 'Timeout a player',
+    description: 'Chat only. Account access and games are not affected.',
+    fields: [
+      { name: 'username', label: 'Minecraft username' },
+      { name: 'minutes', label: 'Minutes (1-1440)', type: 'number', min: 1, max: 1440 },
+      { name: 'reason', label: 'Reason', wide: true },
+    ],
+    submitLabel: 'Issue timeout',
+  });
+  if (!values) return;
+  try {
+    await api.post('/v1/chat/timeouts', {
+      username: values.username,
+      minutes: Number(values.minutes),
+      reason: values.reason,
+    });
+    toast('Chat timeout issued.');
+    await loadModeration();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function liftTimeoutByName() {
+  const values = await editRecord({
+    title: 'Lift chat timeout',
+    fields: [
+      { name: 'username', label: 'Minecraft username' },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Lift timeout',
+  });
+  if (!values) return;
+  try {
+    const result = await api.delete(`/v1/chat/timeouts/${encodeURIComponent(values.username)}`, {
+      reason: values.reason,
+    });
+    toast(`${result.lifted} timeout(s) lifted.`);
+    await loadModeration();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function loadPrograms() {
+  const [rain, creators, races, quests] = await Promise.all([
+    api.get('/v1/social/rain').catch((error) => ({ unavailable: error.message })),
+    api.get('/v1/admin/creator-applications'),
+    api.get('/v1/admin/races'),
+    api.get('/v1/admin/quests'),
+  ]);
+  renderStats(
+    $('rainStats'),
+    rain.unavailable
+      ? [
+          ['Status', 'Disabled'],
+          ['Details', rain.unavailable],
+        ]
+      : rain.active
+        ? [
+            ['Status', 'Live'],
+            ['Pool', amountText(rain.active.poolMinor)],
+            ['Claimants', rain.active.claimants],
+            ['Closes', new Date(rain.active.closesAt).toLocaleString()],
+          ]
+        : [
+            ['Status', 'Idle'],
+            ['Recent events', rain.recent?.length ?? 0],
+          ],
+  );
+  table(
+    $('creatorTable'),
+    ['Applied', 'Player', 'Platform', 'Audience', 'Requested code', 'Status', 'Revshare', ''],
+    creators.applications ?? [],
+    (application) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(application.created_at),
+        cell(application.minecraft_username),
+        cell(application.platform),
+        cell(application.audience_size, { mono: true }),
+        cell(application.requested_code, { mono: true }),
+      );
+      const status = document.createElement('td');
+      status.append(
+        pill(
+          application.status,
+          application.status === 'approved'
+            ? 'ok'
+            : application.status === 'pending'
+              ? 'warn'
+              : 'bad',
+        ),
+      );
+      tr.append(
+        status,
+        cell(
+          application.granted_revshare_bps === null
+            ? null
+            : `${application.granted_revshare_bps} bps`,
+        ),
+      );
+      tr.append(
+        actions(
+          ...(application.status === 'pending'
+            ? [
+                button('Review', () => reviewCreator(application, creators.maxRevshareBps)),
+                button('Open channel', () =>
+                  window.open(application.channel_url, '_blank', 'noopener,noreferrer'),
+                ),
+              ]
+            : []),
+        ),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('raceTable'),
+    ['Starts', 'Ends', 'Name', 'Cadence', 'Prize pool', 'Entrants', 'Wagered', 'Status', ''],
+    races.races ?? [],
+    (race) => {
+      const now = Date.now();
+      const state = race.settled_at
+        ? 'settled'
+        : new Date(race.ends_at).getTime() <= now
+          ? 'due'
+          : new Date(race.starts_at).getTime() <= now
+            ? 'live'
+            : 'scheduled';
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(race.starts_at),
+        cell(race.ends_at),
+        cell(race.name),
+        cell(race.cadence),
+        cell(amountText(race.prize_pool_minor), { mono: true }),
+        cell(race.entrants, { mono: true }),
+        cell(amountText(race.wagered_minor), { mono: true }),
+      );
+      const status = document.createElement('td');
+      status.append(pill(state, state === 'live' ? 'ok' : state === 'due' ? 'bad' : 'warn'));
+      tr.append(
+        status,
+        actions(...(state === 'scheduled' ? [button('Edit', () => editRace(race))] : [])),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('questTable'),
+    ['Order', 'Quest', 'Metric', 'Target', 'Reward', 'Players today', 'Claims today', 'Status', ''],
+    quests.quests ?? [],
+    (quest) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(quest.sort_order, { mono: true }),
+        cell(quest.name),
+        cell(quest.metric),
+        cell(quest.target_value, { mono: true }),
+        cell(amountText(quest.reward_minor), { mono: true }),
+        cell(quest.players_today, { mono: true }),
+        cell(quest.claims_today, { mono: true }),
+      );
+      const status = document.createElement('td');
+      status.append(pill(quest.enabled ? 'enabled' : 'disabled', quest.enabled ? 'ok' : 'warn'));
+      tr.append(status, actions(button('Edit', () => editQuest(quest))));
+      return tr;
+    },
+  );
+}
+
+async function startRain() {
+  const values = await editRecord({
+    title: 'Start Lava Rain',
+    description:
+      'This spends the operator-funded pool. The server enforces the configured maximum.',
+    fields: [
+      { name: 'poolMinor', label: 'Pool amount', value: '' },
+      { name: 'claimMinutes', label: 'Claim window (minutes)', type: 'number', value: 5 },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Start promotion',
+  });
+  if (!values) return;
+  try {
+    const result = await api.post('/v1/social/rain', {
+      poolMinor: values.poolMinor,
+      claimMinutes: Number(values.claimMinutes),
+      reason: values.reason,
+    });
+    toast(`Lava Rain started with a ${amountText(result.poolMinor)} pool.`);
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function reviewCreator(application, maxBps) {
+  const values = await editRecord({
+    title: `Review ${application.minecraft_username}`,
+    description: `${application.platform}: ${application.channel_url}. Maximum ${maxBps} bps.`,
+    fields: [
+      { name: 'decision', label: 'Decision', type: 'select', options: ['approved', 'rejected'] },
+      { name: 'code', label: 'Creator code', value: application.requested_code },
+      {
+        name: 'revshareBps',
+        label: 'Revshare bps',
+        type: 'number',
+        min: 0,
+        max: maxBps,
+        value: maxBps,
+      },
+      { name: 'note', label: 'Review note / audit reason', type: 'textarea', wide: true },
+    ],
+    submitLabel: 'Record decision',
+  });
+  if (!values) return;
+  try {
+    await api.post(`/v1/admin/creator-applications/${application.id}/decision`, {
+      decision: values.decision,
+      ...(values.decision === 'approved'
+        ? { code: values.code.toUpperCase(), revshareBps: Number(values.revshareBps) }
+        : {}),
+      note: values.note,
+    });
+    toast(`Creator application ${values.decision}.`);
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+function localDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+async function editRace(race = null) {
+  const values = await editRecord({
+    title: race ? `Edit ${race.name}` : 'Create wager race',
+    description: 'Payout curve is basis points by rank and may total no more than 10000.',
+    fields: [
+      { name: 'name', label: 'Name', value: race?.name ?? '' },
+      { name: 'slug', label: 'Slug', value: race?.slug ?? '' },
+      {
+        name: 'cadence',
+        label: 'Cadence',
+        type: 'select',
+        options: ['daily', 'weekly'],
+        value: race?.cadence ?? 'daily',
+      },
+      { name: 'prizePoolMinor', label: 'Prize pool', value: race?.prize_pool_minor ?? '' },
+      {
+        name: 'startsAt',
+        label: 'Starts',
+        type: 'datetime-local',
+        value: localDateTime(race?.starts_at),
+      },
+      {
+        name: 'endsAt',
+        label: 'Ends',
+        type: 'datetime-local',
+        value: localDateTime(race?.ends_at),
+      },
+      {
+        name: 'payoutCurveBps',
+        label: 'Payout curve JSON',
+        type: 'textarea',
+        value: prettyJson(race?.payout_curve ?? [5000, 3000, 2000]),
+        wide: true,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: race ? 'Save race' : 'Create race',
+  });
+  if (!values) return;
+  try {
+    const payload = {
+      name: values.name,
+      slug: values.slug,
+      cadence: values.cadence,
+      prizePoolMinor: parseAmount(values.prizePoolMinor)?.toString() ?? values.prizePoolMinor,
+      startsAt: new Date(values.startsAt).toISOString(),
+      endsAt: new Date(values.endsAt).toISOString(),
+      payoutCurveBps: jsonField(values.payoutCurveBps, 'Payout curve'),
+      reason: values.reason,
+    };
+    if (race) await api.patch(`/v1/admin/races/${race.id}`, payload);
+    else await api.post('/v1/admin/races', payload);
+    toast(race ? 'Race updated.' : 'Race created.');
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function settleRaces() {
+  const reason = await confirmAction('Settle every ended race that has not yet paid its winners?');
+  if (!reason) return;
+  try {
+    const result = await api.post('/v1/admin/races/settle', { reason });
+    toast(`${result.settled} race(s) settled; ${result.paid} winner(s) paid.`);
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function editQuest(quest = null) {
+  const metrics = [
+    'upgrader_rolls',
+    'upgrader_wins',
+    'cases_opened',
+    'wagered_minor',
+    'faction_contribution_minor',
+    ...(quest?.metric === 'piggy_deposits' ? ['piggy_deposits'] : []),
+  ];
+  const values = await editRecord({
+    title: quest ? `Edit ${quest.name}` : 'Create daily quest',
+    fields: [
+      ...(quest ? [] : [{ name: 'code', label: 'Stable code' }]),
+      { name: 'name', label: 'Name', value: quest?.name ?? '' },
+      {
+        name: 'metric',
+        label: 'Metric',
+        type: 'select',
+        options: metrics,
+        value: quest?.metric ?? metrics[0],
+      },
+      { name: 'targetValue', label: 'Target', value: quest?.target_value ?? '' },
+      { name: 'rewardMinor', label: 'Reward', value: quest?.reward_minor ?? '' },
+      { name: 'sortOrder', label: 'Sort order', type: 'number', value: quest?.sort_order ?? 0 },
+      { name: 'enabled', label: 'Enabled', type: 'checkbox', value: quest?.enabled ?? false },
+      {
+        name: 'description',
+        label: 'Description',
+        type: 'textarea',
+        value: quest?.description ?? '',
+        wide: true,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: quest ? 'Save quest' : 'Create quest',
+  });
+  if (!values) return;
+  try {
+    const payload = {
+      name: values.name,
+      description: values.description,
+      metric: values.metric,
+      targetValue: parseAmount(values.targetValue)?.toString() ?? values.targetValue,
+      rewardMinor: parseAmount(values.rewardMinor)?.toString() ?? values.rewardMinor,
+      sortOrder: Number(values.sortOrder),
+      enabled: values.enabled,
+      reason: values.reason,
+    };
+    if (quest) await api.patch(`/v1/admin/quests/${encodeURIComponent(quest.code)}`, payload);
+    else await api.post('/v1/admin/quests', { code: values.code, ...payload });
+    toast(quest ? 'Quest updated.' : 'Quest created.');
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+async function loadAudit() {
+  const search = $('auditQuery').value.trim();
+  const data = await api.get(
+    `/v1/admin/audit?limit=200${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+  );
+  table(
+    $('auditTable'),
+    ['When', 'Actor', 'Action', 'Target type', 'Target', 'Details', 'Hash'],
+    data.entries ?? [],
+    (entry) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(entry.created_at),
+        cell(entry.actor_username ?? 'system'),
+        cell(entry.action),
+        cell(entry.target_type),
+        cell(entry.target_id, { mono: true }),
+      );
+      const details = cell(prettyJson(entry.details));
+      details.className = 'wrap mono';
+      tr.append(details, cell(entry.entry_hash, { mono: true }));
+      return tr;
+    },
+  );
+}
+
+async function loadSystem() {
+  const data = await api.get('/v1/admin/system-config');
+  $('systemNote').textContent = data.note;
+  const rows = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
+  table($('systemTable'), ['Setting', 'Current value', 'Management'], rows, (row) => {
+    const tr = document.createElement('tr');
+    tr.append(cell(row.key, { mono: true }), cell(row.value, { mono: true }));
+    tr.append(cell('VPS environment + controlled restart'));
+    return tr;
+  });
+}
+
 /**
  * Publishes the upgrader's fixed prize ladder: fifty-one denominations from $100K to $10B.
  *
@@ -824,9 +1962,9 @@ async function loadItems() {
  */
 async function publishLadder() {
   const reason = await confirmAction(
-    'Publish the upgrader prize ladder: 51 fixed denominations from $100K to $10B. '
-      + 'Prices already correct are left alone, but every rung is re-enabled — '
-      + 'including any you switched off by hand.',
+    'Publish the upgrader prize ladder: 51 fixed denominations from $100K to $10B. ' +
+      'Prices already correct are left alone, but every rung is re-enabled — ' +
+      'including any you switched off by hand.',
   );
   if (!reason) return;
   const button = $('publishLadder');
@@ -834,10 +1972,14 @@ async function publishLadder() {
   try {
     const result = await api.post('/v1/admin/catalog-ladder', { reason });
     toast(
-      result.created + ' created, ' + result.repriced + ' repriced, '
-        + result.unchanged + ' already at the right price.',
+      result.created +
+        ' created, ' +
+        result.repriced +
+        ' repriced, ' +
+        result.unchanged +
+        ' already at the right price.',
     );
-    await show('items');
+    await show('catalog');
   } catch (error) {
     /* Status and code, not just the message. An ApiError always carries a message — 'Request
      * failed' when the response had no JSON body — so the `||` fallback that used to be here could
@@ -852,6 +1994,9 @@ async function publishLadder() {
 const LOADERS = {
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
+  economy: loadEconomy,
+  catalog: loadCatalog,
+  cases: loadCases,
   /* The payout log is the receipt for the Pay button above it, so it is never stale relative to
      the table it belongs to. */
   bots: async () => {
@@ -859,7 +2004,10 @@ const LOADERS = {
     await loadPayouts();
   },
   jobs: loadJobs,
-  items: loadItems,
+  moderation: loadModeration,
+  programs: loadPrograms,
+  audit: loadAudit,
+  system: loadSystem,
 };
 
 async function show(name) {
@@ -955,6 +2103,14 @@ async function start() {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }
   $('publishLadder').addEventListener('click', () => void publishLadder());
+  $('createCatalogItem').addEventListener('click', () => void createCatalogItem());
+  $('createCase').addEventListener('click', () => void editCase());
+  $('timeoutPlayer').addEventListener('click', () => void issueTimeout());
+  $('liftTimeout').addEventListener('click', () => void liftTimeoutByName());
+  $('createRace').addEventListener('click', () => void editRace());
+  $('settleRaces').addEventListener('click', () => void settleRaces());
+  $('startRain').addEventListener('click', () => void startRain());
+  $('createQuest').addEventListener('click', () => void editQuest());
   $('sheetClose').addEventListener('click', () => $('playerSheet').close());
   /* Esc closes it natively; this clears the account it was pointed at so a later refresh cannot
      repaint a sheet nobody is looking at. */
@@ -964,6 +2120,14 @@ async function start() {
   $('playerSearch').addEventListener('submit', (event) => {
     event.preventDefault();
     void show('players');
+  });
+  $('economySearch').addEventListener('submit', (event) => {
+    event.preventDefault();
+    void show('economy');
+  });
+  $('auditSearch').addEventListener('submit', (event) => {
+    event.preventDefault();
+    void show('audit');
   });
   $('signOut').addEventListener('click', async () => {
     /* Best effort. Even if the call fails the console is closed locally, because the operator has

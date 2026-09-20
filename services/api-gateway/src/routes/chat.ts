@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
+import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
-import { safePublicText } from '../lib/sanitize.js';
+import { safePublicText, safeText } from '../lib/sanitize.js';
 import { levelFor } from '../lib/vip.js';
 import { parseWith } from '../lib/validation.js';
 
@@ -43,11 +44,12 @@ const timeoutSchema = z
     /* Bounded at a day. A mute longer than that is an account action, and account actions go
      * through the admin routes where they are audited as such. */
     minutes: z.number().int().min(1).max(1440),
-    reason: z.string().max(120).optional(),
+    reason: safeText(3, 120).optional(),
   })
   .strict();
 
 const moderateSchema = z.object({ id: z.uuid() }).strict();
+const moderationReasonSchema = z.object({ reason: safeText(3, 256) }).strict();
 
 /**
  * How a chat line is decorated.
@@ -223,16 +225,27 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
     { preHandler: guards.requireAdmin, config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async (request) => {
       const params = parseWith(moderateSchema, request.params);
+      const body = parseWith(moderationReasonSchema, request.body);
       const userId = requireUserId(request.authUser?.id);
-      const result = await db.query(
-        `UPDATE chat_messages
-            SET deleted_at = now(), deleted_by = $2
-          WHERE id = $1 AND deleted_at IS NULL`,
-        [params.id, userId],
-      );
-      if (!result.rowCount) {
-        throw new AppError(404, 'MESSAGE_NOT_FOUND', 'No such visible message');
-      }
+      await db.transaction(async (client) => {
+        const result = await client.query<{ user_id: string }>(
+          `UPDATE chat_messages
+              SET deleted_at = now(), deleted_by = $2
+            WHERE id = $1 AND deleted_at IS NULL
+            RETURNING user_id`,
+          [params.id, userId],
+        );
+        if (!result.rows[0]) {
+          throw new AppError(404, 'MESSAGE_NOT_FOUND', 'No such visible message');
+        }
+        await appendAudit(client, config, {
+          actorUserId: userId,
+          action: 'chat.message.delete',
+          targetType: 'chat_message',
+          targetId: params.id,
+          details: { reason: body.reason, authorUserId: result.rows[0].user_id },
+        });
+      });
       return { deleted: true };
     },
   );
@@ -263,11 +276,20 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
       }
 
       const id = randomUUID();
-      await db.query(
-        `INSERT INTO chat_timeouts (id, user_id, issued_by, reason, expires_at)
-         VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5))`,
-        [id, user.id, issuedBy, body.reason ?? null, body.minutes],
-      );
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO chat_timeouts (id, user_id, issued_by, reason, expires_at)
+           VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5))`,
+          [id, user.id, issuedBy, body.reason ?? null, body.minutes],
+        );
+        await appendAudit(client, config, {
+          actorUserId: issuedBy,
+          action: 'chat.timeout.issue',
+          targetType: 'user',
+          targetId: user.id,
+          details: { reason: body.reason ?? 'Chat moderation', minutes: body.minutes },
+        });
+      });
       return { id, username: user.minecraft_username, minutes: body.minutes };
     },
   );
@@ -281,14 +303,28 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
         z.object({ username: z.string().regex(/^[A-Za-z0-9_]{1,16}$/) }),
         request.params,
       );
+      const body = parseWith(moderationReasonSchema, request.body);
       const liftedBy = requireUserId(request.authUser?.id);
-      const result = await db.query(
-        `UPDATE chat_timeouts SET lifted_at = now(), lifted_by = $2
-          WHERE lifted_at IS NULL AND expires_at > now()
-            AND user_id = (SELECT id FROM users WHERE normalized_username = lower($1::varchar))`,
-        [params.username, liftedBy],
-      );
-      return { lifted: result.rowCount ?? 0 };
+      return db.transaction(async (client) => {
+        const result = await client.query<{ user_id: string }>(
+          `UPDATE chat_timeouts SET lifted_at = now(), lifted_by = $2
+            WHERE lifted_at IS NULL AND expires_at > now()
+              AND user_id = (SELECT id FROM users WHERE normalized_username = lower($1::varchar))
+            RETURNING user_id`,
+          [params.username, liftedBy],
+        );
+        const target = result.rows[0]?.user_id;
+        if (target) {
+          await appendAudit(client, config, {
+            actorUserId: liftedBy,
+            action: 'chat.timeout.lift',
+            targetType: 'user',
+            targetId: target,
+            details: { reason: body.reason, lifted: result.rowCount ?? 0 },
+          });
+        }
+        return { lifted: result.rowCount ?? 0 };
+      });
     },
   );
 }

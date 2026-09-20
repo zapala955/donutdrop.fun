@@ -199,3 +199,61 @@ describe('bot reconnect', () => {
     );
   });
 });
+
+describe('complete admin operations surface', () => {
+  it('keeps every cross-product mutation behind the admin guard and audit chain', async () => {
+    const source = await routes('admin-operations');
+    for (const route of [
+      "'/v1/admin/cash-withdrawals/:id/resolve'",
+      "'/v1/admin/payouts/:id/resolve'",
+      "'/v1/admin/jobs/:id/retry'",
+      "'/v1/admin/creator-applications/:id/decision'",
+      "'/v1/admin/races'",
+      "'/v1/admin/quests'",
+    ]) {
+      const start = source.indexOf(route);
+      assert.ok(start >= 0, `${route} must exist`);
+      const endpoint = source.slice(start, start + 9_000);
+      assert.match(endpoint, /guards\.requireAdmin/);
+      assert.match(endpoint, /appendAudit/);
+    }
+  });
+
+  it('guards, serializes, and audits operator-funded Lava Rain promotions', async () => {
+    const source = await routes('social');
+    const endpoint = source.slice(source.indexOf("'/v1/social/rain'"));
+    assert.match(endpoint, /guards\.requireAdmin/);
+    assert.match(endpoint, /lava-rain-create/);
+    assert.match(endpoint, /RAIN_ALREADY_ACTIVE/);
+    assert.match(endpoint, /appendAudit/);
+  });
+
+  it('never blindly retries a value-bearing bot job', async () => {
+    const source = await routes('admin-operations');
+    const endpoint = source.slice(source.indexOf("'/v1/admin/jobs/:id/retry'"));
+    const bounded = endpoint.slice(0, endpoint.indexOf("'/v1/admin/moderation'"));
+    assert.match(bounded, /kind IN \('inventory_resync', 'reconnect'\)/);
+    assert.doesNotMatch(bounded, /kind IN \([^)]*cash_payout/);
+    assert.match(bounded, /JOB_NOT_RETRYABLE/);
+  });
+
+  it('makes system trust roots read-only instead of exposing secret writes', async () => {
+    const source = await routes('admin-operations');
+    assert.match(source, /app\.get\('\/v1\/admin\/system-config'/);
+    assert.doesNotMatch(source, /app\.(?:post|patch|put)\('\/v1\/admin\/system-config'/);
+    for (const secret of ['cookieSecret', 'dataEncryptionKey', 'adminTotpSecrets', 'databaseUrl']) {
+      const response = source.slice(source.indexOf("'/v1/admin/system-config'"));
+      assert.doesNotMatch(response, new RegExp(`${secret}:`));
+    }
+  });
+
+  it('grants only the additional quest privilege and pins readiness to it', async () => {
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/037_admin_operations.sql'),
+      'utf8',
+    );
+    assert.match(sql, /GRANT UPDATE ON TABLE quest_definitions TO donut_api_runtime/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v37\(\) RETURNS boolean/);
+    assert.doesNotMatch(sql, /GRANT (?:ALL|DELETE|TRUNCATE)/);
+  });
+});

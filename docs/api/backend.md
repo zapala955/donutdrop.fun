@@ -57,23 +57,25 @@ fingerprint of the exact TOTP key used at login, so rotating that administrator'
 invalidates every session created with the previous key and requires a new account-link login.
 
 There is no public first-admin endpoint. The reviewed one-time bootstrap command is documented in
-`infra/README.md`; it requires an already linked/profiled allowlisted identity and an explicit KYC
-review confirmation.
+`infra/README.md`; it requires an already linked, allowlisted identity and an explicit confirmation.
 
-| Method | Path                             | Purpose                                               |
-| ------ | -------------------------------- | ----------------------------------------------------- |
-| POST   | `/v1/admin/catalog-items`        | Add an exact fingerprint and fixed value              |
-| PATCH  | `/v1/admin/catalog-items/:id`    | Change fixed value, metadata, or enabled state        |
-| GET    | `/v1/admin/cases`                | List all case configurations and pools                |
-| POST   | `/v1/admin/cases`                | Create an audited case and weighted pool               |
-| PATCH  | `/v1/admin/cases/:id`            | Update case metadata, price, state, or pool            |
-| GET    | `/v1/admin/observed-items`       | Discover exact fingerprints reported by bot inventory |
-| GET    | `/v1/admin/bots`                 | Inspect bot heartbeat and reconciliation status       |
-| PATCH  | `/v1/admin/bots/:id/quarantine`  | Quarantine or explicitly release a reconciled bot     |
-| GET    | `/v1/admin/users`                | Search users for compliance/support review            |
-| GET    | `/v1/admin/jobs`                 | Inspect pending and dead-letter transfer jobs         |
-| POST   | `/v1/admin/stock`                | Allocate physically observed bot stock                |
-| PATCH  | `/v1/admin/users/:id/compliance` | Record reviewed age/KYC status and activate           |
+The web console at `/admin/` exposes all safe runtime operations. Every mutation that changes
+money, content, moderation, rewards, custody allocation, or bot state requires a reason and writes
+to the hash-chained audit log. Admin identities, MFA keys, database credentials, proxy policy, and
+other trust roots remain deployment-managed and are intentionally read-only in the console.
+
+| Area       | Routes                                                                                                 | Runtime management                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Dashboard  | `GET /v1/admin/overview`, `/system-config`                                                             | Platform totals, attention queues, redacted effective configuration                                     |
+| Players    | `GET /users[/:id]`, `PATCH /users/:id/status`, `POST /users/:id/{balance,sessions/revoke}`             | Search, suspend/close/reactivate, credit/debit, revoke sessions, inspect turnover and ledger            |
+| Economy    | `GET /economy`, `/cash-withdrawals`; payout decision and resolution routes                             | Ledger, receipts, approvals, rejections, and human resolution of ambiguous payouts                      |
+| Catalog    | `GET/POST/PATCH /catalog-items`, `GET /observed-items`, `/inventory`, `POST /stock`, `/catalog-ladder` | Create/reprice/enable items, inspect bot observations and lots, allocate verified stock                 |
+| Cases      | `GET/POST/PATCH /cases[/:id]`                                                                          | Create, price, publish, replace weighted pools, moderate community cases, and set creator royalty       |
+| Bots       | `GET /bots`, `PATCH /bots/:id/quarantine`, bot reconnect/pay routes, `GET /payouts`                    | Health, reconciliation, quarantine/release, reconnect, operator payouts                                 |
+| Jobs       | `GET /jobs`, `POST /jobs/:id/retry`                                                                    | Queue visibility and safe retry of idempotent control jobs; value-bearing jobs require human resolution |
+| Moderation | `GET /moderation`; `/v1/chat/:id` and `/v1/chat/timeouts` mutations                                    | Message removal, chat timeouts, early lifts, complete history                                           |
+| Programs   | Creator decision, Lava Rain, race CRUD/settlement, quest CRUD routes                                   | Creator applications/codes/revshare, promotions, wager races, daily quest definitions                   |
+| Audit      | `GET /v1/admin/audit`                                                                                  | Search actors, actions, targets, details, and chain hashes                                              |
 
 ## Internal bot protocol
 

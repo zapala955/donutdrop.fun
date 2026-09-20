@@ -31,11 +31,7 @@ function houseMarginMinor(config: AppConfig, wagerMinor: bigint): bigint {
  * truncates, so small wagers can round to nothing — that is correct, and preferable to rounding a
  * fraction of a unit up a few million times a day.
  */
-export function revshareMinor(
-  config: AppConfig,
-  wagerMinor: bigint,
-  marginMinor?: bigint,
-): bigint {
+export function revshareMinor(config: AppConfig, wagerMinor: bigint, marginMinor?: bigint): bigint {
   if (wagerMinor <= 0n) return 0n;
   /* See rakebackMinor for why an explicit margin exists: a skill duel's margin is a rake on the
    * pot, not an edge on the wager, and the referrer is owed a share of what was really collected
@@ -48,6 +44,7 @@ interface ReferralRow {
   referrer_id: string;
   wagered_minor: string;
   bonus_unlocked_at: Date | null;
+  revshare_bps?: number;
 }
 
 /**
@@ -73,14 +70,21 @@ export async function accrueReferralWager(
    * same running total, both decide the threshold was not crossed, and the milestone would never
    * fire. The lock also serializes the two writes to wagered_minor. */
   const existing = await client.query<ReferralRow>(
-    `SELECT referrer_id, wagered_minor, bonus_unlocked_at
-       FROM referrals WHERE referee_id = $1 FOR UPDATE`,
-    [refereeId],
+    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at,
+            coalesce((
+              SELECT a.granted_revshare_bps FROM creator_applications a
+               WHERE a.user_id = r.referrer_id AND a.status = 'approved'
+               ORDER BY a.reviewed_at DESC LIMIT 1
+            ), $2)::integer AS revshare_bps
+       FROM referrals r WHERE r.referee_id = $1 FOR UPDATE`,
+    [refereeId, config.referralRevshareBps],
   );
   const referral = existing.rows[0];
   if (!referral) return;
 
-  const commission = revshareMinor(config, wagerMinor, marginMinor);
+  const margin = marginMinor ?? houseMarginMinor(config, wagerMinor);
+  const commission =
+    (margin * BigInt(referral.revshare_bps ?? config.referralRevshareBps)) / 10_000n;
   const wageredAfter = BigInt(referral.wagered_minor) + wagerMinor;
 
   await client.query(

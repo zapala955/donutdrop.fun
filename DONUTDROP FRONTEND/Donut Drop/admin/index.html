@@ -1,22 +1,21 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<!-- Empty means same origin, which keeps the session cookie and strict origin check aligned. -->
-<meta name="api-base-url" content="" />
-<!-- An admin console has no business being indexed, previewed or unfurled anywhere. -->
-<meta name="robots" content="noindex, nofollow, noarchive" />
-<meta name="referrer" content="no-referrer" />
-<title>Donut Drop — Admin</title>
-<!-- The ?v= is a second belt beside the no-store header nginx sends for these two files: it
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Empty means same origin, which keeps the session cookie and strict origin check aligned. -->
+    <meta name="api-base-url" content="" />
+    <!-- An admin console has no business being indexed, previewed or unfurled anywhere. -->
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Donut Drop — Admin</title>
+    <!-- The ?v= is a second belt beside the no-store header nginx sends for these two files: it
      changes the URL, so no layer that already holds a copy can answer for it. Bump it whenever
      this console's behaviour changes in a way a stale copy would hide. -->
-<link rel="stylesheet" href="admin.css?v=4" />
-</head>
-<body>
-
-<!--
+    <link rel="stylesheet" href="admin.css?v=5" />
+  </head>
+  <body>
+    <!--
   The token arrives in the URL FRAGMENT (`/admin/#<token>`), never the path or the query.
 
   A fragment is not transmitted in an HTTP request at all, which is what makes the one-time link
@@ -27,164 +26,346 @@
   admin.js reads it, POSTs it once, and clears it from the address bar immediately.
 -->
 
-<a class="skip" href="#main">Skip to content</a>
+    <a class="skip" href="#main">Skip to content</a>
 
-<header class="top">
-  <div class="brand">
-    <span class="brand__mark" aria-hidden="true"></span>
-    <span class="brand__text">Donut Drop <b>Admin</b></span>
-  </div>
-  <div class="who" id="who" hidden>
-    <span class="who__name" id="whoName"></span>
-    <button class="btn btn--ghost" type="button" id="signOut">Sign out</button>
-  </div>
-</header>
-
-<!-- The three states this page can be in. Exactly one is ever visible. -->
-<main id="main">
-
-  <section class="gate" id="gate" aria-live="polite">
-    <div class="gate__card">
-      <h1 class="gate__title" id="gateTitle">Opening your session…</h1>
-      <p class="gate__body" id="gateBody">Verifying the link you were given.</p>
-      <p class="gate__hint" id="gateHint" hidden>
-        Run <code>/dashboard</code> in Discord to mint a new one.
-      </p>
-    </div>
-  </section>
-
-  <div class="console" id="console" hidden>
-
-    <nav class="tabs" aria-label="Sections">
-      <button class="tab" type="button" data-panel="overview" aria-selected="true">Overview</button>
-      <button class="tab" type="button" data-panel="players" aria-selected="false">Players</button>
-      <button class="tab" type="button" data-panel="bots" aria-selected="false">Bots</button>
-      <button class="tab" type="button" data-panel="jobs" aria-selected="false">Jobs</button>
-      <button class="tab" type="button" data-panel="items" aria-selected="false">Items</button>
-    </nav>
-
-    <section class="panel" data-panel="overview">
-      <div class="panel__head">
-        <h2>Overview</h2>
-        <button class="btn" type="button" data-refresh="overview">Refresh</button>
+    <header class="top">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__text">Donut Drop <b>Admin</b></span>
       </div>
-      <div class="stats" id="overviewStats"></div>
-    </section>
-
-    <section class="panel" data-panel="players" hidden>
-      <div class="panel__head">
-        <h2>Players</h2>
-        <form class="search" id="playerSearch" role="search">
-          <label class="search__label" for="playerQuery">Search players</label>
-          <input class="search__input" id="playerQuery" type="search" name="q"
-                 placeholder="Username…" autocomplete="off" maxlength="64" />
-          <button class="btn" type="submit">Search</button>
-        </form>
+      <div class="who" id="who" hidden>
+        <span class="who__name" id="whoName"></span>
+        <button class="btn btn--ghost" type="button" id="signOut">Sign out</button>
       </div>
-      <div class="tablewrap"><table class="grid" id="playerTable"></table></div>
-    </section>
+    </header>
 
-    <section class="panel" data-panel="bots" hidden>
-      <div class="panel__head">
-        <h2>Bots</h2>
-        <button class="btn" type="button" data-refresh="bots">Refresh</button>
-      </div>
-      <div class="tablewrap"><table class="grid" id="botTable"></table></div>
+    <!-- The three states this page can be in. Exactly one is ever visible. -->
+    <main id="main">
+      <section class="gate" id="gate" aria-live="polite">
+        <div class="gate__card">
+          <h1 class="gate__title" id="gateTitle">Opening your session…</h1>
+          <p class="gate__body" id="gateBody">Verifying the link you were given.</p>
+          <p class="gate__hint" id="gateHint" hidden>
+            Run <code>/dashboard</code> in Discord to mint a new one.
+          </p>
+        </div>
+      </section>
 
-      <!-- Every in-game payment an operator has ordered, newest first. It sits under the bots
+      <div class="console" id="console" hidden>
+        <nav class="tabs" aria-label="Sections">
+          <button class="tab" type="button" data-panel="overview" aria-selected="true">
+            Overview
+          </button>
+          <button class="tab" type="button" data-panel="players" aria-selected="false">
+            Players
+          </button>
+          <button class="tab" type="button" data-panel="economy" aria-selected="false">
+            Economy
+          </button>
+          <button class="tab" type="button" data-panel="catalog" aria-selected="false">
+            Catalog
+          </button>
+          <button class="tab" type="button" data-panel="cases" aria-selected="false">Cases</button>
+          <button class="tab" type="button" data-panel="bots" aria-selected="false">Bots</button>
+          <button class="tab" type="button" data-panel="jobs" aria-selected="false">Jobs</button>
+          <button class="tab" type="button" data-panel="moderation" aria-selected="false">
+            Moderation
+          </button>
+          <button class="tab" type="button" data-panel="programs" aria-selected="false">
+            Programs
+          </button>
+          <button class="tab" type="button" data-panel="audit" aria-selected="false">Audit</button>
+          <button class="tab" type="button" data-panel="system" aria-selected="false">
+            System
+          </button>
+        </nav>
+
+        <section class="panel" data-panel="overview">
+          <div class="panel__head">
+            <h2>Overview</h2>
+            <button class="btn" type="button" data-refresh="overview">Refresh</button>
+          </div>
+          <div class="stats" id="overviewStats"></div>
+          <div class="attention" id="overviewAttention"></div>
+        </section>
+
+        <section class="panel" data-panel="economy" hidden>
+          <div class="panel__head">
+            <h2>Economy &amp; payouts</h2>
+            <form class="search" id="economySearch" role="search">
+              <label class="search__label" for="economyQuery">Search ledger</label>
+              <input
+                class="search__input"
+                id="economyQuery"
+                type="search"
+                placeholder="Player or transaction kind..."
+                maxlength="80"
+              />
+              <button class="btn" type="submit">Search</button>
+            </form>
+            <button class="btn" type="button" data-refresh="economy">Refresh</button>
+          </div>
+          <div class="stats" id="economyStats"></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Cash withdrawals needing attention</h3>
+            <span class="hint">Approvals and ambiguous bot outcomes are resolved here.</span>
+          </div>
+          <div class="tablewrap"><table class="grid" id="withdrawalTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Recent wallet ledger</h3></div>
+          <div class="tablewrap"><table class="grid" id="economyTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Recent in-game cash receipts</h3></div>
+          <div class="tablewrap"><table class="grid" id="depositTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="catalog" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Catalog &amp; inventory</h2>
+              <span class="hint">Prices, visibility and physical stock allocation.</span>
+            </div>
+            <div class="rowacts">
+              <button class="btn" type="button" id="createCatalogItem">Add item</button>
+              <button class="btn" type="button" id="publishLadder">Publish upgrade ladder</button>
+              <button class="btn" type="button" data-refresh="catalog">Refresh</button>
+            </div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="catalogTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Observed bot items</h3></div>
+          <div class="tablewrap"><table class="grid" id="itemTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Inventory lots</h3></div>
+          <div class="tablewrap"><table class="grid" id="inventoryTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="cases" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Cases</h2>
+              <span class="hint">Create, price, publish and change weighted drop pools.</span>
+            </div>
+            <div class="rowacts">
+              <button class="btn" type="button" id="createCase">Create case</button>
+              <button class="btn" type="button" data-refresh="cases">Refresh</button>
+            </div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="caseTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="players" hidden>
+          <div class="panel__head">
+            <h2>Players</h2>
+            <form class="search" id="playerSearch" role="search">
+              <label class="search__label" for="playerQuery">Search players</label>
+              <input
+                class="search__input"
+                id="playerQuery"
+                type="search"
+                name="q"
+                placeholder="Username…"
+                autocomplete="off"
+                maxlength="64"
+              />
+              <button class="btn" type="submit">Search</button>
+            </form>
+          </div>
+          <div class="tablewrap"><table class="grid" id="playerTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="bots" hidden>
+          <div class="panel__head">
+            <h2>Bots</h2>
+            <button class="btn" type="button" data-refresh="bots">Refresh</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="botTable"></table></div>
+
+          <!-- Every in-game payment an operator has ordered, newest first. It sits under the bots
            rather than in a tab of its own because it is the receipt for the button above it:
            after paying somebody you look here to see whether it actually landed. -->
-      <div class="panel__head panel__head--sub">
-        <h3>Operator payouts</h3>
-        <span class="hint">Paid from the bot's own in-game balance. No site wallet is touched.</span>
+          <div class="panel__head panel__head--sub">
+            <h3>Operator payouts</h3>
+            <span class="hint"
+              >Paid from the bot's own in-game balance. No site wallet is touched.</span
+            >
+          </div>
+          <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="jobs" hidden>
+          <div class="panel__head">
+            <h2>Jobs</h2>
+            <button class="btn" type="button" data-refresh="jobs">Refresh</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="jobTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="moderation" hidden>
+          <div class="panel__head">
+            <h2>Chat moderation</h2>
+            <div class="rowacts">
+              <button class="btn" type="button" id="timeoutPlayer">Timeout player</button>
+              <button class="btn" type="button" id="liftTimeout">Lift timeout</button>
+              <button class="btn" type="button" data-refresh="moderation">Refresh</button>
+            </div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="messageTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Timeout history</h3></div>
+          <div class="tablewrap"><table class="grid" id="timeoutTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="programs" hidden>
+          <div class="panel__head">
+            <h2>Programs &amp; rewards</h2>
+            <button class="btn" type="button" data-refresh="programs">Refresh</button>
+          </div>
+          <div class="panel__head panel__head--sub">
+            <h3>Lava Rain promotion</h3>
+            <button class="btn" type="button" id="startRain">Start Lava Rain</button>
+          </div>
+          <div class="stats" id="rainStats"></div>
+          <div class="panel__head panel__head--sub"><h3>Creator applications</h3></div>
+          <div class="tablewrap"><table class="grid" id="creatorTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Wager races</h3>
+            <div class="rowacts">
+              <button class="btn" type="button" id="createRace">Create race</button>
+              <button class="btn" type="button" id="settleRaces">Settle due races</button>
+            </div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="raceTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Daily quests</h3>
+            <button class="btn" type="button" id="createQuest">Create quest</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="questTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="audit" hidden>
+          <div class="panel__head">
+            <h2>Audit log</h2>
+            <form class="search" id="auditSearch" role="search">
+              <label class="search__label" for="auditQuery">Search audit log</label>
+              <input
+                class="search__input"
+                id="auditQuery"
+                type="search"
+                placeholder="Actor, target or ID..."
+                maxlength="80"
+              />
+              <button class="btn" type="submit">Search</button>
+            </form>
+            <button class="btn" type="button" data-refresh="audit">Refresh</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="auditTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="system" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>System configuration</h2>
+              <span class="hint" id="systemNote"></span>
+            </div>
+            <button class="btn" type="button" data-refresh="system">Refresh</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="systemTable"></table></div>
+        </section>
       </div>
-      <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
-    </section>
+    </main>
 
-    <section class="panel" data-panel="jobs" hidden>
-      <div class="panel__head">
-        <h2>Jobs</h2>
-        <button class="btn" type="button" data-refresh="jobs">Refresh</button>
-      </div>
-      <div class="tablewrap"><table class="grid" id="jobTable"></table></div>
-    </section>
-
-    <section class="panel" data-panel="items" hidden>
-      <div class="panel__head">
-        <h2>Observed items</h2>
-        <!-- The upgrader's fixed prize ladder is set here rather than in a migration or a seed
-             file, because every catalogue price has to carry an operator and a reason. -->
-        <button class="btn" type="button" id="publishLadder">Publish upgrade ladder</button>
-        <button class="btn" type="button" data-refresh="items">Refresh</button>
-      </div>
-      <div class="tablewrap"><table class="grid" id="itemTable"></table></div>
-    </section>
-
-  </div>
-</main>
-
-<!-- Destructive actions confirm here, for the same reason they confirm in Discord. -->
-<dialog class="confirm" id="confirm" aria-labelledby="confirmTitle">
-  <form method="dialog" class="confirm__form">
-    <h2 class="confirm__title" id="confirmTitle">Confirm</h2>
-    <p class="confirm__body" id="confirmBody"></p>
-    <!-- Shown only for the actions that move money. `1m` is accepted as well as `1000000`,
+    <!-- Destructive actions confirm here, for the same reason they confirm in Discord. -->
+    <dialog class="confirm" id="confirm" aria-labelledby="confirmTitle">
+      <form method="dialog" class="confirm__form">
+        <h2 class="confirm__title" id="confirmTitle">Confirm</h2>
+        <p class="confirm__body" id="confirmBody"></p>
+        <!-- Shown only for the actions that move money. `1m` is accepted as well as `1000000`,
          because demanding every zero on a ten-figure balance is an invitation to typo one — and
          the exact figure is echoed underneath before anything is confirmed, so the shorthand is
          never the last word on what is about to move. -->
-    <div class="confirm__money" id="confirmMoney" hidden>
-      <label class="confirm__label" for="confirmAmount" id="confirmAmountLabel">Amount</label>
-      <input class="confirm__input" id="confirmAmount" name="amount" type="text"
-             inputmode="decimal" maxlength="24" autocomplete="off"
-             placeholder="e.g. 250000 or 250k" />
-      <output class="confirm__echo" id="confirmEcho" for="confirmAmount"></output>
-    </div>
+        <div class="confirm__money" id="confirmMoney" hidden>
+          <label class="confirm__label" for="confirmAmount" id="confirmAmountLabel">Amount</label>
+          <input
+            class="confirm__input"
+            id="confirmAmount"
+            name="amount"
+            type="text"
+            inputmode="decimal"
+            maxlength="24"
+            autocomplete="off"
+            placeholder="e.g. 250000 or 250k"
+          />
+          <output class="confirm__echo" id="confirmEcho" for="confirmAmount"></output>
+        </div>
 
-    <label class="confirm__label" for="confirmReason">Reason (recorded in the audit log)</label>
-    <input class="confirm__input" id="confirmReason" name="reason" type="text"
-           minlength="3" maxlength="256" required autocomplete="off" />
-    <div class="confirm__actions">
-      <!-- formnovalidate, because the reason field beside it is `required`. Without this the
+        <label class="confirm__label" for="confirmReason">Reason (recorded in the audit log)</label>
+        <input
+          class="confirm__input"
+          id="confirmReason"
+          name="reason"
+          type="text"
+          minlength="3"
+          maxlength="256"
+          required
+          autocomplete="off"
+        />
+        <div class="confirm__actions">
+          <!-- formnovalidate, because the reason field beside it is `required`. Without this the
            browser runs constraint validation on Cancel too and refuses to submit, so an operator
            who opens the dialog and thinks better of it cannot close it without first inventing a
            reason for the thing they have decided not to do. -->
-      <button class="btn btn--ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn btn--danger" type="submit" value="go" id="confirmGo">Confirm</button>
-    </div>
-  </form>
-</dialog>
+          <button class="btn btn--ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
+          <button class="btn btn--danger" type="submit" value="go" id="confirmGo">Confirm</button>
+        </div>
+      </form>
+    </dialog>
 
-<!-- One player, everything about them, and every lever that applies to them.
+    <!-- Structured editor used by catalog, cases, races, quests and creator review. Fields are
+     constructed as DOM nodes by admin.js; server-supplied values are never interpolated. -->
+    <dialog class="editor" id="editor" aria-labelledby="editorTitle">
+      <form method="dialog" class="editor__form" id="editorForm">
+        <header class="editor__head">
+          <div>
+            <h2 class="confirm__title" id="editorTitle">Edit</h2>
+            <p class="confirm__body" id="editorBody"></p>
+          </div>
+          <button class="btn btn--ghost" type="submit" value="cancel" formnovalidate>Close</button>
+        </header>
+        <div class="editor__fields" id="editorFields"></div>
+        <div class="confirm__actions">
+          <button class="btn btn--ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
+          <button class="btn" type="submit" value="save" id="editorSave">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- One player, everything about them, and every lever that applies to them.
      A dialog rather than a route: the operator came from a search result and is going straight
      back to it, and a modal keeps that list underneath instead of making them search twice. -->
-<dialog class="sheet" id="playerSheet" aria-labelledby="sheetName">
-  <div class="sheet__inner">
-    <header class="sheet__head">
-      <div>
-        <h2 class="sheet__name" id="sheetName"></h2>
-        <p class="sheet__id mono" id="sheetId"></p>
+    <dialog class="sheet" id="playerSheet" aria-labelledby="sheetName">
+      <div class="sheet__inner">
+        <header class="sheet__head">
+          <div>
+            <h2 class="sheet__name" id="sheetName"></h2>
+            <p class="sheet__id mono" id="sheetId"></p>
+          </div>
+          <button class="btn btn--ghost" type="button" id="sheetClose">Close</button>
+        </header>
+
+        <div class="sheet__facts" id="sheetFacts"></div>
+
+        <div class="sheet__actions" id="sheetActions"></div>
+
+        <section class="sheet__block">
+          <h3 class="sheet__h">Live sessions</h3>
+          <div class="tablewrap"><table class="grid" id="sheetSessions"></table></div>
+        </section>
+
+        <section class="sheet__block">
+          <h3 class="sheet__h">Recent ledger</h3>
+          <div class="tablewrap"><table class="grid" id="sheetLedger"></table></div>
+        </section>
       </div>
-      <button class="btn btn--ghost" type="button" id="sheetClose">Close</button>
-    </header>
+    </dialog>
 
-    <div class="sheet__facts" id="sheetFacts"></div>
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-    <div class="sheet__actions" id="sheetActions"></div>
-
-    <section class="sheet__block">
-      <h3 class="sheet__h">Live sessions</h3>
-      <div class="tablewrap"><table class="grid" id="sheetSessions"></table></div>
-    </section>
-
-    <section class="sheet__block">
-      <h3 class="sheet__h">Recent ledger</h3>
-      <div class="tablewrap"><table class="grid" id="sheetLedger"></table></div>
-    </section>
-  </div>
-</dialog>
-
-<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
-
-<script type="module" src="admin.js?v=4"></script>
-</body>
+    <script type="module" src="admin.js?v=5"></script>
+  </body>
 </html>

@@ -250,7 +250,15 @@ export function assertVipSolvency(config: AppConfig): void {
   const tierBps = config.rakebackEnabled
     ? Object.values(config.rakebackTierBps).reduce((sum, bps) => sum + bps, 0)
     : 0;
-  const referralBps = config.referralsEnabled ? config.referralRevshareBps : 0;
+  /* An approved creator can replace the default referral rate with the programme ceiling. Size
+   * the platform against that ceiling, not today's ordinary rate, or the admin panel could approve
+   * a perfectly valid creator application that makes the combined giveback insolvent. */
+  const referralBps = config.referralsEnabled
+    ? Math.max(
+        config.referralRevshareBps,
+        config.creatorProgrammeEnabled ? config.creatorMaxRevshareBps : 0,
+      )
+    : 0;
   const marginShare = ((BigInt(tierBps) + BigInt(referralBps)) * worstEdge) / 10_000n;
 
   /* The vault jackpot is a share of WAGER, like the VIP rate and unlike the four tiers, so it adds

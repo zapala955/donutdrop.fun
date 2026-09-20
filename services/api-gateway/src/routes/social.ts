@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
+import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import { creditWallet, wageredSince } from '../lib/cash-settlement.js';
 import type { Database } from '../lib/db.js';
@@ -61,6 +62,7 @@ const rainSchema = z
     poolMinor: z.string().regex(/^[1-9][0-9]{0,18}$/),
     /** Minutes the claim window stays open. Defaults to the configured value. */
     claimMinutes: z.number().int().min(1).max(60).optional(),
+    reason: safePublicText(1, 240).optional(),
   })
   .strict();
 
@@ -361,20 +363,41 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
 
       const minutes = body.claimMinutes ?? config.lavaRainClaimMinutes;
       const id = randomUUID();
-      await db.query(
-        `INSERT INTO lava_rain_events
-           (id, pool_minor, created_by, min_wagered_minor, window_minutes,
-            opens_at, closes_at, status)
-         VALUES ($1, $2, $3, $4, $5, now(), now() + make_interval(mins => $6), 'open')`,
-        [
-          id,
-          pool.toString(),
-          userId,
-          config.lavaRainMinWageredMinor.toString(),
-          config.lavaRainWindowMinutes,
-          minutes,
-        ],
-      );
+      await db.transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended('lava-rain-create', 0))");
+        const existing = await client.query(
+          `SELECT 1 FROM lava_rain_events
+            WHERE status = 'open' AND closes_at > now() LIMIT 1`,
+        );
+        if (existing.rows[0]) {
+          throw new AppError(409, 'RAIN_ALREADY_ACTIVE', 'A Lava Rain event is already active');
+        }
+        await client.query(
+          `INSERT INTO lava_rain_events
+             (id, pool_minor, created_by, min_wagered_minor, window_minutes,
+              opens_at, closes_at, status)
+           VALUES ($1, $2, $3, $4, $5, now(), now() + make_interval(mins => $6), 'open')`,
+          [
+            id,
+            pool.toString(),
+            userId,
+            config.lavaRainMinWageredMinor.toString(),
+            config.lavaRainWindowMinutes,
+            minutes,
+          ],
+        );
+        await appendAudit(client, config, {
+          actorUserId: userId,
+          action: 'lava_rain.create',
+          targetType: 'lava_rain_event',
+          targetId: id,
+          details: {
+            poolMinor: pool.toString(),
+            claimMinutes: minutes,
+            reason: body.reason ?? 'Manual operator promotion',
+          },
+        });
+      });
       return { id, poolMinor: pool.toString(), claimMinutes: minutes };
     },
   );

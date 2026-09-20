@@ -83,7 +83,7 @@ export async function refundWithdrawal(
   const closed = await client.query<{ user_id: string; amount_minor: string }>(
     `UPDATE cash_withdrawals
         SET status = 'failed', error_code = $2, updated_at = now()
-      WHERE id = $1 AND status IN ('pending_approval', 'queued', 'processing')
+      WHERE id = $1 AND status IN ('pending_approval', 'queued', 'processing', 'manual_review')
       RETURNING user_id, amount_minor`,
     [withdrawalId, errorCode],
   );

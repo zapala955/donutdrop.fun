@@ -92,6 +92,8 @@ const caseUpdateSchema = z
     imageUrl: z.url().startsWith('https://').max(2048).nullable().optional(),
     priceMinor: positiveValueSchema.optional(),
     enabled: z.boolean().optional(),
+    communityStatus: z.enum(['draft', 'published', 'retired']).optional(),
+    royaltyBps: z.number().int().min(0).max(200).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     drops: z.array(caseDropSchema).min(1).max(100).optional(),
     reason: safeText(3, 256),
@@ -108,6 +110,9 @@ interface CaseRow {
   price_minor: string;
   enabled: boolean;
   metadata: Record<string, unknown>;
+  creator_username?: string | null;
+  royalty_bps?: number;
+  community_status?: 'first_party' | 'draft' | 'published' | 'retired';
 }
 
 interface DropRow {
@@ -511,8 +516,11 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
 
   app.get('/v1/admin/cases', { preHandler: requireAdminRead }, async () => {
     const result = await db.query<CaseRow>(
-      `SELECT id, slug, name, description, image_url, price_minor, enabled, metadata
-         FROM cases ORDER BY created_at, id`,
+      `SELECT c.id, c.slug, c.name, c.description, c.image_url, c.price_minor, c.enabled,
+              c.metadata, c.royalty_bps, c.community_status,
+              u.minecraft_username AS creator_username
+         FROM cases c LEFT JOIN users u ON u.id = c.creator_user_id
+        ORDER BY c.created_at, c.id`,
     );
     return { cases: await attachDrops(db, result.rows, false) };
   });
@@ -561,12 +569,25 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
     if (body.drops) assertUniqueDrops(body.drops);
     const actor = requireUserId(request.authUser?.id);
     await db.transaction(async (client) => {
-      const current = await client.query<{ id: string; price_minor: string }>(
-        'SELECT id, price_minor FROM cases WHERE id = $1 FOR UPDATE',
-        [params.id],
-      );
+      const current = await client.query<{
+        id: string;
+        price_minor: string;
+        creator_user_id: string | null;
+      }>('SELECT id, price_minor, creator_user_id FROM cases WHERE id = $1 FOR UPDATE', [
+        params.id,
+      ]);
       const existing = current.rows[0];
       if (!existing) throw new AppError(404, 'CASE_NOT_FOUND', 'Case was not found');
+      if (
+        (body.communityStatus !== undefined || body.royaltyBps !== undefined) &&
+        existing.creator_user_id === null
+      ) {
+        throw new AppError(
+          400,
+          'NOT_COMMUNITY_CASE',
+          'Community status and royalty apply only to creator cases',
+        );
+      }
 
       if (body.drops) {
         await assertCatalogDropsExist(
@@ -588,8 +609,7 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
       if (body.priceMinor !== undefined || body.drops) {
         const priceMinor = BigInt(body.priceMinor ?? existing.price_minor);
         let drops = body.drops as
-          | ReadonlyArray<{ catalogItemId: string; weight: number; quantity: number }>
-          | undefined;
+          ReadonlyArray<{ catalogItemId: string; weight: number; quantity: number }> | undefined;
         if (!drops) {
           const stored = await client.query<{
             catalog_item_id: string;
@@ -617,8 +637,16 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
            description = COALESCE($4, description),
            image_url = CASE WHEN $5::boolean THEN $6 ELSE image_url END,
            price_minor = COALESCE($7::bigint, price_minor),
-           enabled = COALESCE($8::boolean, enabled),
-           metadata = COALESCE($9::jsonb, metadata),
+           enabled = CASE
+             WHEN $10::text = 'published' THEN true
+             WHEN $10::text IN ('draft', 'retired') THEN false
+             ELSE COALESCE($8::boolean, enabled)
+           END,
+           metadata = CASE WHEN $11::integer IS NULL THEN COALESCE($9::jsonb, metadata)
+             ELSE jsonb_set(COALESCE($9::jsonb, metadata), '{royaltyBps}',
+                            to_jsonb($11::integer), true) END,
+           community_status = COALESCE($10::text, community_status),
+           royalty_bps = COALESCE($11::integer, royalty_bps),
            updated_at = now()
          WHERE id = $1`,
         [
@@ -631,6 +659,8 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
           body.priceMinor ?? null,
           body.enabled ?? null,
           body.metadata === undefined ? null : JSON.stringify(body.metadata),
+          body.communityStatus ?? null,
+          body.royaltyBps ?? null,
         ],
       );
       await appendAudit(client, config, {
@@ -674,6 +704,9 @@ async function attachDrops(db: Database, cases: CaseRow[], enabledOnly = true) {
       priceMinor: entry.price_minor,
       enabled: entry.enabled,
       metadata: entry.metadata,
+      creatorUsername: entry.creator_username ?? null,
+      royaltyBps: entry.royalty_bps ?? 0,
+      communityStatus: entry.community_status ?? 'first_party',
       totalWeight: totalWeight.toString(),
       drops: drops.map((drop) => ({
         catalogItemId: drop.catalog_item_id,

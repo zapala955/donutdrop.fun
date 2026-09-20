@@ -134,6 +134,12 @@ allowed to start. The readiness route is pinned to the newest schema marker. Sta
 revalidation because their filenames are not content-hashed, so a deploy cannot strand browsers
 on a week-old JavaScript file.
 
+The complete update command, including the admin-console migration, is:
+
+```bash
+cd /opt/donutdrop/app && git fetch origin && git pull --ff-only origin main && sudo COMPOSE_ENV_FILE=/opt/donutdrop/shared/donutdrop.env ./infra/vps/deploy.sh
+```
+
 ## 6. Discord control plane (optional)
 
 The admin dashboard has no password. The only way in is a one-time link minted by a Discord slash
@@ -174,7 +180,7 @@ that guild or any other.
 Then set in `/opt/donutdrop/shared/donutdrop.env`. `ADMIN_MINECRAFT_IDS` is the one that is easy
 to miss: the operator has to be an administrator in its own right, and the gateway refuses to boot
 if a Discord mapping points at an identity that is not listed there. A Discord mapping is
-permission to *use* an administrator identity, never permission to become one.
+permission to _use_ an administrator identity, never permission to become one.
 
 ```
 ADMIN_MINECRAFT_IDS=mc:the-identity-from-above
