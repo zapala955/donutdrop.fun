@@ -10,22 +10,24 @@ import { parseWith } from '../lib/validation.js';
 import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
 
 /**
- * Invite & Earn, and the Discord verification that gates half of it.
+ * Invite & Earn.
  *
  * Two payouts hang off one relationship. The revenue share accrues silently on every wager the
- * referee makes and is settled by the game routes themselves; nothing here pays it. What this
- * file owns is the relationship — who invited whom, and whether the two milestone conditions have
- * been met — plus the OAuth round trip that proves the Discord half.
+ * referee makes and is settled by the game routes themselves; nothing here pays it. What this file
+ * owns is the dashboard, the code a player chooses, and the Discord OAuth round trip — which is no
+ * longer part of any payout gate and is kept because an account may still want to be linked.
  *
- * The dashboard reads from `referrals` rather than summing `referral_earnings`, because the row
- * is what the payout gate actually consults. A progress bar computed from a different source than
- * the gate is a progress bar that can reach 100% while the gate stays shut.
+ * It does NOT own redemption. A code is spent in the transaction that creates an account, in
+ * auth.ts, because "has this person signed up yet" is a question only that transaction can answer
+ * without arguing about thresholds.
+ *
+ * The dashboard reads from `referrals` rather than summing `referral_earnings`, because the row is
+ * what the payout gate actually consults. A progress bar computed from a different source than the
+ * gate is a progress bar that can reach 100% while the gate stays shut.
  */
 
-const attachSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).strict();
-
-/* Renaming takes the same alphabet as claiming, because the two have to agree: a code a player can
- * set but nobody can type into the attach endpoint is a link that never works. */
+/* The alphabet has to match the one auth.ts accepts on a login, or a player could set a code that
+ * nobody is able to redeem. */
 const renameSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).strict();
 
 /**
@@ -233,48 +235,21 @@ export async function registerReferralRoutes(
     },
   );
 
-  // ── claiming an invite ────────────────────────────────────────────────────
-
-  app.post(
-    '/v1/referrals/attach',
-    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request) => {
-      requireProgramme();
-      const body = parseWith(attachSchema, request.body);
-      const userId = requireUserId(request.authUser?.id);
-
-      return db.transaction(async (client) => {
-        const owner = await client.query<{ user_id: string }>(
-          'SELECT user_id FROM referral_codes WHERE code = $1',
-          [body.code],
-        );
-        const referrerId = owner.rows[0]?.user_id;
-        if (!referrerId) throw new AppError(404, 'REFERRAL_CODE_UNKNOWN', 'No such invite code');
-        if (referrerId === userId) {
-          throw new AppError(400, 'REFERRAL_SELF', 'You cannot use your own invite code');
-        }
-
-        /* One referrer per account, forever. ON CONFLICT DO NOTHING rather than an upsert: being
-         * able to re-point an existing referral would let a player shop their own wager history
-         * around to whoever paid them the most for it. */
-        const inserted = await client.query(
-          `INSERT INTO referrals (referee_id, referrer_id, code)
-           VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING`,
-          [userId, referrerId, body.code],
-        );
-        if (!inserted.rowCount) {
-          conflict('REFERRAL_ALREADY_SET', 'This account already has a referrer');
-        }
-
-        /* The milestone gate is deliberately NOT tested here. A new row starts at zero wagered, so
-         * only play that happens after the code is attached counts toward the threshold — a player
-         * cannot wager their way to $25M first and then go shopping for a referrer to sell the
-         * completed milestone to. The normal flow attaches the code on arrival, long before any of
-         * it is wagered, so nobody legitimate loses anything to this. */
-        return { attached: true };
-      });
-    },
-  );
+  /* POST /v1/referrals/attach stood here.
+   *
+   * It let any logged-in account without a referrer redeem a code, which included accounts that
+   * had been playing for months: paste a friend's code and a player the site had already acquired,
+   * and paid nothing for, became somebody's referral.
+   *
+   * The rule is that only somebody who has not signed up yet can use a code, and the honest way to
+   * enforce it was not to add a freshness check here — every such rule is a threshold argument and
+   * every threshold has an edge somebody sits on. Redemption moved to the transaction that creates
+   * the account, in auth.ts, where `existing.rows[0]` answers the question exactly. The code rides
+   * there on the login challenge.
+   *
+   * So there is no endpoint here any more. Not a guarded one — none. Attaching a referrer to an
+   * account that already existed is now unexpressible through this API rather than merely refused.
+   */
 
   // ── Discord verification ──────────────────────────────────────────────────
 

@@ -20,6 +20,15 @@ import { creditWallet } from '../lib/wallet.js';
 const startSchema = z
   .object({
     minecraftUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN),
+    /* An invite code, if the signup form carried one.
+     *
+     * Optional, and never fatal. A code that is wrong, expired or owned by nobody must not be able
+     * to fail a login the player has already paid for, so this is recorded here and resolved at
+     * completion, where the worst case is that no referral is created. */
+    referralCode: z
+      .string()
+      .regex(/^[A-Z0-9]{6,16}$/)
+      .optional(),
   })
   .strict();
 const challengeStatusSchema = z
@@ -49,6 +58,8 @@ interface ChallengeRow {
   confirmed_at: Date | null;
   completed_at: Date | null;
   attempts: number;
+  /** Only selected by the completion path; the status route has no use for it. */
+  referral_code?: string | null;
   expired: boolean;
 }
 
@@ -109,8 +120,9 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
       const linkCode = generateLinkCode();
       await db.query(
         `INSERT INTO auth_link_challenges
-           (id, requested_username, normalized_username, code_hash, browser_token_hash, bot_id, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, now() + interval '10 minutes')`,
+           (id, requested_username, normalized_username, code_hash, browser_token_hash, bot_id,
+            referral_code, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '10 minutes')`,
         [
           challengeId,
           body.minecraftUsername,
@@ -118,6 +130,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           sha256(linkCode),
           sha256(browserToken),
           selectedBot.id,
+          body.referralCode ?? null,
         ],
       );
       reply.setCookie(linkCookieName(config), browserToken, {
@@ -178,7 +191,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
       const completion = await db.transaction<LinkCompletion>(async (client) => {
         const result = await client.query<ChallengeRow>(
           `SELECT id, method, requested_username, pay_amount, confirmed_identity,
-                  confirmed_username, confirmed_at, completed_at, attempts,
+                  confirmed_username, confirmed_at, completed_at, attempts, referral_code,
                   expires_at <= now() AS expired
              FROM auth_link_challenges
             WHERE id = $1 AND browser_token_hash = $2 FOR UPDATE`,
@@ -312,6 +325,37 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         );
         const row = inserted.rows[0];
         if (!row) throw new Error('User upsert returned no row');
+
+        /* The invite code is redeemed HERE, and only here.
+         *
+         * `existing.rows[0]` is the lookup taken under the ownership lock a few statements up: it
+         * is non-null exactly when this Minecraft identity already had an account, which makes
+         * `!existing.rows[0]` the only unambiguous "this player is signing up right now" this
+         * codebase has. A referral attached anywhere else would be attachable by an account the
+         * site had already acquired and paid nothing for.
+         *
+         * Everything below is best-effort by design. A code that is mistyped, retired or owned by
+         * nobody resolves to no rows and the login continues — the player has already paid for this
+         * challenge, and failing it over an optional field would be an extraordinary way to lose
+         * somebody's money and their signup at once.
+         */
+        if (!existing.rows[0] && config.referralsEnabled && challenge.referral_code) {
+          const referrer = await client.query<{ user_id: string }>(
+            'SELECT user_id FROM referral_codes WHERE code = $1',
+            [challenge.referral_code],
+          );
+          const referrerId = referrer.rows[0]?.user_id;
+          /* The self-check cannot fire for a row created a moment ago — a brand-new account owns no
+           * code. It is here because that is a property of today's insert order rather than a rule
+           * anybody stated, and the cost of asserting it is one comparison. */
+          if (referrerId && referrerId !== row.id) {
+            await client.query(
+              `INSERT INTO referrals (referee_id, referrer_id, code)
+               VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING`,
+              [row.id, referrerId, challenge.referral_code],
+            );
+          }
+        }
         if (acceptedTotpCounter !== null) {
           await client.query('UPDATE users SET admin_totp_last_counter = $2 WHERE id = $1', [
             row.id,

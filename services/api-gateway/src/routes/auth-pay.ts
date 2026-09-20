@@ -31,6 +31,16 @@ const startSchema = z
      * schema's required set means a deployment that has not configured a challenge does not reject
      * every sign-in for omitting one. */
     turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional(),
+    /* The invite code the signup form carried, if any.
+     *
+     * Recorded on the challenge and redeemed at completion, where the account is created — that is
+     * the only moment "has this person signed up yet" has an answer that is not a threshold
+     * argument. Optional and never fatal: a mistyped code must not be able to fail a login the
+     * player has already paid for. */
+    referralCode: z
+      .string()
+      .regex(/^[A-Z0-9]{6,16}$/)
+      .optional(),
   })
   .strict();
 const statusSchema = z.object({ challengeId: z.uuid() }).strict();
@@ -151,9 +161,9 @@ export async function registerPayLoginRoutes(
             await client.query(
               `INSERT INTO auth_link_challenges
                  (id, requested_username, normalized_username, code_hash, browser_token_hash,
-                  bot_id, expires_at, method, pay_amount)
+                  bot_id, expires_at, method, pay_amount, referral_code)
                VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
-                       'payment', $8)`,
+                       'payment', $8, $9)`,
               [
                 challengeId,
                 body.minecraftUsername,
@@ -164,6 +174,7 @@ export async function registerPayLoginRoutes(
                 selectedBot.id,
                 PAY_CHALLENGE_TTL_MINUTES,
                 payAmount,
+                body.referralCode ?? null,
               ],
             );
           });

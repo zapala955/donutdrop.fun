@@ -412,15 +412,39 @@ describe('custom invite codes', () => {
     assert.doesNotMatch(source, /SELECT user_id FROM referral_codes WHERE code = \$2/);
   });
 
-  it('takes the same alphabet the attach endpoint accepts', async () => {
-    /* A code a player can set but nobody can redeem is a link that silently never works. */
-    const source = await route();
-    const attach = source.match(/const attachSchema = [^;]+;/)?.[0] ?? '';
-    const rename = source.match(/const renameSchema = [^;]+;/)?.[0] ?? '';
-    assert.ok(attach && rename);
-    assert.equal(
-      attach.replace('attachSchema', 'X'),
-      rename.replace('renameSchema', 'X'),
+  it('takes the same alphabet the login will redeem', async () => {
+    /* A code a player can set but nobody can redeem is a link that silently never works, and the
+     * two ends are now in different files: the code is CHOSEN in referrals.ts and SPENT by the
+     * login in auth-pay.ts. That is exactly the kind of split where one side gets widened and the
+     * other does not, so the pattern is compared across the gap rather than assumed. */
+    const rename = (await route()).match(/regex\(\/\^\[A-Z0-9\]\{6,16\}\$\/\)/)?.[0];
+    const login = (
+      await readFile(path.resolve(import.meta.dirname, '../src/routes/auth-pay.ts'), 'utf8')
+    ).match(/regex\(\/\^\[A-Z0-9\]\{6,16\}\$\/\)/)?.[0];
+    assert.ok(rename, 'referrals.ts must constrain the code it lets a player set');
+    assert.ok(login, 'auth-pay.ts must constrain the code it accepts on a login');
+    assert.equal(rename, login);
+  });
+
+  it('is redeemed only by the transaction that creates the account', async () => {
+    /* The rule is "only somebody who has not signed up yet can use a code", and this is where it
+     * is enforced: `existing.rows[0]` is the ownership-locked lookup, so !existing is the only
+     * unambiguous "signing up right now" available. */
+    const auth = await readFile(
+      path.resolve(import.meta.dirname, '../src/routes/auth.ts'),
+      'utf8',
     );
+    assert.match(auth, /!existing\.rows\[0\] && config\.referralsEnabled && challenge\.referral_code/);
+    assert.match(auth, /INSERT INTO referrals \(referee_id, referrer_id, code\)/);
+
+    /* And there is no second path. An attach endpoint is what let an account that had been
+     * playing for months redeem a code, and its absence is the enforcement — not a check inside
+     * it. */
+    const referrals = await route();
+    /* Matched on the REGISTRATION, not on the path string: the comment recording why the endpoint
+       was removed names it, and a test that fails on its own tombstone teaches people to delete
+       the explanation. */
+    assert.doesNotMatch(referrals, /app\.(post|put|get)\(\s*'\/v1\/referrals\/attach'/);
+    assert.doesNotMatch(referrals, /INSERT INTO referrals \(/);
   });
 });

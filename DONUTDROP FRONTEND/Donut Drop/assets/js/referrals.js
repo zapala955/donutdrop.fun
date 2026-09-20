@@ -23,23 +23,18 @@
  * The bar is doing the real work. A referrer has one question about any given invite, "how far
  * along are they", and a progress row answers it faster than a sentence ever could.
  */
-import {
-  state,
-  bus,
-  refreshReferrals,
-  attachReferralCode,
-  setReferralCode,
-} from './store.js';
+import { state, bus, refreshReferrals, setReferralCode } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 
 let root = null;
-/* The invite code carried in on the URL, held until there is a session to attach it to. Somebody
- * following a referral link is almost never logged in at the moment they arrive, so binding it
- * eagerly would drop it for exactly the people it exists for. */
+/* The invite code carried in on the URL, held until the sign-in card can send it.
+ *
+ * Somebody following a referral link is almost never logged in at the moment they arrive, and by
+ * the time they are they have been through a payment round trip that replaces the URL. Holding it
+ * here, and in session storage behind it, is what stops the code being lost between the two. */
 let pendingCode = null;
-let attaching = false;
 
 export function mountReferrals(node) {
   root = $('#referRoot', node);
@@ -50,14 +45,10 @@ export function mountReferrals(node) {
     bus.addEventListener('change', (event) => {
       if (!root.isConnected) return;
       if (!['login', 'logout', 'ready', 'referrals', 'private'].includes(event.detail)) return;
-      /* A held code is spent the moment a session and a snapshot both exist, which is normally
-       * the 'private' tick after login rather than anything this page did. */
-      flushPendingCode();
       paint();
     });
   }
   consumeDiscordReturn();
-  flushPendingCode();
   paint();
 }
 
@@ -85,50 +76,25 @@ export function captureReferralCode() {
 }
 
 /**
- * Accepts a code typed into the sign-in modal rather than one arriving on an invite link.
+ * The code waiting to be spent, if any.
  *
- * Stored rather than sent, because attaching a referrer needs a session and at the moment this is
- * typed there is not one yet. It joins the same queue a `?ref=` link uses, and flushPendingCode
- * spends it on the first referral mount after login.
+ * Read by the sign-in card, which puts it in its own field and sends it with the login. Nothing
+ * clears it here: the code is spent server-side inside the transaction that creates the account,
+ * and this module never learns whether that happened. It is left in session storage and goes when
+ * the tab does — harmless, because a code can only ever be redeemed by a signup, so a stale one
+ * has nothing to attach itself to.
  */
-export function setPendingReferralCode(code) {
-  const clean = String(code ?? '').trim().toUpperCase();
-  if (!/^[A-Z0-9]{6,16}$/.test(clean)) return false;
-  pendingCode = clean;
-  try {
-    sessionStorage.setItem('donutdrop:ref', clean);
-  } catch { /* private browsing; the in-memory copy still covers this session */ }
-  return true;
+export function pendingReferralCode() {
+  return pendingCode;
 }
 
-async function flushPendingCode() {
-  if (!pendingCode || attaching || !state.authenticated || !state.referrals) return;
-  // Already attached to somebody. The backend refuses a second referrer anyway; not asking keeps
-  // a pointless 409 out of the console every time this page is opened.
-  if (state.referrals.self?.referredBy) { clearPendingCode(); return; }
-  if (pendingCode === state.referrals.code) { clearPendingCode(); return; }
+/* setPendingReferralCode stood here.
+ *
+ * It stashed a code typed into the sign-in card so it could be attached after login. Nothing needs
+ * that now: the card sends the code with the login itself, and the server keeps it on the challenge
+ * row for the whole payment round trip — which survives a reload, where session storage did not.
+ */
 
-  attaching = true;
-  try {
-    await attachReferralCode(pendingCode);
-    playSound('coin');
-    toast({ kind: 'win', title: 'Invite accepted', body: `Code ${pendingCode}` });
-    clearPendingCode();
-  } catch (error) {
-    // A code that is already spent or unknown is not worth retrying on every mount.
-    if (['REFERRAL_ALREADY_SET', 'REFERRAL_CODE_UNKNOWN', 'REFERRAL_SELF'].includes(error?.code)) {
-      clearPendingCode();
-    }
-  } finally {
-    attaching = false;
-    paint();
-  }
-}
-
-function clearPendingCode() {
-  pendingCode = null;
-  try { sessionStorage.removeItem('donutdrop:ref'); } catch { /* nothing held */ }
-}
 
 /* ─────────── coming back from Discord ───────────
  *

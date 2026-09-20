@@ -19,7 +19,7 @@ import { mountUpgrader } from './upgrader.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
-import { mountReferrals, captureReferralCode, setPendingReferralCode } from './referrals.js';
+import { mountReferrals, captureReferralCode, pendingReferralCode } from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
 import { mountRakeback } from './rakeback.js';
 import { mountDaily } from './daily.js';
@@ -334,6 +334,19 @@ function openLoginModal() {
     const slot = $('#linkChallenge', body);
     const inlineError = $('#linkError', body);
 
+    /* An invite link fills the field and opens the disclosure it lives in.
+     *
+     * Arriving with a code and being shown a collapsed "Have a referral code?" summary asks the
+     * recipient to go and find the thing the sender already did for them — and a code they cannot
+     * see is a code they cannot check before they commit. It stays editable: it is their signup,
+     * and somebody who wants to change or clear it may. */
+    const arriving = pendingReferralCode();
+    if (arriving) {
+      referral.value = arriving;
+      const disclosure = referral.closest('details');
+      if (disclosure) disclosure.open = true;
+    }
+
     const typedName = () => input.value.trim();
     const referralCode = () => referral.value.trim().toUpperCase();
     const nameValid = () =>
@@ -443,10 +456,14 @@ function openLoginModal() {
       go.dataset.state = 'loading';
       go.textContent = 'Checking…';
       try {
-        const challenge = await startLogin(username, challengeToken);
-        // Held, not sent: attaching a referrer needs a session, and there is none until the
-        // payment lands. The referral panel spends it on the first mount after login.
-        if (code) setPendingReferralCode(code);
+        /* The code goes WITH the login, not after it.
+         *
+         * It used to be held in sessionStorage and attached once a session existed, which meant
+         * any logged-in account could spend one — including accounts that had been playing for
+         * months. It is now recorded on the challenge and redeemed inside the transaction that
+         * creates the account, so a code can only ever be spent by somebody signing up. There is
+         * no endpoint left that could attach one afterwards. */
+        const challenge = await startLogin(username, challengeToken, code || undefined);
         go.dataset.state = 'success';
         form.hidden = true;
         $('#linkProgress', body).innerHTML = `<p>Run this exact command in game:</p>
@@ -1006,9 +1023,18 @@ bus.addEventListener('change', paintAuthChrome);
 paintAuthChrome();
 
 /* Read the invite code off the URL before anything navigates, because the router rewrites the
- * hash and the login round trip replaces it outright. It is only spent once there is a session to
- * attach it to. */
+ * hash and the login round trip replaces it outright. */
 captureReferralCode();
+
+/* Somebody arriving on an invite link is here to sign up, so open the card that does it.
+ *
+ * Without this the link dropped them on the crates page with a code held silently in session
+ * storage — the one thing the sender wanted to happen required the recipient to independently
+ * decide to log in. A logged-in visitor is left alone: they cannot spend a code, and covering
+ * their screen to tell them so would be worse than saying nothing. */
+if (pendingReferralCode() && !state.authenticated) {
+  openLoginModal();
+}
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;

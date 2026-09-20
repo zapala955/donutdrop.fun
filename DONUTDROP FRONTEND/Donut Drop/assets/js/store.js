@@ -324,12 +324,18 @@ export async function turnstileConfig() {
   return api.get('/v1/auth/pay/turnstile');
 }
 
-export async function startLogin(minecraftUsername, turnstileToken) {
-  /* The field is omitted rather than sent empty: the request schema is strict, and a deployment
-   * with no challenge configured would refuse a body carrying one. */
+export async function startLogin(minecraftUsername, turnstileToken, referralCode) {
+  /* Fields are omitted rather than sent empty: the request schema is strict, and a deployment with
+   * no challenge configured would refuse a body carrying a token.
+   *
+   * The invite code travels HERE, on the way in, rather than being attached after login. It is
+   * redeemed in the transaction that creates the account, so a code can only ever be spent by
+   * somebody who is signing up — there is no longer an endpoint that could attach one to an
+   * account that already existed. */
   return api.post('/v1/auth/pay/start', {
     minecraftUsername,
     ...(turnstileToken ? { turnstileToken } : {}),
+    ...(referralCode ? { referralCode } : {}),
   });
 }
 
@@ -789,13 +795,6 @@ export async function refreshReferrals(notify = true) {
   }
   if (notify) emit('referrals');
   return state.referrals;
-}
-
-export async function attachReferralCode(code) {
-  const result = await api.post('/v1/referrals/attach', { code });
-  await refreshReferrals(false);
-  emit('referrals');
-  return result;
 }
 
 /* Claims a custom invite code. The server decides whether it is free, so a 409 here is a normal
