@@ -13,6 +13,7 @@ import { describe, it } from 'node:test';
 const read = (rel: string) => readFile(path.resolve(import.meta.dirname, rel), 'utf8');
 const route = () => read('../src/routes/avatars.ts');
 const chat = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/chat.js');
+const app = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
 
 describe('avatar proxy', () => {
   it('is keyed on an id, never on a name', async () => {
@@ -81,5 +82,16 @@ describe('chat renderer', () => {
   it('passes the id the chat payload already carries', async () => {
     const source = await chat();
     assert.match(source, /avatarFor\(message\.authorId, message\.author\)/);
+  });
+});
+
+describe('account header avatar', () => {
+  it('loads the signed-in player head through the private avatar proxy', async () => {
+    const source = await app();
+    const fn = source.slice(source.indexOf('const paintAuthChrome'));
+    const body = fn.slice(0, fn.indexOf("bus.addEventListener('change'"));
+    assert.match(body, /\/v1\/avatars\/\$\{encodeURIComponent\(state\.user\.id\)\}\?s=40/);
+    assert.doesNotMatch(body, /encodeURIComponent\(state\.user\.minecraftUsername\)/);
+    assert.match(body, /dataset\.avatar = 'fallback'/);
   });
 });

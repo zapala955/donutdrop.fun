@@ -15,6 +15,7 @@ import {
   toast, initModal, initWallet, broadcast,
   openModal, closeModal,
 } from './ui.js';
+import { API_BASE_URL } from './api.js';
 import { mountUpgrader } from './upgrader.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
@@ -1046,9 +1047,11 @@ initTicker(document.getElementById('tickerRoot'));
   if (muteButton) {
     const paintMute = () => {
       const off = isMuted();
+      const label = off ? 'Unmute sound' : 'Mute sound';
       muteButton.dataset.muted = off ? '1' : '0';
       muteButton.setAttribute('aria-pressed', String(off));
-      muteButton.setAttribute('aria-label', off ? 'Unmute sound' : 'Mute sound');
+      muteButton.setAttribute('aria-label', label);
+      muteButton.title = label;
     };
     muteButton.addEventListener('click', () => { setMuted(!isMuted()); paintMute(); });
     paintMute();
@@ -1070,10 +1073,37 @@ $('#signOutBtn')?.addEventListener('click', async (event) => {
 });
 
 const paintAuthChrome = () => {
-  const label = $('#loginBtn span');
+  const button = $('#loginBtn');
+  const label = $('#loginLabel');
+  const head = $('#loginHead');
   if (label) label.textContent = state.authenticated ? state.user.minecraftUsername : 'Log in';
-  $('#loginBtn').dataset.authenticated = state.authenticated ? '1' : '0';
+  button.dataset.authenticated = state.authenticated ? '1' : '0';
+  if (!head) return;
+  if (state.authenticated && state.user?.id) {
+    const next = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40`;
+    if (head.dataset.failedFor === next) {
+      button.dataset.avatar = 'fallback';
+      head.hidden = true;
+      return;
+    }
+    if (head.getAttribute('src') !== next) {
+      delete head.dataset.failedFor;
+      head.src = next;
+    }
+    button.dataset.avatar = 'head';
+    head.hidden = false;
+  } else {
+    button.dataset.avatar = 'guest';
+    head.hidden = true;
+    head.removeAttribute('src');
+    delete head.dataset.failedFor;
+  }
 };
+$('#loginHead')?.addEventListener('error', (event) => {
+  event.currentTarget.dataset.failedFor = event.currentTarget.getAttribute('src') || '';
+  event.currentTarget.hidden = true;
+  $('#loginBtn').dataset.avatar = 'fallback';
+});
 bus.addEventListener('change', paintAuthChrome);
 paintAuthChrome();
 

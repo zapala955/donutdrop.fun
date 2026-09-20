@@ -138,15 +138,23 @@
       <b class="cashpill__n mono" id="wCash">$0</b>
     </div>
     <button class="mute" id="muteBtn" data-muted="0" aria-pressed="false" aria-label="Mute sound">
-      <svg class="mute__on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm11.5 3a4 4 0 0 0-2-3.46v6.92A4 4 0 0 0 15.5 12zM13 3.2v2.06a6.5 6.5 0 0 1 0 13.48v2.06A8.5 8.5 0 0 0 13 3.2z"/></svg>
-      <svg class="mute__off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm15.5 3 2.3-2.3-1.2-1.2-2.3 2.3-2.3-2.3-1.2 1.2 2.3 2.3-2.3 2.3 1.2 1.2 2.3-2.3 2.3 2.3 1.2-1.2z"/></svg>
+      <svg class="mute__on" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/>
+        <path d="M16 9a4.25 4.25 0 0 1 0 6"/>
+        <path d="M18.5 6.5a7.75 7.75 0 0 1 0 11"/>
+      </svg>
+      <svg class="mute__off" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/>
+        <path d="m16.5 9.5 5 5m0-5-5 5"/>
+      </svg>
     </button>
     <!-- Login sits in glass: it is the quiet option, available but not sold.
          Withdraw is the loud one, because taking money out is the action a
          player most needs to be able to find on a gambling site. -->
     <button class="btn btn--glass" id="loginBtn">
-      <svg class="btn__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
-      <span>Log in</span>
+      <svg class="btn__ico loginbtn__guest" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      <img class="loginbtn__head" id="loginHead" alt="" width="26" height="26" hidden />
+      <span id="loginLabel">Log in</span>
     </button>
     <button class="btn btn--go" id="depositBtn"><svg class="btn__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Deposit</span></button>
     <button class="btn btn--withdraw" id="withdrawBtn">
