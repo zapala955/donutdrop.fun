@@ -38,10 +38,15 @@
 import { bus, refreshBalance } from './store.js';
 import { $, clamp, el, formatAmountInput, money, parseAmount } from './util.js';
 import { closeModal, toast } from './ui.js';
-import { playSound } from './audio-engine.js';
+import { isMuted, playSound, setMuted } from './audio-engine.js';
 import { API_BASE_URL, api } from './api.js';
 import { initSideBets, stopSideBets } from './sidebet.js';
-import { createSlitherRenderer, logStakeRadius, snakeColourCss } from './slither-renderer.js';
+import {
+  createSlitherRenderer,
+  logStakeRadius,
+  setPlayerSkin,
+  snakeColourCss,
+} from './slither-renderer.js';
 
 /* ═════════════════════════ the numbers this file is built on ═════════════════════════ */
 
@@ -123,6 +128,90 @@ function notice(text) {
   const box = el('p', 'empty');
   box.textContent = text;
   return box;
+}
+
+/* ═════════════════════════ skins ═════════════════════════
+ *
+ * Four looks for your own snake, and they are YOURS ALONE.
+ *
+ * The server does not carry a skin on the wire, so nobody else's client can know what you picked.
+ * That is stated on the card rather than buried here, because a cosmetic sold on the implication
+ * that other players can see it, when they cannot, is a small lie — and a gambling site is the
+ * worst possible place to establish that the copy shades the truth.
+ *
+ * Why it is safe: a skin never leaves the browser. It changes three RGB triples the renderer uses
+ * to draw one snake. It cannot reach the simulation, cannot change a radius, and cannot be read by
+ * anything that decides money.
+ */
+
+const SKINS = [
+  { id: 'glaze',     name: 'Glazed',    body: [1, 0.75, 0.14] },
+  { id: 'sprinkles', name: 'Sprinkles', body: [1, 0, 0.48] },
+  { id: 'ender',     name: 'Ender',     body: [0.55, 0.36, 0.96] },
+  { id: 'cyber',     name: 'Cyber',     body: [0.02, 0.71, 0.83] },
+];
+
+const SKIN_KEY = 'donutdrop.arena.skin';
+
+function readSkin() {
+  try {
+    const saved = localStorage.getItem(SKIN_KEY);
+    return SKINS.find((skin) => skin.id === saved) ?? SKINS[0];
+  } catch {
+    /* Private mode, or storage the browser refuses to hand over. A default skin is a complete
+       answer to that; there is nothing here worth a second attempt. */
+    return SKINS[0];
+  }
+}
+
+function chooseSkin(skin) {
+  setPlayerSkin(skin.body);
+  try {
+    localStorage.setItem(SKIN_KEY, skin.id);
+  } catch {
+    /* The skin still applies for this session. Not being able to remember it is not a failure
+       worth telling the player about. */
+  }
+}
+
+function skinCss(skin) {
+  const byte = (channel) => Math.round(channel * 255);
+  return `rgb(${byte(skin.body[0])} ${byte(skin.body[1])} ${byte(skin.body[2])})`;
+}
+
+/** The picker: four swatches, one pressed, and one line saying who can see them. */
+function skinPicker() {
+  const wrap = el('div', 'skins');
+  const buttons = [];
+  const current = readSkin();
+
+  for (const skin of SKINS) {
+    const button = el('button', 'skin');
+    button.type = 'button';
+    button.setAttribute('aria-pressed', skin.id === current.id ? 'true' : 'false');
+    const swatch = el('i', 'skin__swatch');
+    swatch.style.background = `radial-gradient(circle at 34% 28%, #fff3, transparent 52%), ${skinCss(skin)}`;
+    const label = el('span', 'skin__name');
+    label.textContent = skin.name;
+    button.append(swatch, label);
+    button.addEventListener('click', () => {
+      chooseSkin(skin);
+      for (const other of buttons) other.setAttribute('aria-pressed', 'false');
+      button.setAttribute('aria-pressed', 'true');
+      playSound('click');
+    });
+    buttons.push(button);
+    wrap.append(button);
+  }
+
+  const note = el('p', 'skin__note');
+  note.textContent = 'Only you see your skin — the pit does not send it to anyone else.';
+  wrap.append(note);
+
+  /* Applied on build, not only on click: a skin chosen in a previous session has to reach the
+     renderer before the first frame, or the first round is drawn in the default. */
+  chooseSkin(current);
+  return wrap;
 }
 
 /* ═════════════════════════ the lobby ═════════════════════════ */
@@ -298,7 +387,7 @@ function entryCard() {
 
   const lb = el('div', 'entry__lb');
 
-  card.append(badges, amount, shape, bar, field, chips, edges, terms, go, lb);
+  card.append(badges, amount, shape, bar, field, chips, edges, skinPicker(), terms, go, lb);
   paint();
   return card;
 }
@@ -549,6 +638,93 @@ async function startArena(session) {
   inputTimer = window.setInterval(pushInput, 1000 / INPUT_HZ);
 }
 
+/**
+ * One inline SVG from a list of path data.
+ *
+ * `el()` builds through createElement, which puts an <svg> in the HTML namespace where it is an
+ * unknown element that renders nothing. SVG needs createElementNS, so it needs its own helper
+ * rather than a special case inside the general one.
+ */
+function icon(...paths) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const data of paths) {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', data);
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path);
+  }
+  return svg;
+}
+
+const SPEAKER = 'M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4';
+
+/**
+ * Sound and fullscreen.
+ *
+ * Both are settings rather than gameplay, which is why they sit in the one corner the HUD does not
+ * use and are drawn at the weight of a label. A settings control that competes with the pit for
+ * attention has been designed wrong.
+ *
+ * Fullscreen is offered only where the browser admits to supporting it. A button that silently
+ * does nothing is worse than no button, and iOS Safari on iPhone has never implemented the
+ * Fullscreen API on a non-video element.
+ */
+function controlStrip(stage) {
+  const strip = el('div', 'pit__ctl');
+
+  const sound = el('button', 'pit__ctlbtn');
+  sound.type = 'button';
+  const paintSound = () => {
+    const muted = isMuted();
+    sound.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    sound.setAttribute('aria-label', muted ? 'Unmute the arena' : 'Mute the arena');
+    sound.replaceChildren(
+      muted ? icon(SPEAKER, 'M16.5 10l4 4M20.5 10l-4 4') : icon(SPEAKER, 'M16 9.5a3.4 3.4 0 0 1 0 5'),
+    );
+  };
+  paintSound();
+  sound.addEventListener('click', () => {
+    setMuted(!isMuted());
+    paintSound();
+    /* Fires only on the way back ON, because the confirmation for muting is the silence. */
+    if (!isMuted()) playSound('click');
+  });
+  strip.append(sound);
+
+  if (stage.requestFullscreen) {
+    const full = el('button', 'pit__ctlbtn');
+    full.type = 'button';
+    const paintFull = () => {
+      const on = document.fullscreenElement === stage;
+      full.setAttribute('aria-pressed', on ? 'true' : 'false');
+      full.setAttribute('aria-label', on ? 'Leave fullscreen' : 'Play fullscreen');
+      full.replaceChildren(
+        on
+          ? icon('M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5')
+          : icon('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'),
+      );
+    };
+    paintFull();
+    full.addEventListener('click', () => {
+      if (document.fullscreenElement === stage) void document.exitFullscreen();
+      else void stage.requestFullscreen().catch(() => {
+        /* Refused — a permissions policy, or a gesture the browser did not accept as one. The
+           pit keeps playing at its normal size, which is a complete outcome. */
+      });
+    });
+    /* The button has to follow the state, not set it: Escape and F11 both leave fullscreen without
+       ever passing through this click handler. */
+    document.addEventListener('fullscreenchange', paintFull);
+    strip.append(full);
+  }
+
+  return strip;
+}
+
 function buildArenaDom() {
   const stage = el('div', 'pit');
 
@@ -570,12 +746,31 @@ function buildArenaDom() {
   const hud = el('div', 'pit__hud');
   const value = el('div', 'pit__value mono');
   value.textContent = money(Number(live?.entryMinor ?? 0));
+
+  /* The cashout control, wrapped in its own gauge.
+   *
+   * The ring is the EXTRACTION CHANNEL and the number inside it is the MULTIPLE. Both wanted the
+   * ring and only one could have it: during a hold the channel is the thing changing under a
+   * decision, and the multiple is a figure already read. Putting the multiple inside the button
+   * that banks it also means the question and its answer are one object rather than two numbers
+   * floating at opposite ends of the HUD.
+   *
+   * The multiple is NET — what would actually reach the wallet, divided by what was paid in. It
+   * therefore opens below 1.00×, because cashing out the instant you arrive really does return
+   * less than the buy-in. Quoting the gross multiple would have looked better on the first frame
+   * and would have been a number the pit never pays. */
   const action = el('button', 'pit__cash');
   action.type = 'button';
+  action.dataset.tier = 'level';
+  const actionDisc = el('i', 'pit__cashdisc');
   const actionFill = el('i', 'pit__cashfill');
   const actionText = el('span', 'pit__cashtxt');
-  actionText.textContent = '[ HOLD E TO CASHOUT ]';
-  action.append(actionFill, actionText);
+  const actionMult = el('b', 'pit__mult');
+  actionMult.textContent = '\u2014';
+  const actionCap = el('i', 'pit__cashcap');
+  actionCap.textContent = 'HOLD E';
+  actionText.append(actionMult, actionCap);
+  action.append(actionDisc, actionFill, actionText);
   /* Touch has no E key and no space bar, so the button is the extract control on a phone. */
   action.addEventListener('pointerdown', () => {
     input.extract = true;
@@ -589,6 +784,7 @@ function buildArenaDom() {
   }
   hud.append(value, action);
   stage.append(hud);
+  stage.append(controlStrip(stage));
 
   /* Bottom left, the one corner nothing else claims: the board is top right, the spectator panel
    * top left, the value and the cashout button run along the bottom centre, and the touch boost pad
@@ -617,6 +813,34 @@ function buildArenaDom() {
   return stage;
 }
 
+/**
+ * The multiple, on the face of the button that banks it.
+ *
+ * Both figures are the server's: `entryMinor` is what was debited at the door and `valueMinor` is
+ * what this snake is carrying on the tick just received. The fee is the rate the session was
+ * opened under. Nothing here is modelled, projected or smoothed — if the number moves, the pit
+ * moved it.
+ */
+function paintMultiple(action, you) {
+  const entry = Number(live?.entryMinor ?? 0);
+  const label = action.querySelector('.pit__mult');
+  if (!label) return;
+  if (!(entry > 0) || !you) {
+    label.textContent = '\u2014';
+    return;
+  }
+  const keep = 1 - Number(board?.cashoutFeeBps ?? 0) / 10_000;
+  const multiple = (Number(you.valueMinor) * keep) / entry;
+  label.textContent = `${multiple.toFixed(2)}\u00D7`;
+  /* Colour is the scale, so "am I up?" is answerable before a digit is read. The break is at 1,
+     not at some flattering figure below it: level means level. */
+  action.dataset.tier = multiple >= 2 ? 'big' : multiple > 1 ? 'up' : 'level';
+  action.setAttribute(
+    'aria-label',
+    `Hold to cash out ${money(Math.round(Number(you.valueMinor) * keep))}`,
+  );
+}
+
 let hudBeat = 0;
 
 function paintHud(frame) {
@@ -626,9 +850,14 @@ function paintHud(frame) {
   const value = stage.querySelector('.pit__value');
   if (value && you) value.textContent = money(Number(you.valueMinor));
   const fill = stage.querySelector('.pit__cashfill');
-  if (fill) fill.style.width = `${Math.round((you?.extracting ?? 0) * 100)}%`;
+  /* A custom property, not a width: the ring is a conic sweep, and the sweep's stop is the only
+     thing that moves. Writing `width` here would have resized the masked box instead. */
+  if (fill) fill.style.setProperty('--fill', `${Math.round((you?.extracting ?? 0) * 100)}%`);
   const action = stage.querySelector('.pit__cash');
-  if (action) action.dataset.on = (you?.extracting ?? 0) > 0 ? '1' : '0';
+  if (action) {
+    action.dataset.on = (you?.extracting ?? 0) > 0 ? '1' : '0';
+    paintMultiple(action, you);
+  }
 
   /* The board is rebuilt five times a second, not twenty. It is a list of five names that change
    * every few seconds; replacing its DOM on every snapshot is layout work nobody can perceive. */
@@ -784,6 +1013,11 @@ function finish(reason, creditedMinor) {
   if (!live) return;
   const credited = Number(creditedMinor || 0);
   const won = reason === 'cashed_out';
+  const entry = Number(live.entryMinor ?? 0);
+  /* What the snake was holding on the last tick that arrived. The server settled from its own
+     copy of this number, not from ours — this is only here so the breakdown can show the figure
+     the fee came off. */
+  const carried = Number(currentFrame?.you?.valueMinor ?? 0);
   live = null;
   detachInput();
   disconnect();
@@ -802,11 +1036,96 @@ function finish(reason, creditedMinor) {
       teardownArena();
       void refresh();
     });
-    overlay.replaceChildren(kicker, figure, again);
+    overlay.replaceChildren(kicker, figure, breakdown(reason, credited, entry, carried), again);
+    if (won) overlay.append(confetti());
   }
 
   playSound(won ? 'win' : 'lose');
   void refreshBalance();
+}
+
+/**
+ * The breakdown: three or four rows of what happened to the money.
+ *
+ * A single figure after a win is a number nobody trusts, and a single figure after a loss is a
+ * number with no story. The rows are chosen so both readings are complete.
+ *
+ * The fee is CARRIED MINUS CREDITED, not the configured rate applied to the carried figure. Those
+ * two should agree, and if they ever disagree the arithmetic on screen would be a second opinion
+ * competing with the wallet — so the screen subtracts the two real numbers and shows the
+ * difference. It cannot drift from what was actually taken.
+ */
+function breakdown(reason, credited, entry, carried) {
+  const rows = [['Buy-in', money(entry), null]];
+  if (reason === 'cashed_out') {
+    /* Only when the last frame is trustworthy. A cashout settled from a tick we never received
+       would make `carried` smaller than `credited`, and a negative fee on screen is worse than a
+       row that is not there. */
+    if (carried >= credited) {
+      rows.push(['Carried out', money(carried), null]);
+      rows.push(['Arena fee', `\u2212${money(carried - credited)}`, 'bad']);
+    }
+    rows.push(['Credited', money(credited), 'good']);
+    rows.push([
+      'Net',
+      `${credited >= entry ? '+' : '\u2212'}${money(Math.abs(credited - entry))}`,
+      credited >= entry ? 'good' : 'bad',
+    ]);
+  } else {
+    rows.push(['Lost', `\u2212${money(entry)}`, 'bad']);
+    rows.push(['Taken by', reason === 'wall' ? 'The wall' : 'Another snake', null]);
+  }
+
+  const list = el('dl', 'pit__overbits');
+  for (const [label, value, mood] of rows) {
+    const key = el('dt', 'pit__overk');
+    key.textContent = label;
+    const val = el('dd', 'pit__overv mono');
+    val.textContent = value;
+    if (mood === 'good') val.dataset.good = '1';
+    if (mood === 'bad') val.dataset.bad = '1';
+    list.append(key, val);
+  }
+  return list;
+}
+
+/**
+ * Twelve pieces of paper.
+ *
+ * A celebration, not a particle system — the round is already decided, and a frame budget spent
+ * after the outcome is a frame budget spent on nothing. Each piece carries its own delay, drift
+ * and spin as custom properties so one keyframe animation covers all twelve, and the whole thing
+ * is removed from the DOM when it finishes rather than left parked on a compositor layer.
+ *
+ * `prefers-reduced-motion` deletes it in CSS. It is the one purely decorative thing in the mode,
+ * so it does not degrade gracefully; it simply goes.
+ */
+function confetti() {
+  const wrap = el('div', 'pit__conf');
+  wrap.setAttribute('aria-hidden', 'true');
+  const colours = ['#ff007a', '#8b5cf6', '#fbbf24', '#06b6d4'];
+  for (let index = 0; index < 12; index += 1) {
+    /* Scattered by a hash of the index, not by a random number generator.
+     *
+     * There is no RNG anywhere in this file and that is load-bearing: every position, collision,
+     * kill and payout comes from the server, and "the arena client rolls no dice" is a property
+     * worth being able to check with grep rather than argue about. Confetti is not worth spending
+     * it. Twelve fixed-but-uneven offsets are indistinguishable from twelve random ones, and this
+     * way the guarantee survives.
+     *
+     * The multipliers are coprime-ish with 12 so the three sequences do not fall into step and
+     * produce twelve pieces marching in a visible pattern. */
+    const scatter = (step, span) => ((index * step) % 97) / 97 * span;
+    const bit = el('i', 'pit__confbit');
+    bit.style.left = `${8 + (index * 84) / 12 + scatter(29, 6)}%`;
+    bit.style.background = colours[index % colours.length];
+    bit.style.setProperty('--delay', `${Math.round(scatter(43, 420))}ms`);
+    bit.style.setProperty('--drift', `${Math.round(scatter(61, 120) - 60)}px`);
+    bit.style.setProperty('--spin', `${Math.round(360 + scatter(53, 540))}deg`);
+    wrap.append(bit);
+  }
+  setTimeout(() => wrap.remove(), 2200);
+  return wrap;
 }
 
 function teardownArena() {

@@ -1,0 +1,18 @@
+[
+  {
+    "date": "2026-09-20",
+    "macrostructure": "none (app shell — the 21 macros are page shapes)",
+    "theme": "custom",
+    "theme_axes": "dark paper / grotesk-display / chromatic-pink",
+    "vibe": "high-voltage arcade, money still gold",
+    "enrichment": "none — the canvas is the artifact",
+    "brief": "Donut Drop · slither arena redesign (DonutSMP neon)"
+  },
+  {
+    "date": "2026-09-19",
+    "macrostructure": "none (component)",
+    "theme": "project system",
+    "enrichment": "none",
+    "brief": "Donut Drop · sign-in modal"
+  }
+]

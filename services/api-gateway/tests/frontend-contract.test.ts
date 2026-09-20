@@ -104,9 +104,15 @@ describe('frontend/backend contract', () => {
   });
 
   it('displays no fee, rake or percentage anywhere in the arena', async () => {
-    /* The platform's cut is applied on the server at the instant of extraction and the socket
-     * returns only the figure that reached the wallet. This asserts the absence is structural: the
-     * client never receives a rate, so there is nothing here that could render one. */
+    /* The client DOES receive the cashout rate now — `cashoutFeeBps`, quoted on the entry card and
+     * folded into the multiple on the dial, because a 10% cut has to be readable before a player
+     * stakes rather than discovered after they extract. This test never forbade that: the patterns
+     * below are case-sensitive and `cashoutFeeBps` does not contain `feeBps`.
+     *
+     * What it forbids is the house's own vocabulary reaching a player-facing surface. "Fee" is a
+     * thing a player is charged and is said plainly; "rake", "house edge" and a raw bps field name
+     * are operator words, and a player reading them is reading the inside of the business rather
+     * than the terms of their own bet. */
     const arena = await source('assets/js/slither.js');
     const sheet = await source('assets/css/slither.css');
     for (const [label, body] of [

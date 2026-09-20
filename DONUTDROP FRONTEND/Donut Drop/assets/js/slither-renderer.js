@@ -32,7 +32,10 @@ const ITEM_NAME = 2;
 const OBSIDIAN = [10 / 255, 10 / 255, 12 / 255];
 const GOLD = [1, 170 / 255, 0];
 const GOLD_BRIGHT = [1, 215 / 255, 0];
-const WALL_RED = [192 / 255, 57 / 255, 43 / 255];
+/* The wall was a flat danger red that belonged to no other surface in the mode. It is the
+ * arena's own pink now — the boundary is the room's edge, and the room has a colour. It still
+ * reads as "do not touch" because it is the only thing on the floor drawn as a hard ring. */
+const WALL_RED = [1, 0, 122 / 255];
 
 /**
  * One colour per snake.
@@ -47,10 +50,10 @@ const WALL_RED = [192 / 255, 57 / 255, 43 / 255];
  * gold is reserved.
  */
 const PLAYER_PALETTE = [
-  [0.29, 0.78, 1.00], // ice
+  [0.02, 0.71, 0.83], // cyan     — the arena's own secondary
   [0.42, 0.98, 0.58], // lime
   [1.00, 0.36, 0.52], // rose
-  [0.68, 0.55, 1.00], // violet
+  [0.55, 0.36, 0.96], // violet   — the arena's own tertiary
   [0.20, 0.92, 0.85], // aqua
   [1.00, 0.55, 0.24], // ember
   [0.98, 0.42, 0.95], // orchid
@@ -58,6 +61,25 @@ const PLAYER_PALETTE = [
   [0.40, 0.62, 1.00], // cobalt
   [1.00, 0.80, 0.35], // sand
 ];
+
+/**
+ * Your own snake's colour.
+ *
+ * Gold by default, because gold is what the rest of this site means by "yours" and by "money".
+ * The entry card can replace it — four skins, chosen locally, never sent anywhere. It is a module
+ * variable rather than a render option because it has to survive `destroyScene()`: a skin picked
+ * on the entry screen must still be in force when the pit builds its own renderer a moment later.
+ *
+ * It is deliberately NOT drawn from PLAYER_PALETTE. Whatever you pick, you are the only snake that
+ * can wear it — `snakePalette` consults this only for `isYou`, so a stranger can never be rendered
+ * in the colour you have learned to read as yourself.
+ */
+let playerSkin = GOLD;
+
+export function setPlayerSkin(colour) {
+  if (!Array.isArray(colour) || colour.length !== 3) return;
+  playerSkin = colour.map((channel) => Math.min(1, Math.max(0, Number(channel) || 0)));
+}
 
 /**
  * YOUR snake is always gold, and nobody else's ever is.
@@ -68,7 +90,16 @@ const PLAYER_PALETTE = [
  * second spent locating yourself in a crowd is the half second you needed.
  */
 function snakePalette(snake) {
-  if (snake.isYou) return { body: GOLD, head: GOLD_BRIGHT };
+  if (snake.isYou) {
+    return {
+      body: playerSkin,
+      head: [
+        Math.min(1, playerSkin[0] * 1.2 + 0.1),
+        Math.min(1, playerSkin[1] * 1.2 + 0.1),
+        Math.min(1, playerSkin[2] * 1.2 + 0.1),
+      ],
+    };
+  }
   /* FNV-1a over the id, so a snake keeps its colour for its whole life and every client in the pit
    * independently agrees on it without the server having to say. */
   let hash = 2166136261;
