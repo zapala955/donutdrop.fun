@@ -4,6 +4,10 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import { creditWallet, streakRewardMinor } from '../lib/cash-settlement.js';
+import {
+  dailyRewardWagerProgress,
+  requireDailyRewardWager,
+} from '../lib/daily-rewards.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
@@ -152,11 +156,14 @@ export async function registerEngagementRoutes(
 
   app.get('/v1/streak', { preHandler: guards.authenticate }, async (request) => {
     const userId = requireUserId(request.authUser?.id);
-    const result = await db.query<StreakRow>(
-      `SELECT current_streak, longest_streak, last_claim_day::text AS last_claim_day, total_claims
-         FROM user_streaks WHERE user_id = $1`,
-      [userId],
-    );
+    const [result, wager] = await Promise.all([
+      db.query<StreakRow>(
+        `SELECT current_streak, longest_streak, last_claim_day::text AS last_claim_day, total_claims
+           FROM user_streaks WHERE user_id = $1`,
+        [userId],
+      ),
+      dailyRewardWagerProgress(db, config, userId),
+    ]);
     const row = result.rows[0];
     const today = utcDay();
     const claimedToday = row?.last_claim_day === today;
@@ -170,7 +177,15 @@ export async function registerEngagementRoutes(
       totalClaims: row?.total_claims ?? 0,
       lastClaimDay: row?.last_claim_day ?? null,
       claimedToday,
-      claimable: !claimedToday,
+      claimable: !claimedToday && wager.met,
+      wageredTodayMinor: wager.wageredMinor.toString(),
+      wagerRequirementMinor: wager.requiredMinor.toString(),
+      wagerRemainingMinor: wager.remainingMinor.toString(),
+      wagerRequirementMet: wager.met,
+      wagerProgressRatio:
+        wager.requiredMinor > 0n
+          ? Math.min(1, Number(wager.wageredMinor) / Number(wager.requiredMinor))
+          : 1,
       nextStreakLength: nextLength,
       nextRewardMinor: streakRewardMinor(config, nextLength).toString(),
       maxMultiplier: config.streakMaxMultiplier,
@@ -202,6 +217,10 @@ export async function registerEngagementRoutes(
         if (row.last_claim_day === today) {
           conflict('STREAK_ALREADY_CLAIMED', 'Today is already claimed');
         }
+
+        // This check is inside the same transaction as the wallet credit. A client cannot unlock
+        // the button locally, and a wager only counts after its own settlement has committed.
+        await requireDailyRewardWager(client, config, userId);
 
         /* A streak continues only if yesterday was claimed. Any longer gap starts again at one —
          * that is what makes it a streak rather than a counter. */

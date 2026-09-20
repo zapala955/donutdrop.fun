@@ -196,6 +196,14 @@
 }
 .daily__claimfig { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .daily__claimv { font: 800 1.3rem/1.05 var(--disp); color: var(--gold-bright); }
+.daily__requirement { display: flex; flex: 1 1 220px; flex-direction: column; gap: 6px; }
+.daily__progress { font-size: .66rem; color: var(--muted); }
+.daily__track { height: 5px; overflow: hidden; border-radius: 999px; background: var(--panel3); }
+.daily__fill {
+  display: block; width: 100%; height: 100%; border-radius: inherit; transform-origin: left center;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
+  transition: transform .35s ease;
+}
 .daily__go { flex: 0 1 260px; justify-content: center; letter-spacing: .06em; }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════

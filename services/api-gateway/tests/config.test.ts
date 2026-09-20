@@ -30,6 +30,7 @@ describe('configuration', () => {
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
+    assert.equal(config.streakDailyWagerRequiredMinor, 10_000_000n);
   });
 
   it('requires HTTPS in production', () => {

@@ -67,6 +67,19 @@ function paint() {
   const streak = state.streak;
   const quests = state.quests || [];
   const claimable = quests.filter((quest) => quest.claimable).length;
+  const wageredToday = money(Number(streak?.wageredTodayMinor ?? 0));
+  const wagerRequired = money(Number(streak?.wagerRequirementMinor ?? 0));
+  const wagerRemaining = money(Number(streak?.wagerRemainingMinor ?? 0));
+  const streakButton = !streak
+    ? 'Loading…'
+    : streak.claimedToday
+      ? 'Claimed today'
+      : streak.wagerRequirementMet
+        ? `Claim ${money(Number(streak.nextRewardMinor))}`
+        : `Wager ${wagerRemaining} more`;
+  const streakProgress = streak
+    ? `Longest ${streak.longestStreak} · ${wageredToday} / ${wagerRequired} wagered today`
+    : 'Loading daily progress';
 
   root.innerHTML = `
     <section class="streak glass">
@@ -74,16 +87,14 @@ function paint() {
         <span class="streak__label">Daily streak</span>
         <b class="streak__figure mono">${streak?.currentStreak ?? 0}<em>days</em></b>
         <span class="streak__sub">
-          Longest ${streak?.longestStreak ?? 0} · resets in <b class="mono" id="questReset">${timeToUtcMidnight()}</b>
+          ${streakProgress} · resets in <b class="mono" id="questReset">${timeToUtcMidnight()}</b>
         </span>
       </div>
       <div class="streak__pips" id="streakPips" role="img"
            aria-label="Streak progress toward the maximum multiplier"></div>
       <button class="btn btn--go streak__claim" id="streakClaim"
               ${streak?.claimable ? '' : 'disabled'}>
-        ${streak?.claimable
-          ? `Claim ${money(Number(streak.nextRewardMinor))}`
-          : 'Claimed today'}
+        ${streakButton}
       </button>
     </section>
 

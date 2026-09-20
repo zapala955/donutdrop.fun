@@ -160,16 +160,13 @@ function summary(referrals, rakeback) {
 function referralCard(data) {
   const amount = Number(data.totals.revshareClaimableMinor ?? 0);
   const claimed = Number(data.totals.revsharePaidMinor ?? 0);
-  const rate = Number(data.terms.revshareWagerBps ?? 0) / 100;
   const card = el('article', 'rake__card rake__card--referral');
   card.dataset.armed = amount > 0 ? '1' : '0';
 
   const head = el('header', 'rake__head');
   const name = el('span', 'rake__name');
   name.textContent = 'Your referral share';
-  const badge = el('span', 'rake__rate mono');
-  badge.textContent = `${rate.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}% of wagers`;
-  head.append(name, badge);
+  head.append(name);
 
   const copy = el('p', 'rake__copy');
   copy.textContent = 'Earn on every wager made by players who joined through your invite link.';

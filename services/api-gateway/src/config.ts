@@ -405,6 +405,7 @@ const environmentSchema = z
     FACTION_WAR_DAYS: z.coerce.number().int().min(1).max(60).default(7),
     STREAK_BASE_REWARD_MINOR: positiveBigintString.default('25000'),
     STREAK_MAX_MULTIPLIER: z.coerce.number().int().min(1).max(50).default(7),
+    STREAK_DAILY_WAGER_REQUIRED_MINOR: positiveBigintString.default('10000000'),
     /* Referrals. Two engines on one relationship, and both of them pay out of the house margin.
      *
      * The revenue share is a cut of the margin a referee's wagers earn the house, never a cut of
@@ -959,6 +960,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     factionWarDays: env.FACTION_WAR_DAYS,
     streakBaseRewardMinor: BigInt(env.STREAK_BASE_REWARD_MINOR),
     streakMaxMultiplier: env.STREAK_MAX_MULTIPLIER,
+    streakDailyWagerRequiredMinor: BigInt(env.STREAK_DAILY_WAGER_REQUIRED_MINOR),
     vipEnabled: env.VIP_ENABLED,
     rakebackEnabled: env.RAKEBACK_ENABLED,
     rakebackTierBps: Object.freeze({

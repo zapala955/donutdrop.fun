@@ -122,6 +122,11 @@ function header(streak) {
     ['Current streak', String(streak.currentStreak), true],
     ['Longest', String(streak.longestStreak), false],
     ['Total claims', String(streak.totalClaims), false],
+    [
+      'Wagered today',
+      `${money(Number(streak.wageredTodayMinor))} / ${money(Number(streak.wagerRequirementMinor))}`,
+      streak.wagerRequirementMet,
+    ],
   ];
   for (const [label, value, gold] of cells) {
     const cell = el('div', 'daily__stat');
@@ -187,26 +192,42 @@ function grid(streak) {
 
 function claimBar(streak) {
   const bar = el('div', 'daily__claim');
+  const wagered = Number(streak.wageredTodayMinor || 0);
+  const required = Number(streak.wagerRequirementMinor || 0);
+  const remaining = Number(streak.wagerRemainingMinor || 0);
 
   const figure = el('div', 'daily__claimfig');
   const label = el('span', 'daily__statk');
-  label.textContent = streak.claimable ? 'Ready to claim' : 'Claimed today';
+  label.textContent = 'Today\'s reward';
   const value = el('b', 'daily__claimv mono');
   value.textContent = money(Number(streak.nextRewardMinor));
   figure.append(label, value);
+
+  const requirement = el('div', 'daily__requirement');
+  const progress = el('span', 'daily__progress mono');
+  progress.textContent = streak.claimedToday
+    ? 'Daily wager complete'
+    : `${money(wagered)} / ${money(required)} wagered`;
+  const track = el('div', 'daily__track');
+  const fill = el('i', 'daily__fill');
+  fill.style.transform = `scaleX(${Math.max(0, Math.min(1, Number(streak.wagerProgressRatio) || 0))})`;
+  track.appendChild(fill);
+  requirement.append(progress, track);
 
   const button = el('button', 'btn btn--go daily__go');
   button.type = 'button';
   const day = Math.min(streak.nextStreakLength || 1, LADDER_DAYS);
   button.textContent = claiming
     ? 'CLAIMING…'
-    : streak.claimable
-      ? `CLAIM DAY ${day}`
-      : 'COME BACK TOMORROW';
+    : streak.claimedToday
+      ? 'COME BACK TOMORROW'
+      : streak.wagerRequirementMet
+        ? `CLAIM DAY ${day}`
+        : `WAGER ${money(remaining)} MORE`;
   button.disabled = !streak.claimable || claiming;
   button.addEventListener('click', claim);
 
-  bar.append(figure, button);
+  bar.append(figure, requirement, button);
   return bar;
 }
 

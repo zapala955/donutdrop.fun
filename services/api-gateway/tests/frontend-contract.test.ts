@@ -112,7 +112,22 @@ describe('frontend/backend contract', () => {
     assert.match(app, /requested === 'rakeback' \? 'rewards' : requested/);
     assert.match(store, /api\.post\('\/v1\/referrals\/claim', \{\}\)/);
     assert.match(rewards, /claimReferralRewards\(\)/);
-    assert.match(rewards, /revshareWagerBps/);
+    const referralCard = rewards.slice(
+      rewards.indexOf('function referralCard('),
+      rewards.indexOf('function tierCard('),
+    );
+    assert.doesNotMatch(referralCard, /rake__rate|% of wagers/);
+  });
+
+  it('shows the server-enforced daily wager progress before enabling a streak claim', async () => {
+    const html = await source('index.html');
+    const daily = await source('assets/js/daily.js');
+    const quests = await source('assets/js/quests.js');
+    assert.match(html, /Wager at least \$10M each UTC day to claim/);
+    assert.match(daily, /streak\.wagerRequirementMet/);
+    assert.match(daily, /streak\.wagerRemainingMinor/);
+    assert.match(daily, /daily__track/);
+    assert.match(quests, /streak\.wagerRequirementMet/);
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {
