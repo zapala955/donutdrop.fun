@@ -144,6 +144,17 @@ describe('frontend/backend contract', () => {
     assert.match(append, /if \(followTail\) log\.scrollTop = log\.scrollHeight/);
   });
 
+  it('inserts mixed chat messages and big-hit cards at their chronological position', async () => {
+    const chat = await source('assets/js/chat.js');
+    const start = chat.indexOf('function appendLine(');
+    const end = chat.indexOf('function trim()', start);
+    const append = chat.slice(start, end);
+    assert.match(append, /for \(const child of log\.children\)/);
+    assert.match(append, /Number\(child\.dataset\.at \|\| 0\) <= nodeAt/);
+    assert.match(append, /log\.insertBefore\(node, child\)/);
+    assert.doesNotMatch(append, /const previous = log\.lastElementChild/);
+  });
+
   it('parses every browser module as an ES module, not merely as a script', async () => {
     /* WHY THIS IS NOT `node --check`.
      *

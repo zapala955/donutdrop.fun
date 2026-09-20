@@ -670,6 +670,7 @@ function openModTools(message, x, y) {
 function appendLine(node, when) {
   // Sort key kept on the node so a hit arriving between two polls still lands in time order.
   node.dataset.at = String(when ? new Date(when).getTime() : Date.now());
+  const nodeAt = Number(node.dataset.at);
 
   /* Measure before changing the log. Measuring after append makes a newly-added line increase
    * scrollHeight first, so a reader who was exactly at the bottom suddenly appears not to be and
@@ -677,13 +678,19 @@ function appendLine(node, when) {
   const followTail =
     !log.children.length || log.scrollHeight - log.scrollTop - log.clientHeight < 60;
 
-  const previous = log.lastElementChild;
-  if (previous && Number(previous.dataset.at || 0) > Number(node.dataset.at)) {
-    // Out of order by arrival: place it before the newer line rather than after it.
-    log.insertBefore(node, previous);
-  } else {
-    log.appendChild(node);
+  /* Messages and big hits come from separate requests and either one can finish first. Comparing
+   * only with the final row is not enough: after one older hit is inserted, that final row remains
+   * the same and every later hit piles up immediately in front of it. Scan the whole merged feed
+   * so the first row newer than this one becomes its insertion point. Equal timestamps retain
+   * their arrival order. */
+  let inserted = false;
+  for (const child of log.children) {
+    if (Number(child.dataset.at || 0) <= nodeAt) continue;
+    log.insertBefore(node, child);
+    inserted = true;
+    break;
   }
+  if (!inserted) log.appendChild(node);
 
   // Only follow the tail when the reader is already at it; yanking someone away from a line they
   // are reading is the most annoying thing a chat can do.
