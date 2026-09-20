@@ -527,6 +527,7 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
         client,
         body.drops.map((drop) => drop.catalogItemId),
       );
+      await assertCaseEdge(client, BigInt(body.priceMinor), body.drops);
       await client.query(
         `INSERT INTO cases
            (id, slug, name, description, image_url, price_minor, enabled, metadata)
@@ -560,18 +561,55 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
     if (body.drops) assertUniqueDrops(body.drops);
     const actor = requireUserId(request.authUser?.id);
     await db.transaction(async (client) => {
-      const current = await client.query<{ id: string }>(
-        'SELECT id FROM cases WHERE id = $1 FOR UPDATE',
+      const current = await client.query<{ id: string; price_minor: string }>(
+        'SELECT id, price_minor FROM cases WHERE id = $1 FOR UPDATE',
         [params.id],
       );
-      if (!current.rows[0]) throw new AppError(404, 'CASE_NOT_FOUND', 'Case was not found');
+      const existing = current.rows[0];
+      if (!existing) throw new AppError(404, 'CASE_NOT_FOUND', 'Case was not found');
+
       if (body.drops) {
         await assertCatalogDropsExist(
           client,
           body.drops.map((drop) => drop.catalogItemId),
         );
-        await upsertDrops(client, params.id, body.drops, true);
       }
+
+      /* The edge is re-checked whenever EITHER side of it moves.
+       *
+       * A patch may change the price, the drops, or both, and each alone changes the edge — so
+       * checking only when `drops` is present would let a price cut through unexamined, which is
+       * the cheaper way to give a crate away. The figures are paired here: the incoming price if
+       * one was sent, otherwise the stored one, against the incoming drops if they were sent,
+       * otherwise what is in the table.
+       *
+       * Read BEFORE upsertDrops runs, because that call disables the old rows — loading them
+       * afterwards would measure the crate against a drop table that no longer exists. */
+      if (body.priceMinor !== undefined || body.drops) {
+        const priceMinor = BigInt(body.priceMinor ?? existing.price_minor);
+        let drops = body.drops as
+          | ReadonlyArray<{ catalogItemId: string; weight: number; quantity: number }>
+          | undefined;
+        if (!drops) {
+          const stored = await client.query<{
+            catalog_item_id: string;
+            weight: number;
+            quantity: number;
+          }>(
+            `SELECT catalog_item_id, weight, quantity FROM case_items
+              WHERE case_id = $1 AND enabled`,
+            [params.id],
+          );
+          drops = stored.rows.map((row) => ({
+            catalogItemId: row.catalog_item_id,
+            weight: row.weight,
+            quantity: row.quantity,
+          }));
+        }
+        if (drops.length > 0) await assertCaseEdge(client, priceMinor, drops);
+      }
+
+      if (body.drops) await upsertDrops(client, params.id, body.drops, true);
       await client.query(
         `UPDATE cases SET
            slug = COALESCE($2, slug),
@@ -762,6 +800,96 @@ async function assertCatalogDropsExist(client: DbClient, ids: string[]): Promise
       400,
       'CASE_DROP_INVALID',
       'Every case drop must reference an enabled catalog item',
+    );
+  }
+}
+
+/**
+ * The band a crate's house edge has to land in.
+ *
+ * ── WHY THIS EXISTS ──
+ *
+ * `dev-seed.ts` solves every crate it generates to exactly 90% RTP and refuses to write one that
+ * misses, which is the right discipline — and it REFUSES TO RUN WITH NODE_ENV=production. Live
+ * crates are created through this endpoint instead, deliberately, so that every catalogue change
+ * lands in the audit log. Until now this endpoint checked that the drops existed and nothing
+ * whatsoever about what they were worth.
+ *
+ * So the guarantee everybody believed the crates had was a property of a script that cannot touch
+ * the live database. An operator could publish a crate at any RTP through here, including above
+ * 100% — a crate that loses money on every open, at whatever rate players found it — and the first
+ * signal would have been the balance sheet.
+ *
+ * ── WHY A BAND AND NOT A NUMBER ──
+ *
+ * 10% is the ceiling and it matches the upgrader's HOUSE_EDGE_BPS. The floor is 7% because a crate
+ * is built out of whole items with fixed prices: the weights are integers, the values are whatever
+ * the catalogue says, and landing exactly on 1000 bps is not always expressible. A band lets an
+ * operator build a crate out of real items without having to hunt for a weight vector that hits a
+ * single figure, while keeping every crate inside a range the house can actually afford.
+ *
+ * Both ends are refusals rather than corrections. Silently repricing somebody's crate to fit would
+ * publish a crate they did not design.
+ */
+const MIN_CASE_EDGE_BPS = 700;
+const MAX_CASE_EDGE_BPS = 1_000;
+
+/**
+ * Refuses a crate whose expected value puts it outside the band.
+ *
+ * EV is `sum(weight * unit_value * quantity) / sum(weight)`, in BigInt throughout: these are
+ * money figures, the weights run to a billion, and the products pass 2^53 long before the
+ * catalogue's dearest item does.
+ */
+async function assertCaseEdge(
+  client: DbClient,
+  priceMinor: bigint,
+  drops: ReadonlyArray<{ catalogItemId: string; weight: number; quantity: number }>,
+): Promise<void> {
+  const values = await client.query<{ id: string; unit_value_minor: string }>(
+    'SELECT id, unit_value_minor FROM catalog_items WHERE id = ANY($1::uuid[])',
+    [drops.map((drop) => drop.catalogItemId)],
+  );
+  const valueById = new Map(values.rows.map((row) => [row.id, BigInt(row.unit_value_minor)]));
+
+  let weightedValue = 0n;
+  let totalWeight = 0n;
+  for (const drop of drops) {
+    const unit = valueById.get(drop.catalogItemId);
+    /* Unreachable after assertCatalogDropsExist, and checked anyway: a missing value silently
+     * treated as zero would make a crate look cheaper to run than it is, which is the exact
+     * direction of error this function exists to catch. */
+    if (unit === undefined) {
+      throw new AppError(400, 'CASE_DROP_INVALID', 'A case drop references an unknown item');
+    }
+    weightedValue += unit * BigInt(drop.quantity) * BigInt(drop.weight);
+    totalWeight += BigInt(drop.weight);
+  }
+  if (totalWeight <= 0n) {
+    throw new AppError(400, 'CASE_DROP_INVALID', 'A case needs at least one weighted drop');
+  }
+
+  /* One division, at the end.
+   *
+   * The obvious form — floor the EV, then take (price - EV) / price — rounds twice, and both
+   * roundings push the computed edge UPWARD. On a cheap crate that is enough to turn a crate
+   * solved to exactly 10% into a measured 1010 bps and refuse it: 10,000 / a 1,000 price is ten
+   * basis points per unit of EV lost to the floor. Refusing a correct crate at the boundary is a
+   * bug an operator cannot do anything about, because nothing they can type will fix it.
+   *
+   * Scaling the whole comparison by `totalWeight` keeps the EV exact and leaves one truncation, at
+   * the last step, worth less than a basis point. */
+  const scaledPrice = priceMinor * totalWeight;
+  const edgeBps = Number(((scaledPrice - weightedValue) * 10_000n) / scaledPrice);
+
+  if (edgeBps < MIN_CASE_EDGE_BPS || edgeBps > MAX_CASE_EDGE_BPS) {
+    const pct = (value: number) => (value / 100).toFixed(2);
+    throw new AppError(
+      400,
+      'CASE_EDGE_OUT_OF_BAND',
+      `This crate returns ${pct(10_000 - edgeBps)}% of its price, a house edge of ${pct(edgeBps)}%.` +
+        ` Every crate must sit between ${pct(MIN_CASE_EDGE_BPS)}% and ${pct(MAX_CASE_EDGE_BPS)}%.` +
+        ` Adjust the price or the weights.`,
     );
   }
 }
