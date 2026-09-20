@@ -104,5 +104,4 @@ export function createSocketBudget({ ratePerSecond, burst }: BudgetOptions): Soc
  * Lobby sockets carry watch/unwatch and a ping. Nothing about them is real-time, and a client
  * sending ten frames a second to a lobby is not a client.
  */
-export const ARENA_SOCKET_BUDGET: BudgetOptions = { ratePerSecond: 25, burst: 50 };
 export const LOBBY_SOCKET_BUDGET: BudgetOptions = { ratePerSecond: 10, burst: 20 };

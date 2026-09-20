@@ -294,6 +294,9 @@ describe('the piggy bank is gone', () => {
     );
     const health = await readFile(path.resolve(import.meta.dirname, '../src/routes/health.ts'), 'utf8');
     assert.match(sql, /CREATE FUNCTION donut_schema_ready_v32\(\) RETURNS boolean/);
-    assert.match(health, /donut_schema_ready_v32\(\)/);
+    /* 032 declares v32; the running API has since moved on to a later marker, which is asserted by
+       the migration that introduced it rather than pinned here. Naming a version in this test made
+       every future migration fail a piggy-bank assertion, which tells nobody anything. */
+    assert.match(health, /donut_schema_ready_v\d+\(\)/);
   });
 });

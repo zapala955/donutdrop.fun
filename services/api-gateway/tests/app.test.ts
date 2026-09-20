@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
@@ -53,7 +55,7 @@ describe('API application', () => {
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       assert.equal(ready.statusCode, 200);
       assert.deepEqual(ready.json(), { status: 'ready' });
-      assert.ok(queries.includes('SELECT public.donut_schema_ready_v32() AS ready'));
+      assert.ok(queries.includes('SELECT public.donut_schema_ready_v33() AS ready'));
 
       const missing = await app.inject({ method: 'GET', url: '/not-a-route' });
       assert.equal(missing.statusCode, 404);
@@ -213,5 +215,58 @@ describe('authenticated bot failure responses', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe('the slither arena is gone', () => {
+  it('leaves no route, no engine, no client module and no config', async () => {
+    const read = (rel: string) => readFile(path.resolve(import.meta.dirname, rel), 'utf8');
+    const app = await read('../src/app.ts');
+    const config = await read('../src/config.ts');
+    assert.doesNotMatch(app, /[Ss]lither/);
+    assert.doesNotMatch(config, /SLITHER_/);
+    for (const gone of [
+      '../src/routes/slither.ts',
+      '../src/lib/slither-engine.ts',
+      '../src/lib/slither-hub.ts',
+      '../../../DONUTDROP FRONTEND/Donut Drop/assets/js/slither.js',
+      '../../../DONUTDROP FRONTEND/Donut Drop/assets/js/slither-renderer.js',
+      '../../../DONUTDROP FRONTEND/Donut Drop/assets/css/slither.css',
+    ]) {
+      await assert.rejects(read(gone), /ENOENT/, `${gone} should be deleted`);
+    }
+  });
+
+  it('refuses to drop the tables while money is still in flight', async () => {
+    /* Two guards, because there are two ways money is in flight, and the second is the one that is
+     * easy to miss: a side-bet market on an arena session could only ever be settled by the arena,
+     * so every open market is other people's money with no remaining path to a payout. */
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/033_remove_slither_arena.sql'),
+      'utf8',
+    );
+    assert.match(sql, /FROM slither_sessions\s*\n\s*WHERE status = 'alive'/);
+    assert.match(sql, /FROM side_bet_markets\s*\n\s*WHERE kind = 'slither' AND status IN \('open', 'locked'\)/);
+    assert.equal(sql.match(/RAISE EXCEPTION/g)?.length, 2, 'one raise per guard');
+    /* Kills reference sessions, so the order is not cosmetic. */
+    assert.ok(
+      sql.indexOf('DROP TABLE slither_kills;') < sql.indexOf('DROP TABLE slither_sessions;'),
+    );
+  });
+
+  it('leaves the ledger kinds and the side-bet history alone', async () => {
+    /* Narrowing either CHECK would be validated against rows that already exist, which is how
+     * migration 030 took production down. */
+    const sql = await readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/033_remove_slither_arena.sql'),
+      'utf8',
+    );
+    assert.doesNotMatch(sql, /wallet_transactions_kind_check/);
+    assert.doesNotMatch(sql, /DROP CONSTRAINT/);
+    assert.doesNotMatch(sql, /DROP TABLE side_bet/);
+    // The two kinds outlive the mode, because the rows naming them do.
+    const wallet = await readFile(path.resolve(import.meta.dirname, '../src/lib/wallet.ts'), 'utf8');
+    assert.match(wallet, /'slither_cashout'/);
+    assert.match(wallet, /'slither_refund'/);
   });
 });

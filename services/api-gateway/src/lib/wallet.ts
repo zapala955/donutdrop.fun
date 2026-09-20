@@ -27,7 +27,13 @@ export type WalletKind =
    * a stake is a debit written directly by the route that takes it. */
   | 'duel_win'
   | 'duel_refund'
-  /* The arena. `slither_cashout` is an extraction that reached the wallet net of the platform's
+  /* The arena, which no longer exists — and these two kinds stay anyway.
+   *
+   * The wallet is append-only, so every extraction and every refund the arena ever wrote is still
+   * in somebody's history and still needs a name. Removing them would not tidy anything; it would
+   * make those rows unnameable. They outlive the mode, as the piggy bank's three did before them.
+   *
+   * `slither_cashout` is an extraction that reached the wallet net of the platform's
    * cut, and `slither_refund` is the buy-in handed back whole when the arena process died holding
    * a live session. There is no credit vocabulary for a kill: a kill does not pay the killer, it
    * puts the victim's value on the floor for whoever reaches it, and that transfer happens inside

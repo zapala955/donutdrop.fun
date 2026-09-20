@@ -243,11 +243,15 @@ export async function registerSideBetRoutes(app: FastifyInstance, db: Database, 
     userId: string,
   ): Promise<boolean> {
     if (market.kind === 'slither') {
-      const row = await client.query(
-        'SELECT 1 FROM slither_sessions WHERE id = $1 AND user_id = $2',
-        [market.subject_ref, userId],
-      );
-      return (row.rowCount ?? 0) > 0;
+      /* The arena is gone and `slither_sessions` went with it, so there is no longer a table that
+       * could answer whether this account was in that session. Querying it would throw.
+       *
+       * Answering `true` refuses the bet, which is the correct direction and the one this function
+       * already documents: a subject that cannot be resolved is treated as one the player might be
+       * in. Nothing can open an arena market any more, so the only rows that reach here are settled
+       * history — and a bet on a match that can never be played again should be refused whoever is
+       * asking. */
+      return true;
     }
     if (market.kind === 'duel') {
       const row = await client.query(
@@ -273,7 +277,7 @@ export async function openSideBetMarket(
   db: Database,
   config: AppConfig,
   market: {
-    readonly kind: 'slither' | 'duel';
+    readonly kind: 'duel';
     readonly subjectRef: string;
     readonly outcomeA: string;
     readonly outcomeB: string;
@@ -299,7 +303,7 @@ export async function openSideBetMarket(
  */
 export async function settleSideBetMarket(
   db: Database,
-  kind: 'slither' | 'duel',
+  kind: 'duel',
   subjectRef: string,
   winningOutcome: string | null,
 ): Promise<void> {

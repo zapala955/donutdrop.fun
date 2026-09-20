@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 import {
-  ARENA_SOCKET_BUDGET,
   LOBBY_SOCKET_BUDGET,
   createSocketBudget,
 } from '../src/lib/socket-limit.js';
@@ -82,13 +81,13 @@ describe('socket frame budget', () => {
     }
   });
 
-  it('ships budgets that leave real clients headroom', () => {
-    /* The arena client sends at INPUT_HZ (20). A limit at or below that would throttle correct
-     * play, which is how a limiter ends up raised until it stops limiting anything. */
-    assert.ok(ARENA_SOCKET_BUDGET.ratePerSecond > 20);
-    assert.ok(ARENA_SOCKET_BUDGET.burst >= ARENA_SOCKET_BUDGET.ratePerSecond);
-    // Lobby sockets carry watch/unwatch and a ping; they have no real-time stream to keep up with.
-    assert.ok(LOBBY_SOCKET_BUDGET.ratePerSecond < ARENA_SOCKET_BUDGET.ratePerSecond);
+  it('ships a budget that leaves real clients headroom', () => {
+    /* Only the lobby budget is left. The arena budget went with the arena — it existed because a
+     * 20Hz input stream needed room above it, and nothing on the platform sends at that rate any
+     * more. Lobby sockets carry watch/unwatch and a ping, so the bar is that a burst of those
+     * cannot trip a limit that is supposed to catch abuse. */
+    assert.ok(LOBBY_SOCKET_BUDGET.ratePerSecond >= 5);
+    assert.ok(LOBBY_SOCKET_BUDGET.burst >= LOBBY_SOCKET_BUDGET.ratePerSecond);
   });
 
   it('counts every refusal for the close-time log line', () => {

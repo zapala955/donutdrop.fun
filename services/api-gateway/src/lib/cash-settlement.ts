@@ -42,10 +42,7 @@ export type QuestMetric =
 export type ContributionSource =
   | 'upgrader'
   | 'case'
-  | 'skill_duel'
-  /* The arena buy-in. Counted at the door rather than at the exit: it is at risk from the
-   * first tick, and a player who dies with it never gets an exit to be counted at. */
-  | 'slither_arena';
+  | 'skill_duel';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

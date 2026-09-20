@@ -106,9 +106,11 @@ curl --fail --head https://donutdrop.fun/
 curl --fail --head https://www.donutdrop.fun/
 ```
 
-The API is intentionally single-instance while the in-memory Slither arena is enabled. Do not
-scale the `api` service horizontally without first extracting or externally coordinating that
-simulation.
+The API no longer holds a live simulation in memory, so the constraint that kept it pinned to a
+single instance is gone. Every remaining mode settles through Postgres, and the socket routes carry
+lobby traffic rather than a real-time stream. Scaling `api` horizontally is a configuration
+decision now rather than something the code forbids — check session affinity for the websocket
+routes before you do it.
 
 ## 5. Updates
 

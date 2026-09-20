@@ -466,24 +466,6 @@ const environmentSchema = z
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
      * and takes it off the board. */
     SKILL_DUEL_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
-    /* The Slither arena. A live PvP pit rather than a round: a player buys in, their stake becomes
-     * a snake, and it grows or vanishes continuously until they extract or die.
-     *
-     * WHAT IS NOT HERE, AND WHY. The entry band is absent on purpose. $1M minimum and $100M
-     * maximum are not tuning knobs, they are the two ends the snake's size is interpolated
-     * between, so they live in slither-engine.ts and in a CHECK constraint on slither_sessions
-     * rather than in an environment file somebody can widen. A $500K entry has no defined shape.
-     *
-     * The fee is charged ONLY on an extraction, as a share of what is extracted. A player who dies
-     * pays nothing — their value went to other players, not to the house, and charging the loser
-     * for someone else's win is not a rake, it is a penalty. Snapshot onto the session row at
-     * entry, so changing it here never changes the terms of a session already in the pit.
-     *
-     * SLITHER_MAX_PLAYERS bounds the simulation, not the business: every tick is O(players ×
-     * body points) and the frame sent to each socket grows with it. */
-    SLITHER_ARENA_ENABLED: booleanString,
-    SLITHER_CASHOUT_FEE_BPS: z.coerce.number().int().min(0).max(1_000).default(1_000),
-    SLITHER_MAX_PLAYERS: z.coerce.number().int().min(2).max(80).default(40),
     /* ── the vault jackpot ──
      * A share of platform volume set aside into one pot, drawn for on every wager and paid whole to
      * one player. The contribution is a share of the WAGER (the brief's "0.1% of all platform
@@ -765,14 +747,6 @@ const environmentSchema = z
      * the largest single claim on it; an arena fee at or below that pays out more rakeback than the
      * extraction collected, on every session, forever. Same arithmetic as the duel check above,
      * and refused at boot for the same reason. */
-    if (env.SLITHER_ARENA_ENABLED && env.VIP_ENABLED && env.SLITHER_CASHOUT_FEE_BPS <= 200) {
-      context.addIssue({
-        code: 'custom',
-        path: ['SLITHER_CASHOUT_FEE_BPS'],
-        message:
-          'must exceed the 200 bps VIP rakeback ceiling: an arena fee at or below it pays out more than the extraction collected',
-      });
-    }
     if (env.TIPS_ENABLED && BigInt(env.TIP_MIN_MINOR) > BigInt(env.TIP_MAX_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1033,9 +1007,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     skillDuelMinStakeMinor: BigInt(env.SKILL_DUEL_MIN_STAKE_MINOR),
     skillDuelMaxStakeMinor: BigInt(env.SKILL_DUEL_MAX_STAKE_MINOR),
     skillDuelLobbyTtlMinutes: env.SKILL_DUEL_LOBBY_TTL_MINUTES,
-    slitherArenaEnabled: env.SLITHER_ARENA_ENABLED,
-    slitherCashoutFeeBps: env.SLITHER_CASHOUT_FEE_BPS,
-    slitherMaxPlayers: env.SLITHER_MAX_PLAYERS,
     vaultJackpotEnabled: env.VAULT_JACKPOT_ENABLED,
     vaultJackpotContributionBps: env.VAULT_JACKPOT_CONTRIBUTION_BPS,
     vaultJackpotOddsDivisorMinor: BigInt(env.VAULT_JACKPOT_ODDS_DIVISOR_MINOR),

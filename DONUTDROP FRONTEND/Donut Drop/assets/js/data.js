@@ -161,20 +161,3 @@ export const UPGRADER = {
   stakes: [10_000, 50_000, 250_000, 1_000_000, 5_000_000],
 };
 
-/* The arena's design note, kept as the record of what the mode was specified to be.
- *
- * It is NOT configuration and nothing reads it. Every number the arena actually runs on lives on
- * the server — the entry band and the channel length in slither-engine.ts, the platform's cut in
- * configuration — because a browser constant that looks like a rule is a browser constant somebody
- * eventually edits and expects to matter. The `fee` field the first draft of this carried is gone
- * for the same reason: the cut is applied at extraction, server-side, and is never quoted to a
- * client.
- */
-export const ARENA_NOTE = {
-  id: 'slither',
-  name: 'Slither Arena',
-  accent: '#ffd700',
-  icon: IMG + 'slime_ball.png',
-  blurb: 'Your buy-in becomes your snake — more money, longer body. Eat what is on the floor to grow what you are carrying, and whatever dies near you is yours if you get there first.',
-  rules: 'Two ways out with the money: steer through one of the four moving gates on the wall, or hold a straight line for three seconds. Turning or boosting resets the channel, so extracting means telling the room exactly where you are going.',
-};

@@ -50,7 +50,6 @@
 <link rel="stylesheet" href="assets/css/duel.css" />
 <!-- The arena. Loads last of the mode sheets: it owns a full-bleed WebGL surface and the four
      things that float on top of it, and nothing else on the site may end up inside .pit. -->
-<link rel="stylesheet" href="assets/css/slither.css" />
 <!-- The social suite: the chat rail's furniture, the vault jackpot bar and the two overlays. -->
 <link rel="stylesheet" href="assets/css/social.css" />
 <!-- The finish pass, and it has to be last: it settles the arguments the sheets above were having
@@ -107,12 +106,12 @@
       </div>
     </div>
 
-    <!-- 1v1 Skill is the arena now. The header entry points at #/slither, which is the mode a
-         player means when they click it: a live pit they can be in within two taps. The turn-based
-         duel lobby it used to open is still a live route at #/skill-duel and still reachable from
-         the account menu — it was moved off the bar rather than removed, because one nav entry
-         cannot introduce two modes and the one worth introducing is the one that is real time. -->
-    <a class="navlive" href="#/slither" data-route="slither">
+    <!-- Back to the duel lobby. This entry pointed at the arena for as long as the arena
+         existed, on the argument that a live pit was the better thing to introduce; with the arena
+         gone the duel is what "1v1 Skill" means again, and it is still a live route. Leaving the
+         href at a mode that no longer answers would have been a dead entry on the busiest bar on
+         the site. -->
+    <a class="navlive" href="#/skill-duel" data-route="skill-duel">
       <span>1v1 Skill</span>
       <i class="navlive__pill">LIVE</i>
     </a>
@@ -395,16 +394,6 @@
           data-tip="Pure skill. The house takes no edge on the result — it is paid a rake on the pot of a duel it decides, and nothing on a draw."></button></h1>
       </header>
       <div class="duelwrap" id="duelRoot"></div>
-    </section>
-
-    <!-- ─────── SLITHER ARENA ─────── -->
-    <section class="view" data-view="slither" hidden>
-      <header class="phead">
-        <h1>Slither Arena <button class="ihint" type="button"
-          aria-label="Your buy-in is your snake. Run into anyone and it is theirs; reach a gate or hold a straight line for three seconds and it is yours."
-          data-tip="Your buy-in is your snake. Run into anyone and it is theirs — reach a gate, or hold a straight line for three seconds, and it is yours."></button></h1>
-      </header>
-      <div class="arenawrap" id="slitherRoot"></div>
     </section>
 
     <!-- ─────── QUESTS ─────── -->

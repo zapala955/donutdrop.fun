@@ -77,54 +77,6 @@ describe('frontend/backend contract', () => {
     }
   });
 
-  it('routes the 1v1 Skill header button straight into the arena', async () => {
-    const html = await source('index.html');
-    const app = await source('assets/js/app.js');
-    // The header entry and the route behind it.
-    assert.match(html, /<a class="navlive" href="#\/slither" data-route="slither">/);
-    assert.match(html, /data-view="slither"/);
-    assert.match(app, /slither: mountSlither/);
-    /* The duel lobby the button used to open is still live and still reachable. A mode with money
-     * in it is retired by being taken off the board, not by being stranded behind a URL. */
-    assert.match(html, /href="#\/skill-duel" data-route="skill-duel"/);
-    assert.match(html, /data-view="skill-duel"/);
-    assert.match(app, /'skill-duel': mountDuel/);
-  });
-
-  it('keeps the arena entry band at $1M to $100M and computes no outcome in the browser', async () => {
-    const arena = await source('assets/js/slither.js');
-    assert.match(arena, /const MIN_ENTRY = 1_000_000;/);
-    assert.match(arena, /const MAX_ENTRY = 100_000_000;/);
-    /* Every position, collision, pickup, kill and payout arrives from the server. A source of
-     * chance in here — even a cosmetic one — weakens the guarantee the rest of the platform makes,
-     * so orb sparkle is derived from the orb's id instead. */
-    assert.doesNotMatch(arena, /Math\.random/);
-    // The steering frame is the whole client-to-server vocabulary.
-    assert.match(arena, /type: 'input', heading: input\.heading, boost: input\.boost/);
-  });
-
-  it('displays no fee, rake or percentage anywhere in the arena', async () => {
-    /* The client DOES receive the cashout rate now — `cashoutFeeBps`, quoted on the entry card and
-     * folded into the multiple on the dial, because a 10% cut has to be readable before a player
-     * stakes rather than discovered after they extract. This test never forbade that: the patterns
-     * below are case-sensitive and `cashoutFeeBps` does not contain `feeBps`.
-     *
-     * What it forbids is the house's own vocabulary reaching a player-facing surface. "Fee" is a
-     * thing a player is charged and is said plainly; "rake", "house edge" and a raw bps field name
-     * are operator words, and a player reading them is reading the inside of the business rather
-     * than the terms of their own bet. */
-    const arena = await source('assets/js/slither.js');
-    const sheet = await source('assets/css/slither.css');
-    for (const [label, body] of [
-      ['slither.js', arena],
-      ['slither.css', sheet],
-    ] as const) {
-      for (const forbidden of [/feeBps/, /rakeBps/, /RAKE/, /HOUSE (EDGE|CUT)/]) {
-        assert.doesNotMatch(body, forbidden, `${label} must not surface a platform cut`);
-      }
-    }
-  });
-
   it('parses every browser module as an ES module, not merely as a script', async () => {
     /* WHY THIS IS NOT `node --check`.
      *
@@ -159,17 +111,6 @@ ${detail}`);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
-  });
-
-  it('keeps the arena renderer isolated and uses the WebGL2 instanced path', async () => {
-    const arena = await source('assets/js/slither.js');
-    const renderer = await source('assets/js/slither-renderer.js');
-    assert.match(arena, /createSlitherRenderer/);
-    assert.doesNotMatch(arena, /getTHREE|WebGLRenderer/);
-    assert.match(renderer, /getContext\('webgl2'/, 'the arena requires a WebGL2 context');
-    assert.match(renderer, /drawArraysInstanced/);
-    assert.match(renderer, /createShader/);
-    assert.match(renderer, /createTexture/);
   });
 
   it('keeps the meta policy and the header policy in step', async () => {

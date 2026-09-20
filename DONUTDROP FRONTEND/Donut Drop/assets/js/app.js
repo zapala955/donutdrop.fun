@@ -19,7 +19,6 @@ import { mountUpgrader } from './upgrader.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
-import { mountSlither } from './slither.js';
 import { mountReferrals, captureReferralCode, setPendingReferralCode } from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
 import { mountRakeback } from './rakeback.js';
@@ -803,7 +802,6 @@ const VIEWS = {
   crates: mountCrates,
   battles: mountBattles,
   'skill-duel': mountDuel,
-  slither: mountSlither,
   referrals: mountReferrals,
   studio: mountStudio,
   upgrader: mountUpgrader,

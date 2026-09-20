@@ -1,6 +1,6 @@
 /* social.css — the chat rail's new furniture, the vault jackpot, and the tip sheet.
  *
- * Loaded after obsidian.css and slither.css, so the finish layer's tokens are already in scope and
+ * Loaded after obsidian.css, so the finish layer's tokens are already in scope and
  * this sheet spends them rather than restating them: --ob-line for every hairline, --ob-gap for
  * every gap, --r-crisp / --r-panel for every corner, --gold-bright / --gold-body for every accent.
  * Nothing here invents a colour, a radius or a spacing step.
