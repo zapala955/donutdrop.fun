@@ -258,7 +258,20 @@
   pointer-events: none;
 }
 
-/* ─────────── Discord ─────────── */
+/* The line under the code field: what a valid code looks like, and the reassurance that renaming
+   does not break links already in the wild. It doubles as the error slot, because an error about
+   a field belongs under that field and not in a corner of the screen. */
+.refer__note {
+  margin: 7px 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.refer__note[data-bad='1'] {
+  color: var(--red);
+}
+
+/* ─────────── rows ─────────── */
 .refer__row {
   display: flex;
   align-items: center;

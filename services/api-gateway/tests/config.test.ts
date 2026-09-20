@@ -25,7 +25,7 @@ const generated = (label: string): string => createHash('sha256').update(label).
 describe('configuration', () => {
   it('loads strict typed values', () => {
     const config = loadConfig(base);
-    assert.equal(config.houseEdgeBps, 500);
+    assert.equal(config.houseEdgeBps, 1000);
     assert.equal(config.itemSellRateBps, 9000);
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);

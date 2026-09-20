@@ -23,6 +23,33 @@ import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
  */
 
 const attachSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).strict();
+
+/* Renaming takes the same alphabet as claiming, because the two have to agree: a code a player can
+ * set but nobody can type into the attach endpoint is a link that never works. */
+const renameSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).strict();
+
+/**
+ * Words a player may not build a code out of.
+ *
+ * An invite code is pasted into public chat beside a link to this site, so a code reading
+ * DONUTDROPSUPPORT is not a vanity code, it is a costume. The check is on CONTAINMENT rather than
+ * equality — XADMINX impersonates exactly as well as ADMIN, and a rule that only caught the exact
+ * word would be a rule that advertised its own workaround.
+ *
+ * Short and specific on purpose. This is not a profanity filter; the site's own identity and its
+ * staff are what a stranger could be fooled by, and a list that tries to police taste as well ends
+ * up refusing ordinary names for reasons nobody can explain to the player it refused.
+ */
+const RESERVED_FRAGMENTS = [
+  'ADMIN',
+  'DONUT',
+  'MOD',
+  'OFFICIAL',
+  'OWNER',
+  'STAFF',
+  'SUPPORT',
+  'SYSTEM',
+];
 const callbackSchema = z
   .object({
     code: z.string().min(8).max(512),
@@ -156,6 +183,55 @@ export async function registerReferralRoutes(
       invites: rows,
     };
   });
+
+  // ── choosing your own code ────────────────────────────────────────────────
+
+  app.put(
+    '/v1/referrals/code',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 6, timeWindow: '1 minute' } } },
+    async (request) => {
+      requireProgramme();
+      const body = parseWith(renameSchema, request.body);
+      const userId = requireUserId(request.authUser?.id);
+      const code = body.code.toUpperCase();
+
+      const reserved = RESERVED_FRAGMENTS.find((word) => code.includes(word));
+      if (reserved) {
+        throw new AppError(
+          400,
+          'REFERRAL_CODE_RESERVED',
+          `An invite code cannot contain "${reserved}"`,
+        );
+      }
+
+      return db.transaction(async (client) => {
+        /* The row is created if it does not exist yet. A player who has never opened the invite
+         * page has no code row, and making them load one page before another would be a sequence
+         * only the schema cares about. */
+        await ensureReferralCode(client, userId);
+
+        /* One statement decides it, rather than a SELECT followed by an UPDATE. Two players racing
+         * for the same code leave a window between a check and a write that is exactly wide enough
+         * for both of them to win it; a conditional UPDATE has no such window, and the unique index
+         * is the backstop if one is ever introduced. */
+        const renamed = await client.query<{ code: string }>(
+          `UPDATE referral_codes SET code = $2
+            WHERE user_id = $1
+              AND NOT EXISTS (SELECT 1 FROM referral_codes WHERE code = $2 AND user_id <> $1)
+            RETURNING code`,
+          [userId, code],
+        );
+        if (!renamed.rows[0]) {
+          conflict('REFERRAL_CODE_TAKEN', 'Somebody already has that code');
+        }
+
+        /* Existing referrals follow the rename through ON UPDATE CASCADE on referrals_code_fkey.
+         * Nobody who already used the old link loses their referrer, and nobody has to be told to
+         * re-send anything. */
+        return { code, link: `${config.appOrigin}/#/?ref=${code}` };
+      });
+    },
+  );
 
   // ── claiming an invite ────────────────────────────────────────────────────
 

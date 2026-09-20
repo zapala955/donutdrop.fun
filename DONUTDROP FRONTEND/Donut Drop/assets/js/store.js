@@ -798,6 +798,15 @@ export async function attachReferralCode(code) {
   return result;
 }
 
+/* Claims a custom invite code. The server decides whether it is free, so a 409 here is a normal
+ * outcome the page reports rather than an error worth logging. */
+export async function setReferralCode(code) {
+  const result = await api.put('/v1/referrals/code', { code });
+  await refreshReferrals(false);
+  emit('referrals');
+  return result;
+}
+
 /* Hands back Discord's own authorize URL rather than navigating here, so the caller decides when
  * the page leaves. The state parameter inside it is single-use and short-lived. */
 export async function startDiscordVerification() {

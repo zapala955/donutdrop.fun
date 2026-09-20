@@ -140,11 +140,21 @@ const config = (overrides: Record<string, string> = {}): AppConfig =>
 describe('referral revenue share', () => {
   it('pays a cut of the house margin, never a cut of the wager', () => {
     const settings = config();
-    // 5% house edge on 1,000,000 is a 50,000 margin; 5% of that margin is 2,500.
-    assert.equal(settings.houseEdgeBps, 500);
+    /* A 10% edge on 1,000,000 is a 100,000 margin; 5% of that margin is 5,000.
+     *
+     * Which is 0.5% of the wager — and that equivalence is the whole point of this test now. The
+     * referrer's cut is quoted to players as half a percent of what their invitee wagers, and it
+     * is IMPLEMENTED as a share of the margin, because every payout on this platform is priced off
+     * the margin so their sum can be checked against the edge that funds all of them. The two
+     * agree only at this edge: at 5% the same setting would pay 0.25% of wager. Whoever changes
+     * HOUSE_EDGE_BPS is changing what referrers earn, and this asserts the arithmetic that makes
+     * that true rather than leaving it to be discovered. */
+    assert.equal(settings.houseEdgeBps, 1000);
     assert.equal(settings.referralRevshareBps, 500);
-    assert.equal(revshareMinor(settings, 1_000_000n), 2_500n);
-    // Emphatically not 5% of the wager, which would be twenty times larger.
+    assert.equal(revshareMinor(settings, 1_000_000n), 5_000n);
+    // Half a percent of the wager, stated as the wager fraction a player is quoted.
+    assert.equal(revshareMinor(settings, 1_000_000n), 1_000_000n / 200n);
+    // Emphatically not 5% of the wager, which would be ten times larger.
     assert.notEqual(revshareMinor(settings, 1_000_000n), 50_000n);
   });
 
@@ -166,7 +176,7 @@ describe('referral revenue share', () => {
 
     const paid = client.credits.filter((entry) => entry.kind === 'referral_revshare');
     assert.equal(paid.length, 1);
-    assert.equal(paid[0]?.amount, 2_500n);
+    assert.equal(paid[0]?.amount, revshareMinor(settings, 1_000_000n));
     assert.equal(paid[0]?.userId, REFERRER);
   });
 
@@ -336,7 +346,81 @@ describe('referral schema and wiring', () => {
   });
 });
 
-/** The same environment with the programme switched off, and therefore no Discord requirement. */
+/** The same environment with the programme switched off. */
 function baseEnv0(): Record<string, string> {
   return { ...baseEnv, REFERRALS_ENABLED: 'false' };
 }
+
+describe('custom invite codes', () => {
+  const route = () =>
+    readFile(path.resolve(import.meta.dirname, '../src/routes/referrals.ts'), 'utf8');
+  const renameMigration = () =>
+    readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/034_custom_referral_codes.sql'),
+      'utf8',
+    );
+
+  it('carries existing referrals through a rename instead of stranding them', async () => {
+    /* `referrals.code` is a foreign key to `referral_codes.code`. Under the default NO ACTION rule
+     * a rename is refused outright while any referral references it, which is why 016 denied the
+     * UPDATE grant in the first place. The relationship is to the PERSON, not to the string they
+     * were holding, so the cascade is the statement of that. */
+    const sql = await renameMigration();
+    assert.match(sql, /FOREIGN KEY \(code\) REFERENCES referral_codes\(code\) ON UPDATE CASCADE/);
+    // ON DELETE stays NO ACTION: deleting a code would erase a relationship rather than rename it.
+    assert.doesNotMatch(sql, /ON DELETE CASCADE/);
+  });
+
+  it('grants the rename narrowly enough that a code cannot change owner', async () => {
+    /* Column-scoped, so the runtime role can rewrite `code` and nothing else. `user_id` is the
+     * primary key and is not granted, which is what makes transferring a code between accounts
+     * unexpressible rather than merely unimplemented. */
+    const sql = await renameMigration();
+    assert.match(sql, /GRANT UPDATE \(code\) ON TABLE referral_codes TO donut_api_runtime;/);
+    assert.doesNotMatch(sql, /GRANT UPDATE ON TABLE referral_codes/);
+    assert.doesNotMatch(sql, /GRANT DELETE/);
+  });
+
+  it('refuses a code that CONTAINS a reserved word, not merely one that equals it', async () => {
+    /* A code is pasted into public chat beside a link to this site, so XADMINX impersonates
+     * exactly as well as ADMIN does. A rule matching only the exact word would be a rule that
+     * advertised its own workaround. */
+    const source = await route();
+    assert.match(source, /RESERVED_FRAGMENTS\.find\(\(word\) => code\.includes\(word\)\)/);
+    assert.match(source, /'ADMIN',/);
+    assert.match(source, /'SUPPORT',/);
+    assert.match(source, /REFERRAL_CODE_RESERVED/);
+  });
+
+  it('decides a contested code in one statement, with no window between check and write', async () => {
+    /* Two players racing for the same code leave a gap between a SELECT and an UPDATE that is
+     * exactly wide enough for both to win it. A conditional UPDATE has no such gap. */
+    /* Asserted against the whole module rather than a sliced-out handler body. The strings are
+       specific enough to belong to exactly one endpoint, and slicing on brace or paren depth is a
+       parser pretending to be a substring search. */
+    const source = await route();
+    assert.match(source, /UPDATE referral_codes SET code = \$2/);
+    assert.match(
+      source,
+      /NOT EXISTS \(SELECT 1 FROM referral_codes WHERE code = \$2 AND user_id <> \$1\)/,
+    );
+    assert.match(source, /REFERRAL_CODE_TAKEN/);
+    // Uppercased server-side: the alphabet is uppercase and the client is not the authority on it.
+    assert.match(source, /body\.code\.toUpperCase\(\)/);
+    /* And there is no SELECT-then-UPDATE pair left to race: the only read of referral_codes by
+       code is the attach endpoint's owner lookup, which writes nothing. */
+    assert.doesNotMatch(source, /SELECT user_id FROM referral_codes WHERE code = \$2/);
+  });
+
+  it('takes the same alphabet the attach endpoint accepts', async () => {
+    /* A code a player can set but nobody can redeem is a link that silently never works. */
+    const source = await route();
+    const attach = source.match(/const attachSchema = [^;]+;/)?.[0] ?? '';
+    const rename = source.match(/const renameSchema = [^;]+;/)?.[0] ?? '';
+    assert.ok(attach && rename);
+    assert.equal(
+      attach.replace('attachSchema', 'X'),
+      rename.replace('renameSchema', 'X'),
+    );
+  });
+});

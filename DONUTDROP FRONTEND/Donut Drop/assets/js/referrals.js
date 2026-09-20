@@ -17,14 +17,19 @@
  * WHY THERE IS ALMOST NO PROSE ON IT
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * The old page explained the programme in four bullet points before it showed the link. The
- * programme has two conditions and one rate; all three are now rendered as state — a pill, a bar,
- * a figure — and the single sentence that survives sits behind the info icon in the heading.
+ * programme is one condition and one rate now, and both are rendered as state — a ruled list of
+ * terms, and a progress bar per invite — rather than described.
  *
- * The bar is doing the real work. A referrer's only two questions are "has this person verified"
- * and "how far along are they", and both are answers a progress row gives faster than a sentence
- * ever could.
+ * The bar is doing the real work. A referrer has one question about any given invite, "how far
+ * along are they", and a progress row answers it faster than a sentence ever could.
  */
-import { state, bus, refreshReferrals, attachReferralCode } from './store.js';
+import {
+  state,
+  bus,
+  refreshReferrals,
+  attachReferralCode,
+  setReferralCode,
+} from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -250,6 +255,7 @@ function offerCard(data) {
   card.appendChild(list);
 
   card.appendChild(el('hr', 'refer__rule'));
+  card.appendChild(codeField(data));
   card.appendChild(linkField(data));
   /* The Discord block stood here. It was on this page because verification was half the gate; the
    * gate is the wager alone now, so a verification card would be asking for a step that buys the
@@ -257,6 +263,79 @@ function offerCard(data) {
    * this deal any more, and a page that kept advertising it would be selling a condition it does
    * not have. */
   return card;
+}
+
+/**
+ * The code, as something a player can choose.
+ *
+ * It is the same field as the link below it, one rung quieter: a code is set once and then ignored,
+ * while the link is used every time somebody opens this page. Giving them identical weight would
+ * have made the page look like two things to do rather than one thing to copy.
+ *
+ * The input is uppercased as it is typed rather than on submit, because the alphabet is uppercase
+ * and a player who types `niklas` and sees `niklas` has been told nothing about the code they will
+ * actually get. The save button stays disabled until the value is both valid and different, so the
+ * one control on screen answers "is this claimable" without a round trip.
+ */
+function codeField(data) {
+  const wrap = document.createDocumentFragment();
+
+  const label = el('label', 'refer__label');
+  label.textContent = 'Your code';
+  label.htmlFor = 'referCode';
+
+  const field = el('div', 'refer__field');
+  field.appendChild(icon('M15 7h2a5 5 0 0 1 0 10h-2', 'M9 17H7A5 5 0 0 1 7 7h2', 'M8 12h8'));
+
+  const input = document.createElement('input');
+  input.className = 'refer__input';
+  input.id = 'referCode';
+  input.value = data.code;
+  input.maxLength = 16;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('aria-describedby', 'referCodeNote');
+
+  const save = el('button', 'refer__copy');
+  save.type = 'button';
+  save.textContent = 'Save';
+  save.disabled = true;
+
+  const note = el('p', 'refer__note');
+  note.id = 'referCodeNote';
+  note.textContent = '6–16 letters and numbers. Old links keep working.';
+
+  const valid = (value) => /^[A-Z0-9]{6,16}$/.test(value);
+  const sync = () => {
+    const value = input.value.toUpperCase();
+    if (input.value !== value) input.value = value;
+    save.disabled = !valid(value) || value === data.code;
+  };
+  input.addEventListener('input', sync);
+
+  save.addEventListener('click', async () => {
+    const value = input.value.toUpperCase();
+    if (!valid(value)) return;
+    save.disabled = true;
+    save.textContent = 'Saving';
+    try {
+      await setReferralCode(value);
+      playSound('coin');
+      /* No toast and no success state to reset: the page repaints off the store the moment the
+       * refresh lands, and the new code is already in the field and in the link below it. The
+       * change IS the confirmation. */
+    } catch (error) {
+      save.textContent = 'Save';
+      save.dataset.state = 'error';
+      note.textContent = error?.message || 'That code could not be saved.';
+      note.dataset.bad = '1';
+      sync();
+    }
+  });
+
+  field.append(input, save);
+  wrap.append(label, field, note);
+  return wrap;
 }
 
 /** The link, in the sign-in field, with the copy button inside the box it copies. */

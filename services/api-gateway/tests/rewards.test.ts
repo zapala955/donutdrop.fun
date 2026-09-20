@@ -45,10 +45,10 @@ const config = (overrides: Record<string, string> = {}): AppConfig =>
 describe('rakeback rates', () => {
   it('pays a share of the house margin, never a share of the wager', () => {
     const settings = config();
-    // A 1,000,000 wager at a 5% edge earns the house 50,000.
-    assert.equal(houseMarginMinor(settings, 1_000_000n), 50_000n);
-    // The instant tier's "10%" is 10% of THAT, which is 5,000 — not 100,000.
-    assert.equal(rakebackMinor(settings, 'instant', 1_000_000n), 5_000n);
+    // A 1,000,000 wager at a 10% edge earns the house 100,000.
+    assert.equal(houseMarginMinor(settings, 1_000_000n), 100_000n);
+    // The instant tier's "10%" is 10% of THAT, which is 10,000 — not 100,000.
+    assert.equal(rakebackMinor(settings, 'instant', 1_000_000n), 10_000n);
     assert.notEqual(rakebackMinor(settings, 'instant', 1_000_000n), 100_000n);
   });
 

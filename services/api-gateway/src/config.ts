@@ -372,7 +372,7 @@ const environmentSchema = z
       .min(1)
       .max(24 * 30)
       .default(24),
-    HOUSE_EDGE_BPS: z.coerce.number().int().min(0).max(5000).default(500),
+    HOUSE_EDGE_BPS: z.coerce.number().int().min(0).max(5000).default(1000),
     ITEM_SELL_RATE_BPS: z.coerce.number().int().min(1).max(10_000).default(9000),
     MIN_MULTIPLIER_BPS: z.coerce.number().int().min(10_001).max(1_000_000).default(11_000),
     MAX_MULTIPLIER_BPS: z.coerce.number().int().min(10_002).max(10_000_000).default(1_000_000),
