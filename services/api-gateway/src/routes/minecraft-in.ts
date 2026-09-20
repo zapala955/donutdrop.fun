@@ -348,16 +348,13 @@ export async function registerMinecraftInternalRoutes(
         const intentResult = await client.query<DepositAuthorizationState>(
           `SELECT d.id, d.bot_id, d.status AS deposit_status, d.expires_at,
                   u.normalized_username, u.minecraft_identity, u.status,
-                  u.country_code, u.terms_accepted_at, u.age_verified_at, u.kyc_status,
-                  r.cooldown_until, r.self_excluded_until,
                   b.status AS bot_status, b.reconciliation_status, b.transfer_capable,
                   b.last_heartbeat_at, b.last_snapshot_at
              FROM deposit_intents d
              JOIN users u ON u.id = d.user_id
-             JOIN responsible_limits r ON r.user_id = u.id
              JOIN bot_accounts b ON b.id = d.bot_id
             WHERE d.deposit_code = $1
-            FOR UPDATE OF d, u, r, b`,
+            FOR UPDATE OF d, u, b`,
           [body.depositCode],
         );
         const intent = intentResult.rows[0];
@@ -378,7 +375,7 @@ export async function registerMinecraftInternalRoutes(
           intent.normalized_username === body.username.toLowerCase() &&
           intent.minecraft_identity === body.identity &&
           intent.expires_at.getTime() > now + 30_000 &&
-          isDepositEligible(intent, config.allowedCountries, now, config.gameCurrencyOnly) &&
+          isDepositEligible(intent) &&
           botIsSafe;
 
         let storedResponse: z.infer<typeof storedDepositAuthorizationSchema> = {
@@ -722,10 +719,9 @@ async function processDeposit(
             lease.token_hash AS lease_token_hash, lease.expires_at AS lease_expires_at
        FROM deposit_intents d
        JOIN users u ON u.id = d.user_id
-       JOIN responsible_limits r ON r.user_id = u.id
        JOIN bot_accounts b ON b.id = d.bot_id
        LEFT JOIN deposit_authorization_leases lease ON lease.deposit_id = d.id
-      WHERE d.deposit_code = $1 FOR UPDATE OF d, u, r, b`,
+      WHERE d.deposit_code = $1 FOR UPDATE OF d, u, b`,
     [event.depositCode],
   );
   const intent = intentResult.rows[0];
@@ -770,7 +766,7 @@ async function processDeposit(
     intent.expires_at.getTime() <= now ||
     intent.lease_expires_at === null ||
     intent.lease_expires_at.getTime() <= now ||
-    !isDepositEligible(intent, config.allowedCountries, now, config.gameCurrencyOnly) ||
+    !isDepositEligible(intent) ||
     !botIsSafe
   ) {
     await quarantineDeposit(client, intent.id, event.botId);

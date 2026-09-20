@@ -83,7 +83,7 @@ function paintSupport() {
     ['Verify a roll', '#/fairness'],
     ['Wallet ledger', '#/wallet'],
     ['Match history', '#/history'],
-    ['Responsible play', '#/settings'],
+    ['Your account', '#/settings'],
     ['Terms', '#/terms'],
   ]) {
     const link = el('a', 'info__link');

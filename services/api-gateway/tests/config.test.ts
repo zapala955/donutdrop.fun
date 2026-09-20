@@ -30,7 +30,6 @@ describe('configuration', () => {
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
-    assert.equal(config.gameCurrencyOnly, false);
   });
 
   it('requires HTTPS in production', () => {
@@ -104,12 +103,12 @@ describe('configuration', () => {
       AUDIT_LOG_HMAC_KEY: generated('audit-key'),
       AUDIT_LOG_KEY_ID: 'production-2026-09',
       IP_HASH_KEY: generated('ip-hash-key'),
-      ALLOWED_COUNTRIES: 'PL',
     };
+    /* ALLOWED_COUNTRIES and GAME_CURRENCY_ONLY were asserted here. Production used to refuse to
+       boot without an explicit country allow-list unless the deployment declared itself game
+       currency only — a real-money licensing rule. Neither setting exists now; the wallet holds
+       DonutSMP dollars and there is no jurisdiction to allow or refuse. */
     assert.doesNotThrow(() => loadConfig(production));
-    assert.doesNotThrow(() =>
-      loadConfig({ ...production, ALLOWED_COUNTRIES: '', GAME_CURRENCY_ONLY: 'true' }),
-    );
     assert.throws(() => loadConfig({ ...production, IP_HASH_KEY: production.AUDIT_LOG_HMAC_KEY }));
     assert.throws(() =>
       loadConfig({
@@ -119,7 +118,5 @@ describe('configuration', () => {
     );
     assert.throws(() => loadConfig({ ...production, TRUSTED_PROXY_CIDRS: '0.0.0.0/0' }));
     assert.throws(() => loadConfig({ ...production, MINECRAFT_TRANSFERS_ENABLED: 'true' }));
-    assert.throws(() => loadConfig({ ...production, ALLOWED_COUNTRIES: ',,,' }));
-    assert.throws(() => loadConfig({ ...production, ALLOWED_COUNTRIES: 'PL,,DE' }));
   });
 });

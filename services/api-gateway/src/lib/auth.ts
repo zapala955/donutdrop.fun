@@ -10,7 +10,7 @@ interface SessionRow {
   minecraft_identity: string;
   minecraft_username: string;
   role: 'player' | 'admin';
-  status: 'pending_compliance' | 'active' | 'suspended' | 'self_excluded' | 'closed';
+  status: 'active' | 'suspended' | 'closed';
   csrf_hash: Buffer;
   admin_mfa_verified_at: Date | null;
   admin_mfa_key_fingerprint: string | null;
@@ -68,14 +68,6 @@ export function createAuthGuards(db: Database, config: AppConfig) {
     );
     const row = result.rows[0];
     if (!row) throw new AppError(401, 'INVALID_SESSION', 'The session is invalid or expired');
-    if (config.gameCurrencyOnly && row.status === 'pending_compliance') {
-      const activated = await db.query<{ status: SessionRow['status'] }>(
-        `UPDATE users SET status = 'active', updated_at = now()
-          WHERE id = $1 AND status = 'pending_compliance' RETURNING status`,
-        [row.user_id],
-      );
-      if (activated.rows[0]) row.status = activated.rows[0].status;
-    }
     const expectedRole = config.adminMinecraftIds.has(row.minecraft_identity.toLowerCase())
       ? 'admin'
       : 'player';

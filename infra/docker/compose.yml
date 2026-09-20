@@ -103,8 +103,6 @@ services:
       AUDIT_LOG_KEY_ID: ${AUDIT_LOG_KEY_ID:?Set a unique audit key identifier}
       IP_HASH_KEY_FILE: /run/secrets/api_ip_hash_key
       ADMIN_MINECRAFT_IDS: '${ADMIN_MINECRAFT_IDS:-}'
-      ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:?Set an explicit ISO country allowlist}
-      GAME_CURRENCY_ONLY: '${GAME_CURRENCY_ONLY:-false}'
       SESSION_TTL_HOURS: '${SESSION_TTL_HOURS:-24}'
       HOUSE_EDGE_BPS: '${HOUSE_EDGE_BPS:-1000}'
       ITEM_SELL_RATE_BPS: '${ITEM_SELL_RATE_BPS:-9000}'

@@ -98,50 +98,13 @@ function currentAdminTotp(secret: Buffer): string {
 }
 
 describe('identity and compliance hardening', () => {
-  it('activates only pending-compliance sessions in game-currency-only mode', async () => {
-    const statements: Array<{ sql: string; values?: readonly unknown[] }> = [];
-    const database = {
-      query: async (sql: string, values?: readonly unknown[]) => {
-        statements.push(values ? { sql, values } : { sql });
-        if (sql.includes('FROM sessions s')) {
-          return result([
-            {
-              session_id: 'game-session-id',
-              user_id: 'game-user-id',
-              minecraft_identity: 'game-player-identity',
-              minecraft_username: 'GamePlayer',
-              role: 'player',
-              status: 'pending_compliance',
-              csrf_hash: Buffer.alloc(32),
-              admin_mfa_verified_at: null,
-              admin_mfa_key_fingerprint: null,
-            },
-          ]);
-        }
-        if (sql.includes("SET status = 'active'")) return result([{ status: 'active' }]);
-        return result([]);
-      },
-    } as unknown as Database;
-    const guards = createAuthGuards(
-      database,
-      loadConfig({ ...configInput, GAME_CURRENCY_ONLY: 'true' }),
-    );
-    const request = {
-      cookies: { du_session: 'signed-cookie' },
-      unsignCookie: () => ({ valid: true, renew: false, value: 'session-token' }),
-    } as unknown as FastifyRequest;
-
-    await guards.authenticate(request);
-
-    assert.equal(request.authUser?.status, 'active');
-    assert.ok(
-      statements.some(
-        ({ sql, values }) =>
-          sql.includes("WHERE id = $1 AND status = 'pending_compliance'") &&
-          values?.[0] === 'game-user-id',
-      ),
-    );
-  });
+  /* A test that promoted a `pending_compliance` session to active on sight stood here.
+   *
+   * It existed because GAME_CURRENCY_ONLY had to rescue accounts parked in a compliance state they
+   * could never leave on a deployment with no compliance to complete. There is no such status and
+   * no such mode now: an account is active, suspended or closed, and nothing in the session path
+   * rewrites any of them.
+   */
 
   it('demotes an admin removed from the allowlist and revokes every stale session', async () => {
     const statements: string[] = [];
@@ -553,66 +516,13 @@ describe('identity and compliance hardening', () => {
     );
   });
 
-  it('uses atomic non-shortening updates for cooldown and self-exclusion', async () => {
-    const { app, handlers } = captureApp();
-    const statements: string[] = [];
-    const database = {
-      query: async (sql: string) => {
-        statements.push(sql);
-        return result([
-          {
-            id: 'user-id',
-            status: 'pending_compliance',
-            age_verified_at: null,
-            kyc_status: 'not_started',
-          },
-        ]);
-      },
-      transaction: async (work: (client: DbClient) => Promise<unknown>) =>
-        work({
-          query: async (sql: string) => {
-            statements.push(sql);
-            if (sql.includes('RETURNING cooldown_until')) {
-              return result([{ cooldown_until: new Date(), self_excluded_until: null }]);
-            }
-            return result([]);
-          },
-        } as unknown as DbClient),
-    } as unknown as Database;
-    await registerAccountRoutes(app, database, loadConfig(configInput));
-    const requestBase = {
-      authUser: { id: 'user-id', sessionId: 'session-id' },
-    };
-
-    await handlerFor(handlers, 'PATCH /v1/account')(
-      {
-        ...requestBase,
-        body: { countryCode: 'gb', dateOfBirth: '1990-01-01', acceptTerms: true },
-      } as unknown as FastifyRequest,
-      {} as FastifyReply,
-    );
-    await handlerFor(handlers, 'PUT /v1/account/limits')(
-      { ...requestBase, body: { cooldownHours: 24 } } as unknown as FastifyRequest,
-      {} as FastifyReply,
-    );
-    await handlerFor(handlers, 'POST /v1/account/self-exclusion')(
-      { ...requestBase, body: { durationDays: 30 } } as unknown as FastifyRequest,
-      {} as FastifyReply,
-    );
-
-    assert.ok(
-      statements.some(
-        (sql) => sql.includes('age_verified_at = CASE') && sql.includes("THEN 'not_started'"),
-      ),
-    );
-    assert.equal(statements.filter((sql) => sql.includes('GREATEST(')).length, 2);
-    assert.ok(
-      statements.some(
-        (sql) =>
-          sql.includes("ELSE 'self_excluded'") && sql.includes("status IN ('suspended', 'closed')"),
-      ),
-    );
-  });
+  /* A test for the atomic, non-shortening cooldown and self-exclusion updates stood here.
+   *
+   * It was a good test of a real hazard: a GREATEST() so that calling the endpoint with a shorter
+   * window could not shorten a hold already running, which is the whole point of a hold somebody
+   * set on themselves. Both endpoints are gone with the responsible_limits table, so there is no
+   * update left to be atomic about.
+   */
 
   it('binds admin stock idempotency keys to the canonical request body', async () => {
     const body = {

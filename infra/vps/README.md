@@ -39,12 +39,18 @@ sudo chmod 0600 /opt/donutdrop/shared/donutdrop.env
 sudoedit /opt/donutdrop/shared/donutdrop.env
 ```
 
-Set the real bot UUID, Microsoft login identifier, exact Minecraft username, country allowlist,
-and any reviewed feature flags. `APP_ORIGIN` must remain exactly `https://donutdrop.fun`.
+Set the real bot UUID, Microsoft login identifier, exact Minecraft username, and any reviewed
+feature flags. `APP_ORIGIN` must remain exactly `https://donutdrop.fun`.
 
-`GAME_CURRENCY_ONLY=true` disables the country, age, terms, and KYC profile for deployments that
-use only DonutSMP game currency. Suspensions, closed accounts, cooldowns, and self-exclusion still
-apply. Set it to `false` before integrating any currency or item with off-server monetary value.
+There is no compliance profile to configure. Country restriction, age verification, KYC,
+self-exclusion and cooldowns were removed along with `GAME_CURRENCY_ONLY`, the flag that used to
+switch most of them off: this platform settles in DonutSMP dollars, and every one of them was a
+real-money licensing condition rather than a product decision. Suspending and closing accounts is
+unaffected and is done from the admin console.
+
+If a currency or item with off-server monetary value is ever integrated here, that apparatus has to
+come back, and it is a deliberate piece of work rather than a flag to flip — migration 036 drops
+the columns and the table it lived in.
 
 Generate the secret files once. This command does not print any generated value:
 

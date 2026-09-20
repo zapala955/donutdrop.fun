@@ -69,18 +69,8 @@ function fakeDb(options: { balance: bigint; botOnline?: boolean; insertConflict?
     if (sql.includes('FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key')) {
       return result([]);
     }
-    if (sql.includes('FROM users account')) {
-      return result([
-        {
-          status: 'active',
-          country_code: null,
-          terms_accepted_at: null,
-          age_verified_at: null,
-          kyc_status: 'not_started',
-          cooldown_until: null,
-          self_excluded_until: null,
-        },
-      ]);
+    if (sql.includes('SELECT status FROM users WHERE id = $1 FOR UPDATE')) {
+      return result([{ status: 'active' }]);
     }
     if (sql.includes('UPDATE user_wallets SET balance_minor = balance_minor - $2')) {
       const asked = BigInt(String(values[1]));
@@ -154,16 +144,22 @@ describe('cash withdrawals', () => {
     );
   });
 
-  it('reads the restriction timestamps from the table that actually has them', async () => {
-    /* cooldown_until and self_excluded_until are on responsible_limits. Selecting them from users
-     * parses fine in TypeScript and fails only against a real database, which is exactly how it
-     * reached production: every test here used a fake that answered whatever it was asked. */
+  it('locks the account row it is about to take money off', async () => {
+    /* This test used to assert that the eligibility query joined responsible_limits for a cooldown
+     * and a self-exclusion timestamp — selecting them off `users` parsed fine in TypeScript and
+     * failed only against a real database, which is how it reached production.
+     *
+     * Those columns are gone with the compliance apparatus. What has to stay is the lock: the
+     * status is read inside the transaction that is about to debit this wallet, because reading it
+     * outside is how an account gets suspended in the gap between the check and the debit. */
     const { statements } = await post({ balance: 5_000_000n }, '1000000');
-    const eligibility = statements.find(({ sql }) => sql.includes('cooldown_until'));
+    const eligibility = statements.find(({ sql }) => sql.includes('SELECT status FROM users'));
     assert.ok(eligibility, 'no eligibility query was issued');
-    assert.match(eligibility.sql, /JOIN responsible_limits/);
-    assert.match(eligibility.sql, /limits\.cooldown_until/);
-    assert.match(eligibility.sql, /limits\.self_excluded_until/);
+    assert.match(eligibility.sql, /FOR UPDATE/);
+    for (const { sql } of statements) {
+      assert.doesNotMatch(sql, /responsible_limits/);
+      assert.doesNotMatch(sql, /kyc_status|age_verified_at|country_code/);
+    }
   });
 
   it('offers a payout to a bot that cannot move items', async () => {

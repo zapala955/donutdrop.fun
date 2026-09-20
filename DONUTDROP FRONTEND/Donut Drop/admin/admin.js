@@ -318,7 +318,10 @@ async function loadPlayers(query = '') {
   const data = await api.get(`/v1/admin/users?limit=50${search}`);
   table(
     $('playerTable'),
-    ['Username', 'Status', 'KYC', 'Role', 'Joined', ''],
+    /* KYC stood between Status and Role. It is gone with the compliance apparatus behind it — a
+       column whose value was the same for every account and could not change anything an operator
+       was going to do about a player using in-game currency. */
+    ['Username', 'Status', 'Role', 'Joined', ''],
     data.users ?? [],
     (user) => {
       const tr = document.createElement('tr');
@@ -326,9 +329,7 @@ async function loadPlayers(query = '') {
       const status = document.createElement('td');
       status.append(pill(user.status, statusTone(user.status)));
       tr.append(status);
-      const kyc = document.createElement('td');
-      kyc.append(pill(user.kyc_status, user.kyc_status === 'verified' ? 'ok' : 'warn'));
-      tr.append(kyc, cell(user.role), cell(user.created_at));
+      tr.append(cell(user.role), cell(user.created_at));
 
       /* The id column became this button. The raw uuid was taking a third of the row's width to
          say something an operator never reads and cannot act on; the sheet prints it at the top
@@ -377,20 +378,31 @@ function renderPlayer(data) {
   $('sheetId').textContent = user.id;
 
   /* The facts that decide whether to act, in the order an operator asks them: what can this
-     account do, what is it holding, and is anything already restraining it. */
+     account do, what is it holding, and what has it actually done here.
+
+     The KYC, age-verified and self-excluded rows are gone with the compliance apparatus behind
+     them. They were the only three facts on this sheet that could not change anything an operator
+     was going to do about an account playing with in-game currency.
+
+     PnL is from the player's side, so a positive figure is a player who is up on the house. That
+     direction is stated in the label rather than left to be inferred, because the same number read
+     the other way round is the opposite conclusion about whether to look harder at an account. */
+  const stats = data.stats ?? {};
+  const pnl = BigInt(stats.pnlMinor ?? '0');
   const facts = [
     ['Status', user.status, statusTone(user.status)],
     ['Role', user.role, user.role === 'admin' ? 'warn' : null],
     ['Balance', amountText(data.balanceMinor), null],
-    ['KYC', user.kyc_status, user.kyc_status === 'verified' ? 'ok' : 'warn'],
-    ['Age verified', user.age_verified_at ? 'yes' : 'no', user.age_verified_at ? 'ok' : 'warn'],
+    ['Wagered', amountText(stats.wageredMinor ?? '0'), null],
+    [
+      'Player PnL',
+      `${pnl > 0n ? '+' : ''}${amountText(stats.pnlMinor ?? '0')}`,
+      pnl > 0n ? 'warn' : pnl < 0n ? 'ok' : null,
+    ],
+    ['Deposited', amountText(stats.depositedMinor ?? '0'), null],
+    ['Withdrawn', amountText(stats.withdrawnMinor ?? '0'), null],
     ['Sessions', String((data.sessions ?? []).length), null],
     ['Last login', user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'never', null],
-    [
-      'Self-excluded',
-      data.selfExcludedUntil ? `until ${new Date(data.selfExcludedUntil).toLocaleString()}` : 'no',
-      data.selfExcludedUntil ? 'bad' : null,
-    ],
   ];
   const host = $('sheetFacts');
   host.replaceChildren();

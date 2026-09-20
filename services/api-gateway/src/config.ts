@@ -356,16 +356,6 @@ const environmentSchema = z
         'must contain comma-separated mc: identities',
       )
       .default(''),
-    ALLOWED_COUNTRIES: z
-      .string()
-      .refine(
-        (value) => commaSeparatedValuesAre(value, /^[A-Za-z]{2}$/),
-        'must contain comma-separated ISO alpha-2 country codes',
-      )
-      .default(''),
-    // For deployments whose wallet contains only server-local game currency. This removes the
-    // real-money compliance profile, but never overrides suspension, closure or player holds.
-    GAME_CURRENCY_ONLY: booleanString,
     SESSION_TTL_HOURS: z.coerce
       .number()
       .int()
@@ -835,13 +825,6 @@ const environmentSchema = z
           message: 'must identify the deployed audit key in production',
         });
       }
-      if (!env.GAME_CURRENCY_ONLY && !env.ALLOWED_COUNTRIES.trim()) {
-        context.addIssue({
-          code: 'custom',
-          path: ['ALLOWED_COUNTRIES'],
-          message: 'must explicitly allow at least one country in production',
-        });
-      }
       if (!env.REDIS_URL) {
         context.addIssue({
           code: 'custom',
@@ -959,8 +942,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     ipHashKey: env.IP_HASH_KEY,
     adminMinecraftIds,
     adminTotpSecrets,
-    allowedCountries: normalizeList(env.ALLOWED_COUNTRIES),
-    gameCurrencyOnly: env.GAME_CURRENCY_ONLY,
     sessionTtlHours: env.SESSION_TTL_HOURS,
     houseEdgeBps: env.HOUSE_EDGE_BPS,
     itemSellRateBps: env.ITEM_SELL_RATE_BPS,

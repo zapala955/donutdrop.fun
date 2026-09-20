@@ -235,7 +235,7 @@ export async function registerCaseRoutes(app: FastifyInstance, db: Database, con
           return { round: await loadOpenedRound(client, prior.rows[0].id), replay: true };
         }
 
-        await assertGameEligible(client, config, userId);
+        await assertGameEligible(client, userId);
         const caseResult = await client.query<CaseRow>(
           `SELECT id, slug, name, description, image_url, price_minor, enabled, metadata
              FROM cases WHERE id = $1 AND enabled FOR SHARE`,

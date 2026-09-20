@@ -1,109 +1,58 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, it } from 'node:test';
-import type { AppConfig } from '../src/config.js';
-import type { DbClient } from '../src/lib/db.js';
-import { isDepositEligible, type DepositEligibilityState } from '../src/lib/eligibility.js';
-import { AppError } from '../src/lib/errors.js';
-import { assertGameEligible } from '../src/lib/game-eligibility.js';
+import { isDepositEligible } from '../src/lib/eligibility.js';
 
-const eligible: DepositEligibilityState = {
-  status: 'active',
-  country_code: 'PL',
-  terms_accepted_at: new Date(0),
-  age_verified_at: new Date(0),
-  kyc_status: 'verified',
-  cooldown_until: null,
-  self_excluded_until: null,
-};
+/*
+ * Deposit eligibility.
+ *
+ * This file used to assert eleven combinations of country, terms, age, KYC, cooldown and
+ * self-exclusion. All six are gone: they were the real-money compliance apparatus, and this
+ * platform settles in DonutSMP dollars.
+ *
+ * One rule is left, so there is one thing to test and one thing to keep anybody from quietly
+ * adding back — a deposit is refused for any account that is not active, and refused by DEFAULT,
+ * which is the property that matters when the row is missing or the shape changes underneath it.
+ */
 
 describe('deposit eligibility', () => {
-  it('requires current compliance and an allowed country', () => {
-    assert.equal(isDepositEligible(eligible, new Set(['pl']), 1_000), true);
-    assert.equal(
-      isDepositEligible({ ...eligible, status: 'suspended' }, new Set(['pl']), 1_000),
-      false,
-    );
-    assert.equal(
-      isDepositEligible({ ...eligible, kyc_status: 'rejected' }, new Set(['pl']), 1_000),
-      false,
-    );
-    assert.equal(isDepositEligible(eligible, new Set(['de']), 1_000), false);
+  it('credits an active account', () => {
+    assert.equal(isDepositEligible({ status: 'active' }), true);
   });
 
-  it('skips only the compliance profile for game-currency-only deployments', () => {
-    const unverified = {
-      ...eligible,
-      country_code: null,
-      terms_accepted_at: null,
-      age_verified_at: null,
-      kyc_status: 'not_started',
-    };
-    assert.equal(isDepositEligible(unverified, new Set(), 1_000, true), true);
-    assert.equal(
-      isDepositEligible({ ...unverified, status: 'suspended' }, new Set(), 1_000, true),
-      false,
-    );
-    assert.equal(
-      isDepositEligible({ ...unverified, self_excluded_until: 'infinity' }, new Set(), 1_000, true),
-      false,
-    );
+  it('refuses every other status', () => {
+    for (const status of ['suspended', 'closed', 'pending', '']) {
+      assert.equal(isDepositEligible({ status }), false, `${status} must not be credited`);
+    }
   });
 
-  it('fails closed for active, infinite, and malformed restrictions', () => {
-    assert.equal(
-      isDepositEligible({ ...eligible, cooldown_until: new Date(2_000) }, new Set(), 1_000),
-      false,
-    );
-    assert.equal(
-      isDepositEligible({ ...eligible, self_excluded_until: 'infinity' }, new Set(), 1_000),
-      false,
-    );
-    assert.equal(
-      isDepositEligible({ ...eligible, self_excluded_until: 'not-a-date' }, new Set(), 1_000),
-      false,
-    );
-    assert.equal(
-      isDepositEligible({ ...eligible, cooldown_until: new Date(999) }, new Set(), 1_000),
-      true,
-    );
-  });
-});
-
-describe('game eligibility', () => {
-  const config = {
-    gameCurrencyOnly: true,
-    allowedCountries: new Set<string>(),
-  } as unknown as AppConfig;
-
-  function client(state: Partial<DepositEligibilityState>): DbClient {
-    return {
-      query: async () => ({ rows: [{ ...eligible, ...state }], rowCount: 1 }),
-    } as unknown as DbClient;
-  }
-
-  it('allows an active game-currency account without a compliance profile', async () => {
-    await assert.doesNotReject(
-      assertGameEligible(
-        client({
-          country_code: null,
-          terms_accepted_at: null,
-          age_verified_at: null,
-          kyc_status: 'not_started',
-        }),
-        config,
-        'game-user-id',
-      ),
-    );
+  it('fails closed on a missing row', () => {
+    /* The callers pass `rows[0]`, which is undefined when the account does not exist or the lock
+     * found nothing. Returning true here would credit a deposit to an account nobody looked up. */
+    assert.equal(isDepositEligible(undefined), false);
   });
 
-  it('still blocks self-exclusion in game-currency-only mode', async () => {
-    await assert.rejects(
-      assertGameEligible(
-        client({ self_excluded_until: new Date(Date.now() + 60_000) }),
-        config,
-        'game-user-id',
-      ),
-      (error: unknown) => error instanceof AppError && error.code === 'SELF_EXCLUDED',
+  it('asks nothing about who the player is', async () => {
+    /* The point of the change, asserted where it can rot. A country, a birth date or a KYC status
+     * appearing in this module again would mean the compliance gate had grown back around a wallet
+     * that holds server-local game currency. */
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../src/lib/eligibility.ts'),
+      'utf8',
     );
+    /* Column names, not the words. The comment above the function explains which checks were
+       removed and names them in prose, and a test that fails on its own explanation teaches the
+       next person to delete the explanation. `cooldown_until` cannot appear in a sentence. */
+    for (const gone of [
+      /country_code/,
+      /date_of_birth/,
+      /kyc_status/,
+      /age_verified_at/,
+      /self_excluded_until/,
+      /cooldown_until/,
+    ]) {
+      assert.doesNotMatch(source, gone, `${gone.source} must not return to eligibility`);
+    }
   });
 });

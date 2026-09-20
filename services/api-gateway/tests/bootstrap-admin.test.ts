@@ -57,7 +57,7 @@ class BootstrapClient implements DbClient {
     if (text.includes("role = 'admin' AND status = 'active'")) {
       return result(this.otherActiveAdmin ? ([{ id: 'other-admin' }] as unknown as R[]) : []);
     }
-    if (text.includes('JOIN responsible_limits')) {
+    if (text.includes('FROM users WHERE minecraft_identity')) {
       return result(this.target ? ([this.target] as R[]) : []);
     }
     if (text.includes('UPDATE users')) return result([], 1);
@@ -68,18 +68,15 @@ class BootstrapClient implements DbClient {
 }
 
 function eligibleTarget(overrides: QueryResultRow = {}): QueryResultRow {
+  /* A country, a birth date, terms, an age flag, a KYC status and a self-exclusion flag were all
+   * part of this fixture, because bootstrap asserted every one of them before granting admin. The
+   * records are gone; what still guards this script is ADMIN_MINECRAFT_IDS, which is deployment
+   * configuration rather than anything the account can claim about itself. */
   return {
     id: '10000000-0000-4000-8000-000000000099',
     minecraft_identity: identity,
     role: 'player',
-    status: 'pending_compliance',
-    country_code: 'PL',
-    date_of_birth: '2000-01-01',
-    terms_accepted_at: '2026-09-09T00:00:00.000Z',
-    age_verified_at: null,
-    kyc_status: 'pending',
-    self_exclusion_active: false,
-    database_today: '2026-09-09',
+    status: 'active',
     ...overrides,
   };
 }
@@ -137,15 +134,8 @@ describe('administrator bootstrap', () => {
     );
   });
 
-  it('is idempotent for the same compliant active administrator', async () => {
-    const client = new BootstrapClient(
-      eligibleTarget({
-        role: 'admin',
-        status: 'active',
-        age_verified_at: '2026-09-09T00:00:00.000Z',
-        kyc_status: 'verified',
-      }),
-    );
+  it('is idempotent for an account that is already an active administrator', async () => {
+    const client = new BootstrapClient(eligibleTarget({ role: 'admin', status: 'active' }));
     const outcome = await bootstrapAdminInTransaction(client, config, confirmedOptions);
     assert.equal(outcome.status, 'already_active');
     assert.equal(
@@ -158,13 +148,13 @@ describe('administrator bootstrap', () => {
     );
   });
 
-  it('rejects missing profile data, minors, disallowed countries, and exclusions', async () => {
+  it('rejects an account an operator has already stopped', async () => {
+    /* This asserted missing profile data, minors, disallowed countries and self-exclusions too.
+     * None of those records exists now. What is left is the one state that still means "do not
+     * give this account anything": an operator has suspended or closed it. */
     for (const target of [
-      eligibleTarget({ terms_accepted_at: null }),
-      eligibleTarget({ date_of_birth: '2010-01-01' }),
-      eligibleTarget({ country_code: 'US' }),
-      eligibleTarget({ self_exclusion_active: true }),
-      eligibleTarget({ status: 'self_excluded' }),
+      eligibleTarget({ status: 'suspended' }),
+      eligibleTarget({ status: 'closed' }),
     ]) {
       await assert.rejects(
         bootstrapAdminInTransaction(new BootstrapClient(target), config, confirmedOptions),

@@ -42,13 +42,16 @@ describe('admin player management', () => {
     assert.match(endpoint, /INSUFFICIENT_FUNDS/);
   });
 
-  it('will not let a live self-exclusion be overridden into active', async () => {
-    /* The player's own standing instruction outranks an operator. The whole point of it is that
-     * nobody, including this console, can lift it before it expires. */
+  it('leaves nothing on this endpoint that can outrank an operator', async () => {
+    /* A live self-exclusion used to, deliberately: it was the player's own standing instruction
+       and the point was that nobody, including this console, could lift it before it expired.
+       Self-exclusion is gone with the rest of the compliance apparatus, so the guard is gone too —
+       asserted here so its absence is a decision on the record rather than something that looks
+       like it fell out. */
     const source = await routes('admin');
     const endpoint = source.slice(source.indexOf("'/v1/admin/users/:id/status'"));
-    assert.match(endpoint, /self_excluded/);
-    assert.match(endpoint, /SELF_EXCLUSION_LOCKED/);
+    assert.doesNotMatch(endpoint, /SELF_EXCLUSION_LOCKED/);
+    assert.doesNotMatch(endpoint, /responsible_limits/);
   });
 
   it('ends live sessions when an account stops being active', async () => {

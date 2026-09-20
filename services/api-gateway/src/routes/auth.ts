@@ -368,10 +368,6 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
             [row.id],
           );
         }
-        await client.query(
-          'INSERT INTO responsible_limits(user_id) VALUES ($1) ON CONFLICT DO NOTHING',
-          [row.id],
-        );
         if (challenge.method === 'payment') {
           // A user may have paid more than one challenge after an earlier completion returned a
           // 500. Reconcile every confirmed payment for the same immutable Minecraft identity;

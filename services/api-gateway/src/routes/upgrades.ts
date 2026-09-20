@@ -200,7 +200,7 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
           return { round: existing.rows[0], wager: null, stakeValue: 0n };
         }
 
-        await assertGameEligible(client, config, userId);
+        await assertGameEligible(client, userId);
 
         const fairnessResult = await client.query<FairnessRow>(
           `SELECT id, server_seed_ciphertext, server_seed_hash, nonce

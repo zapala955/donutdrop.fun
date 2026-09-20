@@ -898,7 +898,7 @@ export async function withdrawCreatorApplication() {
   return result;
 }
 
-/* ─────────── account, wallet ledger, responsible play ───────────
+/* ─────────── account and wallet ledger ───────────
  *
  * These back the profile, wallet, history and settings routes. Unlike the promotions above they
  * are core account surfaces rather than optional programmes, so a failure here is surfaced to the
@@ -925,23 +925,6 @@ export async function refreshTransactions(limit = 50, notify = true) {
   state.transactions = result.transactions || [];
   if (notify) emit('transactions');
   return state.transactions;
-}
-
-/* Cooldown only. The daily wager limit it used to sit beside was removed — both the
- * platform-wide ceiling and the per-player self-set figure — so this endpoint now carries one
- * control, and that control only ever moves the cooldown forward. */
-export async function setCooldown(cooldownHours) {
-  const result = await api.put('/v1/account/limits', { cooldownHours });
-  await refreshAccount(false);
-  emit('account');
-  return result;
-}
-
-export async function setSelfExclusion(durationDays) {
-  const result = await api.post('/v1/account/self-exclusion', { durationDays });
-  await refreshAccount(false);
-  emit('account');
-  return result;
 }
 
 export const canAfford = (amount) => state.authenticated && state.balance >= amount;

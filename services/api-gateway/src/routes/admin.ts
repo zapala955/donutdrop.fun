@@ -61,14 +61,6 @@ const stockSchema = z
     reason: safeText(3, 256),
   })
   .strict();
-const complianceSchema = z
-  .object({
-    ageVerified: z.boolean(),
-    kycStatus: z.enum(['not_started', 'pending', 'verified', 'rejected']),
-    activate: z.boolean().default(false),
-    reason: safeText(3, 256),
-  })
-  .strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
 const botQuarantineSchema = z
   .object({
@@ -76,11 +68,12 @@ const botQuarantineSchema = z
     reason: safeText(3, 256),
   })
   .strict();
-/* Suspension is its own endpoint rather than a field on the compliance one, because the two ask
- * different questions. Compliance asks "has this person proven who they are"; this asks "is this
- * account allowed to trade right now", which is an operator's call and is reversible. The reachable
- * set deliberately excludes 'self_excluded': that is the player's own decision and an operator
- * lifting it by hand is the one thing responsible-gaming rules exist to prevent. */
+/* Whether this account may trade right now. An operator's call, and reversible.
+ *
+ * It used to sit beside a compliance endpoint and exclude a 'self_excluded' status that an operator
+ * was forbidden to lift. Both are gone: there is no compliance to be in a state about, and no
+ * self-exclusion for an operator to be prevented from overriding. What is left is moderation, and
+ * these three values are all of it. */
 const userStatusSchema = z
   .object({
     status: z.enum(['active', 'suspended', 'closed']),
@@ -233,8 +226,8 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
   app.get('/v1/admin/users', { preHandler: requireAdminRead }, async (request) => {
     const query = parseWith(adminListSchema, request.query);
     const result = await db.query(
-      `SELECT id, minecraft_identity, minecraft_username, role, status, country_code,
-              age_verified_at, kyc_status, created_at, last_login_at
+      `SELECT id, minecraft_identity, minecraft_username, role, status,
+              created_at, last_login_at
          FROM users
         WHERE minecraft_identity <> 'system:catalog-seed'
           AND ($1::text IS NULL OR minecraft_username ILIKE '%' || $1 || '%')
@@ -250,11 +243,10 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
    * four facts that decide it. */
   app.get('/v1/admin/users/:id', { preHandler: requireAdminRead }, async (request) => {
     const params = parseWith(idSchema, request.params);
-    const [user, wallet, ledger, sessions, limits] = await Promise.all([
+    const [user, wallet, ledger, sessions, turnover, external] = await Promise.all([
       db.query<AdminEntityRow>(
         `SELECT id, minecraft_identity, minecraft_username, normalized_username, role, status,
-                country_code, date_of_birth, terms_accepted_at, age_verified_at, kyc_status,
-                created_at, updated_at, last_login_at
+                terms_accepted_at, created_at, updated_at, last_login_at
            FROM users WHERE id = $1`,
         [params.id],
       ),
@@ -277,19 +269,64 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           ORDER BY last_seen_at DESC LIMIT 25`,
         [params.id],
       ),
-      db.query<AdminEntityRow>(
-        'SELECT self_excluded_until FROM responsible_limits WHERE user_id = $1',
+      /* Turnover. `wager_events` is the one table that records a stake as a stake, with the margin
+       * it generated beside it, so this is the same number VIP levels and wager races are built
+       * from rather than a fourth opinion assembled out of the ledger. */
+      db.query<{ wagered_minor: string; wagers: string }>(
+        `SELECT coalesce(sum(amount_minor), 0)::text AS wagered_minor,
+                count(*)::text AS wagers
+           FROM wager_events WHERE user_id = $1`,
+        [params.id],
+      ),
+      /* Everything that crossed the platform boundary, signed. A withdrawal is stored negative, so
+       * this one sum is net external money: what they put in, less what they took out. */
+      db.query<{ net_external_minor: string; deposited_minor: string; withdrawn_minor: string }>(
+        `SELECT coalesce(sum(amount_minor), 0)::text AS net_external_minor,
+                coalesce(sum(amount_minor) FILTER (
+                  WHERE kind IN ('pay_login_deposit', 'cash_deposit')), 0)::text AS deposited_minor,
+                coalesce(-sum(amount_minor) FILTER (
+                  WHERE kind IN ('cash_withdrawal', 'cash_withdrawal_refund')), 0)::text
+                  AS withdrawn_minor
+           FROM wallet_transactions
+          WHERE user_id = $1
+            AND kind IN ('pay_login_deposit', 'cash_deposit',
+                         'cash_withdrawal', 'cash_withdrawal_refund')`,
         [params.id],
       ),
     ]);
     if (!user.rows[0]) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+    /* No wallet row means a player who has never had a balance, which is zero, not missing. */
+    const balanceMinor = BigInt(wallet.rows[0]?.balance_minor ?? '0');
+
+    /* Profit and loss, from the player's side.
+     *
+     *     pnl = balance - net external money
+     *
+     * Everything sitting in a balance either came from outside the platform or was won inside it,
+     * so subtracting the outside part leaves exactly what playing here produced. Positive means
+     * the player is up on the house; negative means the house is up on them.
+     *
+     * Derived rather than tallied. A running total would be a fourth place the truth lives, and
+     * the first one to drift — this cannot disagree with the wallet, because it IS the wallet
+     * minus two kinds of row.
+     *
+     * Deposits and withdrawals are reported separately beside it, because "up $40M" reads very
+     * differently on $5M deposited than on $500M, and an operator looking at one number will
+     * always want the other two next. */
+    const netExternalMinor = BigInt(external.rows[0]?.net_external_minor ?? '0');
+
     return {
       user: user.rows[0],
-      /* No wallet row means a player who has never had a balance, which is zero, not missing. */
-      balanceMinor: wallet.rows[0]?.balance_minor ?? '0',
+      balanceMinor: balanceMinor.toString(),
       transactions: ledger.rows,
       sessions: sessions.rows,
-      selfExcludedUntil: limits.rows[0]?.['self_excluded_until'] ?? null,
+      stats: {
+        wageredMinor: turnover.rows[0]?.wagered_minor ?? '0',
+        wagers: Number(turnover.rows[0]?.wagers ?? '0'),
+        depositedMinor: external.rows[0]?.deposited_minor ?? '0',
+        withdrawnMinor: external.rows[0]?.withdrawn_minor ?? '0',
+        pnlMinor: (balanceMinor - netExternalMinor).toString(),
+      },
     };
   });
 
@@ -303,25 +340,18 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       conflict('CANNOT_LOCK_SELF', 'An administrator cannot suspend or close their own account');
     }
     return db.transaction(async (client) => {
-      const current = await client.query<{ status: string; locked: boolean }>(
-        `SELECT u.status,
-                (u.status = 'self_excluded' AND
-                  (r.self_excluded_until IS NULL OR r.self_excluded_until > now())) AS locked
-           FROM users u LEFT JOIN responsible_limits r ON r.user_id = u.id
-          WHERE u.id = $1 FOR UPDATE OF u`,
+      const current = await client.query<{ status: string }>(
+        'SELECT status FROM users WHERE id = $1 FOR UPDATE',
         [params.id],
       );
-      const user = current.rows[0];
-      if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
-      /* A live self-exclusion outranks an operator. It is the player's own standing instruction
-       * and the whole point of it is that nobody, including this console, can talk them out of it
-       * before it expires. */
-      if (user.locked && body.status === 'active') {
-        conflict('SELF_EXCLUSION_LOCKED', 'The self-exclusion period has not expired');
-      }
+      if (!current.rows[0]) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+      /* A live self-exclusion used to outrank an operator here, so that nobody — including this
+       * console — could talk a player out of their own standing instruction before it expired.
+       * There is no self-exclusion any more, so there is nothing left that can outrank an operator
+       * on this endpoint. */
       const updated = await client.query<AdminEntityRow>(
         `UPDATE users SET status = $2, updated_at = now() WHERE id = $1
-          RETURNING id, minecraft_username, role, status, kyc_status, age_verified_at`,
+          RETURNING id, minecraft_username, role, status`,
         [params.id, body.status],
       );
       let revoked = 0;
@@ -338,7 +368,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         action: `user.status.${body.status}`,
         targetType: 'user',
         targetId: params.id,
-        details: { reason: body.reason, from: user.status, sessionsRevoked: revoked },
+        details: { reason: body.reason, from: current.rows[0].status, sessionsRevoked: revoked },
       });
       return { user: updated.rows[0], sessionsRevoked: revoked };
     });
@@ -991,116 +1021,16 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     return reply.code(result.replay ? 200 : 201).send(result.value);
   });
 
-  app.patch(
-    '/v1/admin/users/:id/compliance',
-    { preHandler: guards.requireAdmin },
-    async (request) => {
-      const body = parseWith(complianceSchema, request.body);
-      const params = parseWith(idSchema, request.params);
-      const actor = requireActor(request.authUser?.id);
-      return db.transaction(async (client) => {
-        const current = await client.query<{
-          status: string;
-          country_code: string | null;
-          date_of_birth: Date | string | null;
-          terms_accepted_at: Date | null;
-          age_verified_at: Date | null;
-          kyc_status: 'not_started' | 'pending' | 'verified' | 'rejected';
-          self_exclusion_locked: boolean;
-          self_exclusion_expired: boolean;
-        }>(
-          `SELECT u.status, u.country_code, u.date_of_birth, u.terms_accepted_at,
-                  u.age_verified_at, u.kyc_status,
-                  (u.status = 'self_excluded' AND
-                    (r.self_excluded_until IS NULL OR r.self_excluded_until > now()))
-                    AS self_exclusion_locked,
-                  (u.status = 'self_excluded' AND r.self_excluded_until <= now())
-                    AS self_exclusion_expired
-             FROM users u JOIN responsible_limits r ON r.user_id = u.id
-            WHERE u.id = $1 FOR UPDATE OF u, r`,
-          [params.id],
-        );
-        const user = current.rows[0];
-        if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
-        if (user.self_exclusion_locked && body.activate) {
-          conflict('SELF_EXCLUSION_LOCKED', 'The self-exclusion period has not expired');
-        }
-        if (body.activate && (user.status === 'closed' || user.status === 'suspended')) {
-          conflict(
-            'ACCOUNT_STATUS_LOCKED',
-            'Closed or suspended accounts require a separate account review',
-          );
-        }
-        if (
-          body.activate &&
-          (!body.ageVerified ||
-            body.kycStatus !== 'verified' ||
-            !user.country_code ||
-            !user.date_of_birth ||
-            !user.terms_accepted_at)
-        ) {
-          conflict(
-            'COMPLIANCE_INCOMPLETE',
-            'Country, birth date, accepted terms, age verification, and verified KYC are required',
-          );
-        }
-        if (body.activate && user.date_of_birth && !isAdult(user.date_of_birth)) {
-          conflict('AGE_RESTRICTED', 'The account holder must be at least 18 years old');
-        }
-        if (
-          body.activate &&
-          config.allowedCountries.size &&
-          user.country_code &&
-          !config.allowedCountries.has(user.country_code.trim().toLowerCase())
-        ) {
-          conflict('COUNTRY_NOT_ALLOWED', 'Service is not available in this country');
-        }
-        const nextStatus = body.activate
-          ? 'active'
-          : user.status === 'active' && (!body.ageVerified || body.kycStatus !== 'verified')
-            ? 'pending_compliance'
-            : user.status;
-        const updated = await client.query<AdminEntityRow>(
-          `UPDATE users SET age_verified_at = CASE WHEN $2 THEN COALESCE(age_verified_at, now()) ELSE NULL END,
-                kyc_status = $3, status = $4, updated_at = now()
-          WHERE id = $1 RETURNING id, minecraft_username, status, age_verified_at, kyc_status`,
-          [params.id, body.ageVerified, body.kycStatus, nextStatus],
-        );
-        if (body.activate && user.self_exclusion_expired) {
-          await client.query(
-            `UPDATE responsible_limits SET self_excluded_until = NULL, updated_at = now()
-              WHERE user_id = $1`,
-            [params.id],
-          );
-        }
-        if (
-          nextStatus !== user.status ||
-          Boolean(user.age_verified_at) !== body.ageVerified ||
-          user.kyc_status !== body.kycStatus
-        ) {
-          await client.query(
-            'UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL',
-            [params.id],
-          );
-        }
-        if (nextStatus !== 'active') {
-          await client.query(
-            `UPDATE deposit_intents SET status = 'cancelled'
-              WHERE user_id = $1 AND status = 'pending'`,
-            [params.id],
-          );
-        }
-        await appendAudit(client, config, {
-          actorUserId: actor,
-          action: 'user.compliance_update',
-          targetType: 'user',
-          targetId: params.id,
-          details: body,
-        });
-        return { user: updated.rows[0] };
-      });
-    },
-  );
+  /* PATCH /v1/admin/users/:id/compliance stood here.
+   *
+   * It set an age-verified flag and a KYC status, and decided from those whether an account could
+   * be activated — the operator side of a compliance apparatus that existed because this platform
+   * was written to be able to run as a real-money casino. It settles in DonutSMP dollars, so there
+   * is nothing for an operator to verify and nothing for the endpoint to gate.
+   *
+   * Suspending and closing accounts is unaffected and lives on its own endpoint, which is where it
+   * always belonged: that is moderation rather than compliance.
+   */
 
   /* ─────────────────────── cash payouts awaiting a human ───────────────────────
    *
@@ -1221,17 +1151,6 @@ function readStockCommand(command: StoredCommand, requestHash: string): unknown 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isAdult(dateOfBirth: Date | string, now = new Date()): boolean {
-  const birth =
-    dateOfBirth instanceof Date ? dateOfBirth : new Date(`${dateOfBirth}T00:00:00.000Z`);
-  if (Number.isNaN(birth.getTime())) return false;
-  const birthdayThisYear = new Date(
-    Date.UTC(now.getUTCFullYear(), birth.getUTCMonth(), birth.getUTCDate()),
-  );
-  const age = now.getUTCFullYear() - birth.getUTCFullYear() - (now < birthdayThisYear ? 1 : 0);
-  return age >= 18 && age <= 120;
 }
 
 function requireActor(value: string | undefined): string {

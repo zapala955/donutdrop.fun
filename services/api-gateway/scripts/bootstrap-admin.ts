@@ -27,14 +27,7 @@ interface BootstrapTarget extends QueryResultRow {
   id: string;
   minecraft_identity: string;
   role: 'player' | 'admin';
-  status: 'pending_compliance' | 'active' | 'suspended' | 'self_excluded' | 'closed';
-  country_code: string | null;
-  date_of_birth: Date | string | null;
-  terms_accepted_at: Date | string | null;
-  age_verified_at: Date | string | null;
-  kyc_status: 'not_started' | 'pending' | 'verified' | 'rejected';
-  self_exclusion_active: boolean;
-  database_today: string;
+  status: 'active' | 'suspended' | 'closed';
 }
 
 export function parseBootstrapAdminArguments(args: readonly string[]): BootstrapAdminArguments {
@@ -74,46 +67,21 @@ function assertProvisionedAdmin(config: AppConfig, identity: string): void {
   }
 }
 
-function dateOnly(value: Date | string): string {
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) throw new Error('The linked user has an invalid birth date');
-    return value.toISOString().slice(0, 10);
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error('The linked user has an invalid birth date');
-  }
-  return value;
-}
-
-function isAdultAt(dateOfBirth: Date | string, databaseToday: string): boolean {
-  const birth = new Date(`${dateOnly(dateOfBirth)}T00:00:00.000Z`);
-  const today = new Date(`${databaseToday}T00:00:00.000Z`);
-  if (Number.isNaN(birth.getTime()) || Number.isNaN(today.getTime())) return false;
-  const birthdayThisYear = new Date(
-    Date.UTC(today.getUTCFullYear(), birth.getUTCMonth(), birth.getUTCDate()),
-  );
-  const age = today.getUTCFullYear() - birth.getUTCFullYear() - (today < birthdayThisYear ? 1 : 0);
-  return age >= 18 && age <= 120;
-}
-
-function validateTarget(target: BootstrapTarget, config: AppConfig): void {
+/**
+ * The one thing left to check: the account is not already stopped.
+ *
+ * Country, birth date, terms, adulthood, KYC and self-exclusion were all asserted here, because
+ * granting administrator rights to an unverified identity is a serious thing on a real-money
+ * platform. None of those records exists any more — this settles in DonutSMP dollars — so the
+ * check is what it can honestly be.
+ *
+ * What actually guards this script is unchanged and was always the real control: the identity must
+ * be listed in ADMIN_MINECRAFT_IDS, which is deployment configuration rather than anything a user
+ * can set about themselves.
+ */
+function validateTarget(target: BootstrapTarget): void {
   if (target.status === 'closed' || target.status === 'suspended') {
     throw new Error('The linked user is closed or suspended and cannot be bootstrapped');
-  }
-  if (target.status === 'self_excluded' || target.self_exclusion_active) {
-    throw new Error('The linked user is self-excluded and cannot be bootstrapped');
-  }
-  if (!target.country_code || !target.date_of_birth || !target.terms_accepted_at) {
-    throw new Error(
-      'The linked user must complete country, birth date, and terms before bootstrap',
-    );
-  }
-  if (!isAdultAt(target.date_of_birth, target.database_today)) {
-    throw new Error('The linked user must be between 18 and 120 years old');
-  }
-  const country = target.country_code.trim().toLowerCase();
-  if (config.allowedCountries.size && !config.allowedCountries.has(country)) {
-    throw new Error('The linked user country is not allowed by this deployment');
   }
 }
 
@@ -140,29 +108,17 @@ export async function bootstrapAdminInTransaction(
   }
 
   const targetResult = await client.query<BootstrapTarget>(
-    `SELECT u.id, u.minecraft_identity, u.role, u.status, u.country_code,
-            u.date_of_birth, u.terms_accepted_at, u.age_verified_at, u.kyc_status,
-            (r.self_excluded_until IS NOT NULL AND r.self_excluded_until > now())
-              AS self_exclusion_active,
-            current_date::text AS database_today
-       FROM users u
-       JOIN responsible_limits r ON r.user_id = u.id
-      WHERE u.minecraft_identity = $1
-      FOR UPDATE OF u, r`,
+    `SELECT id, minecraft_identity, role, status
+       FROM users WHERE minecraft_identity = $1 FOR UPDATE`,
     [identity],
   );
   const target = targetResult.rows[0];
   if (!target) {
     throw new Error('The configured identity must link and complete its profile before bootstrap');
   }
-  validateTarget(target, config);
+  validateTarget(target);
 
-  if (
-    target.role === 'admin' &&
-    target.status === 'active' &&
-    target.age_verified_at !== null &&
-    target.kyc_status === 'verified'
-  ) {
+  if (target.role === 'admin' && target.status === 'active') {
     return Object.freeze({
       status: 'already_active',
       userId: target.id,
@@ -172,9 +128,7 @@ export async function bootstrapAdminInTransaction(
   }
 
   const updated = await client.query(
-    `UPDATE users
-        SET role = 'admin', status = 'active', age_verified_at = now(),
-            kyc_status = 'verified', updated_at = now()
+    `UPDATE users SET role = 'admin', status = 'active', updated_at = now()
       WHERE id = $1`,
     [target.id],
   );

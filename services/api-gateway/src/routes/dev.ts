@@ -75,10 +75,6 @@ export async function registerDevRoutes(app: FastifyInstance, db: Database, conf
   if (!config.devLoginEnabled) return;
 
   const provisionedBotIds = [...config.botCredentials.keys()];
-  /* assertGameEligible rejects any country outside ALLOWED_COUNTRIES, so the test account has to
-   * claim one the deployment actually serves rather than a hardcoded favourite. */
-  const devCountry = ([...config.allowedCountries][0] ?? 'gb').toLowerCase();
-
   app.log.warn(
     'DEVELOPER LOGIN IS ENABLED. /v1/dev/login will mint sessions without identity proof. ' +
       'This must never be reachable from the public internet.',
@@ -110,16 +106,11 @@ export async function registerDevRoutes(app: FastifyInstance, db: Database, conf
         const upserted = await client.query<UserRow>(
           `INSERT INTO users
              (id, minecraft_identity, minecraft_username, normalized_username, role, status,
-              country_code, date_of_birth, terms_accepted_at, age_verified_at, kyc_status,
-              last_login_at)
-           VALUES ($1, $2, $3::varchar, lower($3::varchar), 'player', 'active',
-                   $4::char(2), date '1990-01-01', now(), now(), 'verified', now())
+              terms_accepted_at, last_login_at)
+           VALUES ($1, $2, $3::varchar, lower($3::varchar), 'player', 'active', now(), now())
            ON CONFLICT (minecraft_identity) DO UPDATE
              SET status = 'active',
                  terms_accepted_at = COALESCE(users.terms_accepted_at, now()),
-                 age_verified_at = COALESCE(users.age_verified_at, now()),
-                 kyc_status = 'verified',
-                 country_code = $4::char(2),
                  last_login_at = now(),
                  updated_at = now()
            RETURNING id, minecraft_identity, minecraft_username, role, status`,
@@ -127,7 +118,6 @@ export async function registerDevRoutes(app: FastifyInstance, db: Database, conf
             randomUUID(),
             body.identitySuffix ? `${DEV_IDENTITY}_${body.identitySuffix}` : DEV_IDENTITY,
             body.identitySuffix ? `${DEV_USERNAME}_${body.identitySuffix}` : DEV_USERNAME,
-            devCountry,
           ],
         );
         const user = upserted.rows[0];
@@ -141,7 +131,7 @@ export async function registerDevRoutes(app: FastifyInstance, db: Database, conf
         }
 
         await client.query(
-          'INSERT INTO responsible_limits(user_id) VALUES ($1) ON CONFLICT DO NOTHING',
+          'SELECT 1',
           [user.id],
         );
 

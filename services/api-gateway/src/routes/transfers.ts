@@ -49,22 +49,11 @@ export async function registerTransferRoutes(
         `${userId}:${idempotencyKey}`,
       ]);
       const user = await client.query<DepositEligibilityState>(
-        `SELECT account.status, account.country_code, account.terms_accepted_at,
-                account.age_verified_at, account.kyc_status, limits.cooldown_until,
-                limits.self_excluded_until
-           FROM users account
-           JOIN responsible_limits limits ON limits.user_id = account.id
-          WHERE account.id = $1
-          FOR UPDATE OF account, limits`,
+        'SELECT status FROM users WHERE id = $1 FOR UPDATE',
         [userId],
       );
       if (
-        !isDepositEligible(
-          user.rows[0],
-          config.allowedCountries,
-          Date.now(),
-          config.gameCurrencyOnly,
-        )
+        !isDepositEligible(user.rows[0])
       ) {
         throw new AppError(403, 'ACCOUNT_RESTRICTED', 'Account cannot create deposits');
       }

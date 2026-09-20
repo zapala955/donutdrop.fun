@@ -1,8 +1,7 @@
 /* account.js — profile, wallet, history and settings.
  *
  * Four routes, one module. They are four views of the same two things — who the account is, and
- * what its money has done — and splitting them would mean four copies of the same ledger table
- * and the same compliance-state renderer.
+ * what its money has done — and splitting them would mean four copies of the same ledger table.
  *
  * Everything is server state. Nothing here caches a balance or a status between navigations: both
  * change from outside this page (a round settles, an operator suspends an account), and a figure
@@ -14,13 +13,9 @@ import {
   refreshAccount,
   refreshTransactions,
   refreshBalance,
-  setCooldown,
-  setSelfExclusion,
   upgradeHistory,
 } from './store.js';
 import { $, el, money, pct } from './util.js';
-import { toast, openModal, closeModal } from './ui.js';
-import { playSound } from './audio-engine.js';
 
 /* Wallet ledger kinds, in the words a player would use. The API returns the column value, which
  * is a schema identifier and not a label — rendering `upgrade_stake` at somebody is asking them
@@ -55,20 +50,6 @@ const KIND_LABEL = {
 };
 
 const kindLabel = (kind) => KIND_LABEL[kind] ?? String(kind ?? '').replaceAll('_', ' ');
-
-const COOLDOWN_CHOICES = [
-  ['24 hours', 24],
-  ['7 days', 24 * 7],
-  ['30 days', 24 * 30],
-];
-const EXCLUSION_CHOICES = [
-  ['30 days', 30],
-  ['90 days', 90],
-  ['1 year', 365],
-  ['5 years', 1825],
-];
-
-let busy = false;
 
 // ─────────── shared pieces ───────────
 
@@ -208,40 +189,21 @@ function paintProfile() {
     ]),
   );
 
-  const compliance = panel('Verification');
-  compliance.appendChild(
+  /* A Verification panel stood here — KYC, age verified, country — beside a "Play paused" card for
+   * whichever self-imposed hold was running. All of it belonged to the real-money compliance
+   * apparatus, and this wallet holds DonutSMP dollars. The one fact worth keeping out of it is
+   * whether the terms were accepted, which is a record of an agreement rather than a check. */
+  const terms = panel('Terms');
+  terms.appendChild(
     facts([
-      ['Identity (KYC)', account?.kyc_status ?? '—', account?.kyc_status === 'verified' ? 'up' : 'down'],
-      ['Age verified', account?.age_verified_at ? 'yes' : 'no', account?.age_verified_at ? 'up' : 'down'],
-      ['Terms accepted', account?.terms_accepted_at ? 'yes' : 'no', account?.terms_accepted_at ? 'up' : 'down'],
-      ['Country', account?.country_code ?? '—', null],
+      [
+        'Accepted',
+        account?.terms_accepted_at ? new Date(account.terms_accepted_at).toLocaleDateString() : 'no',
+        account?.terms_accepted_at ? 'up' : 'down',
+      ],
     ]),
   );
-  root.appendChild(compliance);
-
-  /* Whichever responsible-play hold is active, shown on the profile as well as in settings: a
-   * player wondering why a round was refused should find the reason on the first page they open,
-   * not only on the page where they set it. */
-  const hold = activeHold(account);
-  if (hold) {
-    const card = panel('Play paused');
-    card.appendChild(facts([[hold.label, hold.until, 'down']]));
-    root.appendChild(card);
-  }
-}
-
-function activeHold(account) {
-  if (!account) return null;
-  const now = Date.now();
-  const excluded = account.self_excluded_until && new Date(account.self_excluded_until).getTime() > now;
-  if (excluded) {
-    return { label: 'Self-excluded until', until: new Date(account.self_excluded_until).toLocaleString() };
-  }
-  const cooling = account.cooldown_until && new Date(account.cooldown_until).getTime() > now;
-  if (cooling) {
-    return { label: 'Cooldown until', until: new Date(account.cooldown_until).toLocaleString() };
-  }
-  return null;
+  root.appendChild(terms);
 }
 
 // ─────────── /wallet ───────────
@@ -422,109 +384,36 @@ function paintSettings() {
     return;
   }
   const account = state.account;
-  const hold = activeHold(account);
 
-  /* Responsible play, and it is the only thing on this page that changes anything.
+  /* A "Responsible play" section stood here: a one-way cooldown and a self-exclusion of up to five
+   * years, both irreversible by design and both enforced on the server rather than on this page.
+   * They were removed on the operator's decision that a wallet of in-game currency does not
+   * warrant them.
    *
-   * Both controls are one-way by design and the server enforces that, not this page: a cooldown
-   * only ever moves forward, and self-exclusion cannot be shortened. The confirm step exists
-   * because neither can be undone from here — not as a formality, but because the player is about
-   * to lock themselves out and should not be able to do it by mis-tapping. */
-  const play = panel('Responsible play');
-  play.appendChild(
-    facts([
-      ['Cooldown', hold?.label === 'Cooldown until' ? hold.until : 'none', hold?.label === 'Cooldown until' ? 'down' : null],
-      [
-        'Self-exclusion',
-        account?.self_excluded_until ? new Date(account.self_excluded_until).toLocaleString() : 'none',
-        account?.self_excluded_until ? 'down' : null,
-      ],
-    ]),
-  );
-
-  const actions = el('div', 'acct__actions');
-  const cooldownBtn = el('button', 'btn');
-  cooldownBtn.type = 'button';
-  cooldownBtn.textContent = 'START COOLDOWN';
-  cooldownBtn.disabled = busy;
-  cooldownBtn.addEventListener('click', openCooldown);
-
-  const excludeBtn = el('button', 'btn acct__danger');
-  excludeBtn.type = 'button';
-  excludeBtn.textContent = 'SELF-EXCLUDE';
-  excludeBtn.disabled = busy;
-  excludeBtn.addEventListener('click', openExclusion);
-
-  actions.append(cooldownBtn, excludeBtn);
-  play.appendChild(actions);
-  root.appendChild(play);
-
+   * This page is a read now. Nothing on it changes anything, which is why there is no longer a
+   * busy state to disable buttons with or a confirm step to guard a mis-tap. */
   const identity = panel('Account');
   identity.appendChild(
     facts([
       ['Username', state.user?.minecraftUsername ?? '—'],
       ['Status', account?.status ?? state.user?.status ?? '—'],
-      ['Country', account?.country_code ?? '—'],
-      ['Identity (KYC)', account?.kyc_status ?? '—'],
+      ['Role', account?.role ?? state.user?.role ?? '—'],
+      [
+        'Joined',
+        account?.created_at ? new Date(account.created_at).toLocaleDateString() : '—',
+      ],
     ]),
   );
   root.appendChild(identity);
 }
 
-function openCooldown() {
-  openModal('Start a cooldown', (body) => {
-    body.innerHTML = '<div class="cform" id="cdForm"></div>';
-    const form = $('#cdForm', body);
-    const warn = el('p', 'acct__warn');
-    warn.textContent = 'A cooldown cannot be shortened or cancelled once it starts.';
-    form.appendChild(warn);
-
-    for (const [label, hours] of COOLDOWN_CHOICES) {
-      const button = el('button', 'btn');
-      button.type = 'button';
-      button.textContent = label;
-      button.addEventListener('click', () => commit(() => setCooldown(hours), `Cooldown set: ${label}`));
-      form.appendChild(button);
-    }
-  });
-}
-
-function openExclusion() {
-  openModal('Self-exclude', (body) => {
-    body.innerHTML = '<div class="cform" id="exForm"></div>';
-    const form = $('#exForm', body);
-    const warn = el('p', 'acct__warn');
-    warn.textContent = 'Self-exclusion cannot be reversed or shortened. Support cannot lift it early.';
-    form.appendChild(warn);
-
-    for (const [label, days] of EXCLUSION_CHOICES) {
-      const button = el('button', 'btn acct__danger');
-      button.type = 'button';
-      button.textContent = label;
-      button.addEventListener('click', () =>
-        commit(() => setSelfExclusion(days), `Self-excluded for ${label}`),
-      );
-      form.appendChild(button);
-    }
-  });
-}
-
-async function commit(action, message) {
-  if (busy) return;
-  busy = true;
-  try {
-    await action();
-    playSound('click');
-    toast({ kind: 'lose', title: message });
-    closeModal();
-  } catch (error) {
-    toast({ kind: 'lose', title: 'Could not apply', body: error?.message || '' });
-  } finally {
-    busy = false;
-    paintSettings();
-    paintProfile();
-  }
-}
+/* openCooldown, openExclusion and the commit helper they shared stood here.
+ *
+ * Two modals that each asked a player to confirm locking themselves out, and one writer that
+ * disabled the page while the request was in flight. Nothing on the settings page writes any more,
+ * so the busy flag and the confirm step went with them rather than being left as scaffolding
+ * around nothing.
+ */
 
 // ─────────── shell helpers ───────────
 

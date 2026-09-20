@@ -362,7 +362,7 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       }
 
       const created = await db.transaction(async (client) => {
-        await assertGameEligible(client, config, userId);
+        await assertGameEligible(client, userId);
 
         const open = await client.query<{ count: string }>(
           `SELECT count(*) AS count FROM duel_lobbies
@@ -427,7 +427,7 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Log in to join a duel');
 
       const joined = await db.transaction(async (client) => {
-        await assertGameEligible(client, config, userId);
+        await assertGameEligible(client, userId);
 
         /* FOR UPDATE: two players hitting Join on the same lobby at the same instant must not both
          * become the opponent. The lock serializes them and the status check below rejects the

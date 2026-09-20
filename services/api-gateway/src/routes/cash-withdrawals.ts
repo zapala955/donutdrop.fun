@@ -211,27 +211,14 @@ export async function registerCashWithdrawalRoutes(
         );
         if (replayed.rows[0]) return { row: replayed.rows[0], replay: true };
 
-        /* The two restriction timestamps live on responsible_limits, not on users. Every account
-         * gets a row there when its login completes, so the inner join cannot drop a real player;
-         * an account somehow missing one returns no row and is refused rather than waved through. */
+        /* One row, one column. This used to join responsible_limits for a cooldown and a
+         * self-exclusion window and read four compliance fields off users; none of them exists
+         * any more. The lock stays, because money is about to leave this account. */
         const account = await client.query<DepositEligibilityState>(
-          `SELECT account.status, account.country_code, account.terms_accepted_at,
-                  account.age_verified_at, account.kyc_status, limits.cooldown_until,
-                  limits.self_excluded_until
-             FROM users account
-             JOIN responsible_limits limits ON limits.user_id = account.id
-            WHERE account.id = $1
-            FOR UPDATE OF account, limits`,
+          'SELECT status FROM users WHERE id = $1 FOR UPDATE',
           [userId],
         );
-        if (
-          !isDepositEligible(
-            account.rows[0],
-            config.allowedCountries,
-            Date.now(),
-            config.gameCurrencyOnly,
-          )
-        ) {
+        if (!isDepositEligible(account.rows[0])) {
           throw new AppError(403, 'ACCOUNT_RESTRICTED', 'This account cannot withdraw right now');
         }
 
