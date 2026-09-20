@@ -24,7 +24,7 @@
  * and "how far along are they", and both are answers a progress row gives faster than a sentence
  * ever could.
  */
-import { state, bus, refreshReferrals, attachReferralCode, startDiscordVerification } from './store.js';
+import { state, bus, refreshReferrals, attachReferralCode } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -137,9 +137,12 @@ function consumeDiscordReturn() {
   const outcome = params.get('discord');
   if (!outcome) return;
 
+  /* `unlocked` used to be one of these. Verifying Discord could complete the bonus gate, so the
+     redirect could come back announcing a payment. The gate is the wager alone now, so that
+     outcome can no longer be produced and an announcement for it would be unreachable code
+     promising money. */
   const announcements = {
     verified: { kind: 'win', title: 'Discord verified' },
-    unlocked: { kind: 'gold', title: 'Bonus unlocked', body: 'Paid to your balance' },
     taken: { kind: 'lose', title: 'Already linked', body: 'That Discord is on another account' },
     expired: { kind: 'lose', title: 'Link expired', body: 'Start the verification again' },
     failed: { kind: 'lose', title: 'Discord declined' },
@@ -147,7 +150,7 @@ function consumeDiscordReturn() {
   const announcement = announcements[outcome];
   if (announcement) {
     toast(announcement);
-    if (outcome === 'verified' || outcome === 'unlocked') playSound('coin');
+    if (outcome === 'verified') playSound('coin');
   }
 
   params.delete('discord');
@@ -201,7 +204,7 @@ function icon(...paths) {
 }
 
 /**
- * The card: the offer, the terms, the link, and Discord if it is still in the way.
+ * The card: the offer, the terms, and the link.
  *
  * In that order, deliberately. It is the order of a decision — what is on the table, what it
  * costs, how to take it, what is blocking it — and it is the same order the sign-in card walks:
@@ -215,9 +218,9 @@ function offerCard(data) {
   title.textContent = 'Invite \u0026 earn';
   const lede = el('p', 'refer__lede');
   lede.textContent =
-    'Send your link to someone who has not played here yet. When they verify Discord and reach the'
-    + ' wager below, the bonus lands in your wallet \u2014 and you keep a cut of the house margin on'
-    + ' everything they ever play.';
+    'Send your link to someone who has not played here yet. Once they have wagered the amount'
+    + ' below, the bonus lands in your wallet \u2014 and you keep a cut of the house margin on'
+    + ' everything they ever play, for as long as they play it.';
   card.append(title, lede);
 
   /* The headline figure, and nothing beside it. */
@@ -248,12 +251,11 @@ function offerCard(data) {
 
   card.appendChild(el('hr', 'refer__rule'));
   card.appendChild(linkField(data));
-
-  const verify = discordRow(data);
-  if (verify) {
-    card.appendChild(el('hr', 'refer__rule'));
-    card.appendChild(verify);
-  }
+  /* The Discord block stood here. It was on this page because verification was half the gate; the
+   * gate is the wager alone now, so a verification card would be asking for a step that buys the
+   * player nothing. Discord verification still exists on the account — it is simply not part of
+   * this deal any more, and a page that kept advertising it would be selling a condition it does
+   * not have. */
   return card;
 }
 
@@ -318,58 +320,6 @@ function linkField(data) {
   return wrap;
 }
 
-/**
- * The caller\u0027s own half of the deal.
- *
- * Shown only when it is actionable \u2014 an unverified account, or one whose verification is holding
- * up somebody else\u0027s bonus. A player who has verified and was not referred needs no card telling
- * them so.
- */
-function discordRow(data) {
-  const self = data.self;
-  if (self.discordVerified && !self.referredBy) return null;
-
-  const wrap = document.createDocumentFragment();
-  const label = el('span', 'refer__label');
-  label.textContent = 'Discord';
-
-  const row = el('div', 'refer__row');
-  const pill = el('span', 'refer__pill');
-  pill.dataset.on = self.discordVerified ? '1' : '0';
-  pill.textContent = self.discordVerified ? 'Verified' : 'Unverified';
-  row.appendChild(pill);
-
-  if (self.discordVerified) {
-    const name = el('span', 'refer__frac');
-    name.textContent = self.discordUsername || '';
-    row.appendChild(name);
-  } else {
-    const note = el('span', 'refer__frac');
-    note.textContent = 'Required before any bonus unlocks';
-    const button = el('button', 'btn btn--go');
-    button.type = 'button';
-    button.textContent = 'Verify';
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      try {
-        /* A top-level navigation rather than a popup: popups are blocked by default on a click
-         * that went through an await, and OAuth in a blocked window fails silently. */
-        location.href = await startDiscordVerification();
-      } catch (error) {
-        button.disabled = false;
-        toast({
-          kind: 'lose',
-          title: 'Cannot start verification',
-          body: error?.message || 'Try again shortly.',
-        });
-      }
-    });
-    row.append(note, button);
-  }
-  wrap.append(label, row);
-  return wrap;
-}
-
 function gate(message) {
   const wrap = el('div', 'refer');
   const card = el('div', 'refer__card');
@@ -385,12 +335,16 @@ function gate(message) {
 function statGrid(data) {
   const grid = el('div', 'refer__grid');
   const totals = data.totals;
-  /* Earned is first and gold, because it is the only figure here somebody came to see. The three
-   * counts after it are the pipeline that produced it, in the order an invite moves through. */
+  /* Earned is first and gold, because it is the only figure here somebody came to see. The two
+   * counts after it are the pipeline that produced it, in the order an invite moves through.
+   *
+   * "Verified" used to sit between them, counting referees who had linked Discord. It was there
+   * because verification gated the bonus; it does not any more, so the column was measuring
+   * something that no longer decides anything — which on a page about getting paid is just a
+   * number to misread. */
   const cells = [
     ['Earned', money(Number(totals.earnedMinor)), true],
     ['Invites', String(totals.invites), false],
-    ['Verified', String(totals.verified), false],
     ['Unlocked', String(totals.unlocked), false],
   ];
   for (const [key, value, gold] of cells) {
@@ -428,10 +382,10 @@ function inviteRow(invite, milestone) {
   const who = el('div', 'refer__who');
   const name = el('span', 'refer__name');
   name.textContent = invite.username;
-  const discord = el('span', 'refer__pill');
-  discord.dataset.on = invite.discordVerified ? '1' : '0';
-  discord.textContent = invite.discordVerified ? 'Verified' : 'Pending';
-  who.append(name, discord);
+  /* A Discord pill sat beside the name. With the gate down to one condition the row already says
+   * everything there is to say about this invite: how far along the bar is, and whether the left
+   * edge has gone gold. */
+  who.append(name);
 
   /* One figure, and it is everything this invite has actually paid \u2014 the running revenue share
    * plus the bonus if it landed. Splitting them into two columns made the row read as a

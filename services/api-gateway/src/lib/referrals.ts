@@ -120,14 +120,21 @@ export async function accrueReferralWager(
 }
 
 /**
- * Tests both milestone conditions and pays the bonus if they are met.
+ * Tests the milestone condition and pays the bonus if it is met.
  *
- * Called from two places — after a wager moves the running total, and after a Discord account is
- * verified — because either one can be the condition that completes the pair. Returns whether the
- * bonus was paid by THIS call, so a caller can tell the player something happened.
+ * ONE condition now: the referee's cumulative wager has reached the threshold. It used to need a
+ * verified Discord account as well, and that second condition was doing two jobs — it gated the
+ * payout, and it made a referee expensive to fabricate, because one Discord account can be bound
+ * to at most one site account here.
  *
- * The row is re-read under a lock rather than trusting whatever the caller already had: between a
- * caller's read and this write, the other condition may have landed in a parallel request.
+ * Only the first job was asked for and only the first job is gone. The second is now unprotected:
+ * nothing in this function can tell a real invite from an operator's own second login, and the
+ * wager threshold is the only cost an attacker pays. See the note on solvency in .env.example —
+ * whether that cost exceeds the bonus is a matter of arithmetic between the threshold and the
+ * house edge, and it is the operator's to keep true.
+ *
+ * Returns whether the bonus was paid by THIS call, so a caller can tell the player something
+ * happened. The row is re-read under a lock rather than trusting whatever the caller already had.
  */
 export async function tryUnlockMilestone(
   client: DbClient,
@@ -136,16 +143,17 @@ export async function tryUnlockMilestone(
 ): Promise<boolean> {
   if (!config.referralsEnabled) return false;
 
-  const locked = await client.query<ReferralRow & { discord_verified_at: Date | null }>(
-    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at, u.discord_verified_at
-       FROM referrals r JOIN users u ON u.id = r.referee_id
-      WHERE r.referee_id = $1
-      FOR UPDATE OF r`,
+  /* The join to `users` went with the Discord condition. This reads one row from one table now,
+     which is the whole of what the gate depends on. */
+  const locked = await client.query<ReferralRow>(
+    `SELECT referrer_id, wagered_minor, bonus_unlocked_at
+       FROM referrals
+      WHERE referee_id = $1
+      FOR UPDATE`,
     [refereeId],
   );
   const referral = locked.rows[0];
   if (!referral || referral.bonus_unlocked_at) return false;
-  if (!referral.discord_verified_at) return false;
   if (BigInt(referral.wagered_minor) < config.referralBonusWagerMinor) return false;
 
   const bonus = config.referralBonusMinor;

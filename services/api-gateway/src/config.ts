@@ -653,22 +653,6 @@ const environmentSchema = z
           'cannot be enabled with PHYSICAL_CUSTODY_ENABLED: minting unbacked items would break bot reconciliation',
       });
     }
-    /* The bonus is the largest single automatic payment on the platform, and the only gate that
-     * keeps it solvent is the wager threshold. Enabling the programme without the Discord
-     * application configured would leave that gate permanently shut for everyone — nobody could
-     * ever verify — which is a silently broken promise rather than a disabled feature, so the
-     * process refuses the combination instead of shipping it. */
-    if (
-      env.REFERRALS_ENABLED &&
-      (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.DISCORD_REDIRECT_URI)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['REFERRALS_ENABLED'],
-        message:
-          'requires DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI: the bonus cannot unlock without Discord verification',
-      });
-    }
     if (
       env.REFERRALS_ENABLED &&
       BigInt(env.REFERRAL_BONUS_WAGER_MINOR) < BigInt(env.REFERRAL_BONUS_MINOR)

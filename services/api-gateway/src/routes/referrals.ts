@@ -5,7 +5,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import { randomToken, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
-import { ensureReferralCode, revshareMinor, tryUnlockMilestone } from '../lib/referrals.js';
+import { ensureReferralCode, revshareMinor } from '../lib/referrals.js';
 import { parseWith } from '../lib/validation.js';
 import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
 
@@ -296,10 +296,10 @@ export async function registerReferralRoutes(
           [claimed, identity.id, identity.username],
         );
 
-        // Verification is one of the two milestone conditions, so the gate is retested the
-        // instant it lands. A referee who was already past the wager threshold unlocks here.
-        const unlocked = await tryUnlockMilestone(client, config, claimed);
-        return unlocked ? ('unlocked' as const) : ('verified' as const);
+        /* No longer retests the milestone. Verifying Discord cannot complete the gate any more
+           because the gate is the wager alone, so a call here could only ever return false — and a
+           call that can only return false reads as a condition somebody forgot to remove. */
+        return 'verified' as const;
       });
 
       return reply.redirect(`${config.appOrigin}/#/referrals?discord=${outcome}`);

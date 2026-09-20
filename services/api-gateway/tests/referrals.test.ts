@@ -77,14 +77,16 @@ class ReferralClient implements DbClient {
     text: string,
     values: unknown[] = [],
   ): Promise<QueryResult<R>> {
-    if (text.includes('FROM referrals') && text.includes('JOIN users')) {
+    /* Matches on FOR UPDATE rather than on the JOIN it used to carry. The gate stopped reading
+       `users` when Discord stopped being a condition, and a stub still insisting on that join
+       would answer nothing and fail every test for the wrong reason. */
+    if (text.includes('FROM referrals') && text.includes('FOR UPDATE')) {
       if (!this.hasReferral) return result([]);
       return result([
         {
           referrer_id: REFERRER,
           wagered_minor: this.state.wagered.toString(),
           bonus_unlocked_at: this.state.bonusUnlocked ? new Date() : null,
-          discord_verified_at: this.state.discordVerified ? new Date() : null,
         },
       ] as unknown as R[]);
     }
@@ -175,7 +177,7 @@ describe('referral revenue share', () => {
   });
 
   it('stays out of the way entirely when the programme is off', async () => {
-    const client = new ReferralClient({ discordVerified: true, wagered: 99_000_000n });
+    const client = new ReferralClient({ wagered: 99_000_000n });
     const off = loadConfig(baseEnv0());
     await accrueReferralWager(client, off, REFEREE, 10_000_000n, 'upgrader', 'round-1');
     assert.equal(client.credits.length, 0);
@@ -184,49 +186,57 @@ describe('referral revenue share', () => {
 });
 
 describe('referral milestone bonus', () => {
-  it('needs both conditions, and fires on whichever lands second', async () => {
-    /* Every figure below is read off the settings rather than written in.
-     *
-     * These numbers used to be literals — 24M, 26M, 20M — pinned to the defaults of the day, so
-     * retuning the programme failed four tests that have no opinion about what the bonus is. The
-     * gate is what is under test: BOTH conditions, in either order, exactly once. What the two
-     * thresholds happen to be is one test's business, below, and not this one's. */
+  it('fires on the wager and nothing else', async () => {
+    /* Every figure below is read off the settings rather than written in, so retuning the
+     * programme cannot fail a test that has no opinion about what the bonus is. */
     const settings = config();
     const gate = settings.referralBonusWagerMinor;
 
-    // Wager threshold crossed, Discord still unverified: nothing is owed.
-    const wagerFirst = new ReferralClient({ wagered: gate - 1_000_000n });
-    await accrueReferralWager(wagerFirst, settings, REFEREE, 2_000_000n, 'case', 'round-a');
-    assert.equal(wagerFirst.state.wagered, gate + 1_000_000n);
-    assert.equal(wagerFirst.state.bonusUnlocked, false);
+    // One unit short: nothing is owed.
+    const client = new ReferralClient({ wagered: gate - 2_000_000n });
+    await accrueReferralWager(client, settings, REFEREE, 1_000_000n, 'case', 'round-a');
+    assert.equal(client.state.bonusUnlocked, false);
     assert.equal(
-      wagerFirst.credits.some((entry) => entry.kind === 'referral_bonus'),
+      client.credits.some((entry) => entry.kind === 'referral_bonus'),
       false,
     );
 
-    // Discord arrives afterwards. The gate is retested from the verification path and pays.
-    wagerFirst.state.discordVerified = true;
-    assert.equal(await tryUnlockMilestone(wagerFirst, settings, REFEREE), true);
-    const bonus = wagerFirst.credits.filter((entry) => entry.kind === 'referral_bonus');
+    // Crossing it pays, with no second condition to wait on.
+    await accrueReferralWager(client, settings, REFEREE, 1_000_000n, 'case', 'round-b');
+    assert.equal(client.state.wagered, gate);
+    assert.equal(client.state.bonusUnlocked, true);
+    const bonus = client.credits.filter((entry) => entry.kind === 'referral_bonus');
     assert.equal(bonus.length, 1);
     assert.equal(bonus[0]?.amount, settings.referralBonusMinor);
     assert.equal(bonus[0]?.userId, REFERRER);
   });
 
-  it('fires from the wager path when Discord was verified first', async () => {
+  it('does not consult Discord at all', async () => {
+    /* The point of the change, asserted where it can actually rot: an unverified referee is paid
+     * exactly like a verified one, and the gate's own query no longer reaches the users table. */
     const settings = config();
-    const gate = settings.referralBonusWagerMinor;
-    const client = new ReferralClient({ discordVerified: true, wagered: gate - 1n });
-    await accrueReferralWager(client, settings, REFEREE, 1n, 'upgrader', 'round-b');
-    assert.equal(client.state.wagered, gate);
-    assert.equal(client.state.bonusUnlocked, true);
-    assert.equal(client.credits.filter((e) => e.kind === 'referral_bonus').length, 1);
+    const unverified = new ReferralClient({
+      discordVerified: false,
+      wagered: settings.referralBonusWagerMinor,
+    });
+    assert.equal(await tryUnlockMilestone(unverified, settings, REFEREE), true);
+
+    /* And the column is unreachable from the whole module, not merely unused by the gate.
+       Checked across the file rather than by slicing out the function body: the repo checks out
+       CRLF on Windows, so every attempt to cut at a bare newline is a portability bug waiting for
+       whoever runs the suite on the other platform. The column name is specific enough that a
+       file-wide search says the same thing, and it cannot come back by accident. */
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../src/lib/referrals.ts'),
+      'utf8',
+    );
+    assert.doesNotMatch(source, /discord_verified_at/);
+    assert.doesNotMatch(source, /JOIN users/i);
   });
 
   it('refuses to pay a verified referee who is one unit short', async () => {
     const settings = config();
     const client = new ReferralClient({
-      discordVerified: true,
       wagered: settings.referralBonusWagerMinor - 1n,
     });
     assert.equal(await tryUnlockMilestone(client, settings, REFEREE), false);
@@ -236,7 +246,6 @@ describe('referral milestone bonus', () => {
   it('pays exactly once, even if the gate is somehow entered twice', async () => {
     const settings = config();
     const client = new ReferralClient({
-      discordVerified: true,
       wagered: settings.referralBonusWagerMinor,
     });
 
@@ -251,7 +260,6 @@ describe('referral milestone bonus', () => {
   it('references the referee, so the bonus is unpayable twice by construction', async () => {
     const settings = config();
     const client = new ReferralClient({
-      discordVerified: true,
       wagered: settings.referralBonusWagerMinor,
     });
     await tryUnlockMilestone(client, settings, REFEREE);
@@ -261,12 +269,6 @@ describe('referral milestone bonus', () => {
 });
 
 describe('referral configuration', () => {
-  it('refuses to run the programme without a Discord application', () => {
-    assert.throws(() => loadConfig({ ...baseEnv, DISCORD_CLIENT_ID: '' }));
-    assert.throws(() => loadConfig({ ...baseEnv, DISCORD_CLIENT_SECRET: '' }));
-    assert.throws(() => loadConfig({ ...baseEnv, DISCORD_REDIRECT_URI: '' }));
-  });
-
   it('refuses a bonus larger than the wager that unlocks it', () => {
     assert.throws(() =>
       loadConfig({
