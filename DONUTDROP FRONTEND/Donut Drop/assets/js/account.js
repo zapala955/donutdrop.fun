@@ -162,7 +162,7 @@ export function mountProfile(view) {
   profileRoot = view;
   bindOnce(view, 'profile', () => paintProfile());
   if (state.authenticated) {
-    refreshAccount(false).then(paintProfile).catch(() => undefined);
+    refreshBalance(false).then(paintProfile).catch(() => undefined);
   }
   paintProfile();
 }
@@ -178,32 +178,27 @@ function paintProfile() {
   }
 
   const user = state.user ?? {};
-  const account = state.account;
 
   root.appendChild(
     statGrid([
       ['Username', String(user.minecraftUsername ?? '—'), null],
       ['Balance', money(state.balance), 'gold'],
-      ['Status', String(user.status ?? '—'), user.status === 'active' ? 'up' : null],
-      ['Role', String(user.role ?? '—'), null],
     ]),
   );
 
-  /* A Verification panel stood here — KYC, age verified, country — beside a "Play paused" card for
-   * whichever self-imposed hold was running. All of it belonged to the real-money compliance
-   * apparatus, and this wallet holds DonutSMP dollars. The one fact worth keeping out of it is
-   * whether the terms were accepted, which is a record of an agreement rather than a check. */
-  const terms = panel('Terms');
-  terms.appendChild(
-    facts([
-      [
-        'Accepted',
-        account?.terms_accepted_at ? new Date(account.terms_accepted_at).toLocaleDateString() : 'no',
-        account?.terms_accepted_at ? 'up' : 'down',
-      ],
-    ]),
-  );
-  root.appendChild(terms);
+  const actions = el('div', 'acct__actions');
+  const deposit = el('button', 'btn btn--go');
+  deposit.type = 'button';
+  deposit.textContent = 'Deposit';
+  deposit.addEventListener('click', () => $('#depositBtn')?.click());
+
+  const withdraw = el('button', 'btn btn--withdraw');
+  withdraw.type = 'button';
+  withdraw.textContent = 'Withdraw';
+  withdraw.addEventListener('click', () => $('#withdrawBtn')?.click());
+
+  actions.append(deposit, withdraw);
+  root.appendChild(actions);
 }
 
 // ─────────── /wallet ───────────

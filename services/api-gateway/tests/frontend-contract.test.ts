@@ -88,6 +88,18 @@ describe('frontend/backend contract', () => {
     }
   });
 
+  it('keeps the profile focused on identity, balance and wallet actions', async () => {
+    const account = await source('assets/js/account.js');
+    const start = account.indexOf('function paintProfile()');
+    const end = account.indexOf('let walletRoot', start);
+    const profile = account.slice(start, end);
+    assert.doesNotMatch(profile, /\['Status'/);
+    assert.doesNotMatch(profile, /\['Role'/);
+    assert.doesNotMatch(profile, /panel\('Terms'\)/);
+    assert.match(profile, /\$\('#depositBtn'\)\?\.click\(\)/);
+    assert.match(profile, /\$\('#withdrawBtn'\)\?\.click\(\)/);
+  });
+
   it('parses every browser module as an ES module, not merely as a script', async () => {
     /* WHY THIS IS NOT `node --check`.
      *
