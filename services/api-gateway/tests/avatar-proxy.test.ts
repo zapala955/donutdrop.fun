@@ -12,7 +12,10 @@ import { describe, it } from 'node:test';
 
 const read = (rel: string) => readFile(path.resolve(import.meta.dirname, rel), 'utf8');
 const route = () => read('../src/routes/avatars.ts');
+const activity = () => read('../src/routes/activity.ts');
 const chat = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/chat.js');
+const store = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/store.js');
+const ticker = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/ticker.js');
 const app = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
 
 describe('avatar proxy', () => {
@@ -69,11 +72,9 @@ describe('chat renderer', () => {
     assert.match(body, /\/v1\/avatars\/\$\{encodeURIComponent\(userId\)\}/);
   });
 
-  it('falls back to initials when there is no id to ask by', async () => {
-    /* Drop cards and tip lines carry only a server-masked name. There is nothing to look a head up
-       by that would not mean un-masking it first, so they get the letter tile. */
+  it('uses the activity player id for big-hit heads and still falls back when no id exists', async () => {
     const source = await chat();
-    assert.match(source, /avatarFor\(null, activity\.player/);
+    assert.match(source, /avatarFor\(activity\.playerId, activity\.player/);
     assert.match(source, /avatarFor\(null, username\)/);
     const fn = source.slice(source.indexOf('function avatarFor'));
     assert.match(fn.slice(0, fn.indexOf('\n}')), /if \(!userId\) return initials\(\)/);
@@ -82,6 +83,21 @@ describe('chat renderer', () => {
   it('passes the id the chat payload already carries', async () => {
     const source = await chat();
     assert.match(source, /avatarFor\(message\.authorId, message\.author\)/);
+  });
+});
+
+describe('activity avatars', () => {
+  it('carries an opaque player id through every activity kind and normalizes it', async () => {
+    const apiSource = await activity();
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 3);
+    const storeSource = await store();
+    assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
+  });
+
+  it('uses the same-origin proxy in the live feed instead of a masked-name URL', async () => {
+    const source = await ticker();
+    assert.match(source, /\/v1\/avatars\/\$\{encodeURIComponent\(playerId\)\}\?s=22/);
+    assert.doesNotMatch(source, /mc-heads\.net\/avatar/);
   });
 });
 

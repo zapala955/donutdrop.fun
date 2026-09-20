@@ -90,7 +90,7 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
   cursor: pointer;
 }
 .msg__av img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
-/* The fallback when mc-heads is blocked or down: the same initials treatment the duel screen uses. */
+/* The fallback when the avatar proxy misses: the same initials treatment the duel screen uses. */
 .msg__av i {
   font-style: normal; font-size: .5625rem; font-weight: 800;
   color: var(--gold-bright); letter-spacing: .02em;

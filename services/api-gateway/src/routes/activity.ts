@@ -52,7 +52,7 @@ export async function registerActivityRoutes(
     const query = parseWith(activityQuery, request.query);
     const result = await db.query(
       `SELECT activity.* FROM (
-         SELECT r.id, 'case'::text AS kind, r.created_at,
+         SELECT r.id, 'case'::text AS kind, r.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 t.wagered_minor AS wagered_minor,
                 cs.name AS source_name,
@@ -69,7 +69,7 @@ export async function registerActivityRoutes(
            JOIN cases cs ON cs.id = r.case_id
            JOIN catalog_items c ON c.id = r.awarded_catalog_item_id
          UNION ALL
-         SELECT r.id, 'upgrade'::text AS kind, r.created_at,
+         SELECT r.id, 'upgrade'::text AS kind, r.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 t.wagered_minor AS wagered_minor,
                 'Upgrader'::text AS source_name,
@@ -86,7 +86,7 @@ export async function registerActivityRoutes(
          UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */
-         SELECT fc.id, 'faction'::text AS kind, fc.created_at,
+         SELECT fc.id, 'faction'::text AS kind, fc.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 t.wagered_minor AS wagered_minor,
                 f.name AS source_name,
@@ -108,9 +108,10 @@ export async function registerActivityRoutes(
     );
     /* The lifetime total is turned into a TIER LABEL here and the raw figure is dropped.
      *
-     * The feed masks usernames on purpose — who lost how much is not public — and a badge is the
-     * most that can ride along without undoing that. "Gold II" is a coarse bucket attached to a
-     * name that is already a letter and some asterisks; the number behind it never leaves. */
+     * The feed masks usernames on purpose — who lost how much is not public. `player_id` is an
+     * opaque internal UUID used by the same-origin avatar proxy; it does not put the Minecraft
+     * username in the page or in a third-party request. "Gold II" remains a coarse bucket attached
+     * to a name that is already a letter and some asterisks; the number behind it never leaves. */
     return {
       activities: result.rows.map((row) => {
         const { wagered_minor: wagered, ...rest } = row as Record<string, unknown> & {

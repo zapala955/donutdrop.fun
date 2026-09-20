@@ -537,15 +537,15 @@ function buildMessage(message) {
  * exists, so it is now the largest thing on it, and the item it came out of is shown rather than
  * named. Everything else is a chip.
  *
- * The avatar will not resolve for most of these, and that is correct: the feed masks usernames on
- * purpose, so mc-heads has nothing to render and it falls back to initials. A real skin here would
- * mean the feed had stopped masking.
+ * The visible name stays masked. The head resolves through the same-origin avatar proxy using the
+ * activity's opaque internal player id, so the browser never builds a third-party URL from a
+ * username. Bedrock accounts and upstream misses still fall back to the initial tile.
  */
 function buildHit(activity, value) {
   const line = el('div', 'msg msg--hit');
 
   const top = el('div', 'msg__top');
-  top.append(avatarFor(null, activity.player || 'Steve'));
+  top.append(avatarFor(activity.playerId, activity.player || 'Steve'));
   const who = el('span', 'msg__who');
   who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);

@@ -25,6 +25,7 @@
  */
 import { state, bus, refreshActivity } from './store.js';
 import { $, el } from './util.js';
+import { API_BASE_URL } from './api.js';
 
 const REFRESH_MS = 8000;
 const MAX_ROWS = 40;
@@ -206,25 +207,33 @@ function gameCell(play) {
 /**
  * The player, with a head.
  *
- * The name in this column is MASKED by the server on purpose, so mc-heads has nothing real to
- * render and the avatar falls back to initials. That is the correct outcome: a resolving skin here
- * would mean the feed had stopped masking, which is a privacy regression rather than a nicer row.
+ * The name remains masked, while the head is requested from this origin by opaque internal id.
+ * This keeps the username out of the image URL and prevents each viewer's browser from telling a
+ * third-party avatar service which players appear in the feed.
  */
 function playerCell(play) {
   const node = cell('feedrow__who', '');
   const name = play.player || '???';
   const head = el('span', 'feedav');
-  const art = document.createElement('img');
-  art.alt = '';
-  art.loading = 'lazy';
-  art.src = `https://mc-heads.net/avatar/${encodeURIComponent(name.replace(/\W/g, ''))}/20`;
-  art.addEventListener('error', () => {
-    art.remove();
-    const initials = el('i');
-    initials.textContent = name.slice(0, 1).toUpperCase();
-    head.appendChild(initials);
-  });
-  head.appendChild(art);
+  const playerId = play.playerId ?? play.player_id;
+  const paintInitial = () => {
+    const initial = el('i');
+    initial.textContent = name.slice(0, 1).toUpperCase();
+    head.appendChild(initial);
+  };
+  if (playerId) {
+    const art = document.createElement('img');
+    art.alt = '';
+    art.loading = 'lazy';
+    art.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(playerId)}?s=22`;
+    art.addEventListener('error', () => {
+      art.remove();
+      paintInitial();
+    });
+    head.appendChild(art);
+  } else {
+    paintInitial();
+  }
   const label = el('span', 'mono');
   label.textContent = name;
   node.append(head, label);

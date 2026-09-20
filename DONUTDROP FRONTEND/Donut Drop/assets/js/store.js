@@ -197,6 +197,7 @@ function normalizeActivity(raw) {
     id: raw.id,
     kind: raw.kind,
     createdAt: raw.created_at ?? raw.createdAt,
+    playerId: raw.player_id ?? raw.playerId ?? null,
     player: raw.player,
     sourceName: raw.source_name ?? raw.sourceName,
     // The faction's hex colour. Validated again at the point it reaches a style property.
