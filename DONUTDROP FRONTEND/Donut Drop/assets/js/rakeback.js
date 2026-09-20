@@ -1,21 +1,16 @@
-/* rakeback.js — the four cash-back tiers.
- *
- * Four cards, four balances, four clocks. Everything on screen is a figure or a control; the one
- * sentence the page needs — that the rates are shares of the house margin rather than of turnover
- * — lives behind the icon in the heading, because it is the sort of thing a player reads once.
- *
- * Nothing accrues in the browser. The balances come off /v1/rakeback, which reads the same rows
- * the claim route locks, so a card can never offer money the claim would refuse. The only thing
- * that ticks locally is the cooldown, and it counts down to a server-supplied timestamp rather
- * than to a locally computed one, so it cannot drift into claiming early.
- */
-import { state, bus, refreshRakeback, claimRakeback } from './store.js';
+/* rewards.js — claimable referral rewards and the optional rakeback tiers in one place. */
+import {
+  state,
+  bus,
+  refreshReferrals,
+  claimReferralRewards,
+  refreshRakeback,
+  claimRakeback,
+} from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 
-/* The order is the claim cadence, fastest first, which is also how often a player will look at
- * each one. Instant sits where the eye lands. */
 const TIERS = [
   { key: 'instant', name: 'Instant', clock: 'No cooldown' },
   { key: 'daily', name: 'Daily', clock: 'Every 24h' },
@@ -27,24 +22,27 @@ let root = null;
 let ticker = 0;
 let claiming = '';
 
-export function mountRakeback(view) {
-  root = $('#rakeRoot', view);
+export function mountRewards(view) {
+  root = $('#rewardsRoot', view);
   if (!root) return;
   if (!root.dataset.built) {
     root.dataset.built = '1';
     bus.addEventListener('change', (event) => {
       if (!root.isConnected) return;
-      if (['login', 'logout', 'ready', 'private', 'rakeback'].includes(event.detail)) paint();
+      if (['login', 'logout', 'ready', 'private', 'referrals', 'rakeback'].includes(event.detail)) {
+        paint();
+      }
     });
   }
-  if (state.authenticated) refreshRakeback(false).then(paint).catch(() => undefined);
+  if (state.authenticated) {
+    Promise.all([refreshReferrals(false), refreshRakeback(false)])
+      .then(paint)
+      .catch(() => undefined);
+  }
   paint();
   startTicker();
 }
 
-/* One interval for every countdown on the page rather than one each. The cards are re-rendered
- * wholesale on any state change, so the timer re-reads the DOM each tick and stops itself once
- * the nodes it was driving are gone. */
 function startTicker() {
   if (ticker) window.clearInterval(ticker);
   ticker = window.setInterval(() => {
@@ -57,14 +55,9 @@ function startTicker() {
     let expired = false;
     for (const node of nodes) {
       const remaining = new Date(node.dataset.readyAt).getTime() - Date.now();
-      if (remaining <= 0) {
-        expired = true;
-        continue;
-      }
-      node.textContent = formatRemaining(remaining);
+      if (remaining <= 0) expired = true;
+      else node.textContent = formatRemaining(remaining);
     }
-    // A clock that just ran out changes a button from disabled to armed, which is a repaint the
-    // ticker cannot do itself without the server's word for the new balance.
     if (expired) refreshRakeback().catch(() => undefined);
   }, 1000);
 }
@@ -81,29 +74,47 @@ function formatRemaining(ms) {
 
 function paint() {
   if (!root?.isConnected) return;
-  root.innerHTML = '';
+  root.replaceChildren();
 
   if (!state.authenticated) {
-    root.appendChild(notice('Log in to collect rakeback.'));
-    return;
-  }
-  const data = state.rakeback;
-  if (!data) {
-    root.appendChild(notice('Rakeback is not switched on yet.'));
+    root.appendChild(notice('Log in to view and claim your rewards.'));
     return;
   }
 
-  root.appendChild(summary(data));
-
-  const grid = el('div', 'rake__grid');
-  const byTier = new Map(data.tiers.map((tier) => [tier.tier, tier]));
-  for (const meta of TIERS) {
-    const tier = byTier.get(meta.key);
-    if (tier) grid.appendChild(tierCard(meta, tier));
+  const referrals = state.referrals;
+  const rakeback = state.rakeback;
+  if (!referrals && !rakeback) {
+    root.appendChild(notice('Rewards are not switched on yet.'));
+    return;
   }
-  root.appendChild(grid);
 
-  if (data.history.length) root.appendChild(historyTable(data.history));
+  root.appendChild(summary(referrals, rakeback));
+
+  if (referrals) {
+    const section = el('section', 'rake__section');
+    section.appendChild(sectionTitle('Referral rewards'));
+    section.appendChild(referralCard(referrals));
+    if (referrals.claims?.length) {
+      section.appendChild(historyTable('Recent referral claims', referrals.claims, 'Referral share'));
+    }
+    root.appendChild(section);
+  }
+
+  if (rakeback) {
+    const section = el('section', 'rake__section');
+    section.appendChild(sectionTitle('Rakeback tiers'));
+    const grid = el('div', 'rake__grid');
+    const byTier = new Map(rakeback.tiers.map((tier) => [tier.tier, tier]));
+    for (const meta of TIERS) {
+      const tier = byTier.get(meta.key);
+      if (tier) grid.appendChild(tierCard(meta, tier));
+    }
+    section.appendChild(grid);
+    if (rakeback.history.length) {
+      section.appendChild(historyTable('Recent rakeback claims', rakeback.history));
+    }
+    root.appendChild(section);
+  }
 }
 
 function notice(message) {
@@ -114,12 +125,26 @@ function notice(message) {
   return card;
 }
 
-function summary(data) {
+function sectionTitle(text) {
+  const title = el('h2', 'rake__subtitle');
+  title.textContent = text;
+  return title;
+}
+
+function summary(referrals, rakeback) {
+  const referralClaimable = Number(referrals?.totals?.revshareClaimableMinor ?? 0);
+  const referralClaimed = Number(referrals?.totals?.revsharePaidMinor ?? 0);
+  const rakebackClaimable = Number(rakeback?.totals?.claimableMinor ?? 0);
+  const rakebackClaimed = Number(rakeback?.totals?.lifetimeMinor ?? 0);
+  const third = referrals
+    ? ['Invite bonus', money(Number(referrals.terms.bonusMinor))]
+    : ['House edge', `${(rakeback.houseEdgeBps / 100).toFixed(2)}%`];
+
   const wrap = el('div', 'rake__summary');
   for (const [label, value, gold] of [
-    ['Claimable now', money(Number(data.totals.claimableMinor)), true],
-    ['Claimed lifetime', money(Number(data.totals.lifetimeMinor)), false],
-    ['House edge', `${(data.houseEdgeBps / 100).toFixed(2)}%`, false],
+    ['Claimable now', money(referralClaimable + rakebackClaimable), true],
+    ['Claimed lifetime', money(referralClaimed + rakebackClaimed), false],
+    [third[0], third[1], false],
   ]) {
     const cell = el('div', 'rake__sumcell');
     const key = el('span', 'rake__sumk');
@@ -132,6 +157,42 @@ function summary(data) {
   return wrap;
 }
 
+function referralCard(data) {
+  const amount = Number(data.totals.revshareClaimableMinor ?? 0);
+  const claimed = Number(data.totals.revsharePaidMinor ?? 0);
+  const rate = Number(data.terms.revshareWagerBps ?? 0) / 100;
+  const card = el('article', 'rake__card rake__card--referral');
+  card.dataset.armed = amount > 0 ? '1' : '0';
+
+  const head = el('header', 'rake__head');
+  const name = el('span', 'rake__name');
+  name.textContent = 'Your referral share';
+  const badge = el('span', 'rake__rate mono');
+  badge.textContent = `${rate.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}% of wagers`;
+  head.append(name, badge);
+
+  const copy = el('p', 'rake__copy');
+  copy.textContent = 'Earn on every wager made by players who joined through your invite link.';
+  const figure = el('b', 'rake__figure mono');
+  figure.textContent = money(amount);
+
+  const meter = el('div', 'rake__meter');
+  const invites = el('span', 'rake__clock mono');
+  invites.textContent = `${data.totals.invites} referred player${data.totals.invites === 1 ? '' : 's'}`;
+  const lifetime = el('span', 'rake__life mono');
+  lifetime.textContent = `${money(claimed)} claimed`;
+  meter.append(invites, lifetime);
+
+  const button = el('button', 'btn btn--go rake__claim');
+  button.type = 'button';
+  button.textContent = claiming === 'referrals' ? 'CLAIMING…' : 'CLAIM REWARDS';
+  button.disabled = amount <= 0 || claiming === 'referrals';
+  button.addEventListener('click', claimReferrals);
+
+  card.append(head, copy, figure, meter, button);
+  return card;
+}
+
 function tierCard(meta, tier) {
   const card = el('article', 'rake__card');
   card.dataset.tier = meta.key;
@@ -141,8 +202,6 @@ function tierCard(meta, tier) {
   const name = el('span', 'rake__name');
   name.textContent = meta.name;
   const rate = el('span', 'rake__rate mono');
-  // Of the margin. The heading's icon carries that qualifier once for the whole page rather than
-  // four times here.
   rate.textContent = `${(tier.rateBps / 100).toFixed(0)}%`;
   head.append(name, rate);
 
@@ -165,13 +224,30 @@ function tierCard(meta, tier) {
   button.type = 'button';
   button.textContent = claiming === meta.key ? 'CLAIMING…' : 'CLAIM CASH';
   button.disabled = !tier.claimable || claiming === meta.key;
-  button.addEventListener('click', () => claim(meta.key));
+  button.addEventListener('click', () => claimTier(meta.key));
 
   card.append(head, figure, meter, button);
   return card;
 }
 
-async function claim(tier) {
+async function claimReferrals() {
+  if (claiming) return;
+  claiming = 'referrals';
+  paint();
+  try {
+    const result = await claimReferralRewards();
+    playSound('coin');
+    toast({ kind: 'gold', title: 'Referral rewards claimed', body: money(Number(result.claimedMinor)) });
+  } catch (error) {
+    toast({ kind: 'lose', title: 'Nothing to claim', body: error?.message || '' });
+    await refreshReferrals(false).catch(() => undefined);
+  } finally {
+    claiming = '';
+    paint();
+  }
+}
+
+async function claimTier(tier) {
   if (claiming) return;
   claiming = tier;
   paint();
@@ -185,7 +261,6 @@ async function claim(tier) {
       title: error?.code === 'RAKEBACK_COOLING_DOWN' ? 'Still on cooldown' : 'Nothing to claim',
       body: error?.message || '',
     });
-    // The refusal usually means this client's snapshot is stale, so take the server's word for it.
     await refreshRakeback(false).catch(() => undefined);
   } finally {
     claiming = '';
@@ -193,23 +268,23 @@ async function claim(tier) {
   }
 }
 
-function historyTable(history) {
+function historyTable(labelText, history, fixedLabel = '') {
   const card = el('section', 'rake__history');
   const label = el('span', 'rake__label');
-  label.textContent = 'Recent claims';
+  label.textContent = labelText;
   card.appendChild(label);
 
   const table = el('table', 'dtable');
   const body = el('tbody');
   for (const entry of history) {
     const row = el('tr');
-    const tier = el('td');
-    tier.textContent = entry.tier;
+    const labelCell = el('td');
+    labelCell.textContent = fixedLabel || entry.tier;
     const amount = el('td', 'dtable__num mono');
     amount.textContent = money(Number(entry.amountMinor));
     const when = el('td', 'dtable__num mono dtable__dim');
     when.textContent = new Date(entry.createdAt).toLocaleDateString();
-    row.append(tier, amount, when);
+    row.append(labelCell, amount, when);
     body.appendChild(row);
   }
   table.appendChild(body);

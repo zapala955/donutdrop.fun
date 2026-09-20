@@ -5,7 +5,11 @@ import { createAuthGuards } from '../lib/auth.js';
 import { randomToken, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
-import { ensureReferralCode, revshareMinor } from '../lib/referrals.js';
+import {
+  claimReferralRewards,
+  ensureReferralCode,
+  revshareMinor,
+} from '../lib/referrals.js';
 import { parseWith } from '../lib/validation.js';
 import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
 
@@ -13,9 +17,10 @@ import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
  * Invite & Earn.
  *
  * Two payouts hang off one relationship. The revenue share accrues silently on every wager the
- * referee makes and is settled by the game routes themselves; nothing here pays it. What this file
- * owns is the dashboard, the code a player chooses, and the Discord OAuth round trip — which is no
- * longer part of any payout gate and is kept because an account may still want to be linked.
+ * referee makes and is collected here by the referrer; the milestone bonus still pays
+ * automatically. This file also owns the dashboard, the code a player chooses, and the Discord
+ * OAuth round trip — which is no longer part of any payout gate and is kept because an account may
+ * still want to be linked.
  *
  * It does NOT own redemption. A code is spent in the transaction that creates an account, in
  * auth.ts, because "has this person signed up yet" is a question only that transaction can answer
@@ -70,10 +75,20 @@ interface InviteRow {
   minecraft_username: string;
   wagered_minor: string;
   revshare_paid_minor: string;
+  revshare_claimable_minor: string;
   bonus_unlocked_at: Date | null;
   bonus_paid_minor: string | null;
   discord_verified_at: Date | null;
   created_at: Date;
+}
+
+interface ReferralTotalsRow {
+  invites: string;
+  verified: string;
+  unlocked: string;
+  revshare_paid_minor: string;
+  revshare_claimable_minor: string;
+  bonus_paid_minor: string;
 }
 
 export async function registerReferralRoutes(
@@ -100,6 +115,7 @@ export async function registerReferralRoutes(
 
     const invites = await db.query<InviteRow>(
       `SELECT r.referee_id, u.minecraft_username, r.wagered_minor, r.revshare_paid_minor,
+              r.revshare_claimable_minor,
               r.bonus_unlocked_at, r.bonus_paid_minor, u.discord_verified_at, r.created_at
          FROM referrals r JOIN users u ON u.id = r.referee_id
         WHERE r.referrer_id = $1
@@ -108,9 +124,8 @@ export async function registerReferralRoutes(
       [userId],
     );
 
-    /* The caller's own side of the relationship: whether THEY were referred, and whether their
-     * own verification is still holding up somebody else's bonus. A referee who cannot see this
-     * has no way to know that the person who invited them is waiting on one button. */
+    /* The caller's own side of the relationship: whether THEY were referred and how far their
+     * wagering has moved the invite that brought them here. */
     const inbound = await db.query<{
       referrer_username: string;
       wagered_minor: string;
@@ -127,6 +142,30 @@ export async function registerReferralRoutes(
       discord_verified_at: Date | null;
     }>('SELECT discord_username, discord_verified_at FROM users WHERE id = $1', [userId]);
 
+    const claims = await db.query<{ amount_minor: string; created_at: Date }>(
+      `SELECT amount_minor, created_at
+         FROM referral_claims
+        WHERE referrer_id = $1
+        ORDER BY created_at DESC
+        LIMIT 25`,
+      [userId],
+    );
+
+    /* The invite list is deliberately capped for the browser, but money totals must cover every
+     * relationship: somebody with more than 200 referrals must see the same claimable amount the
+     * claim endpoint will actually collect. */
+    const totals = await db.query<ReferralTotalsRow>(
+      `SELECT count(*)::text AS invites,
+              count(*) FILTER (WHERE u.discord_verified_at IS NOT NULL)::text AS verified,
+              count(*) FILTER (WHERE r.bonus_unlocked_at IS NOT NULL)::text AS unlocked,
+              coalesce(sum(r.revshare_paid_minor), 0)::text AS revshare_paid_minor,
+              coalesce(sum(r.revshare_claimable_minor), 0)::text AS revshare_claimable_minor,
+              coalesce(sum(r.bonus_paid_minor), 0)::text AS bonus_paid_minor
+         FROM referrals r JOIN users u ON u.id = r.referee_id
+        WHERE r.referrer_id = $1`,
+      [userId],
+    );
+
     const milestone = config.referralBonusWagerMinor;
     const rows = invites.rows.map((row) => {
       const wagered = BigInt(row.wagered_minor);
@@ -137,21 +176,24 @@ export async function registerReferralRoutes(
         wageredMinor: row.wagered_minor,
         // Clamped, so a referee past the threshold cannot render a bar beyond full.
         wagerRatio: milestone > 0n ? Math.min(1, Number(wagered) / Number(milestone)) : 1,
-        revshareEarnedMinor: row.revshare_paid_minor,
+        revsharePaidMinor: row.revshare_paid_minor,
+        revshareClaimableMinor: row.revshare_claimable_minor,
+        revshareEarnedMinor: (
+          BigInt(row.revshare_paid_minor) + BigInt(row.revshare_claimable_minor)
+        ).toString(),
         bonusUnlocked: !!row.bonus_unlocked_at,
         bonusPaidMinor: row.bonus_paid_minor,
         joinedAt: row.created_at,
       };
     });
 
-    const totalRevshare = invites.rows.reduce(
-      (sum, row) => sum + BigInt(row.revshare_paid_minor),
-      0n,
-    );
-    const totalBonus = invites.rows.reduce(
-      (sum, row) => sum + BigInt(row.bonus_paid_minor ?? '0'),
-      0n,
-    );
+    const aggregate = totals.rows[0];
+    const totalRevsharePaid = BigInt(aggregate?.revshare_paid_minor ?? '0');
+    const totalRevshareClaimable = BigInt(aggregate?.revshare_claimable_minor ?? '0');
+    const totalRevshare = totalRevsharePaid + totalRevshareClaimable;
+    const totalBonus = BigInt(aggregate?.bonus_paid_minor ?? '0');
+
+    const revsharePerMillion = revshareMinor(config, 1_000_000n);
 
     return {
       code,
@@ -165,7 +207,8 @@ export async function registerReferralRoutes(
         houseEdgeBps: config.houseEdgeBps,
         // What a referrer actually keeps per unit wagered, so the page never has to multiply two
         // rates together and get it wrong.
-        revsharePerMillionMinor: revshareMinor(config, 1_000_000n).toString(),
+        revsharePerMillionMinor: revsharePerMillion.toString(),
+        revshareWagerBps: Number((revsharePerMillion * 10_000n) / 1_000_000n),
       },
       self: {
         discordVerified: !!self.rows[0]?.discord_verified_at,
@@ -175,16 +218,33 @@ export async function registerReferralRoutes(
         unlockedForReferrer: !!inbound.rows[0]?.bonus_unlocked_at,
       },
       totals: {
-        invites: rows.length,
-        verified: rows.filter((row) => row.discordVerified).length,
-        unlocked: rows.filter((row) => row.bonusUnlocked).length,
+        invites: Number(aggregate?.invites ?? '0'),
+        verified: Number(aggregate?.verified ?? '0'),
+        unlocked: Number(aggregate?.unlocked ?? '0'),
         revshareMinor: totalRevshare.toString(),
+        revsharePaidMinor: totalRevsharePaid.toString(),
+        revshareClaimableMinor: totalRevshareClaimable.toString(),
+        claimableMinor: totalRevshareClaimable.toString(),
         bonusMinor: totalBonus.toString(),
         earnedMinor: (totalRevshare + totalBonus).toString(),
       },
+      claims: claims.rows.map((row) => ({
+        amountMinor: row.amount_minor,
+        createdAt: row.created_at,
+      })),
       invites: rows,
     };
   });
+
+  app.post(
+    '/v1/referrals/claim',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request) => {
+      requireProgramme();
+      const userId = requireUserId(request.authUser?.id);
+      return db.transaction((client) => claimReferralRewards(client, userId));
+    },
+  );
 
   // ── choosing your own code ────────────────────────────────────────────────
 

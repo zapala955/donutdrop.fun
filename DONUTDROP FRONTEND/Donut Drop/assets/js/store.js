@@ -807,6 +807,15 @@ export async function setReferralCode(code) {
   return result;
 }
 
+export async function claimReferralRewards() {
+  const result = await api.post('/v1/referrals/claim', {});
+  state.balanceMinor = String(result.balanceMinor || state.balanceMinor);
+  state.balance = toSafeNumber(state.balanceMinor);
+  await refreshReferrals(false);
+  emit('referrals');
+  return result;
+}
+
 /* Hands back Discord's own authorize URL rather than navigating here, so the caller decides when
  * the page leaves. The state parameter inside it is single-use and short-lived. */
 export async function startDiscordVerification() {

@@ -5,11 +5,20 @@ import { describe, it } from 'node:test';
 import type { QueryResult, QueryResultRow } from 'pg';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import type { DbClient } from '../src/lib/db.js';
-import { accrueReferralWager, revshareMinor, tryUnlockMilestone } from '../src/lib/referrals.js';
+import {
+  accrueReferralWager,
+  claimReferralRewards,
+  revshareMinor,
+  tryUnlockMilestone,
+} from '../src/lib/referrals.js';
 
 const migrationPath = path.resolve(
   import.meta.dirname,
   '../../../packages/db/migrations/016_referrals_and_discord.sql',
+);
+const claimMigrationPath = path.resolve(
+  import.meta.dirname,
+  '../../../packages/db/migrations/038_claimable_referral_rewards.sql',
 );
 const settlementPath = path.resolve(import.meta.dirname, '../src/lib/cash-settlement.ts');
 
@@ -43,6 +52,8 @@ function result<R extends QueryResultRow>(rows: R[], rowCount = rows.length): Qu
 
 interface ReferralState {
   wagered: bigint;
+  claimable: bigint;
+  paid: bigint;
   discordVerified: boolean;
   bonusUnlocked: boolean;
   /** Reference ids the earnings table has already seen, which is what makes a replay a no-op. */
@@ -66,6 +77,8 @@ class ReferralClient implements DbClient {
   ) {
     this.state = {
       wagered: 0n,
+      claimable: 0n,
+      paid: 0n,
       discordVerified: false,
       bonusUnlocked: false,
       seenEarnings: new Set(),
@@ -77,6 +90,15 @@ class ReferralClient implements DbClient {
     text: string,
     values: unknown[] = [],
   ): Promise<QueryResult<R>> {
+    if (text.includes('WHERE referrer_id = $1') && text.includes('FOR UPDATE')) {
+      if (!this.hasReferral || this.state.claimable <= 0n) return result([]);
+      return result([
+        {
+          referee_id: REFEREE,
+          revshare_claimable_minor: this.state.claimable.toString(),
+        },
+      ] as unknown as R[]);
+    }
     /* Matches on FOR UPDATE rather than on the JOIN it used to carry. The gate stopped reading
        `users` when Discord stopped being a condition, and a stub still insisting on that join
        would answer nothing and fail every test for the wrong reason. */
@@ -102,6 +124,12 @@ class ReferralClient implements DbClient {
     }
     if (text.includes('UPDATE referrals') && text.includes('wagered_minor = $2')) {
       this.state.wagered = BigInt(String(values[1]));
+      this.state.claimable += BigInt(String(values[2]));
+      return result([], 1);
+    }
+    if (text.includes('UPDATE referrals') && text.includes('revshare_paid_minor =')) {
+      this.state.paid += this.state.claimable;
+      this.state.claimable = 0n;
       return result([], 1);
     }
     if (text.includes('UPDATE referrals') && text.includes('bonus_unlocked_at = now()')) {
@@ -130,6 +158,7 @@ class ReferralClient implements DbClient {
       });
       return result([], 1);
     }
+    if (text.includes('INSERT INTO referral_claims')) return result([], 1);
     return result([]);
   }
 }
@@ -166,7 +195,7 @@ describe('referral revenue share', () => {
     assert.equal(revshareMinor(settings, -5n), 0n);
   });
 
-  it('credits the referrer once per round, however many times it is replayed', async () => {
+  it('accrues once per round, then credits only when the referrer claims', async () => {
     const client = new ReferralClient();
     const settings = config();
     const round = '40000000-0000-4000-8000-000000000004';
@@ -174,10 +203,24 @@ describe('referral revenue share', () => {
     await accrueReferralWager(client, settings, REFEREE, 1_000_000n, 'case', round);
     await accrueReferralWager(client, settings, REFEREE, 1_000_000n, 'case', round);
 
+    const expected = revshareMinor(settings, 1_000_000n);
+    assert.equal(client.credits.length, 0);
+    assert.equal(client.state.claimable, expected);
+    assert.equal(client.state.wagered, 1_000_000n);
+
+    const claim = await claimReferralRewards(client, REFERRER);
+    assert.equal(claim.claimedMinor, expected.toString());
+    assert.equal(client.state.claimable, 0n);
+    assert.equal(client.state.paid, expected);
     const paid = client.credits.filter((entry) => entry.kind === 'referral_revshare');
     assert.equal(paid.length, 1);
-    assert.equal(paid[0]?.amount, revshareMinor(settings, 1_000_000n));
+    assert.equal(paid[0]?.amount, expected);
     assert.equal(paid[0]?.userId, REFERRER);
+
+    await assert.rejects(
+      claimReferralRewards(client, REFERRER),
+      (error: { code?: string }) => error.code === 'REFERRAL_REWARDS_EMPTY',
+    );
   });
 
   it('does nothing at all for a player nobody referred', async () => {
@@ -343,6 +386,14 @@ describe('referral schema and wiring', () => {
   it('keeps referral money on the same wallet ledger as everything else', async () => {
     const sql = await readFile(migrationPath, 'utf8');
     assert.match(sql, /'referral_revshare', 'referral_bonus'/);
+  });
+
+  it('stores claimable share separately and records every collection append-only', async () => {
+    const sql = await readFile(claimMigrationPath, 'utf8');
+    assert.match(sql, /ADD COLUMN revshare_claimable_minor bigint NOT NULL DEFAULT 0/);
+    assert.match(sql, /CREATE TABLE referral_claims/);
+    assert.match(sql, /CREATE TRIGGER referral_claims_append_only/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v38\(\) RETURNS boolean/);
   });
 });
 

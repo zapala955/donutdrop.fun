@@ -83,6 +83,11 @@
    RAKEBACK
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
 .rake { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rake__section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rake__subtitle {
+  margin: 6px 0 0; font: 800 .82rem/1 var(--body); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
 .rake__summary {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;
 }
@@ -127,6 +132,8 @@
   font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
 .rake__card[data-armed="1"] .rake__figure { color: var(--gold-bright); }
+.rake__card--referral { max-width: 560px; }
+.rake__copy { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
 .rake__meter { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rake__clock { font-size: .625rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rake__life { font-size: .625rem; color: var(--faint); }

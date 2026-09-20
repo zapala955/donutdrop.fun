@@ -22,7 +22,7 @@ import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
 import { mountReferrals, captureReferralCode, pendingReferralCode } from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
-import { mountRakeback } from './rakeback.js';
+import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
 import { mountDiscord } from './discord.js';
 import { mountRace } from './race.js';
@@ -882,7 +882,7 @@ const VIEWS = {
   war: mountWar,
   fairness: mountFair,
   vip: mountVip,
-  rakeback: mountRakeback,
+  rewards: mountRewards,
   'daily-rewards': mountDaily,
   discord: mountDiscord,
   race: mountRace,
@@ -998,7 +998,9 @@ function initCasesMenu() {
 }
 
 function route() {
-  const seg = location.hash.replace(/^#\/?/, '').split('/')[0] || 'home';
+  const requested = location.hash.replace(/^#\/?/, '').split('/')[0] || 'home';
+  // Old bookmarks keep working after the account menu's Rakeback page became Rewards.
+  const seg = requested === 'rakeback' ? 'rewards' : requested;
   const name = VIEWS[seg] ? seg : 'home';
 
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
@@ -1192,10 +1194,8 @@ $('#burger').addEventListener('click', () => {
 
     const paintInvites = () => {
       const n = $('#menuInvites');
-      if (n) {
-        // Off the referral ledger, not off the retired client-side counter that used to sit here.
-        n.textContent = money(Number(state.referrals?.totals?.earnedMinor ?? 0));
-      }
+      const bonus = Number(state.referrals?.terms?.bonusMinor ?? 0);
+      if (n && bonus > 0) n.textContent = money(bonus);
 
       /* The nav pill's figure, from the server's terms rather than from the markup.
        *
@@ -1205,7 +1205,6 @@ $('#burger').addEventListener('click', () => {
        * now ships "INVITE & EARN" and this upgrades it once the real amount is known. Logged out,
        * or with the programme off, the honest version is the one that stays. */
       const pill = $('.navref__txt');
-      const bonus = Number(state.referrals?.terms?.bonusMinor ?? 0);
       if (pill && bonus > 0) {
         pill.replaceChildren(
           document.createTextNode(money(bonus) + ' '),

@@ -100,6 +100,21 @@ describe('frontend/backend contract', () => {
     assert.match(profile, /\$\('#withdrawBtn'\)\?\.click\(\)/);
   });
 
+  it('shows the invite offer and collects referral share from one Rewards page', async () => {
+    const html = await source('index.html');
+    const app = await source('assets/js/app.js');
+    const store = await source('assets/js/store.js');
+    const rewards = await source('assets/js/rakeback.js');
+    assert.match(html, /id="menuInvites">\$10M<\/b> Invites/);
+    assert.match(html, /href="#\/rewards" data-route="rewards"/);
+    assert.match(html, /data-view="rewards"/);
+    assert.doesNotMatch(html, />Rakeback<\/span>/);
+    assert.match(app, /requested === 'rakeback' \? 'rewards' : requested/);
+    assert.match(store, /api\.post\('\/v1\/referrals\/claim', \{\}\)/);
+    assert.match(rewards, /claimReferralRewards\(\)/);
+    assert.match(rewards, /revshareWagerBps/);
+  });
+
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {
     const chat = await source('assets/js/chat.js');
     const start = chat.indexOf('function appendLine(');

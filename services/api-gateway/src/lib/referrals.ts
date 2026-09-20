@@ -2,19 +2,19 @@ import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
 import type { ContributionSource } from './cash-settlement.js';
 import type { DbClient } from './db.js';
+import { conflict } from './errors.js';
 import { creditWallet } from './wallet.js';
 
 /**
  * The referral programme: a lifetime revenue share, and a one-off milestone bonus.
  *
  * Both engines run on the same `referrals` row and both pay out of the house margin, but they are
- * independent of one another. The revenue share accrues on every wager forever. The bonus unlocks
- * exactly once, when the referee has BOTH proved a Discord account and crossed the cumulative
- * wager threshold — whichever of those two happens second is what fires it, which is why the gate
- * is re-checked from the wager path AND from the Discord verification path.
+ * independent of one another. The revenue share accrues on every wager forever and waits for the
+ * referrer to claim it. The bonus unlocks exactly once when the referee crosses the cumulative
+ * wager threshold.
  *
- * Everything here takes the caller's open transaction. A referral credit that commits without the
- * wager that earned it, or a bonus that pays without the row recording that it paid, is a
+ * Everything here takes the caller's open transaction. An accrual that commits without the wager
+ * that earned it, or a bonus or claim that pays without the row recording it, is a
  * reconciliation problem nobody finds until the ledger is audited.
  */
 
@@ -47,9 +47,14 @@ interface ReferralRow {
   revshare_bps?: number;
 }
 
+interface ClaimableReferralRow {
+  referee_id: string;
+  revshare_claimable_minor: string;
+}
+
 /**
- * Records one wager against the referee's referral, pays the revenue share, and re-tests the
- * milestone gate.
+ * Records one wager against the referee's referral, accrues claimable revenue share, and re-tests
+ * the milestone gate.
  *
  * Silently does nothing when the player was never referred or the programme is off. A wager is
  * not the moment to fail over a promotion: refusing the round because a bonus could not be paid
@@ -87,19 +92,11 @@ export async function accrueReferralWager(
     (margin * BigInt(referral.revshare_bps ?? config.referralRevshareBps)) / 10_000n;
   const wageredAfter = BigInt(referral.wagered_minor) + wagerMinor;
 
-  await client.query(
-    `UPDATE referrals
-        SET wagered_minor = $2, revshare_paid_minor = revshare_paid_minor + $3, updated_at = now()
-      WHERE referee_id = $1`,
-    [refereeId, wageredAfter.toString(), commission.toString()],
-  );
-
   if (commission > 0n) {
-    /* The earnings row goes in FIRST, so its unique (kind, reference_id) index is what stops a
-     * replayed settlement rather than the wallet insert further down. ON CONFLICT DO NOTHING plus
-     * a rowCount check means a retry of the same round skips the credit instead of paying twice —
-     * and the UPDATE above is idempotent-by-transaction, because a replay that reaches here is a
-     * replay of the whole enclosing round. */
+    /* The earnings row goes in FIRST, so its unique (kind, reference_id) index stops a replayed
+     * settlement before either running total moves. Revenue share is an earning here, but it is no
+     * longer a wallet payment: it waits in revshare_claimable_minor until the referrer collects it
+     * from the Rewards page. */
     const recorded = await client.query(
       `INSERT INTO referral_earnings
          (id, referrer_id, referee_id, kind, amount_minor, source, reference_id)
@@ -107,20 +104,72 @@ export async function accrueReferralWager(
        ON CONFLICT (kind, reference_id) DO NOTHING`,
       [randomUUID(), referral.referrer_id, refereeId, commission.toString(), source, referenceId],
     );
-    if (recorded.rowCount) {
-      await creditWallet(
-        client,
-        referral.referrer_id,
-        commission,
-        'referral_revshare',
-        referenceId,
-      );
-    }
+    if (!recorded.rowCount) return;
   }
+
+  await client.query(
+    `UPDATE referrals
+        SET wagered_minor = $2,
+            revshare_claimable_minor = revshare_claimable_minor + $3,
+            updated_at = now()
+      WHERE referee_id = $1`,
+    [refereeId, wageredAfter.toString(), commission.toString()],
+  );
 
   if (!referral.bonus_unlocked_at && wageredAfter >= config.referralBonusWagerMinor) {
     await tryUnlockMilestone(client, config, refereeId);
   }
+}
+
+/**
+ * Collects every referral-share balance belonging to one referrer in a single wallet credit.
+ *
+ * The rows are locked in referee-id order. A concurrent wager either lands before this snapshot
+ * and is included, or after it and remains claimable for the next collection; it can never be
+ * cleared without being paid. A replay finds every balance at zero and is refused.
+ */
+export async function claimReferralRewards(
+  client: DbClient,
+  referrerId: string,
+): Promise<{ claimedMinor: string; balanceMinor: string }> {
+  const locked = await client.query<ClaimableReferralRow>(
+    `SELECT referee_id, revshare_claimable_minor
+       FROM referrals
+      WHERE referrer_id = $1 AND revshare_claimable_minor > 0
+      ORDER BY referee_id
+      FOR UPDATE`,
+    [referrerId],
+  );
+  const amount = locked.rows.reduce(
+    (sum, row) => sum + BigInt(row.revshare_claimable_minor),
+    0n,
+  );
+  if (amount <= 0n) conflict('REFERRAL_REWARDS_EMPTY', 'No referral rewards are ready to claim');
+
+  const claimId = randomUUID();
+  const balanceAfter = await creditWallet(
+    client,
+    referrerId,
+    amount,
+    'referral_revshare',
+    claimId,
+  );
+  await client.query(
+    `UPDATE referrals
+        SET revshare_paid_minor = revshare_paid_minor + revshare_claimable_minor,
+            revshare_claimable_minor = 0,
+            updated_at = now()
+      WHERE referrer_id = $1 AND revshare_claimable_minor > 0`,
+    [referrerId],
+  );
+  await client.query(
+    `INSERT INTO referral_claims
+       (id, referrer_id, amount_minor, balance_after_minor)
+     VALUES ($1, $2, $3, $4)`,
+    [claimId, referrerId, amount.toString(), balanceAfter],
+  );
+
+  return { claimedMinor: amount.toString(), balanceMinor: balanceAfter };
 }
 
 /**

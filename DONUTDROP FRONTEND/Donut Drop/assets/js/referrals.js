@@ -184,14 +184,15 @@ function icon(...paths) {
 function offerCard(data) {
   const card = el('div', 'refer__card');
   const terms = data.terms;
+  const sharePercent = (terms.revshareWagerBps / 100).toFixed(1);
 
   const title = el('h2', 'refer__title');
   title.textContent = 'Invite \u0026 earn';
   const lede = el('p', 'refer__lede');
   lede.textContent =
     'Send your link to someone who has not played here yet. Once they have wagered the amount'
-    + ' below, the bonus lands in your wallet \u2014 and you keep a cut of the house margin on'
-    + ' everything they ever play, for as long as they play it.';
+    + ` below, the bonus lands in your wallet \u2014 and ${sharePercent}% of everything they wager keeps building`
+    + ' in Rewards for you to claim.';
   card.append(title, lede);
 
   /* The headline figure, and nothing beside it. */
@@ -210,7 +211,7 @@ function offerCard(data) {
   for (const [label, value] of [
     ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],
     ['Unlocks at', `${money(Number(terms.bonusWagerMinor))} wagered`],
-    ['Revenue share', `${(terms.revshareBps / 100).toFixed(1)}% for life`],
+    ['Revenue share', `${sharePercent}% of wagers for life`],
   ]) {
     const key = el('dt', 'refer__termk');
     key.textContent = label;
@@ -432,7 +433,7 @@ function inviteRow(invite, milestone) {
    * edge has gone gold. */
   who.append(name);
 
-  /* One figure, and it is everything this invite has actually paid \u2014 the running revenue share
+  /* One figure, and it is everything this invite has earned \u2014 claimed and waiting revenue share
    * plus the bonus if it landed. Splitting them into two columns made the row read as a
    * statement; a referrer wants the total. */
   const paid = Number(invite.revshareEarnedMinor) + Number(invite.bonusPaidMinor ?? 0);

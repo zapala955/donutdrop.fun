@@ -287,7 +287,10 @@ export async function registerRewardRoutes(app: FastifyInstance, db: Database, c
     const driven = await db.query<{ referrals: string; wagered: string; earned: string }>(
       `SELECT count(*)::text AS referrals,
               coalesce(sum(r.wagered_minor), 0)::text AS wagered,
-              coalesce(sum(r.revshare_paid_minor + coalesce(r.bonus_paid_minor, 0)), 0)::text AS earned
+              coalesce(sum(
+                r.revshare_paid_minor + r.revshare_claimable_minor
+                + coalesce(r.bonus_paid_minor, 0)
+              ), 0)::text AS earned
          FROM referrals r WHERE r.referrer_id = $1`,
       [userId],
     );
