@@ -466,14 +466,42 @@ function openLoginModal() {
         const challenge = await startLogin(username, challengeToken, code || undefined);
         go.dataset.state = 'success';
         form.hidden = true;
-        $('#linkProgress', body).innerHTML = `<p>Run this exact command in game:</p>
-          <p class="mono" style="font-size:1.25rem;font-weight:700">${escapeText(challenge.instruction)}</p>
-          <p class="card__p">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
+        /* The command, the amount, and one button that copies it.
+         *
+         * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
+         * is what identifies the payment, so one wrong digit is a login that never completes and a
+         * payment somebody then has to ask about. It is on the clipboard now.
+         *
+         * There is no Finish button. The poll signs the player in the moment the payment confirms
+         * — see pollLink. The block below stays hidden until something actually fails. */
+        $('#linkProgress', body).innerHTML = `<p class="auth__lede">Run this exact command in game:</p>
+          <div class="auth__field auth__field--static">
+            <span class="auth__value auth__value--lg mono">${escapeText(challenge.instruction)}</span>
+          </div>
+          <button class="btn btn--go auth__go" type="button" id="linkCopy">Copy command</button>
+          <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
           <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
           <div id="linkFinish" hidden>
-            <button class="btn btn--go" type="button" id="linkComplete">Finish login</button>
-            <p class="card__p" id="linkCompleteError" role="alert" hidden></p>
+            <p class="card__p" id="linkCompleteError" role="alert"></p>
+            <button class="btn btn--go" type="button" id="linkComplete">Try again</button>
           </div>`;
+
+        $('#linkCopy', body).addEventListener('click', async (event) => {
+          const button = event.currentTarget;
+          try {
+            await navigator.clipboard.writeText(challenge.instruction);
+            button.textContent = 'Copied';
+            button.dataset.state = 'success';
+          } catch {
+            // Refused in plenty of ordinary situations. The command is on screen right above it.
+            button.textContent = 'Select it above';
+          }
+          setTimeout(() => {
+            if (!button.isConnected) return;
+            button.textContent = 'Copy command';
+            button.dataset.state = '';
+          }, 1800);
+        });
         pollLink(challenge.challengeId, body);
       } catch (error) {
         go.dataset.state = '';
@@ -550,7 +578,11 @@ async function openDepositModal() {
   $('#depositCopy', host).addEventListener('click', async (event) => {
     const button = event.currentTarget;
     try {
-      await navigator.clipboard.writeText(info.example || info.command);
+      /* `copy` is the command with no amount on it, so the paste lands with the cursor where
+         the figure goes. It used to copy `example`, which pasted a literal 1000000 that had to be
+         deleted first — and the failure mode when somebody forgot was depositing exactly one
+         million by accident. */
+      await navigator.clipboard.writeText(info.copy || info.command);
       button.textContent = 'Copied';
       button.dataset.state = 'success';
     } catch {
@@ -769,29 +801,11 @@ async function pollLink(challengeId, body) {
     const status = $('#linkState', body);
     if (status) status.textContent = PAY_STATE_TEXT[state] || state;
     if (state === 'confirmed') {
-      const finish = $('#linkFinish', body);
-      finish.hidden = false;
-      let completionPending = false;
-      $('#linkComplete', body).addEventListener('click', async () => {
-        if (completionPending) return;
-        completionPending = true;
-        const button = $('#linkComplete', body);
-        const inlineError = $('#linkCompleteError', body);
-        button.disabled = true;
-        inlineError.hidden = true;
-        inlineError.textContent = '';
-        try {
-          const user = await completeLogin(challengeId);
-          closeModal();
-          toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
-        } catch (error) {
-          inlineError.textContent = error?.message || 'The server rejected the request.';
-          inlineError.hidden = false;
-          showApiError(error);
-          completionPending = false;
-          button.disabled = false;
-        }
-      });
+      /* Confirmed means the bot has seen the payment, so there is nothing left to decide and
+       * nothing left to press. The button that stood here asked a player to agree to something
+       * that had already happened, and every second it waited was a second somebody looked at a
+       * screen that had taken their money and had not signed them in. */
+      await finishLogin(challengeId, body);
       return;
     }
     if (['expired', 'locked', 'completed'].includes(state)) return;
@@ -800,6 +814,47 @@ async function pollLink(challengeId, body) {
     return;
   }
   setTimeout(() => pollLink(challengeId, body), 2000);
+}
+
+/**
+ * Signs in a confirmed login, and offers a retry only if that fails.
+ *
+ * The retry is not decoration. Completion is a separate request from the confirmation, so it can
+ * fail on its own — a dropped connection, a 500 — after the payment has already been made. With no
+ * way back the player would be holding a receipt for a session they never got, which is the one
+ * outcome this flow must not produce. The block stays hidden until that happens.
+ */
+async function finishLogin(challengeId, body) {
+  const finish = $('#linkFinish', body);
+  const inlineError = $('#linkCompleteError', body);
+  const button = $('#linkComplete', body);
+  const status = $('#linkState', body);
+  if (status) status.textContent = 'signing you in';
+
+  try {
+    const user = await completeLogin(challengeId);
+    closeModal();
+    toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
+  } catch (error) {
+    if (!body.isConnected) return;
+    if (status) status.textContent = 'payment received, sign-in failed';
+    if (inlineError) inlineError.textContent = error?.message || 'The server rejected the request.';
+    if (finish) finish.hidden = false;
+    showApiError(error);
+    if (button && !button.dataset.wired) {
+      /* Wired once. A listener added per failure would fire N completions on the Nth press, and
+       * the payment behind them has already been spent. */
+      button.dataset.wired = '1';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await finishLogin(challengeId, body);
+        } finally {
+          if (button.isConnected) button.disabled = false;
+        }
+      });
+    }
+  }
 }
 
 function showApiError(error) {

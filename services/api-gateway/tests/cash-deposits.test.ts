@@ -86,12 +86,16 @@ describe('cash payment deposits', () => {
     const payload = (await handlerFor(handlers, 'GET /v1/cash-deposits/info')(
       { authUser: { id: '10000000-0000-4000-8000-000000000001' } } as unknown as FastifyRequest,
       {} as FastifyReply,
-    )) as { botUsername: string; command: string; example: string };
+    )) as { botUsername: string; command: string; example: string; copy: string };
 
     assert.deepEqual(payload, {
       botUsername: 'DonutBot',
       command: '/pay DonutBot <amount>',
       example: '/pay DonutBot 1000000',
+      /* What the copy button puts on the clipboard: no amount, and a trailing space so the paste
+         lands with the cursor where the figure goes. Copying `example` pasted a literal 1000000
+         that had to be deleted first, and forgetting to meant depositing exactly one million. */
+      copy: '/pay DonutBot ',
     });
     assert.equal(fetchMock.mock.callCount(), 0);
     assert.equal(

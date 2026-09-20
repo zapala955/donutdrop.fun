@@ -41,6 +41,17 @@ export async function registerCashDepositRoutes(
         botUsername: bot.username,
         command: `/pay ${bot.username} <amount>`,
         example: `/pay ${bot.username} 1000000`,
+        /* What the copy button puts on the clipboard: the command WITHOUT an amount.
+         *
+         * Copying `example` pasted a literal 1000000 into the player's chat box, so depositing
+         * anything else meant deleting a figure somebody else chose before typing your own — and
+         * the failure mode when you forget is paying exactly one million by accident. Pasting a
+         * command that ends in a space leaves the cursor where the amount goes.
+         *
+         * Stated by the server rather than sliced off `command` in the browser, because the shape
+         * of a DonutSMP pay command is the server's business and a client that reconstructs it is
+         * a second opinion about it. */
+        copy: `/pay ${bot.username} `,
       };
     },
   );

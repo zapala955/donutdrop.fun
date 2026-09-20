@@ -23,12 +23,23 @@ describe('frontend/backend contract', () => {
     assert.match(html, /meta name="api-base-url" content=""/);
   });
 
-  it('keeps payment-login completion player-facing and retryable', async () => {
+  it('signs the player in on confirmation, and stays retryable if that fails', async () => {
+    /* The Finish button is gone. Confirmation means the bot has already seen the payment, so there
+     * was nothing left for the player to decide and the button only made them wait.
+     *
+     * Retryable is still asserted, and matters more now than it did: completion is a separate
+     * request from the confirmation, so it can fail on its own AFTER the money has been paid. The
+     * block that offers another go must exist and must start hidden — a player holding a receipt
+     * for a session they never got is the one outcome this flow must not produce. */
     const app = await source('assets/js/app.js');
     const store = await source('assets/js/store.js');
     assert.doesNotMatch(app, /Admin TOTP|linkTotp/);
-    assert.match(app, /type="button" id="linkComplete"/);
-    assert.match(app, /completionPending = false;\s*button\.disabled = false;/);
+    assert.match(app, /await finishLogin\(challengeId, body\);/);
+    assert.doesNotMatch(app, /Finish login/);
+    assert.match(app, /<div id="linkFinish" hidden>/);
+    assert.match(app, /type="button" id="linkComplete">Try again</);
+    // Wired once, so a second failure cannot queue a second completion against a spent payment.
+    assert.match(app, /button\.dataset\.wired = '1';/);
     assert.doesNotMatch(store, /completeLogin\(challengeId,\s*adminTotpCode/);
     assert.match(store, /Post-login data refresh failed/);
     assert.match(store, /Authenticated data refresh failed/);
