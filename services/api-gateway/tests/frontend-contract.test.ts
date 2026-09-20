@@ -100,6 +100,20 @@ describe('frontend/backend contract', () => {
     assert.match(profile, /\$\('#withdrawBtn'\)\?\.click\(\)/);
   });
 
+  it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {
+    const chat = await source('assets/js/chat.js');
+    const start = chat.indexOf('function appendLine(');
+    const end = chat.indexOf('function trim()', start);
+    const append = chat.slice(start, end);
+    const measurement = append.indexOf('const followTail =');
+    const mutation = append.indexOf('log.appendChild(node)');
+    assert.ok(measurement >= 0, 'chat does not decide whether to follow its tail');
+    assert.ok(mutation >= 0, 'chat does not append new lines');
+    assert.ok(measurement < mutation, 'chat measures the tail after changing its height');
+    assert.match(append, /!log\.children\.length/);
+    assert.match(append, /if \(followTail\) log\.scrollTop = log\.scrollHeight/);
+  });
+
   it('parses every browser module as an ES module, not merely as a script', async () => {
     /* WHY THIS IS NOT `node --check`.
      *

@@ -671,6 +671,12 @@ function appendLine(node, when) {
   // Sort key kept on the node so a hit arriving between two polls still lands in time order.
   node.dataset.at = String(when ? new Date(when).getTime() : Date.now());
 
+  /* Measure before changing the log. Measuring after append makes a newly-added line increase
+   * scrollHeight first, so a reader who was exactly at the bottom suddenly appears not to be and
+   * the rail stops following. An empty log always follows while its initial history is filled. */
+  const followTail =
+    !log.children.length || log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+
   const previous = log.lastElementChild;
   if (previous && Number(previous.dataset.at || 0) > Number(node.dataset.at)) {
     // Out of order by arrival: place it before the newer line rather than after it.
@@ -681,8 +687,7 @@ function appendLine(node, when) {
 
   // Only follow the tail when the reader is already at it; yanking someone away from a line they
   // are reading is the most annoying thing a chat can do.
-  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
-  if (atBottom) log.scrollTop = log.scrollHeight;
+  if (followTail) log.scrollTop = log.scrollHeight;
 }
 
 function trim() {
