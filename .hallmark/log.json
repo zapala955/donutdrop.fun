@@ -1,18 +1,25 @@
 [
   {
     "date": "2026-09-20",
-    "macrostructure": "none (app shell — the 21 macros are page shapes)",
+    "macrostructure": "none (single-card page)",
+    "theme": "project system",
+    "enrichment": "none - typography only",
+    "brief": "Donut Drop - invite page, wearing the sign-in card's vocabulary"
+  },
+  {
+    "date": "2026-09-20",
+    "macrostructure": "none (app shell \u2014 the 21 macros are page shapes)",
     "theme": "custom",
     "theme_axes": "dark paper / grotesk-display / chromatic-pink",
     "vibe": "high-voltage arcade, money still gold",
-    "enrichment": "none — the canvas is the artifact",
-    "brief": "Donut Drop · slither arena redesign (DonutSMP neon)"
+    "enrichment": "none \u2014 the canvas is the artifact",
+    "brief": "Donut Drop \u00b7 slither arena redesign (DonutSMP neon)"
   },
   {
     "date": "2026-09-19",
     "macrostructure": "none (component)",
     "theme": "project system",
     "enrichment": "none",
-    "brief": "Donut Drop · sign-in modal"
+    "brief": "Donut Drop \u00b7 sign-in modal"
   }
 ]

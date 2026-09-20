@@ -1,0 +1,464 @@
+/* Hallmark · page: invites · genre: atmospheric · theme: project system
+ * paper: obsidian (--panel) · accent: nether lava gold (--gold-bright / --gold-deep)
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass — no new colour tokens invented; every value resolves through app.css
+ * pre-emit critique: P5 H5 E4 S5 R5 V4
+ *
+ * referrals.css — the invite page, wearing the sign-in card's clothes.
+ *
+ * ── WHY IT LOOKS LIKE THE LOGIN SCREEN ──
+ *
+ * Because it is the same kind of moment. The sign-in card is the one surface on this site that is
+ * not a game: no reels, no counters, no stake dial — a heading at display size, one field, one
+ * button, and a lot of quiet around them. It reads as the platform talking rather than the casino,
+ * and that is exactly the register an invite page needs, because it is asking somebody to put their
+ * own name behind the site to other people.
+ *
+ * So the vocabulary is lifted wholesale and deliberately: the 52px field box with its icon and its
+ * focus ring, the mono uppercase label above it, the 1px rule between sections, the display title
+ * and the 38ch lede. Nothing here is a new idea. That is the point — a player who has signed in
+ * has already been taught how to read this page.
+ *
+ * ── WHAT IT REFUSES ──
+ *
+ * No gold plate behind the figure, no glow on the type, no promotional gradient. The bonus is a
+ * large number in the accent colour and nothing else is competing with it. Every figure on the page
+ * arrives from the server, and there is not one hardcoded amount in this sheet or the module that
+ * renders it — the last time an invite figure was written as literal text it went stale and the
+ * site advertised a bonus it no longer paid.
+ */
+
+/* ─────────── the column ───────────
+   Narrow on purpose. This page is read top to bottom once; a wide measure would turn a short,
+   ordered explanation into a scan. */
+.refer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  min-width: 0;
+}
+
+/* ─────────── the card ───────────
+   The sign-in card's proportions: 16px corner, panel paper, and padding generous enough that the
+   contents never touch an edge. */
+.refer__card {
+  padding: 26px 28px 28px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.refer__title {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 5.4vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 10px;
+  /* A long word in a narrow viewport breaks inside itself rather than pushing the card wider. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.refer__lede {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 38ch;
+}
+
+.refer__rule {
+  height: 1px;
+  border: 0;
+  background: var(--line);
+  margin: 22px 0;
+}
+
+/* ─────────── the offer ───────────
+   One figure at display size and a caption under it. No plate, no glow: the number is the largest
+   thing on the page and does not need help being found. */
+.refer__offer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 18px 0 0;
+}
+.refer__figure {
+  font-family: var(--disp);
+  font-weight: 900;
+  font-size: clamp(2.25rem, 9vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.refer__caption {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ─────────── the terms ───────────
+   A ruled list, the same device the arena's entry card used for the same job: conditions you read
+   once and agree to, not statuses you glance at. No nested panel — the card is already one. */
+.refer__terms {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 14px;
+  margin: 18px 0 0;
+}
+.refer__termk,
+.refer__termv {
+  margin: 0;
+  padding: 8px 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--line);
+}
+.refer__terms > :nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+.refer__termk {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.refer__termv {
+  /* Right-aligned so the figures stack into one column the eye can compare, rather than floating
+     at three different x positions after three different labels. */
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ─────────── the label ─────────── */
+.refer__label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 9px;
+}
+
+/* ─────────── the link field ───────────
+   The sign-in field, exactly: 52px, panel2 paper, hairline border, and a ring that lands on the
+   wrapper rather than the bare input so the icon sits inside the focused box instead of orphaned
+   beside it. */
+.refer__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 6px 0 14px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  transition:
+    border-color 0.14s var(--ease-out, ease-out),
+    box-shadow 0.14s var(--ease-out, ease-out);
+}
+.refer__field:hover {
+  border-color: var(--line2);
+}
+.refer__field:focus-within {
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px rgba(255, 170, 0, 0.14);
+}
+.refer__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--faint);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  transition: color 0.14s var(--ease-out, ease-out);
+}
+.refer__field:focus-within .refer__icon {
+  color: var(--gold);
+}
+.refer__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+}
+.refer__input:focus {
+  outline: none;
+}
+
+/* The copy button lives INSIDE the field, because what it copies is the thing it sits in. Pulled
+   out to its own column it became a second action competing with the link rather than an operation
+   on it. 40px tall inside a 52px box keeps a 6px breathing gap top and bottom. */
+.refer__copy {
+  flex: none;
+  height: 40px;
+  min-width: 84px;
+  padding: 0 14px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel3);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    border-color 0.14s var(--ease-out, ease-out),
+    color 0.14s var(--ease-out, ease-out),
+    background-color 0.14s var(--ease-out, ease-out);
+}
+.refer__copy:hover {
+  border-color: var(--gold-deep);
+  color: var(--gold-bright);
+}
+.refer__copy:active {
+  transform: translateY(1px);
+}
+.refer__copy:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+/* Copied. The confirmation is the button, not a toast: the action happened here, so the answer
+   belongs here, and a toast for a copy is a notification about something the player is already
+   looking at. It reverts on its own. */
+.refer__copy[data-state='done'] {
+  border-color: var(--win);
+  color: var(--win);
+  background: var(--win-lo);
+}
+.refer__copy[data-state='error'] {
+  border-color: var(--red);
+  color: var(--red);
+}
+.refer__copy[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ─────────── Discord ─────────── */
+.refer__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.refer__pill {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.refer__pill[data-on='1'] {
+  border-color: var(--win);
+  color: var(--win);
+  background: var(--win-lo);
+}
+.refer__who .refer__pill {
+  font-size: 0.5625rem;
+  padding: 3px 8px;
+}
+
+/* ─────────── the stats ───────────
+   Four figures on one line, and only the first one is gold: it is the only number here somebody
+   came to see. The three after it are the pipeline that produced it, in the order an invite moves
+   through — invited, verified, unlocked. */
+.refer__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.refer__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+.refer__statk {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.refer__statv {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.refer__statv--gold {
+  color: var(--gold-bright);
+}
+
+/* ─────────── the invites ─────────── */
+.refer__invites {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.refer__invite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  min-width: 0;
+}
+/* The left edge carries the state, so a long list is scannable without reading a word of it. */
+.refer__invite[data-unlocked='1'] {
+  border-left-color: var(--gold-bright);
+}
+.refer__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.refer__name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.refer__pays {
+  font-weight: 800;
+  font-size: 0.875rem;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Progress to the wager gate. It is the only thing on the row that answers "when do I get paid",
+   so it spans the full width under both columns rather than squeezing into one. */
+.refer__bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  min-width: 0;
+}
+.refer__track {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--panel3);
+  overflow: hidden;
+  min-width: 0;
+}
+.refer__fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
+  /* scaleX rather than width: the animation runs on the compositor and cannot reflow the rest of
+     the list while it moves. */
+  transition: transform 0.4s var(--ease-out, ease-out);
+}
+.refer__frac {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────── the quiet states ───────────
+   A gate is not an error. It is the page saying what has to happen first, in the same voice the
+   rest of the page uses, on the same card. */
+.refer__gate,
+.refer__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+.refer__empty {
+  padding: 18px 15px;
+  border-radius: 10px;
+  border: 1px dashed var(--line2);
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--faint);
+}
+
+/* ─────────── narrow ─────────── */
+@media (max-width: 560px) {
+  .refer__card {
+    padding: 20px 18px 22px;
+  }
+  /* Two-up rather than four. At 320px a four-column strip gives each figure ~70px, which is not
+     enough for a nine-character money value and forces it to break mid-number. */
+  .refer__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .refer__field {
+    /* The button drops to its own line: a 84px control inside a 52px box leaves the link itself
+       about 120px on a phone, which is not enough of it to recognise. */
+    height: auto;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .refer__input {
+    height: 32px;
+    flex: 1 1 140px;
+  }
+  .refer__copy {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refer__fill,
+  .refer__copy,
+  .refer__field,
+  .refer__icon {
+    transition: none;
+  }
+}

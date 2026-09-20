@@ -2423,62 +2423,6 @@ html, body { overflow-x: clip; }
   100% { transform: scale(1); color: var(--gold-bright); }
 }
 
-/* ════════════════════ referrals page ════════════════════ */
-.refer { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.refer__hero {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  min-width: 0; padding: 26px 18px; border-radius: 14px; text-align: center;
-  background:
-    radial-gradient(90% 120% at 50% 0%, rgba(255, 170, 0, .16), transparent 68%),
-    linear-gradient(180deg, rgba(28, 24, 15, .78), rgba(10, 10, 12, .94));
-  border: 1px solid rgba(255, 170, 0, .25);
-}
-.refer__badge {
-  padding: 10px 22px; border-radius: 999px;
-  color: #0a0a0c; font-size: 1.25rem; font-weight: 900; letter-spacing: .01em;
-  background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
-  box-shadow: 0 0 13px rgba(255, 170, 0, .22);
-  text-transform: uppercase;
-}
-.refer__cap {
-  margin: 0; max-width: 54ch; font-size: .75rem; line-height: 1.6;
-  color: var(--muted); overflow-wrap: anywhere;
-}
-
-.refer__terms, .refer__link, .refer__status {
-  display: flex; flex-direction: column; gap: 8px; min-width: 0;
-  padding: 16px; border-radius: 14px;
-  background: linear-gradient(180deg, rgba(26, 23, 15, .7), rgba(10, 10, 12, .92));
-  border: 1px solid rgba(255, 170, 0, .18);
-}
-.refer__terms h2 { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); }
-.refer__list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
-.refer__list li {
-  font-size: .75rem; line-height: 1.6; color: #d1d5db;
-  overflow-wrap: anywhere;
-}
-.refer__label {
-  font-family: var(--mono); font-size: .625rem; font-weight: 800;
-  letter-spacing: .18em; text-transform: uppercase; color: var(--faint);
-}
-.refer__row { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.refer__field {
-  flex: 1 1 260px; min-width: 0; padding: 11px 13px; border-radius: 8px;
-  background: rgba(0, 0, 0, .5); border: 1px solid rgba(255, 255, 255, .08);
-  color: var(--gold-bright); font-size: .75rem; outline: none;
-}
-.refer__field:focus { border-color: #ffaa00; }
-.refer__copy { flex: none; }
-.refer__gate { margin: 0; font-size: .75rem; color: var(--faint); }
-
-/* The honest status. Deliberately not styled as an error — nothing is broken, it is simply not
-   switched on, and dressing that as a failure would be its own kind of misleading. */
-.refer__status { border-color: rgba(255, 170, 0, .32); background: rgba(255, 170, 0, .07); }
-.refer__status h3 { margin: 0; font-size: .875rem; font-weight: 800; color: var(--gold-bright); }
-.refer__status p {
-  margin: 0; font-size: .75rem; line-height: 1.6; color: #d1d5db;
-  overflow-wrap: anywhere;
-}
 
 @media (max-width: 860px) {
   .navref__txt b { display: none; }

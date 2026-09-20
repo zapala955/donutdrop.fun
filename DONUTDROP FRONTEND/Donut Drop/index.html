@@ -58,6 +58,8 @@
 <link rel="stylesheet" href="assets/css/polish.css" />
 <!-- the sign-in card; last so it can restyle the shared modal shell for one variant -->
 <link rel="stylesheet" href="assets/css/auth.css" />
+<!-- the invite page, which borrows the sign-in card's vocabulary and so loads beside it -->
+<link rel="stylesheet" href="assets/css/referrals.css" />
 <link rel="icon" href="assets/img/items/ender_chest.png" />
 </head>
 <body>
@@ -106,19 +108,18 @@
       </div>
     </div>
 
-    <!-- Back to the duel lobby. This entry pointed at the arena for as long as the arena
-         existed, on the argument that a live pit was the better thing to introduce; with the arena
-         gone the duel is what "1v1 Skill" means again, and it is still a live route. Leaving the
-         href at a mode that no longer answers would have been a dead entry on the busiest bar on
-         the site. -->
-    <a class="navlive" href="#/skill-duel" data-route="skill-duel">
-      <span>1v1 Skill</span>
-      <i class="navlive__pill">LIVE</i>
-    </a>
+    <!-- The live-mode entry stood here. It introduced the duel lobby, then the arena, and with the
+         arena gone it was back to pointing at a turn-based lobby under a LIVE pill that no longer
+         meant anything. Skill duels are still a live route and still in the account menu under
+         "Play" — the entry left the bar rather than the mode leaving the site. -->
 
     <a class="navref" href="#/referrals" data-route="referrals">
       <span class="navref__ico" aria-hidden="true">&#127873;</span>
-      <span class="navref__txt">$20M <b>PER INVITE</b></span>
+      <!-- Ships with no figure on purpose. The amount lived here as literal text and went stale
+           the moment the bonus was retuned — which is exactly what happened. app.js fills it in
+           from the server's own terms once they arrive, and this is what shows until then: still
+           true, and true whatever the bonus is set to. -->
+      <span class="navref__txt"><b>INVITE &amp; EARN</b></span>
     </a>
   </nav>
 

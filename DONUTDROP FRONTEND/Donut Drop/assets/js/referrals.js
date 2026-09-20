@@ -160,13 +160,13 @@ function consumeDiscordReturn() {
 /* ─────────── render ─────────── */
 function paint() {
   if (!root?.isConnected) return;
-  root.innerHTML = '';
+  root.replaceChildren();
 
   const data = state.referrals;
 
-  /* No headline when there is no figure to put in it. The badge is a large filled pill; rendering
-   * it around a dash reads as a component that failed to load rather than as a page waiting for a
-   * session, which is exactly the wrong impression on the one page that asks for trust. */
+  /* Both empty states are the same card with one sentence in it, rather than a headline wrapped
+   * around a dash. A large filled figure rendered around nothing reads as a component that failed
+   * to load, which is the wrong impression on the one page that asks a player for their trust. */
   if (!state.authenticated) {
     root.appendChild(gate('Log in to get your invite link.'));
     return;
@@ -176,45 +176,210 @@ function paint() {
     return;
   }
 
-  root.appendChild(hero(data.terms));
-  root.appendChild(statGrid(data));
-  root.appendChild(linkCard(data));
-
-  const verify = discordCard(data);
-  if (verify) root.appendChild(verify);
-
-  root.appendChild(inviteList(data));
+  const wrap = el('div', 'refer');
+  wrap.appendChild(offerCard(data));
+  wrap.appendChild(statGrid(data));
+  wrap.appendChild(inviteList(data));
+  root.appendChild(wrap);
 }
 
-/* The headline figure. It is the direct bonus and nothing else: the lifetime revenue share has no
- * ceiling to quote, so putting a number on the badge for it would mean inventing one.
+/** One icon from path data. SVG needs createElementNS; createElement puts it in the wrong namespace. */
+function icon(...paths) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'refer__icon');
+  for (const data of paths) {
+    const node = document.createElementNS(NS, 'path');
+    node.setAttribute('d', data);
+    node.setAttribute('stroke-linecap', 'round');
+    node.setAttribute('stroke-linejoin', 'round');
+    svg.append(node);
+  }
+  return svg;
+}
+
+/**
+ * The card: the offer, the terms, the link, and Discord if it is still in the way.
  *
- * Only ever called with real terms — the empty states render a plain card instead. */
-function hero(terms) {
-  const wrap = el('div', 'refer__hero');
-  const badge = el('span', 'refer__badge');
-  badge.textContent = `${money(Number(terms.bonusMinor))} per invite`;
+ * In that order, deliberately. It is the order of a decision — what is on the table, what it
+ * costs, how to take it, what is blocking it — and it is the same order the sign-in card walks:
+ * say what this is, then show the one field, then the one button.
+ */
+function offerCard(data) {
+  const card = el('div', 'refer__card');
+  const terms = data.terms;
 
-  const sentence =
-    `Paid once per invite, when they verify Discord and wager ${money(Number(terms.bonusWagerMinor))}.`
-    + ` The ${(terms.revshareBps / 100).toFixed(1)}% revenue share runs for life alongside it.`;
-  const tip = el('button', 'ihint');
-  tip.type = 'button';
-  tip.dataset.tip = sentence;
-  // The bubble is CSS-generated content, so the accessible name carries the same sentence.
-  tip.setAttribute('aria-label', sentence);
-  badge.appendChild(tip);
+  const title = el('h2', 'refer__title');
+  title.textContent = 'Invite \u0026 earn';
+  const lede = el('p', 'refer__lede');
+  lede.textContent =
+    'Send your link to someone who has not played here yet. When they verify Discord and reach the'
+    + ' wager below, the bonus lands in your wallet \u2014 and you keep a cut of the house margin on'
+    + ' everything they ever play.';
+  card.append(title, lede);
 
-  wrap.appendChild(badge);
+  /* The headline figure, and nothing beside it. */
+  const offer = el('div', 'refer__offer');
+  const figure = el('span', 'refer__figure');
+  figure.textContent = money(Number(terms.bonusMinor));
+  const caption = el('span', 'refer__caption');
+  caption.textContent = 'per invite';
+  offer.append(figure, caption);
+  card.appendChild(offer);
+
+  /* The deal as a ruled list. Every figure is the server\u0027s \u2014 there is no amount written into
+   * this file, because the last invite figure that was hardcoded went stale and the site
+   * advertised a bonus it had stopped paying. */
+  const list = el('dl', 'refer__terms');
+  for (const [label, value] of [
+    ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],
+    ['Unlocks at', `${money(Number(terms.bonusWagerMinor))} wagered`],
+    ['Revenue share', `${(terms.revshareBps / 100).toFixed(1)}% for life`],
+  ]) {
+    const key = el('dt', 'refer__termk');
+    key.textContent = label;
+    const val = el('dd', 'refer__termv');
+    val.textContent = value;
+    list.append(key, val);
+  }
+  card.appendChild(list);
+
+  card.appendChild(el('hr', 'refer__rule'));
+  card.appendChild(linkField(data));
+
+  const verify = discordRow(data);
+  if (verify) {
+    card.appendChild(el('hr', 'refer__rule'));
+    card.appendChild(verify);
+  }
+  return card;
+}
+
+/** The link, in the sign-in field, with the copy button inside the box it copies. */
+function linkField(data) {
+  const wrap = document.createDocumentFragment();
+
+  const label = el('label', 'refer__label');
+  label.textContent = 'Your invite link';
+  label.htmlFor = 'referLink';
+
+  const field = el('div', 'refer__field');
+  field.appendChild(icon('M9 15l6-6', 'M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5', 'M13 17.5L11.5 19a3.5 3.5 0 0 1-5-5L8 12.5'));
+
+  const input = document.createElement('input');
+  input.className = 'refer__input';
+  input.id = 'referLink';
+  input.readOnly = true;
+  input.value = data.link;
+  /* Selecting on focus means a player who cannot use the clipboard \u2014 an insecure origin, a
+   * locked-down browser \u2014 still gets the link in one gesture plus Ctrl-C. */
+  input.addEventListener('focus', () => input.select());
+
+  const copy = el('button', 'refer__copy');
+  copy.type = 'button';
+  copy.textContent = 'Copy';
+
+  let revert = null;
+  const settle = (text, state_) => {
+    copy.textContent = text;
+    if (state_) copy.dataset.state = state_;
+    else delete copy.dataset.state;
+    clearTimeout(revert);
+    revert = setTimeout(() => {
+      copy.textContent = 'Copy';
+      delete copy.dataset.state;
+    }, 1800);
+  };
+
+  copy.addEventListener('click', async () => {
+    /* The confirmation is the button itself, not a toast.
+     *
+     * The guidance is that a successful action must confirm rather than succeed silently, and a
+     * copy is the case where WHERE the confirmation appears matters more than that it appears: the
+     * player is already looking at the button they pressed, so a notification in the corner asks
+     * them to look somewhere else to learn about something in front of them. */
+    try {
+      await navigator.clipboard.writeText(data.link);
+      playSound('coin');
+      settle('Copied', 'done');
+    } catch {
+      /* No clipboard \u2014 almost always an insecure origin or a permissions policy. Selecting the
+       * text turns a dead end into one keystroke, and the button says which one. */
+      input.focus();
+      input.select();
+      settle('Press Ctrl+C', 'error');
+    }
+  });
+
+  field.append(input, copy);
+  wrap.append(label, field);
+  return wrap;
+}
+
+/**
+ * The caller\u0027s own half of the deal.
+ *
+ * Shown only when it is actionable \u2014 an unverified account, or one whose verification is holding
+ * up somebody else\u0027s bonus. A player who has verified and was not referred needs no card telling
+ * them so.
+ */
+function discordRow(data) {
+  const self = data.self;
+  if (self.discordVerified && !self.referredBy) return null;
+
+  const wrap = document.createDocumentFragment();
+  const label = el('span', 'refer__label');
+  label.textContent = 'Discord';
+
+  const row = el('div', 'refer__row');
+  const pill = el('span', 'refer__pill');
+  pill.dataset.on = self.discordVerified ? '1' : '0';
+  pill.textContent = self.discordVerified ? 'Verified' : 'Unverified';
+  row.appendChild(pill);
+
+  if (self.discordVerified) {
+    const name = el('span', 'refer__frac');
+    name.textContent = self.discordUsername || '';
+    row.appendChild(name);
+  } else {
+    const note = el('span', 'refer__frac');
+    note.textContent = 'Required before any bonus unlocks';
+    const button = el('button', 'btn btn--go');
+    button.type = 'button';
+    button.textContent = 'Verify';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        /* A top-level navigation rather than a popup: popups are blocked by default on a click
+         * that went through an await, and OAuth in a blocked window fails silently. */
+        location.href = await startDiscordVerification();
+      } catch (error) {
+        button.disabled = false;
+        toast({
+          kind: 'lose',
+          title: 'Cannot start verification',
+          body: error?.message || 'Try again shortly.',
+        });
+      }
+    });
+    row.append(note, button);
+  }
+  wrap.append(label, row);
   return wrap;
 }
 
 function gate(message) {
-  const card = el('div', 'refer__link');
+  const wrap = el('div', 'refer');
+  const card = el('div', 'refer__card');
+  const title = el('h2', 'refer__title');
+  title.textContent = 'Invite \u0026 earn';
   const line = el('p', 'refer__gate');
   line.textContent = message;
-  card.appendChild(line);
-  return card;
+  card.append(title, line);
+  wrap.appendChild(card);
+  return wrap;
 }
 
 function statGrid(data) {
@@ -240,92 +405,11 @@ function statGrid(data) {
   return grid;
 }
 
-function linkCard(data) {
-  const card = el('div', 'refer__link');
-  const label = el('span', 'refer__label');
-  label.textContent = 'Your invite link';
-  card.appendChild(label);
-
-  const row = el('div', 'refer__row');
-  const field = document.createElement('input');
-  field.className = 'refer__field mono';
-  field.readOnly = true;
-  field.value = data.link;
-  field.addEventListener('focus', () => field.select());
-
-  const copy = el('button', 'btn btn--go refer__copy');
-  copy.type = 'button';
-  copy.textContent = 'Copy';
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(data.link);
-      playSound('coin');
-      toast({ kind: 'win', title: 'Link copied' });
-    } catch {
-      field.select();
-      toast({ kind: 'lose', title: 'Copy it manually', body: 'Your browser blocked the clipboard.' });
-    }
-  });
-  row.append(field, copy);
-  card.appendChild(row);
-  return card;
-}
-
-/* The caller's own half of the deal.
- *
- * Shown only when it is actionable — an unverified account, or one whose verification is holding
- * up somebody else's bonus. A player who has already verified does not need a card telling them
- * so; the pill on their own row says it if they look.
- */
-function discordCard(data) {
-  const self = data.self;
-  if (self.discordVerified && !self.referredBy) return null;
-
-  const card = el('div', 'refer__link');
-  const label = el('span', 'refer__label');
-  label.textContent = 'Discord';
-  card.appendChild(label);
-
-  const row = el('div', 'refer__row');
-  const pill = el('span', 'refer__pill');
-  pill.dataset.on = self.discordVerified ? '1' : '0';
-  pill.textContent = self.discordVerified ? 'Verified' : 'Unverified';
-  row.appendChild(pill);
-
-  if (self.discordVerified) {
-    const name = el('span', 'refer__frac');
-    name.textContent = self.discordUsername || '';
-    row.appendChild(name);
-  } else {
-    const button = el('button', 'btn btn--go');
-    button.type = 'button';
-    button.textContent = 'Verify';
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      try {
-        // A top-level navigation rather than a popup: popups are blocked by default on a click
-        // that went through an await, and OAuth in a blocked window fails silently.
-        location.href = await startDiscordVerification();
-      } catch (error) {
-        button.disabled = false;
-        toast({
-          kind: 'lose',
-          title: 'Cannot start verification',
-          body: error?.message || 'Try again shortly.',
-        });
-      }
-    });
-    row.appendChild(button);
-  }
-  card.appendChild(row);
-  return card;
-}
-
 function inviteList(data) {
   const wrap = el('div', 'refer__invites');
   if (!data.invites.length) {
     const empty = el('p', 'refer__empty');
-    empty.textContent = 'No invites yet.';
+    empty.textContent = 'No invites yet. Anyone who signs up on your link shows up here.';
     wrap.appendChild(empty);
     return wrap;
   }
@@ -349,7 +433,7 @@ function inviteRow(invite, milestone) {
   discord.textContent = invite.discordVerified ? 'Verified' : 'Pending';
   who.append(name, discord);
 
-  /* One figure, and it is everything this invite has actually paid — the running revenue share
+  /* One figure, and it is everything this invite has actually paid \u2014 the running revenue share
    * plus the bonus if it landed. Splitting them into two columns made the row read as a
    * statement; a referrer wants the total. */
   const paid = Number(invite.revshareEarnedMinor) + Number(invite.bonusPaidMinor ?? 0);
@@ -359,13 +443,16 @@ function inviteRow(invite, milestone) {
   const bar = el('div', 'refer__bar');
   const track = el('div', 'refer__track');
   const fill = el('div', 'refer__fill');
-  // scaleX rather than width, so the animation runs on the compositor and the row cannot reflow
-  // the rest of the list while it moves.
-  fill.style.transform = `scaleX(${Math.min(1, Math.max(0, invite.wagerRatio))})`;
+  const ratio = Math.min(1, Math.max(0, invite.wagerRatio));
+  /* scaleX rather than width, so the animation runs on the compositor and the row cannot reflow
+   * the rest of the list while it moves. */
+  fill.style.transform = `scaleX(${ratio})`;
   track.appendChild(fill);
 
   const fraction = el('span', 'refer__frac');
-  fraction.textContent = `${money(Number(invite.wageredMinor))} / ${money(milestone)}`;
+  fraction.textContent = invite.bonusUnlocked
+    ? 'Bonus paid'
+    : `${money(Number(invite.wageredMinor))} / ${money(milestone)}`;
   bar.append(track, fraction);
 
   row.append(who, pays, bar);

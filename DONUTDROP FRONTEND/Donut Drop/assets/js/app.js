@@ -1081,9 +1081,26 @@ $('#burger').addEventListener('click', () => {
 
     const paintInvites = () => {
       const n = $('#menuInvites');
-      if (!n) return;
-      // Off the referral ledger, not off the retired client-side counter that used to sit here.
-      n.textContent = money(Number(state.referrals?.totals?.earnedMinor ?? 0));
+      if (n) {
+        // Off the referral ledger, not off the retired client-side counter that used to sit here.
+        n.textContent = money(Number(state.referrals?.totals?.earnedMinor ?? 0));
+      }
+
+      /* The nav pill's figure, from the server's terms rather than from the markup.
+       *
+       * It was literal text in index.html and it went stale the moment the bonus was retuned — the
+       * bar advertised $20M per invite while the programme paid something else. A promotional
+       * figure that can disagree with what is actually paid is worse than no figure, so the markup
+       * now ships "INVITE & EARN" and this upgrades it once the real amount is known. Logged out,
+       * or with the programme off, the honest version is the one that stays. */
+      const pill = $('.navref__txt');
+      const bonus = Number(state.referrals?.terms?.bonusMinor ?? 0);
+      if (pill && bonus > 0) {
+        pill.replaceChildren(
+          document.createTextNode(money(bonus) + ' '),
+          Object.assign(document.createElement('b'), { textContent: 'PER INVITE' }),
+        );
+      }
     };
     paintInvites();
     bus.addEventListener('change', paintInvites);

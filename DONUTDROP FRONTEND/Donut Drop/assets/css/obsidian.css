@@ -227,8 +227,7 @@ html {
    layers per frame. */
 .hero,
 .glass,
-.upg .wheel__ring,
-.refer__hero {
+.upg .wheel__ring {
   box-shadow:
     inset 0 1px 0 rgba(255, 225, 160, .08),
     0 24px 60px -34px rgba(0, 0, 0, .96),
@@ -492,62 +491,6 @@ html {
   white-space: nowrap;
 }
 
-/* ── the 1v1 Skill entry ──
- *
- * This replaced a disabled placeholder carrying a SOON pill. The pill is LIVE now and it pulses,
- * and it pulses the same way the invite badge does and for the same reason: the glow is painted by
- * an absolutely positioned ::after that is outside the flex row's layout, so it can breathe to any
- * size without the nav row re-measuring and nudging the links beside it.
- *
- * The naive version — animating the pill's own box-shadow spread — reflows a scrolling flex row
- * every frame, and the visible symptom is the whole navbar shivering. */
-.tabs .navlive {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  flex: none;
-  padding: 7px 12px;
-  border-radius: var(--r-crisp);
-  color: var(--muted);
-  text-decoration: none;
-  white-space: nowrap;
-  font-size: .875rem;
-  transition: color var(--ob-quick), background var(--ob-quick);
-}
-.tabs .navlive:hover { color: var(--text); background: var(--panel2); }
-.tabs .navlive[aria-current="page"] {
-  color: var(--gold-bright);
-  background: linear-gradient(180deg, rgba(255, 170, 0, .16), rgba(255, 170, 0, .06));
-  box-shadow: inset 0 -2px 0 #ffaa00;
-  font-weight: 600;
-}
-.navlive__pill {
-  position: relative;
-  isolation: isolate;
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 999px;
-  font-style: normal;
-  font-size: .5rem;
-  font-weight: 800;
-  letter-spacing: .14em;
-  color: #0a0a0c;
-  background: linear-gradient(135deg, #ffd700, #ffaa00);
-}
-.navlive__pill::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(255, 215, 0, .7), transparent 72%);
-  animation: navlive-breathe 2.2s ease-in-out infinite;
-}
-@keyframes navlive-breathe {
-  0%, 100% { opacity: .25; transform: scale(1);    }
-  50%      { opacity: .75; transform: scale(1.12); }
-}
 
 .duelwrap { min-width: 0; }
 
@@ -723,7 +666,6 @@ html {
 
    What replaced the paragraphs. Three shapes, one material: a figure in mono over a label in
    letterspaced caps, so the eye lands on the number first and reads the unit second. */
-
 
 /* The chip row that stood between the headline and the buttons carried 22px of its own bottom
    margin, so removing it left the CTA sitting 14px under a display headline — tight enough to read
@@ -958,9 +900,7 @@ h1, h2, h3, .phead h1, .card__h { overflow-wrap: break-word; }
 @media (prefers-reduced-motion: reduce) {
   .hero::after,
   .tabs .navref::after,
-  .navlive__pill::after { animation: none; }
   .tabs .navref::after { opacity: .4; }
-  .navlive__pill::after { opacity: .4; }
 
   .gamecard, .promo, .mode, .crate, .cratecard, .ucard, .btlcard, .mktcard,
   .tabdrop__menu, .acct .menu, .lvl {

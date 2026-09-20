@@ -185,12 +185,19 @@ describe('referral revenue share', () => {
 
 describe('referral milestone bonus', () => {
   it('needs both conditions, and fires on whichever lands second', async () => {
+    /* Every figure below is read off the settings rather than written in.
+     *
+     * These numbers used to be literals — 24M, 26M, 20M — pinned to the defaults of the day, so
+     * retuning the programme failed four tests that have no opinion about what the bonus is. The
+     * gate is what is under test: BOTH conditions, in either order, exactly once. What the two
+     * thresholds happen to be is one test's business, below, and not this one's. */
     const settings = config();
+    const gate = settings.referralBonusWagerMinor;
 
     // Wager threshold crossed, Discord still unverified: nothing is owed.
-    const wagerFirst = new ReferralClient({ wagered: 24_000_000n });
+    const wagerFirst = new ReferralClient({ wagered: gate - 1_000_000n });
     await accrueReferralWager(wagerFirst, settings, REFEREE, 2_000_000n, 'case', 'round-a');
-    assert.equal(wagerFirst.state.wagered, 26_000_000n);
+    assert.equal(wagerFirst.state.wagered, gate + 1_000_000n);
     assert.equal(wagerFirst.state.bonusUnlocked, false);
     assert.equal(
       wagerFirst.credits.some((entry) => entry.kind === 'referral_bonus'),
@@ -202,28 +209,36 @@ describe('referral milestone bonus', () => {
     assert.equal(await tryUnlockMilestone(wagerFirst, settings, REFEREE), true);
     const bonus = wagerFirst.credits.filter((entry) => entry.kind === 'referral_bonus');
     assert.equal(bonus.length, 1);
-    assert.equal(bonus[0]?.amount, 20_000_000n);
+    assert.equal(bonus[0]?.amount, settings.referralBonusMinor);
     assert.equal(bonus[0]?.userId, REFERRER);
   });
 
   it('fires from the wager path when Discord was verified first', async () => {
     const settings = config();
-    const client = new ReferralClient({ discordVerified: true, wagered: 24_999_999n });
+    const gate = settings.referralBonusWagerMinor;
+    const client = new ReferralClient({ discordVerified: true, wagered: gate - 1n });
     await accrueReferralWager(client, settings, REFEREE, 1n, 'upgrader', 'round-b');
-    assert.equal(client.state.wagered, 25_000_000n);
+    assert.equal(client.state.wagered, gate);
     assert.equal(client.state.bonusUnlocked, true);
     assert.equal(client.credits.filter((e) => e.kind === 'referral_bonus').length, 1);
   });
 
   it('refuses to pay a verified referee who is one unit short', async () => {
-    const client = new ReferralClient({ discordVerified: true, wagered: 24_999_999n });
-    assert.equal(await tryUnlockMilestone(client, config(), REFEREE), false);
+    const settings = config();
+    const client = new ReferralClient({
+      discordVerified: true,
+      wagered: settings.referralBonusWagerMinor - 1n,
+    });
+    assert.equal(await tryUnlockMilestone(client, settings, REFEREE), false);
     assert.equal(client.credits.length, 0);
   });
 
   it('pays exactly once, even if the gate is somehow entered twice', async () => {
     const settings = config();
-    const client = new ReferralClient({ discordVerified: true, wagered: 30_000_000n });
+    const client = new ReferralClient({
+      discordVerified: true,
+      wagered: settings.referralBonusWagerMinor,
+    });
 
     assert.equal(await tryUnlockMilestone(client, settings, REFEREE), true);
     // Force the row back to its pre-payment state: only the earnings index should stop the second
@@ -234,8 +249,12 @@ describe('referral milestone bonus', () => {
   });
 
   it('references the referee, so the bonus is unpayable twice by construction', async () => {
-    const client = new ReferralClient({ discordVerified: true, wagered: 30_000_000n });
-    await tryUnlockMilestone(client, config(), REFEREE);
+    const settings = config();
+    const client = new ReferralClient({
+      discordVerified: true,
+      wagered: settings.referralBonusWagerMinor,
+    });
+    await tryUnlockMilestone(client, settings, REFEREE);
     const bonus = client.credits.find((entry) => entry.kind === 'referral_bonus');
     assert.equal(bonus?.reference, REFEREE);
   });
@@ -258,10 +277,21 @@ describe('referral configuration', () => {
     );
   });
 
-  it('defaults to the published $20M bonus at a $25M wager gate', () => {
+  it('defaults to the published $10M bonus at a $100M wager gate', () => {
+    /* The one place the figures are written down, on purpose: this test is the record of what the
+     * programme pays, so changing the terms has to change it and be read in review. Everything
+     * else derives from the config.
+     *
+     * $10M for $100M wagered is a 10% cost of acquisition against a margin thinner than that on
+     * every mode, so it is the WAGER GATE that makes it solvent rather than the bonus being small.
+     * It is not a signup bonus and it must not be retuned into one. */
     const settings = config();
-    assert.equal(settings.referralBonusMinor, 20_000_000n);
-    assert.equal(settings.referralBonusWagerMinor, 25_000_000n);
+    assert.equal(settings.referralBonusMinor, 10_000_000n);
+    assert.equal(settings.referralBonusWagerMinor, 100_000_000n);
+    assert.ok(
+      settings.referralBonusWagerMinor >= settings.referralBonusMinor * 10n,
+      'the gate must stay at least ten times the bonus, or acquisition costs more than 10%',
+    );
   });
 });
 

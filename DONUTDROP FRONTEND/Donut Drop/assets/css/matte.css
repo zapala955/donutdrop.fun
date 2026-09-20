@@ -71,51 +71,6 @@
 .inspect__dropval { color: var(--cyan); }
 .inspect__dropodds { color: var(--gold-deep); }
 
-/* ── the invite page ──
-   The loudest surface on the site, and the one the token override could not reach: every colour
-   in its block is a literal. The badge was a filled #ffaa00→#ffd700 pill under a 26px gold glow,
-   which is a light source, not a component — and the info icon sitting inside it was gold on gold
-   and effectively invisible.
-
-   It becomes what every other accent here is: gold on obsidian, held by a border. The figure
-   still reads as the biggest thing on the page because of its size and weight, which is how it
-   should have been carrying that emphasis in the first place. */
-.refer__hero {
-  padding: 22px 18px; border-radius: var(--r);
-  background: var(--panel);
-  border: 1px solid var(--line2);
-}
-.refer__badge {
-  display: inline-flex; align-items: center;
-  padding: 9px 18px; border-radius: 999px;
-  color: var(--gold-bright);
-  background: rgba(255, 170, 0, .07);
-  background-image: none;
-  border: 1px solid rgba(255, 170, 0, .38);
-  box-shadow: none;
-  font-size: 1rem; font-weight: 800;
-}
-/* On a dark pill the hint reads at the same weight as it does everywhere else. */
-.refer__badge .ihint { margin-left: 9px; }
-
-.refer__terms, .refer__link, .refer__status {
-  border-radius: var(--r);
-  background: var(--panel);
-  border: 1px solid var(--line);
-}
-.refer__terms h2 { color: var(--text); }
-.refer__list li { color: var(--text); }
-.refer__field {
-  border-radius: var(--r-s);
-  background: var(--bg);
-  border: 1px solid var(--line2);
-  color: var(--gold-deep);
-}
-.refer__field:focus { border-color: var(--gold-bright); }
-.refer__status { border-color: rgba(224, 162, 10, .26); background: rgba(224, 162, 10, .05); }
-.refer__status h3 { color: var(--gold-bright); }
-.refer__status p { color: var(--text); }
-
 /* The invite badge in the nav pulsed its glow on a 2.8s infinite loop, on every page, forever.
    That is the one animation on the site that a player cannot get away from, and a permanently
    breathing element in the chrome is exactly what "no excessive glow animations" is about. The
@@ -206,82 +161,11 @@
   color: var(--gold-bright); border-color: var(--gold-bright); background: rgba(255, 170, 0, .08);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════════════════════
-   REFERRAL DASHBOARD
-   ══════════════════════════════════════════════════════════════════════════════════════════════
-
-   One row per invite, answering the only two questions a referrer has: is this person verified,
-   and how far along are they. Both render as state rather than as prose — a pill for Discord, a
-   bar and a fraction for the wager — so the page scans in a glance and carries no sentences.
-*/
-.refer__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; }
-.refer__stat {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 11px 13px;
-  border: 1px solid var(--line); border-radius: var(--r);
-  background: var(--panel);
-}
-.refer__statk {
-  font: 600 .62rem/1 var(--body); letter-spacing: .09em; text-transform: uppercase;
-  color: var(--faint);
-}
-.refer__statv { font: 800 1.05rem/1.1 var(--disp); color: var(--text); }
-.refer__statv--gold { color: var(--gold-bright); }
-
-.refer__invites { display: flex; flex-direction: column; gap: 8px; }
-.refer__invite {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  gap: 9px 12px; align-items: center;
-  padding: 11px 13px;
-  border: 1px solid var(--line); border-radius: var(--r);
-  background: var(--panel);
-}
-/* An invite that has paid its bonus is the one state worth lighting up, so it is the only row
-   that takes the accent. */
-.refer__invite[data-unlocked="1"] {
-  border-color: rgba(255, 170, 0, .34); background: rgba(255, 170, 0, .045);
-}
-.refer__who {
-  display: flex; align-items: center; gap: 8px; min-width: 0;
-  font: 800 .82rem/1 var(--body); color: var(--text);
-}
-.refer__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.refer__pays { font: 800 .8rem/1 var(--mono); color: var(--gold-deep); white-space: nowrap; }
-
-/* The two milestone conditions, as pills. Met is gold; pending is furniture — an unmet condition
-   on a brand-new invite is the normal state, and painting it red would make it look broken. */
-.refer__pill {
-  flex: none;
-  padding: 3px 7px; border-radius: 999px;
-  border: 1px solid var(--line2);
-  font: 800 .6rem/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase;
-  color: var(--faint); background: var(--panel2);
-}
-.refer__pill[data-on="1"] {
-  color: var(--gold-bright); border-color: rgba(255, 170, 0, .42);
-  background: rgba(255, 170, 0, .09);
-}
-
-.refer__bar {
-  grid-column: 1 / -1;
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center;
-}
-.refer__track { height: 5px; border-radius: 999px; overflow: hidden; background: var(--panel3); }
-.refer__fill {
-  height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
-  transform-origin: left center;
-  transition: transform .5s cubic-bezier(.22, .61, .36, 1);
-}
-.refer__frac { font: 600 .68rem/1 var(--mono); color: var(--muted); white-space: nowrap; }
-.refer__empty { margin: 0; font: .78rem/1.5 var(--body); color: var(--faint); }
-
 @media (prefers-reduced-motion: reduce) {
-  .refer__fill { transition: none; }
+
 }
 @media (max-width: 560px) {
-  .refer__invite { grid-template-columns: minmax(0, 1fr); }
-  .refer__pays { justify-self: start; }
+
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -301,7 +185,6 @@
 /* The card heading keeps its right-hand meta span, so the icon goes in as a third item rather
    than pushing that span out of position. */
 .card__h .ihint { align-self: center; }
-
 
 /* The community-crate price head is a label-and-figure pair on one row; the icon joins the label
    end of it rather than the figure. */
