@@ -9,10 +9,11 @@ import { parseWith } from '../lib/validation.js';
 /**
  * The live feed.
  *
- * Three kinds of event share one chronological stream:
+ * Four kinds of event share one chronological stream:
  *
  *   case     a crate was opened — what it cost, what it paid.
  *   upgrade  an upgrader round settled — stake in, payout out.
+ *   roulette one row per player and spin — every chip aggregated into the real round total.
  *   faction  a wager was credited to a team in the running faction war.
  *
  * Every settled round appears, win or lose. An earlier version filtered upgrader losses out,
@@ -62,7 +63,8 @@ export async function registerActivityRoutes(
                 c.id AS catalog_item_id, c.minecraft_name, c.display_name, c.image_url,
                 c.unit_value_minor, c.metadata,
                 r.awarded_quantity AS quantity,
-                ((r.awarded_weight::bigint * 1000000) / r.total_weight)::integer AS chance_ppm
+                ((r.awarded_weight::bigint * 1000000) / r.total_weight)::integer AS chance_ppm,
+                NULL::smallint AS game_result
            FROM case_rounds r
            JOIN users u ON u.id = r.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = r.user_id
@@ -78,33 +80,33 @@ export async function registerActivityRoutes(
                 COALESCE(r.payout_minor, '0')::bigint AS payout_minor,
                 c.id AS catalog_item_id, c.minecraft_name, c.display_name, c.image_url,
                 c.unit_value_minor, c.metadata,
-                r.target_quantity AS quantity, r.chance_ppm
+                r.target_quantity AS quantity, r.chance_ppm,
+                NULL::smallint AS game_result
            FROM upgrader_rounds r
            JOIN users u ON u.id = r.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = r.user_id
            JOIN catalog_items c ON c.id = r.target_catalog_item_id
          UNION ALL
-         SELECT b.id, 'roulette'::text AS kind, r.settled_at AS created_at,
+         SELECT min(b.id::text)::uuid AS id,
+                'roulette'::text AS kind, r.settled_at AS created_at,
                 u.id AS player_id,
-                ${MASKED_NAME} AS player,
-                t.wagered_minor AS wagered_minor,
+                max(${MASKED_NAME}) AS player,
+                max(t.wagered_minor) AS wagered_minor,
                 'Roulette'::text AS source_name,
                 NULL::char(7) AS accent,
-                b.stake_minor AS wager_minor,
-                COALESCE(b.payout_minor, '0')::bigint AS payout_minor,
+                sum(b.stake_minor)::bigint AS wager_minor,
+                sum(COALESCE(b.payout_minor, '0'))::bigint AS payout_minor,
                 NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
                 NULL::varchar AS display_name, NULL::text AS image_url,
                 NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
-                1 AS quantity,
-                CASE
-                  WHEN b.selection LIKE 'straight:%' THEN 27027
-                  WHEN b.selection LIKE 'dozen:%' THEN 324324
-                  ELSE 486486
-                END AS chance_ppm
+                count(*)::integer AS quantity,
+                0 AS chance_ppm,
+                r.result AS game_result
            FROM roulette_bets b
            JOIN roulette_rounds r ON r.id = b.round_id AND r.status = 'settled'
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
+          GROUP BY r.id, r.settled_at, r.result, u.id
          UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */
@@ -118,7 +120,8 @@ export async function registerActivityRoutes(
                 NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
                 NULL::varchar AS display_name, NULL::text AS image_url,
                 NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
-                1 AS quantity, 0 AS chance_ppm
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
            FROM faction_contributions fc
            JOIN users u ON u.id = fc.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = fc.user_id

@@ -192,6 +192,7 @@ function normalizeActivity(raw) {
    * zero-valued item for it would put a phantom "0" drop in every consumer that reads
    * activity.item, so the field stays null and the feed renders it as its own kind of row. */
   const isFaction = raw.kind === 'faction';
+  const isRoulette = raw.kind === 'roulette';
   const payoutRaw = raw.payout_minor ?? raw.payoutMinor;
   return {
     id: raw.id,
@@ -209,7 +210,9 @@ function normalizeActivity(raw) {
     wager: toSafeNumber(raw.wager_minor ?? raw.wagerMinor),
     payoutMinor: payoutRaw == null ? null : String(payoutRaw),
     payout: payoutRaw == null ? 0 : toSafeNumber(payoutRaw),
-    item: isFaction ? null : normalizeItem({
+    rouletteResult: isRoulette ? Number(raw.game_result ?? raw.gameResult) : null,
+    betCount: isRoulette ? Number(raw.quantity || 0) : null,
+    item: isFaction || isRoulette ? null : normalizeItem({
       id: raw.catalog_item_id ?? raw.catalogItemId,
       minecraft_name: raw.minecraft_name ?? raw.minecraftName,
       display_name: raw.display_name ?? raw.displayName,

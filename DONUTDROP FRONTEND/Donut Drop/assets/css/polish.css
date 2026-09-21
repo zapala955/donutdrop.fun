@@ -92,6 +92,29 @@
   image-rendering: pixelated;
   filter: drop-shadow(0 0 8px rgba(255, 170, 0, .45));
 }
+.flexwin__roulette {
+  position: relative;
+  display: grid;
+  width: 34px; height: 34px; flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid #9c790d;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #151519 0 39%, transparent 41%),
+    repeating-conic-gradient(#a62027 0 9.7deg, #1b1c21 9.7deg 19.4deg);
+  box-shadow: 0 0 0 2px #111115, 0 0 12px rgba(255, 170, 0, .32);
+  color: #f3f3f5;
+  font-size: .6875rem;
+  font-weight: 900;
+  text-shadow: 0 1px 3px #000;
+}
+.flexwin__roulette[data-color='red'] { color: #ff7378; }
+.flexwin__roulette[data-color='green'] { color: #48e39a; }
+.msg__badge--roulette {
+  color: #ffd400;
+  background: rgba(255, 212, 0, .11);
+  border: 1px solid rgba(255, 212, 0, .22);
+}
 .flexwin__stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .flexwin__tag {
   font-size: 1.0625rem; font-weight: 900;

@@ -151,7 +151,7 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /bet\.isViewer \? 'You' : bet\.player/);
   });
 
-  it('publishes settled roulette bets in the shared activity feed', async () => {
+  it('publishes one recognizable activity card per player and settled roulette round', async () => {
     const activity = await readFile(
       path.join(repo, 'services/api-gateway/src/routes/activity.ts'),
       'utf8',
@@ -160,10 +160,27 @@ describe('roulette persistence and client contract', () => {
       path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/ticker.js'),
       'utf8',
     );
+    const store = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/store.js'),
+      'utf8',
+    );
+    const chat = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/chat.js'),
+      'utf8',
+    );
     assert.match(activity, /FROM roulette_bets b/);
     assert.match(activity, /'roulette'::text AS kind/);
     assert.match(activity, /r\.status = 'settled'/);
+    assert.match(activity, /sum\(b\.stake_minor\)::bigint AS wager_minor/);
+    assert.match(activity, /sum\(COALESCE\(b\.payout_minor, '0'\)\)::bigint AS payout_minor/);
+    assert.match(activity, /count\(\*\)::integer AS quantity/);
+    assert.match(activity, /GROUP BY r\.id, r\.settled_at, r\.result, u\.id/);
     assert.match(ticker, /kind === 'roulette'/);
     assert.match(ticker, /return 'Roulette'/);
+    assert.match(store, /rouletteResult: isRoulette/);
+    assert.match(store, /item:\s*isFaction \|\| isRoulette\s*\? null/);
+    assert.match(chat, /msg__badge--roulette/);
+    assert.match(chat, /flexwin__roulette/);
+    assert.match(chat, /Roulette · \$\{count\}/);
   });
 });

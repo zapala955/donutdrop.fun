@@ -36,6 +36,7 @@ import { api, API_BASE_URL } from './api.js';
 const POLL_MS = 6000;
 const RAIN_POLL_MS = 8000;
 const MAX_LINES = 60;
+const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
 /** Remembered across sessions so the rail opens the way the player left it. */
 const DOCK_KEY = 'dd.chat.collapsed';
@@ -397,7 +398,7 @@ function drainBigHits() {
   if (threshold <= 0) return;
   for (const activity of state.activities ?? []) {
     const item = activity.item;
-    if (!item) continue;
+    if (!item && activity.kind !== 'roulette') continue;
     // The payout is what actually landed in a wallet; the item's catalogue price is not the same
     // thing on a losing round, where nothing was paid at all.
     const value = Number(activity.payout ?? 0);
@@ -542,13 +543,19 @@ function buildMessage(message) {
  * username. Bedrock accounts and upstream misses still fall back to the initial tile.
  */
 function buildHit(activity, value) {
-  const line = el('div', 'msg msg--hit');
+  const isRoulette = activity.kind === 'roulette';
+  const line = el('div', isRoulette ? 'msg msg--hit msg--roulette' : 'msg msg--hit');
 
   const top = el('div', 'msg__top');
   top.append(avatarFor(activity.playerId, activity.player || 'Steve'));
   const who = el('span', 'msg__who');
   who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);
+  if (isRoulette) {
+    const game = el('i', 'msg__badge msg__badge--roulette');
+    game.textContent = 'ROULETTE';
+    top.append(game);
+  }
   if (activity.vip) {
     const tier = el('i', 'msg__badge');
     tier.dataset.tier = activity.vip.tier;
@@ -561,7 +568,14 @@ function buildHit(activity, value) {
 
   /* The payout and the thing it came out of, side by side. */
   const figure = el('div', 'flexwin');
-  if (activity.item?.img) {
+  if (isRoulette) {
+    const result = Number(activity.rouletteResult);
+    const wheel = el('span', 'flexwin__roulette mono');
+    wheel.dataset.color = rouletteColor(result);
+    wheel.textContent = Number.isInteger(result) ? String(result) : '?';
+    wheel.setAttribute('aria-label', `Roulette landed on ${wheel.textContent}`);
+    figure.appendChild(wheel);
+  } else if (activity.item?.img) {
     const art = document.createElement('img');
     art.className = 'flexwin__art';
     art.src = safeImage(activity.item.img);
@@ -572,7 +586,14 @@ function buildHit(activity, value) {
   const tag = el('b', 'flexwin__tag mono');
   tag.textContent = money(value);
   const from = el('span', 'flexwin__from');
-  from.textContent = activity.item?.displayName || activity.item?.name || 'a round';
+  if (isRoulette) {
+    const result = Number(activity.rouletteResult);
+    const count = Math.max(1, Number(activity.betCount) || 1);
+    const landed = Number.isInteger(result) ? ` · ${result} ${rouletteColor(result)}` : '';
+    from.textContent = `Roulette · ${count} ${count === 1 ? 'chip' : 'chips'}${landed}`;
+  } else {
+    from.textContent = activity.item?.displayName || activity.item?.name || 'a round';
+  }
   stack.append(tag, from);
   figure.append(stack);
 
@@ -582,6 +603,11 @@ function buildHit(activity, value) {
 
   line.append(top, figure);
   return line;
+}
+
+function rouletteColor(result) {
+  if (result === 0) return 'green';
+  return ROULETTE_RED.has(result) ? 'red' : 'black';
 }
 
 function buildTip(username, amount, note) {
