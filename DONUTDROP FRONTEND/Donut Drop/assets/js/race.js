@@ -10,6 +10,7 @@
  * are not paid.
  */
 import { state, bus, refreshRaces, settleRaces } from './store.js';
+import { tableAvatar } from './table-avatar.js';
 import { $, el, money } from './util.js';
 
 let root = null;
@@ -211,9 +212,7 @@ function table(race) {
     rank.textContent = `#${entry.rank}`;
 
     const player = el('td', 'dtable__player');
-    const avatar = el('span', 'dtable__avatar');
-    avatar.setAttribute('aria-hidden', 'true');
-    avatar.textContent = entry.username.slice(0, 1).toUpperCase();
+    const avatar = tableAvatar(entry.playerId);
     const name = el('span', 'dtable__name');
     name.textContent = entry.username;
     player.append(avatar, name);

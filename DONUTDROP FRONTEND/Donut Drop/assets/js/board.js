@@ -8,7 +8,7 @@
  * is a number that can be stale in a way the player cannot see.
  */
 import { state, bus, refreshLeaderboard, refreshStatistics } from './store.js';
-import { API_BASE_URL } from './api.js';
+import { tableAvatar } from './table-avatar.js';
 import { $, el, money, pct } from './util.js';
 
 /* The three boards, and what the two numeric columns mean on each. A board's `value` and `detail`
@@ -127,7 +127,7 @@ function paintBoard() {
     rank.textContent = `#${entry.rank}`;
 
     const player = el('td', 'dtable__player');
-    const avatar = playerAvatar(entry.playerId);
+    const avatar = tableAvatar(entry.playerId);
     const name = el('span', 'dtable__name');
     name.textContent = entry.username;
     player.append(avatar, name);
@@ -145,25 +145,6 @@ function paintBoard() {
   table.append(head, body);
   wrap.appendChild(table);
   boardRoot.appendChild(wrap);
-}
-
-/**
- * A leaderboard is public, so the browser asks our same-origin proxy for the head using the
- * opaque player id. The masked Minecraft name never appears in an image URL. If a skin is not
- * available, the empty tile's CSS silhouette remains visible instead of putting the initial back.
- */
-function playerAvatar(playerId) {
-  const avatar = el('span', 'dtable__avatar');
-  avatar.setAttribute('aria-hidden', 'true');
-  if (!playerId) return avatar;
-
-  const art = document.createElement('img');
-  art.alt = '';
-  art.loading = 'lazy';
-  art.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(playerId)}?s=22`;
-  art.addEventListener('error', () => art.remove());
-  avatar.appendChild(art);
-  return avatar;
 }
 
 function boardTabs() {

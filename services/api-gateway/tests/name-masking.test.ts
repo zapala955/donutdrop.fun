@@ -46,6 +46,7 @@ describe('public surfaces', () => {
     ['activity', ['u.minecraft_username']],
     ['battles', ['u.minecraft_username', 'display_name']],
     ['duels', ['h.minecraft_username', 'o.minecraft_username']],
+    ['rewards', ['u.minecraft_username']],
   ];
 
   for (const [name, columns] of surfaces) {
@@ -80,6 +81,13 @@ describe('public surfaces', () => {
     assert.equal(source.match(/maskedName\('u\.minecraft_username'\)/g)?.length, 3);
     assert.match(source, /username: row\.username/);
     assert.doesNotMatch(source, /username: row\.minecraft_username/);
+  });
+
+  it('does not fetch jackpot winner names when the public widget only displays amounts', async () => {
+    const source = await route('social');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.doesNotMatch(code, /minecraft_username AS winner/);
+    assert.doesNotMatch(code, /winner: row\.winner/);
   });
 
   it('keeps the stored name raw, and masks only on the way out', async () => {

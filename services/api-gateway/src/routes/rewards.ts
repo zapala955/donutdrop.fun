@@ -5,6 +5,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { maskedName } from '../lib/masked-name.js';
 import {
   RAKEBACK_TIERS,
   TIER_COOLDOWN_MS,
@@ -185,10 +186,10 @@ export async function registerRewardRoutes(app: FastifyInstance, db: Database, c
       races.rows.map(async (race) => {
         const entries = await db.query<{
           user_id: string;
-          minecraft_username: string;
+          username: string;
           wagered_minor: string;
         }>(
-          `SELECT e.user_id, u.minecraft_username, e.wagered_minor
+          `SELECT e.user_id, ${maskedName('u.minecraft_username')} AS username, e.wagered_minor
              FROM wager_race_entries e JOIN users u ON u.id = e.user_id
             WHERE e.race_id = $1 AND e.wagered_minor > 0
             ORDER BY e.wagered_minor DESC, e.updated_at ASC
@@ -200,7 +201,8 @@ export async function registerRewardRoutes(app: FastifyInstance, db: Database, c
         const pool = BigInt(race.prize_pool_minor);
         const leaderboard = entries.rows.map((entry, index) => ({
           rank: index + 1,
-          username: entry.minecraft_username,
+          playerId: entry.user_id,
+          username: entry.username,
           // The viewer's own row is flagged server-side so the client never has to match on a
           // username, which is not a stable identifier.
           isViewer: viewerId !== null && entry.user_id === viewerId,

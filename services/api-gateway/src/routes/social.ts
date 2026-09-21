@@ -107,10 +107,10 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     const viewerId = request.authUser?.id ?? null;
     const pot = await readJackpot(db);
 
-    const recent = await db.query<{ amount_minor: string; won_at: Date; winner: string | null }>(
-      `SELECT w.amount_minor, w.won_at, u.minecraft_username AS winner
-         FROM vault_jackpot_wins w JOIN users u ON u.id = w.user_id
-        ORDER BY w.won_at DESC LIMIT 5`,
+    const recent = await db.query<{ amount_minor: string; won_at: Date }>(
+      `SELECT amount_minor, won_at
+         FROM vault_jackpot_wins
+        ORDER BY won_at DESC LIMIT 5`,
     );
 
     /* A win the viewer has not necessarily seen yet. Five minutes is long enough to survive a
@@ -131,7 +131,6 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       /* Published so a player can check the odds they were given. `chance = wager / divisor`. */
       oddsDivisorMinor: config.vaultJackpotOddsDivisorMinor.toString(),
       recentWins: recent.rows.map((row) => ({
-        winner: row.winner,
         amountMinor: row.amount_minor,
         wonAt: row.won_at.toISOString(),
       })),

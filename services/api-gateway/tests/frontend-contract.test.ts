@@ -272,7 +272,7 @@ ${detail}`);
       );
     };
 
-    for (const directive of ['script-src', 'frame-src']) {
+    for (const directive of ['script-src', 'frame-src', 'img-src']) {
       const inPage = origins(metaPolicy, directive);
       const inHeader = origins(headers, directive);
       for (const origin of inPage) {
@@ -288,6 +288,8 @@ ${detail}`);
         );
       }
     }
+    assert.doesNotMatch(metaPolicy, /mc-heads\.net/);
+    assert.doesNotMatch(headers, /mc-heads\.net/);
   });
 
   it('forbids inline script with a content security policy', async () => {

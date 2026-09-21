@@ -18,7 +18,10 @@ const store = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/store
 const ticker = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/ticker.js');
 const app = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
 const board = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/board.js');
+const race = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/race.js');
+const tableAvatar = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/table-avatar.js');
 const insights = () => read('../src/routes/insights.ts');
+const rewards = () => read('../src/routes/rewards.ts');
 
 describe('avatar proxy', () => {
   it('is keyed on an id, never on a name', async () => {
@@ -115,13 +118,20 @@ describe('account header avatar', () => {
 });
 
 describe('leaderboard avatars', () => {
-  it('returns an opaque player id and renders the proxied head instead of a name initial', async () => {
+  it('returns opaque player ids for both public leaderboards', async () => {
     const apiSource = await insights();
     assert.match(apiSource, /playerId: row\.user_id/);
+    const raceSource = await rewards();
+    assert.match(raceSource, /playerId: entry\.user_id/);
+  });
 
-    const source = await board();
-    assert.match(source, /playerAvatar\(entry\.playerId\)/);
-    assert.match(source, /\/v1\/avatars\/\$\{encodeURIComponent\(playerId\)\}\?s=22/);
-    assert.doesNotMatch(source, /avatar\.textContent = entry\.username/);
+  it('shares the proxied head renderer instead of drawing name initials', async () => {
+    for (const source of [await board(), await race()]) {
+      assert.match(source, /tableAvatar\(entry\.playerId\)/);
+      assert.doesNotMatch(source, /avatar\.textContent = entry\.username/);
+      assert.doesNotMatch(source, /entry\.username\.slice/);
+    }
+    const avatarSource = await tableAvatar();
+    assert.match(avatarSource, /\/v1\/avatars\/\$\{encodeURIComponent\(playerId\)\}\?s=22/);
   });
 });
