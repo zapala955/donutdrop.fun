@@ -42,7 +42,8 @@ export type QuestMetric =
 export type ContributionSource =
   | 'upgrader'
   | 'case'
-  | 'skill_duel';
+  | 'skill_duel'
+  | 'roulette';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

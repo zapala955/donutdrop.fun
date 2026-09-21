@@ -94,7 +94,7 @@ describe('chat renderer', () => {
 describe('activity avatars', () => {
   it('carries an opaque player id through every activity kind and normalizes it', async () => {
     const apiSource = await activity();
-    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 3);
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 4);
     const storeSource = await store();
     assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
   });

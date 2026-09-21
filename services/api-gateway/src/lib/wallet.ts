@@ -49,6 +49,7 @@ export type WalletKind =
   | 'tip_received'
   | 'sidebet_win'
   | 'sidebet_refund'
+  | 'roulette_win'
   // A community crate paying its author. Carved from the house margin, never added to the price.
   | 'creator_royalty'
   // Referrals: the lifetime cut of the house margin, and the one-off milestone bonus. Both are

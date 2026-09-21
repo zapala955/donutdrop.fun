@@ -31,6 +31,10 @@ describe('configuration', () => {
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
     assert.equal(config.streakDailyWagerRequiredMinor, 10_000_000n);
+    assert.equal(config.rouletteEnabled, true);
+    assert.equal(config.rouletteRoundSeconds, 10);
+    assert.equal(config.rouletteMinStakeMinor, 100_000n);
+    assert.equal(config.rouletteMaxStakeMinor, 100_000_000n);
   });
 
   it('requires HTTPS in production', () => {

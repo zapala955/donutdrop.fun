@@ -400,6 +400,8 @@ async function loadOverview() {
     ['Wagered today', amountText(m.wagered_today_minor ?? 0)],
     ['Enabled cases', m.cases_enabled ?? 0],
     ['Catalog items', m.catalog_items_enabled ?? 0],
+    ['Roulette open bets', m.roulette_open_bets ?? 0],
+    ['Roulette wagered today', amountText(m.roulette_wagered_today_minor ?? 0)],
   ]);
   renderStats($('overviewAttention'), [
     ['Quarantined bots', m.bots_quarantined ?? 0, Number(m.bots_quarantined) > 0],

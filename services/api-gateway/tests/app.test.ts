@@ -55,7 +55,7 @@ describe('API application', () => {
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       assert.equal(ready.statusCode, 200);
       assert.deepEqual(ready.json(), { status: 'ready' });
-      assert.ok(queries.includes('SELECT public.donut_schema_ready_v38() AS ready'));
+      assert.ok(queries.includes('SELECT public.donut_schema_ready_v39() AS ready'));
 
       const missing = await app.inject({ method: 'GET', url: '/not-a-route' });
       assert.equal(missing.statusCode, 404);

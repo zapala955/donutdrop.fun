@@ -60,6 +60,7 @@
 <link rel="stylesheet" href="assets/css/auth.css" />
 <!-- the invite page, which borrows the sign-in card's vocabulary and so loads beside it -->
 <link rel="stylesheet" href="assets/css/referrals.css" />
+<link rel="stylesheet" href="assets/css/roulette.css" />
 <link rel="icon" href="assets/img/items/ender_chest.png" />
 </head>
 <body>
@@ -83,6 +84,7 @@
        account menu under "Play" rather than being stranded behind a URL nobody can find. -->
   <nav class="tabs" id="tabs" aria-label="Primary">
     <a href="/upgrader" data-route="upgrader">Upgrader</a>
+    <a href="/roulette" data-route="roulette">Roulette</a>
 
     <!-- Cases is a disclosure, not a link: it owns three routes and picking between them is the
          decision, so the parent never navigates on its own. -->
@@ -389,6 +391,16 @@
           data-tip="The gold arc is your window: the pointer stops inside it and the payout is yours."></button></h1>
       </header>
       <div class="upg" id="upgRoot"></div>
+    </section>
+
+    <!-- â”€â”€â”€â”€â”€â”€â”€ ROULETTE â”€â”€â”€â”€â”€â”€â”€ -->
+    <section class="view" data-view="roulette" hidden>
+      <header class="phead">
+        <h1>Roulette <button class="ihint" type="button"
+          aria-label="One server-owned European wheel is shared by every player. Bets lock every ten seconds."
+          data-tip="One server-owned European wheel is shared by every player. Bets lock every ten seconds."></button></h1>
+      </header>
+      <div class="roulette" id="rouletteRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

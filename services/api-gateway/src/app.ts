@@ -39,6 +39,7 @@ import { registerReferralRoutes } from './routes/referrals.js';
 import { registerSideBetRoutes } from './routes/sidebets.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { registerRewardRoutes } from './routes/rewards.js';
+import { registerRouletteRoutes } from './routes/roulette.js';
 import { registerVipRoutes } from './routes/vip.js';
 import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
@@ -221,6 +222,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerEngagementRoutes(app, db, config);
   await registerReferralRoutes(app, db, config);
   await registerRewardRoutes(app, db, config);
+  await registerRouletteRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   // Registers nothing unless DEV_LOGIN_ENABLED is on, and config refuses to boot with it on

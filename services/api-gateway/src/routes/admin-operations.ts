@@ -171,7 +171,11 @@ export async function registerAdminOperationRoutes(
          (SELECT count(*) FROM chat_timeouts
            WHERE lifted_at IS NULL AND expires_at > now())::text AS chat_timeouts_active,
          (SELECT count(*) FROM cases WHERE enabled)::text AS cases_enabled,
-         (SELECT count(*) FROM catalog_items WHERE enabled)::text AS catalog_items_enabled`,
+         (SELECT count(*) FROM catalog_items WHERE enabled)::text AS catalog_items_enabled,
+         (SELECT count(*) FROM roulette_bets b JOIN roulette_rounds r ON r.id = b.round_id
+           WHERE r.status = 'open')::text AS roulette_open_bets,
+         (SELECT coalesce(sum(b.stake_minor), 0) FROM roulette_bets b
+           WHERE b.created_at >= date_trunc('day', now()))::text AS roulette_wagered_today_minor`,
     );
     return { metrics: result.rows[0] ?? {} };
   });
@@ -690,6 +694,10 @@ export async function registerAdminOperationRoutes(
       maxMultiplierBps: config.maxMultiplierBps,
       maxWinChancePpm: config.maxWinChancePpm,
       upgradeMaxStakeMinor: config.upgradeMaxStakeMinor.toString(),
+      rouletteEnabled: config.rouletteEnabled,
+      rouletteRoundSeconds: config.rouletteRoundSeconds,
+      rouletteMinStakeMinor: config.rouletteMinStakeMinor.toString(),
+      rouletteMaxStakeMinor: config.rouletteMaxStakeMinor.toString(),
       houseStockUnlimited: config.houseStockUnlimited,
       cashOnlyPlay: config.cashOnlyPlay,
       minecraftTransfersEnabled: config.minecraftTransfersEnabled,

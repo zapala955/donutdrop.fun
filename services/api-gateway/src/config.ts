@@ -452,6 +452,17 @@ const environmentSchema = z
      * be holding. The house carries the other side of an upgrade, and an unbounded stake is an
      * unbounded liability on one roll. */
     UPGRADE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    /* One server-owned European roulette table. The round duration is deliberately bounded to a
+     * short live-game window, and defaults to the ten seconds published in the UI. Payouts are
+     * derived from HOUSE_EDGE_BPS, so changing the site's edge cannot leave roulette advertising
+     * one figure while settling another. */
+    ROULETTE_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    ROULETTE_ROUND_SECONDS: z.coerce.number().int().min(5).max(60).default(10),
+    ROULETTE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    ROULETTE_MAX_STAKE_MINOR: positiveBigintString.default('100000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -699,6 +710,16 @@ const environmentSchema = z
         code: 'custom',
         path: ['SKILL_DUEL_MAX_STAKE_MINOR'],
         message: 'must be at least SKILL_DUEL_MIN_STAKE_MINOR',
+      });
+    }
+    if (
+      env.ROULETTE_ENABLED &&
+      BigInt(env.ROULETTE_MIN_STAKE_MINOR) > BigInt(env.ROULETTE_MAX_STAKE_MINOR)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ROULETTE_MAX_STAKE_MINOR'],
+        message: 'must be at least ROULETTE_MIN_STAKE_MINOR',
       });
     }
     /* A rake that rounds to nothing on the smallest legal duel is a free mode. Integer division
@@ -1023,6 +1044,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     donutsmpApiBaseUrl: env.DONUTSMP_API_BASE_URL,
     donutsmpApiKey: env.DONUTSMP_API_KEY,
     upgradeMaxStakeMinor: BigInt(env.UPGRADE_MAX_STAKE_MINOR),
+    rouletteEnabled: env.ROULETTE_ENABLED,
+    rouletteRoundSeconds: env.ROULETTE_ROUND_SECONDS,
+    rouletteMinStakeMinor: BigInt(env.ROULETTE_MIN_STAKE_MINOR),
+    rouletteMaxStakeMinor: BigInt(env.ROULETTE_MAX_STAKE_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

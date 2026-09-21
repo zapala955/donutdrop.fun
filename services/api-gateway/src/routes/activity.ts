@@ -84,6 +84,28 @@ export async function registerActivityRoutes(
            LEFT JOIN user_wager_totals t ON t.user_id = r.user_id
            JOIN catalog_items c ON c.id = r.target_catalog_item_id
          UNION ALL
+         SELECT b.id, 'roulette'::text AS kind, r.settled_at AS created_at,
+                u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Roulette'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                COALESCE(b.payout_minor, '0')::bigint AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity,
+                CASE
+                  WHEN b.selection LIKE 'straight:%' THEN 27027
+                  WHEN b.selection LIKE 'dozen:%' THEN 324324
+                  ELSE 486486
+                END AS chance_ppm
+           FROM roulette_bets b
+           JOIN roulette_rounds r ON r.id = b.round_id AND r.status = 'settled'
+           JOIN users u ON u.id = b.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
+         UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */
          SELECT fc.id, 'faction'::text AS kind, fc.created_at, u.id AS player_id,

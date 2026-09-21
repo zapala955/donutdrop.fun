@@ -17,6 +17,7 @@ import {
 } from './ui.js';
 import { API_BASE_URL } from './api.js';
 import { mountUpgrader } from './upgrader.js';
+import { mountRoulette } from './roulette.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
@@ -911,6 +912,7 @@ const VIEWS = {
   referrals: mountReferrals,
   studio: mountStudio,
   upgrader: mountUpgrader,
+  roulette: mountRoulette,
   quests: mountQuests,
   war: mountWar,
   fairness: mountFair,
