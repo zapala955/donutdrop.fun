@@ -41,6 +41,8 @@ const MIN_WITHDRAWAL_MINOR = 10_000n;
  * acquired a balance it should not have.
  */
 const APPROVAL_THRESHOLD_MINOR = 500_000_000n;
+/** A completed or failed request cannot be immediately followed by another payout request. */
+export const WITHDRAWAL_COOLDOWN_SECONDS = 60;
 
 const requestSchema = z.object({ amountMinor: z.string().regex(/^[1-9]\d{0,18}$/) }).strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
@@ -53,6 +55,7 @@ interface WithdrawalRow {
   error_code: string | null;
   created_at: Date;
   paid_at: Date | null;
+  cooldown_seconds?: number;
 }
 
 function view(row: WithdrawalRow) {
@@ -162,11 +165,13 @@ export async function registerCashWithdrawalRoutes(
     async (request) => {
       const userId = request.authUser?.id;
       const live = await db.query<WithdrawalRow>(
-        `SELECT id, amount_minor, payee_username, status, error_code, created_at, paid_at
+        `SELECT id, amount_minor, payee_username, status, error_code, created_at, paid_at,
+                GREATEST(0, CEIL(EXTRACT(EPOCH FROM
+                  (created_at + ($2::integer * interval '1 second') - now()))))::int AS cooldown_seconds
            FROM cash_withdrawals
           WHERE user_id = $1
           ORDER BY created_at DESC LIMIT 5`,
-        [userId],
+        [userId, WITHDRAWAL_COOLDOWN_SECONDS],
       );
       const pending = live.rows.find((row) =>
         ['pending_approval', 'queued', 'processing'].includes(row.status),
@@ -175,6 +180,8 @@ export async function registerCashWithdrawalRoutes(
         payeeUsername: request.authUser?.minecraftUsername ?? null,
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
         approvalThresholdMinor: APPROVAL_THRESHOLD_MINOR.toString(),
+        cooldownSeconds: WITHDRAWAL_COOLDOWN_SECONDS,
+        cooldownRemainingSeconds: live.rows[0]?.cooldown_seconds ?? 0,
         pending: pending ? view(pending) : null,
         recent: live.rows.map(view),
       };
@@ -220,6 +227,42 @@ export async function registerCashWithdrawalRoutes(
         );
         if (!isDepositEligible(account.rows[0])) {
           throw new AppError(403, 'ACCOUNT_RESTRICTED', 'This account cannot withdraw right now');
+        }
+
+        /* The first lookup above makes ordinary retries cheap. This second lookup is what closes
+         * the race between two identical requests: the account lock makes the second transaction
+         * wait, then it sees and replays the row the first one committed instead of mistaking it
+         * for a new withdrawal inside the cooldown. */
+        const replayedAfterLock = await client.query<WithdrawalRow>(
+          `SELECT id, amount_minor, payee_username, status, error_code, created_at, paid_at
+             FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key = $2`,
+          [userId, idempotencyKey],
+        );
+        if (replayedAfterLock.rows[0]) {
+          return { row: replayedAfterLock.rows[0], replay: true };
+        }
+
+        /* The account row lock serializes this check with the insert below. Without that lock,
+         * two requests could both see no recent row and create withdrawals a few milliseconds
+         * apart. Database time is used so clock drift between API instances cannot shorten the
+         * minute. */
+        const cooldown = await client.query<{ retry_after_seconds: number }>(
+          `SELECT GREATEST(1, CEIL(EXTRACT(EPOCH FROM
+                    (created_at + ($2::integer * interval '1 second') - now()))))::int AS retry_after_seconds
+             FROM cash_withdrawals
+            WHERE user_id = $1 AND created_at > now() - ($2::integer * interval '1 second')
+            ORDER BY created_at DESC
+            LIMIT 1`,
+          [userId, WITHDRAWAL_COOLDOWN_SECONDS],
+        );
+        const retryAfterSeconds = cooldown.rows[0]?.retry_after_seconds;
+        if (retryAfterSeconds !== undefined) {
+          throw new AppError(
+            429,
+            'WITHDRAWAL_COOLDOWN',
+            `Wait ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'} before withdrawing again`,
+            { retryAfterSeconds },
+          );
         }
 
         const bot = await onlineBot(client);

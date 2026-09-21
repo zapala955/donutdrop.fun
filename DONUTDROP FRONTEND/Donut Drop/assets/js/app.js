@@ -635,6 +635,12 @@ async function openWithdrawModal() {
     return;
   }
 
+  const cooldownRemaining = Number(info.cooldownRemainingSeconds ?? 0);
+  if (cooldownRemaining > 0) {
+    paintWithdrawCooldown(host, cooldownRemaining);
+    return;
+  }
+
   const minimum = Number(info.minimumMinor);
   const threshold = Number(info.approvalThresholdMinor);
 
@@ -706,6 +712,30 @@ async function openWithdrawModal() {
     confirmWithdraw(host, amountOf(), info, threshold);
   });
   input.focus();
+}
+
+/** Keep the server-enforced minute visible instead of letting the next submit fail mysteriously. */
+function paintWithdrawCooldown(host, remainingSeconds) {
+  const readyAt = Date.now() + Math.max(1, remainingSeconds) * 1000;
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
+    <p class="auth__lede">Please wait <b class="mono" id="wdCooldown"></b> before starting
+      another withdrawal.</p>
+    <hr class="auth__rule">
+    <button class="btn btn--go auth__go" type="button" id="wdCooldownClose">Close</button>`;
+
+  $('#wdCooldownClose', host).addEventListener('click', () => closeModal());
+  const label = $('#wdCooldown', host);
+  const tick = () => {
+    if (!host.isConnected || !$('#modal').open) return;
+    const seconds = Math.max(0, Math.ceil((readyAt - Date.now()) / 1000));
+    if (seconds === 0) {
+      void openWithdrawModal();
+      return;
+    }
+    label.textContent = `${seconds} second${seconds === 1 ? '' : 's'}`;
+    window.setTimeout(tick, 250);
+  };
+  tick();
 }
 
 /** Step two: the exact figure and the exact name, with nothing else competing for attention. */

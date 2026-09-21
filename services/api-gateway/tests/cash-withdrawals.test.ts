@@ -5,7 +5,10 @@ import { describe, it } from 'node:test';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { loadConfig } from '../src/config.js';
 import type { Database } from '../src/lib/db.js';
-import { registerCashWithdrawalRoutes } from '../src/routes/cash-withdrawals.js';
+import {
+  registerCashWithdrawalRoutes,
+  WITHDRAWAL_COOLDOWN_SECONDS,
+} from '../src/routes/cash-withdrawals.js';
 
 const botId = '20000000-0000-4000-8000-000000000002';
 const userId = '30000000-0000-4000-8000-000000000003';
@@ -57,7 +60,12 @@ interface Statement {
  * `balance` is what the wallet UPDATE will hand back, and setting it below the requested amount is
  * how the overdraft case is reproduced without a server.
  */
-function fakeDb(options: { balance: bigint; botOnline?: boolean; insertConflict?: boolean }) {
+function fakeDb(options: {
+  balance: bigint;
+  botOnline?: boolean;
+  cooldownSeconds?: number;
+  insertConflict?: boolean;
+}) {
   const statements: Statement[] = [];
   const query = async (sql: string, values: unknown[] = []) => {
     statements.push({ sql, values });
@@ -71,6 +79,11 @@ function fakeDb(options: { balance: bigint; botOnline?: boolean; insertConflict?
     }
     if (sql.includes('SELECT status FROM users WHERE id = $1 FOR UPDATE')) {
       return result([{ status: 'active' }]);
+    }
+    if (sql.includes('AS retry_after_seconds')) {
+      return options.cooldownSeconds === undefined
+        ? result([])
+        : result([{ retry_after_seconds: options.cooldownSeconds }]);
     }
     if (sql.includes('UPDATE user_wallets SET balance_minor = balance_minor - $2')) {
       const asked = BigInt(String(values[1]));
@@ -127,6 +140,44 @@ async function post(options: Parameters<typeof fakeDb>[0], amount: string) {
 }
 
 describe('cash withdrawals', () => {
+  it('requires a full minute between withdrawal requests', async () => {
+    assert.equal(WITHDRAWAL_COOLDOWN_SECONDS, 60);
+    const { app, handlers } = captureApp();
+    const { db, statements } = fakeDb({ balance: 5_000_000n, cooldownSeconds: 37 });
+    await registerCashWithdrawalRoutes(app, db, config);
+    const handler = handlers.get('POST /v1/cash-withdrawals');
+    assert.ok(handler, 'route not registered');
+    await assert.rejects(
+      () => handler(request('1000000'), reply()),
+      /Wait 37 seconds before withdrawing again/,
+    );
+    assert.ok(
+      !statements.some(({ sql }) => sql.includes('balance_minor - $2')),
+      'the wallet was debited during the cooldown',
+    );
+    const cooldown = statements.find(({ sql }) => sql.includes('AS retry_after_seconds'));
+    assert.equal(cooldown?.values[1], 60);
+    const lockedAt = statements.findIndex(({ sql }) => sql.includes('FOR UPDATE'));
+    const cooldownAt = statements.findIndex(({ sql }) => sql.includes('AS retry_after_seconds'));
+    assert.ok(
+      lockedAt >= 0 && cooldownAt > lockedAt,
+      'cooldown was checked outside the account lock',
+    );
+  });
+
+  it('shows the remaining cooldown in the withdrawal modal', async () => {
+    const source = await readFile(
+      path.resolve(
+        import.meta.dirname,
+        '../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js',
+      ),
+      'utf8',
+    );
+    assert.match(source, /info\.cooldownRemainingSeconds/);
+    assert.match(source, /paintWithdrawCooldown\(host, cooldownRemaining\)/);
+    assert.match(source, /Math\.ceil\(\(readyAt - Date\.now\(\)\) \/ 1000\)/);
+  });
+
   it('installs the payout ledger, the one-live guard and the readiness marker', async () => {
     const sql = await readFile(
       path.join(process.cwd(), '../../packages/db/migrations/028_cash_withdrawals.sql'),
