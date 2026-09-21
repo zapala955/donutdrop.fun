@@ -32,6 +32,7 @@ let serverOffsetMs = 0;
 let polling = false;
 let placing = false;
 let seenResultId = null;
+let pendingResultId = null;
 let wheelRotation = 0;
 
 export function mountRoulette(view) {
@@ -236,6 +237,7 @@ async function refresh() {
     const newest = next.history?.[0];
     const shouldSpin = seenResultId !== null && newest?.id && newest.id !== seenResultId;
     if (newest?.id) seenResultId = newest.id;
+    if (shouldSpin) pendingResultId = newest.id;
     snapshot = next;
     paint();
     if (shouldSpin) spinTo(newest.result, next.yourPreviousBets || []);
@@ -256,25 +258,35 @@ function paint() {
   $('#rouletteLimits', root).textContent =
     `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max · one shared ${config.roundSeconds}s round`;
 
-  const history = $('#rouletteHistory', root);
-  history.replaceChildren(
-    ...(snapshot.history || []).slice(0, 10).map((round) => {
-      const node = document.createElement('span');
-      node.className = `roulette__past roulette__past--${round.color}`;
-      node.textContent = String(round.result);
-      node.title = `Round ${round.id}`;
-      return node;
-    }),
-  );
+  paintHistory();
 
-  const result = snapshot.history?.[0]?.result;
-  if (result != null && !$('#rouletteWheel', root).classList.contains('is-spinning')) {
-    $('#rouletteResult', root).textContent = String(result);
+  const visibleResult = visibleHistory()[0]?.result;
+  if (visibleResult != null && !$('#rouletteWheel', root).classList.contains('is-spinning')) {
+    $('#rouletteResult', root).textContent = String(visibleResult);
   }
   paintPools();
   paintBets();
   paintClock();
   syncSelection();
+}
+
+function visibleHistory() {
+  return (snapshot?.history || []).filter((round) => round.id !== pendingResultId);
+}
+
+function paintHistory() {
+  const history = $('#rouletteHistory', root);
+  history.replaceChildren(
+    ...visibleHistory()
+      .slice(0, 10)
+      .map((round) => {
+        const node = document.createElement('span');
+        node.className = `roulette__past roulette__past--${round.color}`;
+        node.textContent = String(round.result);
+        node.title = `Round ${round.id}`;
+        return node;
+      }),
+  );
 }
 
 function paintPools() {
@@ -374,7 +386,9 @@ function spinTo(result, bets) {
   window.setTimeout(
     () => {
       wheel.classList.remove('is-spinning');
+      pendingResultId = null;
       $('#rouletteResult', root).textContent = String(result);
+      paintHistory();
       announceResult(result, bets);
       void refreshBalance();
     },

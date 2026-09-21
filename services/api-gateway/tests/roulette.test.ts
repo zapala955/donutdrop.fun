@@ -103,6 +103,10 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /Date\.parse\(next\.serverTime\)/);
     assert.match(client, /Date\.parse\(snapshot\?\.round\?\.closesAt/);
     assert.match(client, /api\.post\(\s*'\/v1\/roulette\/bets'/);
+    assert.match(client, /if \(shouldSpin\) pendingResultId = newest\.id/);
+    assert.match(client, /filter\(\(round\) => round\.id !== pendingResultId\)/);
+    assert.match(client, /pendingResultId = null;\s*\$\('#rouletteResult'/);
+    assert.match(client, /\$\('#rouletteResult'[\s\S]*paintHistory\(\);\s*announceResult/);
     assert.match(html, /href="\/roulette" data-route="roulette"/);
     assert.match(html, /data-view="roulette"/);
     assert.match(nginx, /\|roulette\|/);
