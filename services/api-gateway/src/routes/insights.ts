@@ -4,6 +4,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 
 /**
@@ -28,7 +29,7 @@ const boardSchema = z
 
 interface BoardRow {
   user_id: string;
-  minecraft_username: string;
+  username: string;
   value: string;
   detail: string | null;
 }
@@ -38,8 +39,8 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
 
   /**
    * Public, because a leaderboard nobody can see before signing up is an advertisement for an
-   * empty room. It exposes usernames and volumes, both of which are already public in the live
-   * ticker and the chat rail.
+   * empty room. It exposes masked names and volumes, matching the public live feed without giving
+   * a spectator a second route that reveals the Minecraft names behind those masks.
    */
   app.get('/v1/leaderboard', async (request) => {
     const query = parseWith(boardSchema, request.query ?? {});
@@ -51,7 +52,8 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
       windowDays: WINDOW_DAYS,
       entries: rows.map((row, index) => ({
         rank: index + 1,
-        username: row.minecraft_username,
+        playerId: row.user_id,
+        username: row.username,
         isViewer: viewerId !== null && row.user_id === viewerId,
         value: row.value,
         detail: row.detail,
@@ -180,10 +182,10 @@ async function runBoard(
      * who owns them. DISTINCT ON keeps one row per player — their best — so a single player
      * cannot occupy the whole board with ten good pulls. */
     const result = await db.query<BoardRow>(
-      `SELECT user_id, minecraft_username, value, detail FROM (
+      `SELECT user_id, username, value, detail FROM (
          SELECT DISTINCT ON (r.user_id)
                 r.user_id,
-                u.minecraft_username,
+                ${maskedName('u.minecraft_username')} AS username,
                 round(r.target_value_minor::numeric / nullif(r.stake_value_minor, 0), 2)::text AS value,
                 r.target_value_minor::text AS detail
            FROM upgrader_rounds r JOIN users u ON u.id = r.user_id
@@ -199,7 +201,7 @@ async function runBoard(
 
   if (board === 'crates') {
     const result = await db.query<BoardRow>(
-      `SELECT cr.user_id, u.minecraft_username,
+      `SELECT cr.user_id, ${maskedName('u.minecraft_username')} AS username,
               count(*)::text AS value,
               sum(cr.price_minor)::text AS detail
          FROM case_rounds cr JOIN users u ON u.id = cr.user_id
@@ -226,7 +228,7 @@ async function runBoard(
          FROM battle_players p JOIN battles b ON b.id = p.battle_id
         WHERE p.user_id IS NOT NULL
      )
-     SELECT v.user_id, u.minecraft_username,
+     SELECT v.user_id, ${maskedName('u.minecraft_username')} AS username,
             sum(v.amount)::text AS value,
             count(*)::text AS detail
        FROM volume v JOIN users u ON u.id = v.user_id

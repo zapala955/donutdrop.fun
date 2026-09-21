@@ -75,6 +75,13 @@ describe('public surfaces', () => {
     }
   });
 
+  it('masks every leaderboard query before the response leaves the API', async () => {
+    const source = await route('insights');
+    assert.equal(source.match(/maskedName\('u\.minecraft_username'\)/g)?.length, 3);
+    assert.match(source, /username: row\.username/);
+    assert.doesNotMatch(source, /username: row\.minecraft_username/);
+  });
+
   it('keeps the stored name raw, and masks only on the way out', async () => {
     /* battle_players.display_name is captured at join time and an audit of who actually played
      * needs it. The mask belongs in the read, not in the write. */

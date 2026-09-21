@@ -17,6 +17,8 @@ const chat = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/chat.j
 const store = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/store.js');
 const ticker = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/ticker.js');
 const app = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
+const board = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/board.js');
+const insights = () => read('../src/routes/insights.ts');
 
 describe('avatar proxy', () => {
   it('is keyed on an id, never on a name', async () => {
@@ -109,5 +111,17 @@ describe('account header avatar', () => {
     assert.match(body, /\/v1\/avatars\/\$\{encodeURIComponent\(state\.user\.id\)\}\?s=40/);
     assert.doesNotMatch(body, /encodeURIComponent\(state\.user\.minecraftUsername\)/);
     assert.match(body, /dataset\.avatar = 'fallback'/);
+  });
+});
+
+describe('leaderboard avatars', () => {
+  it('returns an opaque player id and renders the proxied head instead of a name initial', async () => {
+    const apiSource = await insights();
+    assert.match(apiSource, /playerId: row\.user_id/);
+
+    const source = await board();
+    assert.match(source, /playerAvatar\(entry\.playerId\)/);
+    assert.match(source, /\/v1\/avatars\/\$\{encodeURIComponent\(playerId\)\}\?s=22/);
+    assert.doesNotMatch(source, /avatar\.textContent = entry\.username/);
   });
 });
