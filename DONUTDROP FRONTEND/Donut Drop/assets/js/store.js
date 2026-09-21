@@ -20,7 +20,10 @@ export const state = {
   activities: [],
   fairness: null,
   upgradeConfig: null,
-  chat: { messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0' },
+  chat: {
+    messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0',
+    resetId: null, clearedAt: null, loaded: false,
+  },
   quests: [],
   questDay: null,
   streak: null,
@@ -511,6 +514,9 @@ export async function refreshChat(notify = true) {
     slowModeSeconds: Number(result.slowModeSeconds || 0),
     maxLength: Number(result.maxLength || 240),
     bigHitMinor: String(result.bigHitMinor ?? state.chat?.bigHitMinor ?? '0'),
+    resetId: result.reset?.id ?? null,
+    clearedAt: result.reset?.clearedAt ?? null,
+    loaded: true,
   };
   if (notify) emit('chat');
   return state.chat;

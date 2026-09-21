@@ -69,6 +69,11 @@ interface MessageRow {
   wagered_minor: string | null;
 }
 
+interface ChatClearRow {
+  id: string;
+  cleared_at: Date;
+}
+
 /**
  * The badge a chat line wears.
  *
@@ -95,6 +100,11 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
 
   app.get('/v1/chat', async (request) => {
     const query = parseWith(listQuery, request.query);
+    const clear = await db.query<ChatClearRow>(
+      `SELECT id, cleared_at FROM chat_clear_events
+        ORDER BY cleared_at DESC, id DESC LIMIT 1`,
+    );
+    const reset = clear.rows[0] ?? null;
     const result = await db.query<MessageRow>(
       `SELECT m.id, m.body, m.created_at, u.minecraft_username AS author,
               m.user_id AS author_id, u.role, t.wagered_minor
@@ -102,9 +112,10 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
          JOIN users u ON u.id = m.user_id
          LEFT JOIN user_wager_totals t ON t.user_id = m.user_id
         WHERE m.deleted_at IS NULL
+          AND ($2::timestamptz IS NULL OR m.created_at > $2)
         ORDER BY m.created_at DESC, m.id DESC
         LIMIT $1`,
-      [query.limit],
+      [query.limit, reset?.cleared_at ?? null],
     );
     // Oldest first, so the client appends downward without reversing a list on every poll.
     return {
@@ -123,6 +134,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
        * is one number in one place rather than a constant the frontend guesses at. */
       bigHitMinor: config.chatBigHitMinor.toString(),
       enabled: config.chatEnabled,
+      reset: reset ? { id: reset.id, clearedAt: reset.cleared_at } : null,
     };
   });
 
@@ -210,6 +222,53 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
           ...decorate(config, sent.wagered_minor ?? null),
           createdAt: sent.created_at,
         },
+      });
+    },
+  );
+
+  /**
+   * Clears the shared timeline for everyone without destroying moderation evidence.
+   *
+   * Player messages are soft-deleted, the reset boundary hides earlier automated game cards, and
+   * the append-only audit records both the operator's reason and the number of messages affected.
+   */
+  app.post(
+    '/v1/admin/chat/clear',
+    { preHandler: guards.requireAdmin, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const body = parseWith(moderationReasonSchema, request.body);
+      const actor = requireUserId(request.authUser?.id);
+      const clearId = randomUUID();
+
+      return db.transaction(async (client) => {
+        const cleared = await client.query(
+          `UPDATE chat_messages
+              SET deleted_at = now(), deleted_by = $1
+            WHERE deleted_at IS NULL`,
+          [actor],
+        );
+        const boundary = await client.query<ChatClearRow>(
+          `INSERT INTO chat_clear_events (id, cleared_by, reason)
+           VALUES ($1, $2, $3)
+           RETURNING id, cleared_at`,
+          [clearId, actor, body.reason],
+        );
+        const reset = boundary.rows[0];
+        if (!reset) throw new Error('Chat clear boundary insert returned no row');
+
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'chat.clear',
+          targetType: 'chat',
+          targetId: clearId,
+          details: { reason: body.reason, messagesCleared: cleared.rowCount ?? 0 },
+        });
+
+        return {
+          cleared: cleared.rowCount ?? 0,
+          resetId: reset.id,
+          clearedAt: reset.cleared_at,
+        };
       });
     },
   );

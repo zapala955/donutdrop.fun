@@ -1543,6 +1543,24 @@ async function loadModeration() {
   );
 }
 
+async function clearChat() {
+  const reason = await confirmAction(
+    'Clear the shared chat for everyone? Player messages remain in moderation history, but all current messages and older game cards will disappear from chat.',
+  );
+  if (!reason) return;
+  const button = $('clearChat');
+  button.disabled = true;
+  try {
+    const result = await api.post('/v1/admin/chat/clear', { reason });
+    toast(`Chat cleared. ${result.cleared} player message(s) removed.`);
+    await loadModeration();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function issueTimeout() {
   const values = await editRecord({
     title: 'Timeout a player',
@@ -2109,6 +2127,7 @@ async function start() {
   $('createCase').addEventListener('click', () => void editCase());
   $('timeoutPlayer').addEventListener('click', () => void issueTimeout());
   $('liftTimeout').addEventListener('click', () => void liftTimeoutByName());
+  $('clearChat').addEventListener('click', () => void clearChat());
   $('createRace').addEventListener('click', () => void editRace());
   $('settleRaces').addEventListener('click', () => void settleRaces());
   $('startRain').addEventListener('click', () => void startRain());

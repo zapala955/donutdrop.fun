@@ -51,6 +51,7 @@ let rainCountdown = 0;
  * redraw the same messages and the log would grow without bound. */
 const seenMessages = new Set();
 const seenHits = new Set();
+let appliedResetId;
 
 export function initChat() {
   log = $('#chatLog');
@@ -68,7 +69,10 @@ export function initChat() {
 
   paintAuthState();
   bus.addEventListener('change', (event) => {
-    if (event.detail === 'chat') drainMessages();
+    if (event.detail === 'chat') {
+      drainMessages();
+      drainBigHits();
+    }
     if (event.detail === 'activity' || event.detail === 'ready') drainBigHits();
     if (['login', 'logout', 'ready', 'private'].includes(event.detail)) paintAuthState();
   });
@@ -384,8 +388,11 @@ function openTipSheet(userId, username) {
 /* ═════════════════════════ rendering ═════════════════════════ */
 
 function drainMessages() {
+  applyChatReset();
+  const clearedAt = resetTimestamp();
   const messages = state.chat?.messages ?? [];
   for (const message of messages) {
+    if (new Date(message.createdAt).getTime() <= clearedAt) continue;
     if (seenMessages.has(message.id)) continue;
     seenMessages.add(message.id);
     appendLine(buildMessage(message), message.createdAt);
@@ -394,9 +401,13 @@ function drainMessages() {
 }
 
 function drainBigHits() {
+  if (!state.chat?.loaded) return;
+  applyChatReset();
+  const clearedAt = resetTimestamp();
   const threshold = Number(state.chat?.bigHitMinor ?? 0);
   if (threshold <= 0) return;
   for (const activity of state.activities ?? []) {
+    if (new Date(activity.createdAt).getTime() <= clearedAt) continue;
     const item = activity.item;
     if (!item && activity.kind !== 'roulette') continue;
     // The payout is what actually landed in a wallet; the item's catalogue price is not the same
@@ -408,6 +419,24 @@ function drainBigHits() {
     appendLine(buildHit(activity, value), activity.createdAt);
   }
   trim();
+}
+
+function resetTimestamp() {
+  const value = new Date(state.chat?.clearedAt ?? 0).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function applyChatReset() {
+  const resetId = state.chat?.resetId ?? null;
+  if (appliedResetId === undefined) {
+    appliedResetId = resetId;
+    return;
+  }
+  if (resetId === appliedResetId) return;
+  appliedResetId = resetId;
+  seenMessages.clear();
+  seenHits.clear();
+  log.replaceChildren();
 }
 
 /**
@@ -694,6 +723,7 @@ function openModTools(message, x, y) {
 /* ═════════════════════════ the log ═════════════════════════ */
 
 function appendLine(node, when) {
+  log.querySelector('[data-chat-empty]')?.remove();
   // Sort key kept on the node so a hit arriving between two polls still lands in time order.
   node.dataset.at = String(when ? new Date(when).getTime() : Date.now());
   const nodeAt = Number(node.dataset.at);
@@ -727,6 +757,7 @@ function trim() {
   while (log.children.length > MAX_LINES) log.firstElementChild.remove();
   if (!log.children.length) {
     const empty = el('div', 'msg msg--sys');
+    empty.dataset.chatEmpty = '1';
     const body = el('div', 'msg__body');
     const text = el('span');
     text.textContent = 'Quiet so far. Big hits and messages show up here.';
