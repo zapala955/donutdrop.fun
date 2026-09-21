@@ -101,6 +101,7 @@ describe('roulette persistence and client contract', () => {
     assert.doesNotMatch(client, /Math\.random|crypto\.getRandomValues/);
     assert.match(client, /api\.get\('\/v1\/roulette'\)/);
     assert.match(client, /Date\.parse\(next\.serverTime\)/);
+    assert.match(client, /Date\.parse\(next\.round\?\.opensAt/);
     assert.match(client, /Date\.parse\(snapshot\?\.round\?\.closesAt/);
     assert.match(client, /api\.post\(\s*'\/v1\/roulette\/bets'/);
     assert.match(client, /if \(shouldSpin\) pendingResultId = newest\.id/);
@@ -111,10 +112,26 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /\[100_000n, '\$100K'\]/);
     assert.match(client, /\[1_000_000_000n, '\$1B'\]/);
     assert.match(client, /void place\(selected\)/);
+    assert.match(client, /if \(placing \|\| !isBettingOpen\(\)\) return/);
+    assert.match(client, /spinTo\(newest\.result,[\s\S]*next\.round\.opensAt\)/);
+    assert.match(client, /Wheel spinning · bets are locked/);
     assert.doesNotMatch(client, /<span>DONUT<\/span>/);
     assert.match(html, /href="\/roulette" data-route="roulette"/);
     assert.match(html, /data-view="roulette"/);
     assert.match(nginx, /\|roulette\|/);
+  });
+
+  it('schedules the full betting countdown after the shared spin and locks early bets', async () => {
+    const route = await readFile(
+      path.join(repo, 'services/api-gateway/src/routes/roulette.ts'),
+      'utf8',
+    );
+    assert.match(route, /opens_at, closes_at/);
+    assert.match(route, /make_interval\(secs => \$4::double precision\)/);
+    assert.match(route, /make_interval\(secs => \$4::double precision \+ \$5::double precision\)/);
+    assert.match(route, /createRound\(client, config, config\.rouletteSpinSeconds\)/);
+    assert.match(route, /round\.opens_at\.getTime\(\) > Date\.now\(\)/);
+    assert.match(route, /ROUND_SPINNING/);
   });
 
   it('returns a bounded live bet table with masked names and opaque avatar ids', async () => {

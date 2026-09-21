@@ -33,6 +33,7 @@ describe('configuration', () => {
     assert.equal(config.streakDailyWagerRequiredMinor, 10_000_000n);
     assert.equal(config.rouletteEnabled, true);
     assert.equal(config.rouletteRoundSeconds, 10);
+    assert.equal(config.rouletteSpinSeconds, 3);
     assert.equal(config.rouletteMinStakeMinor, 100_000n);
     assert.equal(config.rouletteMaxStakeMinor, 1_000_000_000n);
   });

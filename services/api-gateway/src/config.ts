@@ -461,6 +461,7 @@ const environmentSchema = z
       .default('true')
       .transform((value) => value === 'true'),
     ROULETTE_ROUND_SECONDS: z.coerce.number().int().min(5).max(60).default(10),
+    ROULETTE_SPIN_SECONDS: z.coerce.number().int().min(1).max(10).default(3),
     ROULETTE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     ROULETTE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
@@ -823,7 +824,7 @@ const environmentSchema = z
         });
       }
     }
-        // A daily rate with no ceiling compounds without bound. Refusing the combination outright is
+    // A daily rate with no ceiling compounds without bound. Refusing the combination outright is
     // safer than shipping a yield that only stops when someone notices the economy has drifted.
     if (env.VAULT_YIELD_BPS_PER_DAY > 0 && env.VAULT_YIELD_CAP_BPS === 0) {
       context.addIssue({
@@ -1046,6 +1047,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     upgradeMaxStakeMinor: BigInt(env.UPGRADE_MAX_STAKE_MINOR),
     rouletteEnabled: env.ROULETTE_ENABLED,
     rouletteRoundSeconds: env.ROULETTE_ROUND_SECONDS,
+    rouletteSpinSeconds: env.ROULETTE_SPIN_SECONDS,
     rouletteMinStakeMinor: BigInt(env.ROULETTE_MIN_STAKE_MINOR),
     rouletteMaxStakeMinor: BigInt(env.ROULETTE_MAX_STAKE_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,

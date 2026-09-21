@@ -22,6 +22,51 @@
   padding: 16px;
 }
 
+.roulette__guide {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid #303037;
+  border-radius: 9px;
+  background: #151519;
+  color: #aaaab2;
+  font-size: 11px;
+  font-weight: 700;
+}
+.roulette__guide span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.roulette__guide span b {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffd400;
+  color: #111;
+  font-size: 10px;
+}
+.roulette__guide i {
+  color: #5f5f67;
+  font-style: normal;
+}
+.roulette__guide strong {
+  margin-left: auto;
+  color: #54d995;
+  font-size: 10px;
+  text-align: right;
+}
+.roulette[data-phase='spinning'] .roulette__guide strong,
+.roulette[data-phase='settling'] .roulette__guide strong {
+  color: #ff9b56;
+}
+
 .roulette__roundline,
 .roulette__subhead {
   display: flex;
@@ -200,6 +245,11 @@
 .roulette__outside button:hover {
   transform: translateY(-1px);
   border-color: rgba(255, 212, 0, 0.55);
+}
+.roulette__number:disabled,
+.roulette__outside button:disabled {
+  transform: none;
+  filter: saturate(0.45);
 }
 .roulette__number--red {
   background: linear-gradient(145deg, #8f1d23, #561318);
@@ -542,6 +592,14 @@
   .roulette__board {
     padding: 12px;
     border-radius: 12px;
+  }
+  .roulette__guide {
+    flex-wrap: wrap;
+  }
+  .roulette__guide strong {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
   }
   .roulette__numbers {
     grid-template-columns: repeat(6, 1fr);

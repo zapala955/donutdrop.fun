@@ -77,6 +77,12 @@ function build() {
     </section>
 
     <section class="roulette__board">
+      <div class="roulette__guide">
+        <span><b>1</b> Pick a chip</span>
+        <i aria-hidden="true">→</i>
+        <span><b>2</b> Click a bet</span>
+        <strong id="roulettePhase" role="status" aria-live="polite">Connecting to the table…</strong>
+      </div>
       <div class="roulette__numbers" id="rouletteNumbers"></div>
       <div class="roulette__outside" id="rouletteOutside"></div>
       <div class="roulette__slip">
@@ -205,10 +211,9 @@ function syncSelection() {
 }
 
 function paintControls() {
-  const remaining = remainingMs();
   const min = BigInt(snapshot?.config?.minStakeMinor || '0');
   const max = BigInt(snapshot?.config?.maxStakeMinor || '0');
-  const tableLocked = placing || !snapshot || remaining <= 0 || !state.authenticated;
+  const tableLocked = placing || !isBettingOpen() || !state.authenticated;
   root.querySelectorAll('[data-selection]').forEach((button) => {
     button.disabled = tableLocked;
   });
@@ -221,17 +226,64 @@ function paintControls() {
   });
 }
 
+function serverNowMs() {
+  return Date.now() + serverOffsetMs;
+}
+
+function untilOpenMs() {
+  const opens = Date.parse(snapshot?.round?.opensAt || '');
+  return Number.isFinite(opens) ? opens - serverNowMs() : 0;
+}
+
 function remainingMs() {
   const close = Date.parse(snapshot?.round?.closesAt || '');
-  return Number.isFinite(close) ? close - (Date.now() + serverOffsetMs) : 0;
+  return Number.isFinite(close) ? close - serverNowMs() : 0;
+}
+
+function isBettingOpen() {
+  return Boolean(snapshot) && untilOpenMs() <= 0 && remainingMs() > 0;
+}
+
+function paintPhase() {
+  const phase = $('#roulettePhase', root);
+  if (!phase) return;
+  if (!snapshot) {
+    phase.textContent = 'Connecting to the table…';
+    return;
+  }
+  if (untilOpenMs() > 0) {
+    phase.textContent = 'Wheel spinning · bets are locked';
+    return;
+  }
+  if (remainingMs() <= 0) {
+    phase.textContent = 'Round closing · waiting for the result';
+    return;
+  }
+  if (!state.authenticated) {
+    phase.textContent = 'Log in to place a chip';
+    return;
+  }
+  phase.textContent = placing
+    ? `Placing ${money(Number(amountMinor))}…`
+    : `Betting open · click a spot to place ${money(Number(amountMinor))}`;
 }
 
 function paintClock() {
   if (!root?.isConnected) return;
+  const untilOpen = Math.max(0, untilOpenMs());
   const remaining = Math.max(0, remainingMs());
+  const spinning = Boolean(snapshot) && untilOpen > 0;
   const clock = $('#rouletteClock', root);
-  if (clock) clock.textContent = remaining > 0 ? `${(remaining / 1000).toFixed(1)}s` : 'SPINNING';
-  root.classList.toggle('is-locked', remaining <= 0);
+  if (clock) {
+    clock.textContent = spinning
+      ? 'SPINNING'
+      : remaining > 0
+        ? `${(remaining / 1000).toFixed(1)}s`
+        : 'SETTLING';
+  }
+  root.dataset.phase = spinning ? 'spinning' : remaining > 0 ? 'betting' : 'settling';
+  root.classList.toggle('is-locked', !isBettingOpen());
+  paintPhase();
   paintControls();
 }
 
@@ -243,12 +295,17 @@ async function refresh() {
     const receivedAt = Date.now();
     serverOffsetMs = Date.parse(next.serverTime) - receivedAt;
     const newest = next.history?.[0];
-    const shouldSpin = seenResultId !== null && newest?.id && newest.id !== seenResultId;
+    const spinInProgress = Date.parse(next.round?.opensAt || '') > Date.now() + serverOffsetMs;
+    const shouldSpin = Boolean(
+      newest?.id &&
+      ((seenResultId !== null && newest.id !== seenResultId) ||
+        (seenResultId === null && spinInProgress)),
+    );
     if (newest?.id) seenResultId = newest.id;
     if (shouldSpin) pendingResultId = newest.id;
     snapshot = next;
     paint();
-    if (shouldSpin) spinTo(newest.result, next.yourPreviousBets || []);
+    if (shouldSpin) spinTo(newest.result, next.yourPreviousBets || [], next.round.opensAt);
     else if (newest?.result != null && wheelRotation === 0) setWheel(newest.result);
   } catch (error) {
     if (!snapshot) root.dataset.error = '1';
@@ -264,7 +321,7 @@ function paint() {
   $('#rouletteCommit', root).textContent = snapshot.round.serverSeedHash;
   $('#rouletteEdge', root).textContent = `${(config.houseEdgeBps / 100).toFixed(2)}%`;
   $('#rouletteLimits', root).textContent =
-    `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max · one shared ${config.roundSeconds}s round`;
+    `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max · ${config.spinSeconds}s spin then ${config.roundSeconds}s betting`;
 
   paintHistory();
 
@@ -376,7 +433,7 @@ function paintPublicBets() {
 }
 
 async function place(selection) {
-  if (placing || !snapshot || remainingMs() <= 0) return;
+  if (placing || !isBettingOpen()) return;
   const placedSelection = selection;
   const placedAmount = amountMinor;
   placing = true;
@@ -419,7 +476,7 @@ function setWheel(result) {
   wheel.style.transform = `rotate(${wheelRotation}deg)`;
 }
 
-function spinTo(result, bets) {
+function spinTo(result, bets, opensAt) {
   const index = ORDER.indexOf(Number(result));
   if (index < 0) return;
   const wheel = $('#rouletteWheel', root);
@@ -427,24 +484,34 @@ function spinTo(result, bets) {
   const normalized = ((wheelRotation % 360) + 360) % 360;
   const targetNormalized = ((target % 360) + 360) % 360;
   const delta = (targetNormalized - normalized + 360) % 360;
-  wheelRotation += (reduceMotion() ? 0 : 5 * 360) + delta;
-  wheel.style.transition = reduceMotion() ? 'none' : 'transform 2.8s cubic-bezier(.12,.68,.16,1)';
+  const parsedOpen = Date.parse(opensAt);
+  const spinWindowMs = Number.isFinite(parsedOpen) ? Math.max(0, parsedOpen - serverNowMs()) : 0;
+  const animationMs = reduceMotion() || spinWindowMs <= 150 ? 0 : spinWindowMs - 100;
+  wheelRotation += (animationMs === 0 ? 0 : 5 * 360) + delta;
+
+  const finish = () => {
+    wheel.classList.remove('is-spinning');
+    pendingResultId = null;
+    $('#rouletteResult', root).textContent = String(result);
+    paintHistory();
+    announceResult(result, bets);
+    void refreshBalance();
+  };
+
+  if (animationMs === 0) {
+    wheel.style.transition = 'none';
+    wheel.style.transform = `rotate(${wheelRotation}deg)`;
+    finish();
+    return;
+  }
+
+  wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
   wheel.classList.add('is-spinning');
   $('#rouletteResult', root).textContent = '•';
   requestAnimationFrame(() => {
     wheel.style.transform = `rotate(${wheelRotation}deg)`;
   });
-  window.setTimeout(
-    () => {
-      wheel.classList.remove('is-spinning');
-      pendingResultId = null;
-      $('#rouletteResult', root).textContent = String(result);
-      paintHistory();
-      announceResult(result, bets);
-      void refreshBalance();
-    },
-    reduceMotion() ? 0 : 2850,
-  );
+  window.setTimeout(finish, animationMs + 40);
 }
 
 function announceResult(result, bets) {

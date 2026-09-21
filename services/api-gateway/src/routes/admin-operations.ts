@@ -696,6 +696,7 @@ export async function registerAdminOperationRoutes(
       upgradeMaxStakeMinor: config.upgradeMaxStakeMinor.toString(),
       rouletteEnabled: config.rouletteEnabled,
       rouletteRoundSeconds: config.rouletteRoundSeconds,
+      rouletteSpinSeconds: config.rouletteSpinSeconds,
       rouletteMinStakeMinor: config.rouletteMinStakeMinor.toString(),
       rouletteMaxStakeMinor: config.rouletteMaxStakeMinor.toString(),
       houseStockUnlimited: config.houseStockUnlimited,

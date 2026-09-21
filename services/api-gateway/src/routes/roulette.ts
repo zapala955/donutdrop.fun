@@ -112,18 +112,25 @@ function betView(row: BetRow) {
   };
 }
 
-async function createRound(client: DbClient, config: AppConfig): Promise<RoundRow> {
+async function createRound(
+  client: DbClient,
+  config: AppConfig,
+  spinDelaySeconds = 0,
+): Promise<RoundRow> {
   const id = randomUUID();
   const seed = generateServerSeed();
   const inserted = await client.query<RoundRow>(
     `INSERT INTO roulette_rounds
-       (id, server_seed_hash, server_seed_ciphertext, closes_at)
-     VALUES ($1, $2, $3, now() + make_interval(secs => $4))
+       (id, server_seed_hash, server_seed_ciphertext, opens_at, closes_at)
+     VALUES ($1, $2, $3,
+             now() + make_interval(secs => $4::double precision),
+             now() + make_interval(secs => $4::double precision + $5::double precision))
      RETURNING *`,
     [
       id,
       hashServerSeed(seed),
       encryptSecret(seed, config.dataEncryptionKey, `roulette:${id}`),
+      spinDelaySeconds,
       config.rouletteRoundSeconds,
     ],
   );
@@ -204,7 +211,7 @@ async function currentRound(client: DbClient, config: AppConfig): Promise<RoundR
       bets.rows.length,
     ],
   );
-  return createRound(client, config);
+  return createRound(client, config, config.rouletteSpinSeconds);
 }
 
 export async function registerRouletteRoutes(
@@ -292,6 +299,7 @@ export async function registerRouletteRoutes(
           minStakeMinor: config.rouletteMinStakeMinor.toString(),
           maxStakeMinor: config.rouletteMaxStakeMinor.toString(),
           roundSeconds: config.rouletteRoundSeconds,
+          spinSeconds: config.rouletteSpinSeconds,
           houseEdgeBps: config.houseEdgeBps,
           payoutBps: {
             straight: roulettePayoutBps(sample.straight, config.houseEdgeBps),
@@ -354,6 +362,9 @@ export async function registerRouletteRoutes(
         // into the previous result after its timer reaches zero.
         if (round.id !== body.roundId) {
           conflict('ROUND_CHANGED', 'That roulette round has closed');
+        }
+        if (round.opens_at.getTime() > Date.now()) {
+          conflict('ROUND_SPINNING', 'Wait for the roulette wheel to stop');
         }
         if (round.closes_at.getTime() <= Date.now()) {
           conflict('ROUND_CLOSED', 'That roulette round has closed');
