@@ -175,6 +175,11 @@ describe('frontend/backend contract', () => {
 
   it('uses a balanced filled brand mark for the Discord menu route', async () => {
     const html = await source('index.html');
+    const discordRows = [...html.matchAll(/<a class="menu__row"[^>]*>[\s\S]*?<\/a>/g)]
+      .filter((match) => match[0].includes('<span>Discord</span>'));
+
+    assert.equal(discordRows.length, 1);
+    assert.match(discordRows[0]?.[0] ?? '', /href="\/discord"/);
     assert.match(
       html,
       /href="\/discord"[^>]*>[\s\S]*?<svg class="menu__ico menu__ico--brand"/,
