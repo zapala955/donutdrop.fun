@@ -41,7 +41,12 @@ const MIN_WITHDRAWAL_MINOR = 10_000n;
  * acquired a balance it should not have.
  */
 const APPROVAL_THRESHOLD_MINOR = 500_000_000n;
-/** A completed or failed request cannot be immediately followed by another payout request. */
+/**
+ * A completed or failed request cannot be immediately followed by another payout request.
+ *
+ * This is deliberately derived from cash_withdrawals, not stored as account state. Deposits and
+ * gameplay have their own eligibility paths and must remain available during this minute.
+ */
 export const WITHDRAWAL_COOLDOWN_SECONDS = 60;
 
 const requestSchema = z.object({ amountMinor: z.string().regex(/^[1-9]\d{0,18}$/) }).strict();

@@ -4,7 +4,9 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { loadConfig } from '../src/config.js';
-import type { Database } from '../src/lib/db.js';
+import type { Database, DbClient } from '../src/lib/db.js';
+import { isDepositEligible } from '../src/lib/eligibility.js';
+import { assertGameEligible } from '../src/lib/game-eligibility.js';
 import {
   registerCashWithdrawalRoutes,
   WITHDRAWAL_COOLDOWN_SECONDS,
@@ -176,6 +178,29 @@ describe('cash withdrawals', () => {
     assert.match(source, /info\.cooldownRemainingSeconds/);
     assert.match(source, /paintWithdrawCooldown\(host, cooldownRemaining\)/);
     assert.match(source, /Math\.ceil\(\(readyAt - Date\.now\(\)\) \/ 1000\)/);
+  });
+
+  it('keeps deposits and gameplay available during the withdrawal cooldown', async () => {
+    const coolingAccount = { status: 'active', withdrawalCooldownSeconds: 60 };
+    assert.equal(isDepositEligible(coolingAccount), true);
+
+    const gameQueries: string[] = [];
+    const client = {
+      query: async (sql: string) => {
+        gameQueries.push(sql);
+        return result([coolingAccount]);
+      },
+    } as unknown as DbClient;
+    await assertGameEligible(client, userId);
+    assert.deepEqual(gameQueries, ['SELECT status FROM users WHERE id = $1 FOR UPDATE']);
+
+    /* Keep the separation structural too. The cooldown may be read only by the withdrawal route;
+     * adding it to either shared eligibility helper would silently block every deposit or game. */
+    for (const relative of ['../src/lib/eligibility.ts', '../src/lib/game-eligibility.ts']) {
+      const source = await readFile(path.resolve(import.meta.dirname, relative), 'utf8');
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      assert.doesNotMatch(code, /cash_withdrawals|WITHDRAWAL_COOLDOWN/);
+    }
   });
 
   it('installs the payout ledger, the one-live guard and the readiness marker', async () => {
