@@ -1,7 +1,8 @@
 /* roulette.js — one server-owned European wheel shared by every browser. */
 import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance } from './store.js';
-import { $, money, parseAmount, formatAmountInput, reduceMotion } from './util.js';
+import { tableAvatar } from './table-avatar.js';
+import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 
 const ORDER = Object.freeze([
@@ -12,6 +13,17 @@ const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 
 // The local clock still paints at 10 fps. Only canonical round state needs the network, and this
 // cadence keeps roulette plus the shell's chat/feed/deposit polls inside the shared API budget.
 const POLL_MS = 1_250;
+const CHIPS = Object.freeze([
+  [100_000n, '$100K'],
+  [500_000n, '$500K'],
+  [1_000_000n, '$1M'],
+  [5_000_000n, '$5M'],
+  [10_000_000n, '$10M'],
+  [50_000_000n, '$50M'],
+  [100_000_000n, '$100M'],
+  [500_000_000n, '$500M'],
+  [1_000_000_000n, '$1B'],
+]);
 const OUTSIDE = Object.freeze([
   ['low', '1–18'],
   ['even', 'Even'],
@@ -59,7 +71,7 @@ function build() {
       <div class="roulette__wheelwrap">
         <span class="roulette__pointer" aria-hidden="true"></span>
         <div class="roulette__wheel" id="rouletteWheel" aria-hidden="true"></div>
-        <div class="roulette__hub"><span>DONUT</span><b id="rouletteResult">—</b></div>
+        <div class="roulette__hub"><b id="rouletteResult">—</b></div>
       </div>
       <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
     </section>
@@ -69,26 +81,28 @@ function build() {
       <div class="roulette__outside" id="rouletteOutside"></div>
       <div class="roulette__slip">
         <div class="roulette__choice">
-          <span>BET</span><strong id="rouletteChoice">Red</strong>
-          <i class="mono" id="rouletteReturn">1.85× return</i>
+          <span>ACTIVE CHIP</span><strong id="rouletteChipValue">$1M</strong>
+          <i class="mono" id="rouletteChoice">Red · 1.85× return</i>
         </div>
-        <label class="roulette__amount">
-          <span>CHIP</span>
-          <input id="rouletteAmount" inputmode="decimal" autocomplete="off" value="1m" aria-label="Roulette chip amount" />
-        </label>
-        <div class="roulette__presets" id="roulettePresets">
-          <button type="button" data-chip="1000000">$1M</button>
-          <button type="button" data-chip="10000000">$10M</button>
-          <button type="button" data-chip="50000000">$50M</button>
-          <button type="button" data-chip="max">MAX</button>
-        </div>
-        <button class="btn btn--go roulette__place" id="roulettePlace" type="button">Place bet</button>
+        <div class="roulette__chips" id="rouletteChips" aria-label="Choose a chip"></div>
         <p class="roulette__limits mono" id="rouletteLimits">Loading table limits…</p>
       </div>
       <div class="roulette__mine">
         <div class="roulette__subhead"><strong>Your chips this round</strong><span id="rouletteMineTotal">$0</span></div>
         <div class="roulette__bets" id="rouletteBets"><span class="roulette__empty">No chips placed yet.</span></div>
       </div>
+      <section class="roulette__livebets" aria-labelledby="rouletteLiveBetsTitle">
+        <div class="roulette__subhead">
+          <strong id="rouletteLiveBetsTitle">Live bets</strong>
+          <span id="rouletteLiveBetCount">0 chips</span>
+        </div>
+        <div class="roulette__tablewrap">
+          <table class="roulette__table">
+            <thead><tr><th>Player</th><th>Bet</th><th>Chip</th></tr></thead>
+            <tbody id="roulettePublicBets"></tbody>
+          </table>
+        </div>
+      </section>
       <details class="roulette__fair">
         <summary>Round fairness</summary>
         <dl>
@@ -119,8 +133,16 @@ function build() {
     if (selection === 'red' || selection === 'black') button.dataset.color = selection;
     outside.append(button);
   }
+  const chips = $('#rouletteChips', root);
+  for (const [value, label] of CHIPS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.chip = value.toString();
+    button.textContent = label;
+    button.setAttribute('aria-label', `${label} chip`);
+    chips.append(button);
+  }
   root.addEventListener('click', onClick);
-  $('#rouletteAmount', root)?.addEventListener('input', readAmount);
   syncSelection();
 }
 
@@ -147,28 +169,14 @@ function onClick(event) {
   if (choice && root.contains(choice)) {
     selected = choice.dataset.selection;
     syncSelection();
+    void place(selected);
     return;
   }
   const chip = event.target.closest('[data-chip]');
   if (chip && root.contains(chip)) {
-    if (chip.dataset.chip === 'max') {
-      const limit = BigInt(snapshot?.config?.maxStakeMinor || '0');
-      amountMinor = [BigInt(state.balanceMinor || '0'), limit].reduce((a, b) => (a < b ? a : b));
-    } else {
-      amountMinor = BigInt(chip.dataset.chip);
-    }
-    const input = $('#rouletteAmount', root);
-    if (input) input.value = formatAmountInput(Number(amountMinor));
+    amountMinor = BigInt(chip.dataset.chip);
     syncSelection();
-    return;
   }
-  if (event.target.closest('#roulettePlace')) void place();
-}
-
-function readAmount(event) {
-  const parsed = parseAmount(event.target.value);
-  amountMinor = parsed === null || parsed <= 0 ? 0n : BigInt(Math.trunc(parsed));
-  syncSelection();
 }
 
 function payoutBps() {
@@ -189,28 +197,28 @@ function syncSelection() {
     button.setAttribute('aria-pressed', button.dataset.selection === selected ? 'true' : 'false');
   });
   const choice = $('#rouletteChoice', root);
-  const returns = $('#rouletteReturn', root);
-  if (choice) choice.textContent = labelFor(selected);
-  if (returns)
-    returns.textContent = `${(payoutBps() / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}× return`;
-  paintButton();
+  const chipValue = $('#rouletteChipValue', root);
+  const multiplier = (payoutBps() / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  if (choice) choice.textContent = `${labelFor(selected)} · ${multiplier}× return`;
+  if (chipValue) chipValue.textContent = money(Number(amountMinor));
+  paintControls();
 }
 
-function paintButton() {
-  const button = $('#roulettePlace', root);
-  if (!button) return;
+function paintControls() {
   const remaining = remainingMs();
   const min = BigInt(snapshot?.config?.minStakeMinor || '0');
   const max = BigInt(snapshot?.config?.maxStakeMinor || '0');
-  const valid = amountMinor >= min && amountMinor <= max;
-  button.disabled = placing || !snapshot || remaining <= 0 || !state.authenticated || !valid;
-  button.textContent = placing
-    ? 'Placing…'
-    : !state.authenticated
-      ? 'Log in to play'
-      : remaining <= 0
-        ? 'Bets locked'
-        : `Place ${money(Number(amountMinor))}`;
+  const tableLocked = placing || !snapshot || remaining <= 0 || !state.authenticated;
+  root.querySelectorAll('[data-selection]').forEach((button) => {
+    button.disabled = tableLocked;
+  });
+  root.querySelectorAll('[data-chip]').forEach((button) => {
+    const value = BigInt(button.dataset.chip);
+    const inLimits = value >= min && value <= max;
+    button.disabled = placing || !snapshot || !inLimits;
+    button.classList.toggle('is-selected', value === amountMinor);
+    button.setAttribute('aria-pressed', value === amountMinor ? 'true' : 'false');
+  });
 }
 
 function remainingMs() {
@@ -224,7 +232,7 @@ function paintClock() {
   const clock = $('#rouletteClock', root);
   if (clock) clock.textContent = remaining > 0 ? `${(remaining / 1000).toFixed(1)}s` : 'SPINNING';
   root.classList.toggle('is-locked', remaining <= 0);
-  paintButton();
+  paintControls();
 }
 
 async function refresh() {
@@ -266,6 +274,7 @@ function paint() {
   }
   paintPools();
   paintBets();
+  paintPublicBets();
   paintClock();
   syncSelection();
 }
@@ -326,17 +335,59 @@ function paintBets() {
   $('#rouletteMineTotal', root).textContent = money(Number(total));
 }
 
-async function place() {
+function paintPublicBets() {
+  const host = $('#roulettePublicBets', root);
+  const bets = snapshot.publicBets || [];
+  host.replaceChildren();
+  $('#rouletteLiveBetCount', root).textContent =
+    `${bets.length} ${bets.length === 1 ? 'chip' : 'chips'}`;
+
+  if (!bets.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'roulette__tableempty';
+    cell.textContent = 'No bets on this round yet.';
+    row.append(cell);
+    host.append(row);
+    return;
+  }
+
+  for (const bet of bets) {
+    const row = document.createElement('tr');
+    row.dataset.you = bet.isViewer ? '1' : '0';
+
+    const player = document.createElement('td');
+    player.className = 'roulette__player';
+    const name = document.createElement('span');
+    name.textContent = bet.isViewer ? 'You' : bet.player;
+    player.append(tableAvatar(bet.playerId), name);
+
+    const selection = document.createElement('td');
+    selection.textContent = labelFor(bet.selection);
+
+    const stake = document.createElement('td');
+    stake.className = 'roulette__tablemoney mono';
+    stake.textContent = money(Number(bet.stakeMinor));
+
+    row.append(player, selection, stake);
+    host.append(row);
+  }
+}
+
+async function place(selection) {
   if (placing || !snapshot || remainingMs() <= 0) return;
+  const placedSelection = selection;
+  const placedAmount = amountMinor;
   placing = true;
-  paintButton();
+  paintControls();
   try {
     await api.post(
       '/v1/roulette/bets',
       {
         roundId: snapshot.round.id,
-        selection: selected,
-        stakeMinor: amountMinor.toString(),
+        selection: placedSelection,
+        stakeMinor: placedAmount.toString(),
       },
       { idempotencyKey: idempotencyKey() },
     );
@@ -344,7 +395,7 @@ async function place() {
     toast({
       kind: 'win',
       title: 'Bet placed',
-      body: `${money(Number(amountMinor))} on ${labelFor(selected)}`,
+      body: `${money(Number(placedAmount))} on ${labelFor(placedSelection)}`,
     });
   } catch (error) {
     toast({
@@ -355,7 +406,7 @@ async function place() {
     await refresh();
   } finally {
     placing = false;
-    paintButton();
+    paintControls();
   }
 }
 

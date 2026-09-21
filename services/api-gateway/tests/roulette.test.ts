@@ -107,9 +107,31 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /filter\(\(round\) => round\.id !== pendingResultId\)/);
     assert.match(client, /pendingResultId = null;\s*\$\('#rouletteResult'/);
     assert.match(client, /\$\('#rouletteResult'[\s\S]*paintHistory\(\);\s*announceResult/);
+    assert.doesNotMatch(client, /rouletteAmount|parseAmount|formatAmountInput/);
+    assert.match(client, /\[100_000n, '\$100K'\]/);
+    assert.match(client, /\[1_000_000_000n, '\$1B'\]/);
+    assert.match(client, /void place\(selected\)/);
+    assert.doesNotMatch(client, /<span>DONUT<\/span>/);
     assert.match(html, /href="\/roulette" data-route="roulette"/);
     assert.match(html, /data-view="roulette"/);
     assert.match(nginx, /\|roulette\|/);
+  });
+
+  it('returns a bounded live bet table with masked names and opaque avatar ids', async () => {
+    const route = await readFile(
+      path.join(repo, 'services/api-gateway/src/routes/roulette.ts'),
+      'utf8',
+    );
+    const client = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/roulette.js'),
+      'utf8',
+    );
+    assert.match(route, /maskedName\('u\.minecraft_username'\)/);
+    assert.match(route, /u\.id AS player_id/);
+    assert.match(route, /WHERE b\.round_id = \$1[\s\S]*LIMIT 100/);
+    assert.match(route, /publicBets: publicBets\.rows\.map/);
+    assert.match(client, /tableAvatar\(bet\.playerId\)/);
+    assert.match(client, /bet\.isViewer \? 'You' : bet\.player/);
   });
 
   it('publishes settled roulette bets in the shared activity feed', async () => {

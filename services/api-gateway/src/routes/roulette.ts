@@ -9,6 +9,7 @@ import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/c
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
+import { maskedName } from '../lib/masked-name.js';
 import {
   rouletteColor,
   roulettePayout,
@@ -59,6 +60,15 @@ interface BetRow {
   request_hash: string;
   created_at: Date;
   settled_at: Date | null;
+}
+
+interface PublicBetRow {
+  id: string;
+  player_id: string;
+  player: string;
+  selection: RouletteSelection;
+  stake_minor: string;
+  created_at: Date;
 }
 
 function softAuthenticate(guards: { authenticate: (request: FastifyRequest) => Promise<void> }) {
@@ -216,7 +226,7 @@ export async function registerRouletteRoutes(
     const viewerId = request.authUser?.id ?? null;
     return db.transaction(async (client) => {
       const round = await currentRound(client, config);
-      const [history, pools, mine, previousMine] = await Promise.all([
+      const [history, pools, publicBets, mine, previousMine] = await Promise.all([
         client.query<RoundRow>(
           `SELECT * FROM roulette_rounds WHERE status = 'settled'
            ORDER BY closes_at DESC LIMIT 12`,
@@ -224,6 +234,17 @@ export async function registerRouletteRoutes(
         client.query<{ selection: RouletteSelection; amount_minor: string }>(
           `SELECT selection, sum(stake_minor)::text AS amount_minor
              FROM roulette_bets WHERE round_id = $1 GROUP BY selection`,
+          [round.id],
+        ),
+        client.query<PublicBetRow>(
+          `SELECT b.id, u.id AS player_id,
+                  ${maskedName('u.minecraft_username')} AS player,
+                  b.selection, b.stake_minor::text AS stake_minor, b.created_at
+             FROM roulette_bets b
+             JOIN users u ON u.id = b.user_id
+            WHERE b.round_id = $1
+            ORDER BY b.created_at DESC, b.id DESC
+            LIMIT 100`,
           [round.id],
         ),
         viewerId
@@ -256,6 +277,15 @@ export async function registerRouletteRoutes(
         round: roundView(round),
         history: history.rows.map(roundView),
         pools: Object.fromEntries(pools.rows.map((row) => [row.selection, row.amount_minor])),
+        publicBets: publicBets.rows.map((bet) => ({
+          id: bet.id,
+          playerId: bet.player_id,
+          player: bet.player,
+          selection: bet.selection,
+          stakeMinor: bet.stake_minor,
+          createdAt: bet.created_at.toISOString(),
+          isViewer: viewerId === bet.player_id,
+        })),
         yourBets: mine.rows.map(betView),
         yourPreviousBets: previousMine.rows.map(betView),
         config: {

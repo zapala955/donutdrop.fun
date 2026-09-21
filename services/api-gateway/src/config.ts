@@ -462,7 +462,7 @@ const environmentSchema = z
       .transform((value) => value === 'true'),
     ROULETTE_ROUND_SECONDS: z.coerce.number().int().min(5).max(60).default(10),
     ROULETTE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
-    ROULETTE_MAX_STAKE_MINOR: positiveBigintString.default('100000000'),
+    ROULETTE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
