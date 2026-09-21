@@ -123,7 +123,7 @@ function paintTerms() {
     [
       '1. Eligibility',
       [
-        'You must be at least 18 years old, meet the legal age required where you live, and be legally allowed to use the service.',
+        'You must be legally allowed to use the service where you live.',
         'Do not use Donut Drop from a location where this type of service is prohibited.',
       ],
     ],

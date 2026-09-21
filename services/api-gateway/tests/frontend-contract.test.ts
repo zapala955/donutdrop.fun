@@ -169,7 +169,16 @@ describe('frontend/backend contract', () => {
     assert.match(terms, /1\. Eligibility/);
     assert.match(terms, /3\. Balances and gameplay/);
     assert.match(terms, /10\. Questions/);
+    assert.doesNotMatch(terms, /18 years|18\+|legal age/i);
     assert.doesNotMatch(terms, /House edge|Return to player|not published yet|acct__facts/);
+  });
+
+  it('uses a balanced filled brand mark for the Discord menu route', async () => {
+    const html = await source('index.html');
+    assert.match(
+      html,
+      /href="\/discord"[^>]*>[\s\S]*?<svg class="menu__ico menu__ico--brand"/,
+    );
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {
