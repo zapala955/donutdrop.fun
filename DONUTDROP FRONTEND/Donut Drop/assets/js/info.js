@@ -1,27 +1,6 @@
-/* info.js — support, and the terms page.
- *
- * ─────────────────────────────────────────────────────────────────────────────────────────────
- * WHY THESE TWO ARE NOT WRITTEN THE WAY THE OTHER ROUTES ARE
- * ─────────────────────────────────────────────────────────────────────────────────────────────
- * Every other page on the site renders server state. These two would normally render prose, and
- * prose is the one thing that cannot be invented here.
- *
- * TERMS. A terms page is a legal instrument. Writing plausible-sounding clauses — withdrawal
- * rules, dispute handling, liability, account closure — would produce a document that reads as
- * binding and is not, drafted by nobody, agreed by nobody, and relied on by players. So this page
- * publishes the operative ECONOMIC terms instead, every one of them read live from the server
- * config the games actually enforce: the house edge, the return to player, the multiplier window,
- * the rakeback rates, the referral terms. Those are facts this codebase can prove. The legal
- * document is marked as not yet published, because it is not.
- *
- * SUPPORT. Same rule, smaller stakes. No invented response times, no invented ticket system, no
- * staffed-hours promise. It surfaces the things that genuinely help somebody stuck — their own
- * account and session identifiers for a report, the live service state, and the routes that
- * answer the questions support is most often asked — and says plainly where the contact channel
- * is not configured rather than printing an address that goes nowhere.
- */
+/* info.js — support details and the public terms document. */
 import { state, bus } from './store.js';
-import { $, el, money, pct } from './util.js';
+import { $, el } from './util.js';
 import { toast } from './ui.js';
 
 // ─────────── /support ───────────
@@ -80,11 +59,11 @@ function paintSupport() {
   const help = panel('Answer it yourself');
   const links = el('div', 'info__links');
   for (const [label, href] of [
-    ['Verify a roll', '#/fairness'],
-    ['Wallet ledger', '#/wallet'],
-    ['Match history', '#/history'],
-    ['Your account', '#/settings'],
-    ['Terms', '#/terms'],
+    ['Verify a roll', '/fairness'],
+    ['Wallet ledger', '/wallet'],
+    ['Match history', '/history'],
+    ['Your account', '/settings'],
+    ['Terms', '/terms'],
   ]) {
     const link = el('a', 'info__link');
     link.href = href;
@@ -130,71 +109,110 @@ export function mountTerms(view) {
 function paintTerms() {
   if (!termsRoot?.isConnected) return;
   const root = ensureShell(termsRoot, 'Terms', 'termsRoot');
-  root.innerHTML = '';
+  root.replaceChildren();
 
-  const upgrade = state.upgradeConfig;
-  const rake = state.rakeback;
-  const referral = state.referrals;
+  const document = el('article', 'termsdoc');
+  const effective = el('p', 'termsdoc__effective mono');
+  effective.textContent = 'Effective: 21 September 2026';
+  const intro = el('p', 'termsdoc__intro');
+  intro.textContent =
+    'These terms govern your use of Donut Drop. By creating an account, depositing, playing, or claiming a reward, you agree to them.';
+  document.append(effective, intro);
 
-  /* The house edge, as the platform actually applies it. Read from the live upgrade config rather
-   * than restated, so this page cannot drift from what the server charges. */
-  const economics = panel('What the house takes');
-  if (upgrade) {
-    const edge = Number(upgrade.houseEdgeBps) / 10_000;
-    economics.appendChild(
-      facts([
-        ['House edge', pct(edge, 2)],
-        ['Return to player', pct(1 - edge, 2)],
-        ['Max win chance', pct(Number(upgrade.maxWinChancePpm) / 1_000_000, 2)],
-        ['Multiplier floor', `${(Number(upgrade.minMultiplierBps) / 10_000).toFixed(2)}x`],
-        ['Multiplier ceiling', `${(Number(upgrade.maxMultiplierBps) / 10_000).toFixed(2)}x`],
-      ]),
-    );
-  } else {
-    economics.appendChild(facts([['Terms', 'log in to load the live figures']]));
+  const sections = [
+    [
+      '1. Eligibility',
+      [
+        'You must be at least 18 years old, meet the legal age required where you live, and be legally allowed to use the service.',
+        'Do not use Donut Drop from a location where this type of service is prohibited.',
+      ],
+    ],
+    [
+      '2. Your account',
+      [
+        'You are responsible for your account, your Minecraft account, and all activity performed through them.',
+        'Do not share or sell access, impersonate another player, evade restrictions, or use multiple accounts to abuse promotions or rewards.',
+      ],
+    ],
+    [
+      '3. Balances and gameplay',
+      [
+        'Balances are denominated in DonutSMP in-game dollars. They are not legal tender, cryptocurrency, a bank deposit, or an investment.',
+        'Games involve risk and you may lose the amount you wager. The probabilities and potential return shown before a play form part of that play.',
+        'The platform record is authoritative for wagers, outcomes, credits, and debits. You may verify supported game outcomes on the Fairness page.',
+      ],
+    ],
+    [
+      '4. Deposits and withdrawals',
+      [
+        'Use only the supported deposit and withdrawal methods and provide the correct Minecraft username and payment details.',
+        'Minimums, maximums, availability, and any verification requirements shown when you make a transfer apply to that transfer.',
+        'Transfers may be delayed or refused when information is incorrect, the Minecraft server is unavailable, or fraud or abuse is suspected.',
+      ],
+    ],
+    [
+      '5. Rewards and referrals',
+      [
+        'Bonuses, daily rewards, rakeback, VIP benefits, and referral rewards are subject to the eligibility and wagering requirements displayed for them.',
+        'Rewards obtained through self-referrals, coordinated abuse, bots, exploits, or misleading promotion may be withheld or reversed.',
+      ],
+    ],
+    [
+      '6. Prohibited conduct',
+      [
+        'You may not exploit bugs, automate play, interfere with the service, collude, manipulate outcomes, launder value, threaten users, or attempt unauthorized access.',
+        'Report a suspected vulnerability or incorrect balance instead of attempting to benefit from it.',
+      ],
+    ],
+    [
+      '7. Suspension and closure',
+      [
+        'We may restrict, suspend, or close an account to investigate fraud, abuse, security incidents, legal requirements, or a breach of these terms.',
+        'Where lawful and technically possible, a legitimate remaining balance will be handled after the investigation is complete.',
+      ],
+    ],
+    [
+      '8. Availability and changes',
+      [
+        'The service is provided as available. Features, games, limits, rewards, and these terms may change, and the service may be interrupted for maintenance or security.',
+        'Material changes apply from the effective date shown on this page. Continuing to use the service after that date means you accept the updated terms.',
+      ],
+    ],
+    [
+      '9. Responsibility',
+      [
+        'To the fullest extent permitted by law, Donut Drop is not responsible for indirect losses, lost opportunities, third-party outages, or events outside its reasonable control.',
+        'Nothing in these terms excludes rights or liability that cannot legally be excluded.',
+      ],
+    ],
+  ];
+
+  for (const [heading, paragraphs] of sections) {
+    const section = el('section', 'termsdoc__section');
+    const title = el('h2');
+    title.textContent = heading;
+    section.appendChild(title);
+    for (const copy of paragraphs) {
+      const paragraph = el('p');
+      paragraph.textContent = copy;
+      section.appendChild(paragraph);
+    }
+    document.appendChild(section);
   }
-  root.appendChild(economics);
 
-  if (rake) {
-    const back = panel('Rakeback');
-    back.appendChild(
-      facts(
-        rake.tiers.map((tier) => [
-          tier.tier,
-          `${(tier.rateBps / 100).toFixed(0)}% of house margin`,
-        ]),
-      ),
-    );
-    root.appendChild(back);
-  }
+  const contact = el('section', 'termsdoc__section');
+  const contactTitle = el('h2');
+  contactTitle.textContent = '10. Questions';
+  const contactCopy = el('p');
+  contactCopy.append('If you have a question about these terms or your account, use the ');
+  const support = el('a');
+  support.href = '/support';
+  support.textContent = 'Support page';
+  contactCopy.append(support, '.');
+  contact.append(contactTitle, contactCopy);
+  document.appendChild(contact);
 
-  if (referral) {
-    const invites = panel('Referrals');
-    invites.appendChild(
-      facts([
-        ['Bonus per invite', money(Number(referral.terms.bonusMinor))],
-        ['Wager to unlock', money(Number(referral.terms.bonusWagerMinor))],
-        ['Revenue share', `${(referral.terms.revshareBps / 100).toFixed(1)}% of house margin`],
-      ]),
-    );
-    root.appendChild(invites);
-  }
-
-  const fairness = panel('Fairness');
-  fairness.appendChild(
-    facts([
-      ['Algorithm', state.fairness?.algorithm ?? 'HMAC-SHA256'],
-      ['Commitment', 'published before every roll'],
-      ['Verification', 'in your browser, at /fairness'],
-    ]),
-  );
-  root.appendChild(fairness);
-
-  /* Stated last and stated plainly. A terms page that quietly omits the fact that there is no
-   * legal document would imply one exists. */
-  const legal = panel('Legal document');
-  legal.appendChild(facts([['Status', 'not published yet', 'down']]));
-  root.appendChild(legal);
+  root.appendChild(document);
 }
 
 // ─────────── shared ───────────

@@ -199,7 +199,7 @@ export async function registerReferralRoutes(
       code,
       // Built here rather than in the browser so one origin is authoritative for the link that
       // gets pasted into public chat.
-      link: `${config.appOrigin}/#/?ref=${code}`,
+      link: `${config.appOrigin}/?ref=${code}`,
       terms: {
         bonusMinor: config.referralBonusMinor.toString(),
         bonusWagerMinor: milestone.toString(),
@@ -290,7 +290,7 @@ export async function registerReferralRoutes(
         /* Existing referrals follow the rename through ON UPDATE CASCADE on referrals_code_fkey.
          * Nobody who already used the old link loses their referrer, and nobody has to be told to
          * re-send anything. */
-        return { code, link: `${config.appOrigin}/#/?ref=${code}` };
+        return { code, link: `${config.appOrigin}/?ref=${code}` };
       });
     },
   );
@@ -377,7 +377,7 @@ export async function registerReferralRoutes(
         return state.rows[0]?.user_id;
       });
       if (!claimed) {
-        return reply.redirect(`${config.appOrigin}/#/referrals?discord=expired`);
+        return reply.redirect(`${config.appOrigin}/referrals?discord=expired`);
       }
 
       let identity: { id: string; username: string };
@@ -386,7 +386,7 @@ export async function registerReferralRoutes(
       } catch {
         // Never surface Discord's own error text: it echoes back request parameters, and one of
         // those is the client secret's counterpart.
-        return reply.redirect(`${config.appOrigin}/#/referrals?discord=failed`);
+        return reply.redirect(`${config.appOrigin}/referrals?discord=failed`);
       }
 
       const outcome = await db.transaction(async (client) => {
@@ -413,7 +413,7 @@ export async function registerReferralRoutes(
         return 'verified' as const;
       });
 
-      return reply.redirect(`${config.appOrigin}/#/referrals?discord=${outcome}`);
+      return reply.redirect(`${config.appOrigin}/referrals?discord=${outcome}`);
     },
   );
 }

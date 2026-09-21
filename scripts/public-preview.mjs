@@ -94,7 +94,7 @@ async function serveStatic(clientRequest, clientResponse, pathname) {
     stats = await fs.stat(target).catch(() => undefined);
   }
   if (!stats || !stats.isFile()) {
-    // The frontend routes on the hash, so a deep link still needs the shell.
+    // Clean SPA paths such as /terms and /battles still need the shared shell.
     target = path.join(ROOT, 'index.html');
     stats = await fs.stat(target).catch(() => undefined);
     if (!stats) {

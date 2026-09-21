@@ -54,13 +54,11 @@ export function mountReferrals(node) {
 
 /* ─────────── the invite link, arriving ───────────
  *
- * Read from the hash rather than from location.search, because the link is a hash route:
- * `#/?ref=ABC123`. Called on boot, so a code survives the login round trip that almost always
- * follows it.
+ * Read from the ordinary query string (`/?ref=ABC123`). Called on boot, so a code survives the
+ * login round trip that almost always follows it.
  */
 export function captureReferralCode() {
-  const query = location.hash.includes('?') ? location.hash.slice(location.hash.indexOf('?') + 1) : '';
-  const code = new URLSearchParams(query).get('ref');
+  const code = new URLSearchParams(location.search).get('ref');
   if (code && /^[A-Z0-9]{6,16}$/.test(code)) {
     pendingCode = code;
     try {
@@ -98,13 +96,11 @@ export function pendingReferralCode() {
 
 /* ─────────── coming back from Discord ───────────
  *
- * The API redirects to `#/referrals?discord=<outcome>` and the outcome is announced once, then
+ * The API redirects to `/referrals?discord=<outcome>` and the outcome is announced once, then
  * stripped from the URL so a reload does not replay it.
  */
 function consumeDiscordReturn() {
-  const index = location.hash.indexOf('?');
-  if (index < 0) return;
-  const params = new URLSearchParams(location.hash.slice(index + 1));
+  const params = new URLSearchParams(location.search);
   const outcome = params.get('discord');
   if (!outcome) return;
 
@@ -126,7 +122,7 @@ function consumeDiscordReturn() {
 
   params.delete('discord');
   const rest = params.toString();
-  history.replaceState(null, '', `${location.pathname}#/referrals${rest ? `?${rest}` : ''}`);
+  history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}`);
   // The verification landed on the server; the cached snapshot predates it.
   refreshReferrals().catch(() => undefined);
 }

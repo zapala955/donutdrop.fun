@@ -33,7 +33,7 @@ export interface FlexPayload {
   readonly mode: string;
   /** Payout over stake, when the mode has one. Omitted for a jackpot, which has no multiplier. */
   readonly multiplier?: number;
-  /** Deep link path back into the platform, e.g. '#/upgrader'. */
+  /** Deep link path back into the platform, e.g. '/upgrader'. */
   readonly path?: string;
 }
 

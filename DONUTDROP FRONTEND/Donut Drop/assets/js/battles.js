@@ -32,6 +32,7 @@ import { $, el, money, safeImage, grouped, reduceMotion } from './util.js';
 import { bezier, span } from './fx.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { navigate } from './routing.js';
 
 const TILE_COUNT = 32;
 const WIN_AT = 26;                 // the winner, with six tiles of runway left behind it
@@ -101,9 +102,9 @@ export function mountBattles(node) {
     }).catch(() => undefined);
   }
 
-  // A code in the hash opens that battle directly — this is the private invite link.
-  const hash = location.hash.split('/')[2];
-  if (hash && /^[A-Z0-9]{6,12}$/.test(hash)) openBattle(hash);
+  // A code in the query string opens that battle directly — this is the private invite link.
+  const code = new URLSearchParams(location.search).get('code');
+  if (code && /^[A-Z0-9]{6,12}$/.test(code)) openBattle(code);
   else {
     view.screen = 'lobby';
     view.code = null;
@@ -265,7 +266,7 @@ function goLobby() {
   view.schedule = null;
   if (frame) cancelAnimationFrame(frame);
   frame = 0;
-  location.hash = '#/battles';
+  navigate('/battles');
   refreshLobbies();
   paint();
 }
@@ -597,7 +598,7 @@ function paintArena() {
 
   const copy = $('#arenaCopy', root);
   copy.addEventListener('click', async () => {
-    const link = `${location.origin}${location.pathname}#/battles/${battle.code}`;
+    const link = `${location.origin}/battles?code=${encodeURIComponent(battle.code)}`;
     try {
       await navigator.clipboard.writeText(link);
       toast({ kind: 'win', title: 'Invite copied', body: link });
@@ -1076,8 +1077,7 @@ async function createBattle() {
     view.draft.caseIds = [];
     playSound('coin');
     await refreshBalance().catch(() => undefined);
-    location.hash = `#/battles/${result.battle.code}`;
-    openBattle(result.battle.code);
+    navigate(`/battles?code=${encodeURIComponent(result.battle.code)}`);
   } catch (error) {
     toast({
       kind: 'lose',
@@ -1096,8 +1096,7 @@ async function joinBattle(code) {
     await api.post(`/v1/battles/${encodeURIComponent(code)}/join`, { clientSeed: randomSeed() });
     playSound('coin');
     await refreshBalance().catch(() => undefined);
-    location.hash = `#/battles/${code}`;
-    openBattle(code);
+    navigate(`/battles?code=${encodeURIComponent(code)}`);
   } catch (error) {
     toast({
       kind: 'lose',

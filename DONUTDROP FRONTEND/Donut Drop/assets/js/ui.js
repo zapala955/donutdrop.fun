@@ -4,6 +4,7 @@
 import { $, el, money, safeImage } from './util.js';
 import { RARITY } from './data.js';
 import { state, bus } from './store.js';
+import { navigate } from './routing.js';
 
 /* ─────────── toasts ─────────── */
 export function toast({ title, body = '', img = null, kind = 'win', ttl = 4200 }) {
@@ -92,7 +93,7 @@ export function initWallet() {
   /* The pill is a link to the dashboard now rather than a modal apologising for not having one.
    * vip.js owns what it displays; this only owns where it goes. */
   $('#lvlPill').addEventListener('click', () => {
-    location.hash = '#/vip';
+    navigate('/vip');
   });
   paint();
 }

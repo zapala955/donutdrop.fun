@@ -106,7 +106,7 @@ describe('frontend/backend contract', () => {
     const store = await source('assets/js/store.js');
     const rewards = await source('assets/js/rakeback.js');
     assert.match(html, /id="menuInvites">\$10M<\/b> Invites/);
-    assert.match(html, /href="#\/rewards" data-route="rewards"/);
+    assert.match(html, /href="\/rewards" data-route="rewards"/);
     assert.match(html, /data-view="rewards"/);
     assert.doesNotMatch(html, />Rakeback<\/span>/);
     assert.match(app, /requested === 'rakeback' \? 'rewards' : requested/);
@@ -128,6 +128,48 @@ describe('frontend/backend contract', () => {
     assert.match(daily, /streak\.wagerRemainingMinor/);
     assert.match(daily, /daily__track/);
     assert.match(quests, /streak\.wagerRequirementMet/);
+  });
+
+  it('uses clean public paths while preserving old fragment bookmarks', async () => {
+    const html = await source('index.html');
+    const app = await source('assets/js/app.js');
+    const battles = await source('assets/js/battles.js');
+    const referrals = await source('assets/js/referrals.js');
+    const routing = await source('assets/js/routing.js');
+    const nginx = await readFile(
+      path.resolve(import.meta.dirname, '../../../infra/nginx/nginx.conf'),
+      'utf8',
+    );
+    const referralRoutes = await readFile(
+      path.resolve(import.meta.dirname, '../src/routes/referrals.ts'),
+      'utf8',
+    );
+
+    assert.doesNotMatch(html, /href="#\//);
+    assert.match(html, /href="\/terms"/);
+    assert.match(app, /currentRouteName\(\)/);
+    assert.match(app, /onNavigate\(route\)/);
+    assert.doesNotMatch(app, /hashchange|location\.hash/);
+    assert.match(battles, /\/battles\?code=/);
+    assert.doesNotMatch(battles, /location\.hash|#\/battles/);
+    assert.match(referrals, /URLSearchParams\(location\.search\)/);
+    assert.match(routing, /migrateLegacyHashRoute/);
+    assert.match(routing, /query\.set\('code', parts\[1\]\)/);
+    assert.match(nginx, /\|terms\)\$/);
+    assert.match(referralRoutes, /\$\{config\.appOrigin\}\/\?ref=\$\{code\}/);
+    assert.match(referralRoutes, /\$\{config\.appOrigin\}\/referrals\?discord=/);
+    assert.doesNotMatch(referralRoutes, /\/#\//);
+  });
+
+  it('renders Terms as a basic document instead of an economics dashboard', async () => {
+    const info = await source('assets/js/info.js');
+    const start = info.indexOf('function paintTerms()');
+    const end = info.indexOf('// ─────────── shared', start);
+    const terms = info.slice(start, end);
+    assert.match(terms, /1\. Eligibility/);
+    assert.match(terms, /3\. Balances and gameplay/);
+    assert.match(terms, /10\. Questions/);
+    assert.doesNotMatch(terms, /House edge|Return to player|not published yet|acct__facts/);
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {

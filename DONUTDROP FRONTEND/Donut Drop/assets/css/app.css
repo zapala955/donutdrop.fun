@@ -151,7 +151,8 @@ img { display: block; max-width: 100%; }
 .skip {
   position: fixed; left: 10px; top: -60px; z-index: 300;
   background: var(--gold-bright); color: #0a0a0c; font-weight: 800;
-  padding: 9px 16px; border-radius: var(--r-s); transition: top .15s;
+  padding: 9px 16px; border: 0; border-radius: var(--r-s); cursor: pointer;
+  font-family: var(--body); transition: top .15s;
 }
 .skip:focus { top: 10px; }
 
@@ -1328,5 +1329,4 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .btn:active:not([disabled]) { box-shadow: inset 1px 1px 0 rgba(255,255,255,.12), inset -1px -1px 0 rgba(0,0,0,.38); }
 }
-
 

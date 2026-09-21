@@ -1,4 +1,4 @@
-/* app.js — entry point: shell wiring, hash router, home + crates + inventory. */
+/* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
 import {
   RARITY, IMG,
 } from './data.js';
@@ -42,6 +42,9 @@ import { mountHero3d } from './hero3d.js';
 import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
+import {
+  currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
+} from './routing.js';
 
 /** The biggest multiplier the server will quote, as a player would say it. */
 function topMultiplierLabel() {
@@ -90,11 +93,11 @@ function mountHome(view) {
    * catalogue the server actually sent, and reads "—" until that arrives instead of asserting a
    * number before it could possibly be known. */
   const promos = () => [
-    { ac: '#ffaa00', h: 'Crates',      art: 'chest.png',       href: '#/crates',
+    { ac: '#ffaa00', h: 'Crates',      art: 'chest.png',       href: '/crates',
       stats: [[count(state.cases), 'CRATES'], [count(RARITY), 'RARITIES']] },
-    { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '#/upgrader',
+    { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '/upgrader',
       stats: [[maxStakeLabel(), 'MAX STAKE'], [topMultiplierLabel(), 'TOP PAYOUT']] },
-    { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '#/war',
+    { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '/war',
       stats: [[count(state.war?.factions), 'SIDES'], ['ONE', 'PRIZE POT']] },
   ];
 
@@ -298,7 +301,7 @@ function openLoginModal() {
           <label class="auth__check">
             <input type="checkbox" id="linkTerms">
             <span class="auth__box" aria-hidden="true"></span>
-            <span class="auth__txt">I agree to all <a href="#/terms">Terms &amp; Conditions</a>.</span>
+            <span class="auth__txt">I agree to all <a href="/terms">Terms &amp; Conditions</a>.</span>
           </label>
           <label class="auth__check">
             <input type="checkbox" id="linkBedrock">
@@ -897,8 +900,6 @@ const VIEWS = {
   terms: mountTerms,
 };
 
-const isActive = (name) => (location.hash.replace(/^#\/?/, '').split('/')[0] || 'home') === name;
-
 /* ═════════ the Cases disclosure ═════════
  *
  * Opens on click, closes on a click anywhere else, on Escape, and on choosing a row. Marked
@@ -998,10 +999,14 @@ function initCasesMenu() {
 }
 
 function route() {
-  const requested = location.hash.replace(/^#\/?/, '').split('/')[0] || 'home';
+  const requested = currentRouteName();
   // Old bookmarks keep working after the account menu's Rakeback page became Rewards.
   const seg = requested === 'rakeback' ? 'rewards' : requested;
-  const name = VIEWS[seg] ? seg : 'home';
+  if (!VIEWS[seg]) {
+    navigate('/', { replace: true });
+    return;
+  }
+  const name = seg;
 
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
   const CASES_ROUTES = ['crates', 'battles', 'studio'];
@@ -1020,7 +1025,7 @@ function route() {
 
   const mount = VIEWS[name];
   if (typeof mount !== 'function') {
-    location.hash = '#/home';
+    navigate('/', { replace: true });
     return;
   }
   mount($(`.view[data-view="${name}"]`));
@@ -1034,6 +1039,11 @@ function route() {
 initModal();
 initCasesMenu();
 initWallet();
+$('#skipToMain')?.addEventListener('click', () => {
+  const main = $('#main');
+  main?.focus();
+  main?.scrollIntoView({ block: 'start' });
+});
 /* The level pill. Owns its own bus subscription, so it repaints on every snapshot without the
  * router having to remember it. */
 initVipWidget();
@@ -1067,7 +1077,7 @@ $('#signOutBtn')?.addEventListener('click', async (event) => {
   event.preventDefault();
   try {
     await logout();
-    location.hash = '#/home';
+    navigate('/');
     toast({ kind: 'win', title: 'Signed out' });
   } catch (error) {
     showApiError(error);
@@ -1109,8 +1119,9 @@ $('#loginHead')?.addEventListener('error', (event) => {
 bus.addEventListener('change', paintAuthChrome);
 paintAuthChrome();
 
-/* Read the invite code off the URL before anything navigates, because the router rewrites the
- * hash and the login round trip replaces it outright. */
+/* Convert old #/ links before anything reads route state, then capture an invite code from the
+ * ordinary query string so shared links and login round trips no longer depend on a fragment. */
+migrateLegacyHashRoute();
 captureReferralCode();
 
 /* Somebody arriving on an invite link is here to sign up, so open the card that does it.
@@ -1217,5 +1228,24 @@ $('#burger').addEventListener('click', () => {
   }
 }
 
-window.addEventListener('hashchange', route);
+/* All public links use real paths. Keep navigation instant inside the app while preserving normal
+ * browser behaviour for external links, downloads, new tabs and the in-page skip link. */
+document.addEventListener('click', (event) => {
+  if (event.defaultPrevented || (typeof event.button === 'number' && event.button !== 0)) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target.closest('a[href]');
+  if (!link || link.target || link.hasAttribute('download')) return;
+
+  const target = new URL(link.href, location.href);
+  if (target.origin !== location.origin || target.hash) return;
+  const segments = target.pathname.split('/').filter(Boolean);
+  if (segments.length > 1) return;
+  const requested = segments[0] || 'home';
+  if (!VIEWS[requested] && requested !== 'rakeback') return;
+
+  event.preventDefault();
+  navigate(target.pathname + target.search);
+});
+
+onNavigate(route);
 route();
