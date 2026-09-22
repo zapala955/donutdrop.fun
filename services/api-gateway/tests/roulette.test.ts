@@ -106,7 +106,16 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /api\.post\(\s*'\/v1\/roulette\/bets'/);
     assert.match(client, /if \(shouldSpin\) pendingResultId = newest\.id/);
     assert.match(client, /filter\(\(round\) => round\.id !== pendingResultId\)/);
-    assert.match(client, /pendingResultId = null;\s*\$\('#rouletteResult'/);
+    /* The reveal and the clearing of the pending flag happen in the same step — the result reaches
+       the face when the wheel stops, not when the snapshot carrying it arrives. Asserted as "both
+       are in finish()" rather than as two adjacent lines, so a null guard between them is not a
+       test failure. */
+    const finishBody = client.slice(
+      client.indexOf('const finish = () => {'),
+      client.indexOf('void refreshBalance();'),
+    );
+    assert.match(finishBody, /pendingResultId = null;/);
+    assert.match(finishBody, /#rouletteResult/);
     assert.match(client, /\$\('#rouletteResult'[\s\S]*paintHistory\(\);\s*announceResult/);
     assert.doesNotMatch(client, /rouletteAmount|parseAmount|formatAmountInput/);
     assert.match(client, /\[100_000n, '\$100K'\]/);
@@ -299,5 +308,53 @@ describe('the roulette client keeps itself current', () => {
     /* And the poll window has to cover the longest gap the deadline chain leaves, which is a whole
      * betting window — a fixed 4.5s locked betting part-way into every round. */
     assert.match(source, /roundSeconds \|\| 0\) \+ Number\(snapshot\?\.config\?\.spinSeconds/);
+  });
+});
+
+describe('the roulette does not spoil its own spin', () => {
+  const repo = path.resolve(import.meta.dirname, '../../..');
+  const client = () =>
+    readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/roulette.js'), 'utf8');
+
+  it('freezes the wallet figure for the length of the animation', async () => {
+    /* Settlement credits winners the instant the server resolves the round, and creditWallet
+     * publishes a balance invalidation as it goes. Acting on that immediately made the header
+     * balance jump to its post-spin value while the wheel was still turning — a player could read
+     * the result off their own wallet seconds before the ball landed. */
+    const source = await client();
+    assert.match(source, /function takeSpinHold\(\)/);
+    assert.match(source, /spinHold = holdLiveFigures\(\);/);
+    // Taken before the animation starts, released when it ends.
+    const spin = source.slice(source.indexOf('function spinTo('));
+    assert.ok(
+      spin.indexOf('takeSpinHold()') < spin.indexOf('cubic-bezier'),
+      'the hold must be taken before the transition is armed',
+    );
+  });
+
+  it('releases the hold even when the page is gone by the time the timer fires', async () => {
+    /* finish() runs from a timer that fires whether or not the view is still mounted. A detached
+     * root makes the DOM work throw, and a hold that escaped would freeze the wallet figure for
+     * the whole site until a reload — far worse than the spoiler it was taken to prevent. */
+    const source = await client();
+    const finish = source.slice(source.indexOf('const finish = () => {'));
+    const body = finish.slice(0, finish.indexOf('\n  };'));
+    assert.match(body, /\} finally \{\s*\n\s*releaseSpinHold\(\);/);
+    // And a result the wheel cannot render must not strand one either.
+    assert.match(source, /if \(index < 0\) \{\s*\n\s*releaseSpinHold\(\);/);
+  });
+
+  it('shows what YOU have on a spot, not only what the table has', async () => {
+    const source = await client();
+    const css = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/css/roulette.css'),
+      'utf8',
+    );
+    assert.match(source, /function mineBySelection\(\)/);
+    assert.match(source, /class = 'roulette__mine'|className = 'roulette__mine'/);
+    assert.match(source, /button\.dataset\.mine = own > 0n \? '1' : '0';/);
+    // The spot itself is marked too, so a covered number is findable without reading a figure.
+    assert.match(css, /\.roulette__mine \{/);
+    assert.match(css, /\[data-mine='1'\]/);
   });
 });

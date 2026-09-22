@@ -1,6 +1,6 @@
 /* roulette.js — one server-owned European wheel shared by every browser. */
 import { api, idempotencyKey } from './api.js';
-import { state, refreshBalance } from './store.js';
+import { state, refreshBalance, holdLiveFigures } from './store.js';
 import { tableAvatar } from './table-avatar.js';
 import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
@@ -59,6 +59,7 @@ let wheelRotation = 0;
 let lastSuccessfulSyncMs = 0;
 let lastLivePulseMs = 0;
 let deadlineTimer = null;
+let spinHold = null;
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -496,9 +497,38 @@ function paintHistory() {
   );
 }
 
+/** What this player has on each spot, keyed by selection. */
+function mineBySelection() {
+  const mine = new Map();
+  for (const bet of snapshot?.yourBets || []) {
+    mine.set(bet.selection, (mine.get(bet.selection) ?? 0n) + BigInt(bet.stakeMinor));
+  }
+  return mine;
+}
+
+/**
+ * Two figures per spot, and they are not the same question.
+ *
+ * The table's pool was the only one shown, in seven-pixel type in a corner — so the number a
+ * player most wants back from the board — what THEY have on red — was either absent or
+ * indistinguishable from somebody else's total. Their own stake now sits on the face of the spot at a size meant to
+ * be read across the table, and the pool keeps its corner.
+ */
 function paintPools() {
+  const mine = mineBySelection();
   root.querySelectorAll('[data-selection]').forEach((button) => {
     button.querySelector('.roulette__pool')?.remove();
+    button.querySelector('.roulette__mine')?.remove();
+
+    const own = mine.get(button.dataset.selection) ?? 0n;
+    button.dataset.mine = own > 0n ? '1' : '0';
+    if (own > 0n) {
+      const chip = document.createElement('b');
+      chip.className = 'roulette__mine';
+      chip.textContent = money(Number(own));
+      button.append(chip);
+    }
+
     const amount = Number(snapshot.pools?.[button.dataset.selection] || 0);
     if (amount <= 0) return;
     const pool = document.createElement('small');
@@ -624,9 +654,38 @@ function setWheel(result) {
   wheel.style.transform = `rotate(${wheelRotation}deg)`;
 }
 
+/**
+ * Freezes the wallet figure for the length of the spin.
+ *
+ * Settlement credits the winners the moment the server resolves the round, and `creditWallet`
+ * publishes a balance invalidation as it goes. The browser acted on that immediately — so the
+ * header balance jumped to its post-spin value while the wheel was still turning, and a player
+ * could read the outcome off their own wallet several seconds before the ball landed.
+ *
+ * The money is already theirs either way; this is only about which of the two tells them. Held
+ * rather than discarded after the fact, because the request the hold prevents is the one the rate
+ * limiter counts.
+ */
+function takeSpinHold() {
+  if (spinHold) return;
+  spinHold = holdLiveFigures();
+}
+
+function releaseSpinHold() {
+  if (!spinHold) return;
+  const release = spinHold;
+  spinHold = null;
+  release();
+}
+
 function spinTo(result, bets, opensAt) {
   const index = ORDER.indexOf(Number(result));
-  if (index < 0) return;
+  /* A result the wheel cannot show is not a reason to strand the balance behind a hold that will
+     never be released. */
+  if (index < 0) {
+    releaseSpinHold();
+    return;
+  }
   const wheel = $('#rouletteWheel', root);
   const target = -((index * 360) / ORDER.length);
   const normalized = ((wheelRotation % 360) + 360) % 360;
@@ -638,11 +697,20 @@ function spinTo(result, bets, opensAt) {
   wheelRotation += (animationMs === 0 ? 0 : 5 * 360) + delta;
 
   const finish = () => {
-    wheel.classList.remove('is-spinning');
-    pendingResultId = null;
-    $('#rouletteResult', root).textContent = String(result);
-    paintHistory();
-    announceResult(result, bets);
+    /* The release is in a `finally` because this runs from a timer that fires whether or not the
+     * page is still mounted. Navigating away mid-spin leaves `root` detached, the DOM work below
+     * throws on a null node, and a hold that escaped would freeze the wallet figure for the whole
+     * SITE until a reload — a far worse bug than the spoiler it was taken to prevent. */
+    try {
+      wheel.classList.remove('is-spinning');
+      pendingResultId = null;
+      const face = $('#rouletteResult', root);
+      if (face) face.textContent = String(result);
+      paintHistory();
+      announceResult(result, bets);
+    } finally {
+      releaseSpinHold();
+    }
     void refreshBalance();
   };
 
@@ -653,6 +721,7 @@ function spinTo(result, bets, opensAt) {
     return;
   }
 
+  takeSpinHold();
   wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
   wheel.classList.add('is-spinning');
   $('#rouletteResult', root).textContent = '•';
