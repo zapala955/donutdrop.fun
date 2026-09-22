@@ -397,8 +397,13 @@ const environmentSchema = z
     CHAT_ENABLED: booleanString,
     CHAT_SLOW_MODE_SECONDS: z.coerce.number().int().min(0).max(3600).default(5),
     /* What counts as a "big hit" worth announcing in chat. Every payout is in the ticker; only
-     * the ones above this reach the conversation, or the chat is just the feed twice. */
-    CHAT_BIG_HIT_MINOR: positiveBigintString.default('5000000'),
+     * the ones at or above this reach the conversation, or the chat is just the feed twice.
+     *
+     * $50M, not the $5M this used to be. At $5M a single roulette round produced several cards in
+     * a row -- a $9M chip win is an ordinary round here, and three of them stacked back to back
+     * push the actual conversation off the top of the rail. The threshold only earns its keep
+     * while clearing it is rare. */
+    CHAT_BIG_HIT_MINOR: positiveBigintString.default('50000000'),
     /* Faction war. The pool is a real figure that gets paid out of the ledger on settlement, so
      * it is configuration rather than a number typed into a template. */
     FACTION_WAR_PRIZE_POOL_MINOR: positiveBigintString.default('1000000000'),

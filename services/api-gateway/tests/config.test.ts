@@ -36,6 +36,20 @@ describe('configuration', () => {
     assert.equal(config.rouletteSpinSeconds, 3);
     assert.equal(config.rouletteMinStakeMinor, 100_000n);
     assert.equal(config.rouletteMaxStakeMinor, 1_000_000_000n);
+    assert.equal(config.chatBigHitMinor, 50_000_000n);
+  });
+
+  /* The chat rail and the ticker are two different jobs. The ticker carries every settled round;
+   * the rail carries the handful worth interrupting a conversation for. A low threshold collapses
+   * the distinction -- at $5M a roulette round announced itself three times in a row and buried
+   * what people were actually saying. The deployment can raise it further; it must not silently
+   * fall back to a figure that ordinary rounds clear. */
+  it('announces a win in chat only once it is genuinely big', () => {
+    assert.equal(loadConfig(base).chatBigHitMinor, 50_000_000n);
+    assert.equal(
+      loadConfig({ ...base, CHAT_BIG_HIT_MINOR: '250000000' }).chatBigHitMinor,
+      250_000_000n,
+    );
   });
 
   it('requires HTTPS in production', () => {
