@@ -287,7 +287,22 @@
             </div>
             <button class="btn" type="button" data-refresh="system">Refresh</button>
           </div>
-          <p class="hint">Click an operational setting to edit it immediately. Reset removes the override and restores the VPS default.</p>
+          <p class="hint">Edit applies immediately and writes the previous value, the new value and your reason to the audit log. Reset removes the override and restores the VPS default.</p>
+          <div class="settingbar">
+            <form class="search" id="settingSearch" role="search" onsubmit="return false">
+              <label class="search__label" for="settingQuery">Filter settings</label>
+              <input
+                class="search__input"
+                id="settingQuery"
+                type="search"
+                placeholder="Name or key..."
+                maxlength="60"
+                autocomplete="off"
+              />
+            </form>
+            <div class="chips" id="settingGroups" role="group" aria-label="Filter by group"></div>
+            <p class="hint settingbar__count" id="settingCount" role="status" aria-live="polite"></p>
+          </div>
           <div class="tablewrap"><table class="grid" id="systemTable"></table></div>
           <div class="panel__head panel__head--sub">
             <h3>Deployment-only trust settings</h3>

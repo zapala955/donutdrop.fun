@@ -10,6 +10,7 @@ import { liveEvents } from '../lib/live-events.js';
 import { isValidCurve, settleRace } from '../lib/rewards.js';
 import {
   RuntimeSettings,
+  runtimeSettingDefinitions,
   runtimeSettingKeys,
   type RuntimeSettingKey,
 } from '../lib/runtime-settings.js';
@@ -165,6 +166,21 @@ export async function registerAdminOperationRoutes(
   runtimeSettings = new RuntimeSettings(config),
 ) {
   const guards = createAuthGuards(db, config);
+
+  /* Which live topics a settings change has to wake.
+   *
+   * Every change publishes `settings`, which is what the admin console itself listens on. The two
+   * player-facing topics are derived from the setting's own group rather than from a hand-written
+   * list of keys: the previous version named four keys explicitly, and every control added since
+   * had silently not notified anybody until their next poll. A group is declared once, next to
+   * the setting, so this cannot drift again. */
+  const publishSettingTopics = (keys: readonly RuntimeSettingKey[]): void => {
+    liveEvents.publish('settings');
+    const groups = new Set(keys.map((key) => runtimeSettingDefinitions[key].group));
+    if (groups.has('roulette')) liveEvents.publish('roulette');
+    if (groups.has('chat')) liveEvents.publish('chat');
+  };
+
   const requireAdminRead = async (request: Parameters<typeof guards.authenticate>[0]) => {
     await guards.authenticate(request);
     if (request.authUser?.role !== 'admin' || request.authUser.status !== 'active') {
@@ -704,25 +720,32 @@ export async function registerAdminOperationRoutes(
     return { entries: result.rows, limit: query.limit, offset: query.offset };
   });
 
+  /* Two tables, and the split between them is the whole point.
+   *
+   * `runtimeSettings` is everything an administrator can change here and now, audited. `config` is
+   * what deliberately cannot be: the trust boundary, the custody switches and the identities. The
+   * economy dials that used to be listed below are runtime-managed now, and printing them in both
+   * places would tell an operator two different stories about who owns the value. */
   app.get('/v1/admin/system-config', { preHandler: requireAdminRead }, async () => ({
     restartRequired: false,
-    note: 'Operational controls apply immediately. Security keys, custody credentials and game outcome maths remain deployment-only.',
+    note:
+      'Every control in the table above applies immediately and is written to the audit log with ' +
+      'its previous value, its new value and your reason. The settings below define the trust ' +
+      'boundary — custody, sign-in and the remote control plane — and stay deployment-only.',
     runtimeSettings: runtimeSettings.rows(),
     config: {
       environment: config.environment,
       appOrigin: config.appOrigin,
       sessionTtlHours: config.sessionTtlHours,
-      houseEdgeBps: config.houseEdgeBps,
-      itemSellRateBps: config.itemSellRateBps,
-      minMultiplierBps: config.minMultiplierBps,
-      maxMultiplierBps: config.maxMultiplierBps,
-      maxWinChancePpm: config.maxWinChancePpm,
       houseStockUnlimited: config.houseStockUnlimited,
-      cashOnlyPlay: config.cashOnlyPlay,
       minecraftTransfersEnabled: config.minecraftTransfersEnabled,
       physicalCustodyEnabled: config.physicalCustodyEnabled,
       discordControlEnabled: config.discordControlEnabled,
+      devLoginEnabled: config.devLoginEnabled,
       turnstileEnabled: config.turnstileEnabled,
+      payLoginMinAmount: config.payLoginMinAmount,
+      payLoginMaxAmount: config.payLoginMaxAmount,
+      logLevel: config.logLevel,
       adminCount: config.adminMinecraftIds.size,
       provisionedBotCount: config.botCredentials.size,
     },
@@ -734,7 +757,14 @@ export async function registerAdminOperationRoutes(
     async (request) => {
       const body = parseWith(runtimeSettingsUpdateSchema, request.body);
       const actor = requireActor(request.authUser?.id);
+      /* Validation first, and against the WHOLE prospective config rather than the changed keys
+       * alone. A rate that is individually legal can still be insolvent next to the three others
+       * drawn from the same margin, and the check that catches it refuses to boot -- so it has to
+       * happen here, before a row is written, rather than on the next restart. */
       const parsed = runtimeSettings.validate(body.settings);
+      // Captured before apply(): an audit line that says only what a value became cannot answer
+      // the question actually asked of it later, which is what it was before somebody changed it.
+      const before = runtimeSettings.snapshot(parsed.keys());
       await db.transaction(async (client) => {
         for (const [key, value] of parsed) {
           await client.query(
@@ -752,6 +782,7 @@ export async function registerAdminOperationRoutes(
           targetId: [...parsed.keys()].join(','),
           details: {
             reason: body.reason,
+            previous: before,
             settings: Object.fromEntries(
               [...parsed].map(([key, value]) => [key, RuntimeSettings.databaseValue(value)]),
             ),
@@ -759,13 +790,7 @@ export async function registerAdminOperationRoutes(
         });
       });
       runtimeSettings.apply(parsed, actor);
-      liveEvents.publish('settings');
-      if (parsed.has('roulettePaused') || parsed.has('rouletteEnabled')) {
-        liveEvents.publish('roulette');
-      }
-      if (parsed.has('chatEnabled') || parsed.has('chatSlowModeSeconds')) {
-        liveEvents.publish('chat');
-      }
+      publishSettingTopics([...parsed.keys()]);
       return { settings: runtimeSettings.rows() };
     },
   );
@@ -776,7 +801,11 @@ export async function registerAdminOperationRoutes(
     async (request) => {
       const body = parseWith(runtimeSettingsResetSchema, request.body);
       const actor = requireActor(request.authUser?.id);
-      const keys = [...new Set(body.keys)];
+      /* A reset is a change like any other and can break the same invariants: restoring one half
+       * of a min/max pair to its deployment default while the other half is still overridden is
+       * exactly how the two cross. */
+      const keys = runtimeSettings.validateReset(body.keys);
+      const before = runtimeSettings.snapshot(keys);
       await db.transaction(async (client) => {
         await client.query('DELETE FROM runtime_settings WHERE key = ANY($1::text[])', [keys]);
         await appendAudit(client, config, {
@@ -784,17 +813,11 @@ export async function registerAdminOperationRoutes(
           action: 'runtime_settings.reset',
           targetType: 'runtime_settings',
           targetId: keys.join(','),
-          details: { reason: body.reason, keys },
+          details: { reason: body.reason, keys, previous: before },
         });
       });
       runtimeSettings.reset(keys);
-      liveEvents.publish('settings');
-      if (keys.includes('roulettePaused') || keys.includes('rouletteEnabled')) {
-        liveEvents.publish('roulette');
-      }
-      if (keys.includes('chatEnabled') || keys.includes('chatSlowModeSeconds')) {
-        liveEvents.publish('chat');
-      }
+      publishSettingTopics(keys);
       return { settings: runtimeSettings.rows() };
     },
   );

@@ -2028,9 +2028,14 @@ async function toggleRoulettePause() {
 }
 
 async function editRuntimeSetting(setting) {
+  /* Key and bounds, not just the default. With fifty-nine controls the label alone is not enough
+   * to be sure which one is open, and a rejected value after the fact is a worse way to learn a
+   * range than being told it up front. */
+  const bounds =
+    setting.min !== null && setting.max !== null ? ` · allowed ${setting.min}–${setting.max}` : '';
   const values = await editRecord({
     title: setting.label,
-    description: `Deployment default: ${setting.defaultValue}`,
+    description: `${setting.key} · deployment default: ${setting.defaultValue}${bounds}`,
     fields: [
       {
         name: 'value',
@@ -2070,24 +2075,134 @@ async function resetRuntimeSetting(setting) {
   await loadSystem();
 }
 
+/* The runtime controls, as last loaded, plus the two filters applied over them. Held here rather
+ * than re-fetched on every keystroke: the whole set arrives in one response and filtering it is a
+ * string comparison, so a round trip per character would be latency bought for nothing. */
+const systemState = { rows: [], group: 'all', query: '' };
+
+const GROUP_LABELS = {
+  features: 'Features',
+  economy: 'House maths',
+  chat: 'Chat',
+  rewards: 'Rewards',
+  rakeback: 'Rakeback',
+  roulette: 'Roulette',
+  duels: 'Duels',
+  jackpot: 'Jackpot',
+  rain: 'Lava Rain',
+  social: 'Tips & side bets',
+  limits: 'Limits',
+};
+
+const groupLabel = (group) => GROUP_LABELS[group] ?? group;
+
+function visibleSettings() {
+  const query = systemState.query.trim().toLowerCase();
+  return systemState.rows.filter((row) => {
+    if (systemState.group !== 'all' && row.group !== systemState.group) return false;
+    if (!query) return true;
+    /* Key as well as label. An operator arriving from the audit log or from this file has the
+     * camelCase key in hand, not the sentence the panel prints. */
+    return (
+      row.label.toLowerCase().includes(query) ||
+      row.key.toLowerCase().includes(query) ||
+      groupLabel(row.group).toLowerCase().includes(query)
+    );
+  });
+}
+
+function renderSettingGroups() {
+  const host = $('settingGroups');
+  if (!host) return;
+  const counts = new Map();
+  for (const row of systemState.rows) counts.set(row.group, (counts.get(row.group) ?? 0) + 1);
+  const entries = [['all', 'All', systemState.rows.length], ...[...counts].map(
+    ([group, count]) => [group, groupLabel(group), count],
+  )];
+  host.replaceChildren();
+  for (const [group, label, count] of entries) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    // aria-pressed, not a class alone: the selected filter has to reach a screen reader too.
+    chip.setAttribute('aria-pressed', String(systemState.group === group));
+    chip.textContent = label;
+    const n = document.createElement('span');
+    n.className = 'chip__n';
+    n.textContent = String(count);
+    chip.append(n);
+    chip.addEventListener('click', () => {
+      systemState.group = group;
+      renderSettingGroups();
+      renderSettingRows();
+    });
+    host.append(chip);
+  }
+}
+
+function renderSettingRows() {
+  const rows = visibleSettings();
+  const count = $('settingCount');
+  if (count) {
+    const total = systemState.rows.length;
+    count.textContent =
+      rows.length === total
+        ? `${total} controls`
+        : `${rows.length} of ${total} controls`;
+  }
+  let lastGroup = null;
+  table(
+    $('systemTable'),
+    ['Setting', 'Current value', 'Source', 'Last changed', 'Actions'],
+    rows,
+    (row) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(row.label),
+        cell(row.value, { mono: true }),
+        cell(row.overridden ? 'Admin override' : 'VPS default'),
+        cell(row.overridden ? row.updatedAt : null),
+        actions(
+          button('Edit', () => editRuntimeSetting(row)),
+          button('Reset', () => resetRuntimeSetting(row), {
+            disabled: !row.overridden,
+            title: row.overridden ? '' : 'Already on the deployment default',
+          }),
+        ),
+      );
+      if (row.group === lastGroup) return tr;
+      /* A separator row rather than a repeated group column: the group changes eleven times in a
+       * list of fifty-nine, so printing it on every line is fifty-nine cells to say eleven things. */
+      lastGroup = row.group;
+      const fragment = document.createDocumentFragment();
+      const head = document.createElement('tr');
+      head.className = 'groupsep';
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      td.textContent = groupLabel(row.group);
+      head.append(td);
+      fragment.append(head, tr);
+      return fragment;
+    },
+  );
+}
+
 async function loadSystem() {
   const data = await api.get('/v1/admin/system-config');
   $('systemNote').textContent = data.note;
-  const runtimeRows = data.runtimeSettings ?? [];
-  table($('systemTable'), ['Group', 'Setting', 'Current value', 'Source', 'Actions'], runtimeRows, (row) => {
-    const tr = document.createElement('tr');
-    tr.append(
-      cell(row.group),
-      cell(row.label),
-      cell(row.value, { mono: true }),
-      cell(row.overridden ? 'Admin override' : 'VPS default'),
-      actions(
-        button('Edit', () => editRuntimeSetting(row)),
-        button('Reset', () => resetRuntimeSetting(row), { disabled: !row.overridden }),
-      ),
-    );
-    return tr;
-  });
+  systemState.rows = data.runtimeSettings ?? [];
+  const query = $('settingQuery');
+  if (query && !query.dataset.bound) {
+    query.dataset.bound = '1';
+    /* Filters on input rather than on submit. The set is already in memory, so waiting for Enter
+     * buys nothing and costs the operator a keystroke per search. */
+    query.addEventListener('input', () => {
+      systemState.query = query.value;
+      renderSettingRows();
+    });
+  }
+  renderSettingGroups();
+  renderSettingRows();
   const protectedRows = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
   table($('protectedSystemTable'), ['Setting', 'Current value', 'Management'], protectedRows, (row) => {
     const tr = document.createElement('tr');

@@ -388,6 +388,85 @@ body {
   outline: none;
 }
 
+/* ── the settings filter bar ──
+   Fifty-nine runtime controls is past the point where a flat table can be read. Two filters that
+   compose -- a group and a substring -- plus a live count, so an operator can always tell the
+   difference between "no setting matches" and "the table failed to load". */
+.settingbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 14px 0 12px;
+}
+.settingbar .search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.settingbar .search__input {
+  width: 100%;
+}
+.settingbar__count {
+  flex: 0 0 auto;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* Wraps onto as many rows as it needs. A chip row that clips its own overflow hides the very
+   filter somebody is looking for, and there is no affordance saying anything was hidden. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: 700 0.75rem/1 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+.chip:hover {
+  border-color: var(--line-hi);
+  color: var(--ink);
+}
+/* Kept, not removed: this console is operated by keyboard as often as by pointer, and the chips
+   are the only way to reach most of the table. */
+.chip:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+.chip[aria-pressed='true'] {
+  border-color: var(--gold-bright);
+  background: rgba(255, 215, 0, 0.1);
+  color: var(--gold-bright);
+}
+.chip__n {
+  margin-left: 6px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A group's first row carries its name, so the table stays readable once it is scrolled far
+   enough that the filter bar is off screen. */
+.grid tr.groupsep td {
+  padding: 14px 14px 6px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 215, 0, 0.03);
+  font: 700 0.6875rem/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
 /* ── confirm dialog ── */
 .confirm {
   width: min(460px, calc(100% - 32px));
