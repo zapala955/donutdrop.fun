@@ -12,6 +12,16 @@ fi
 
 cd "$repo_root"
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
+
+# The vault bot sits behind a compose profile, so without this flag every deploy would treat a
+# running vault as an orphan and remove it -- `--remove-orphans` below is not optional, it is what
+# keeps a renamed service from lingering. Deciding from the environment rather than asking means
+# nobody has to remember a flag on the one command that must not be got wrong.
+if grep -q '^VAULT_BOT_ID=' "$env_file"; then
+  compose+=(--profile vault)
+  echo "Vault bot configured; deploying it too."
+fi
+
 "${compose[@]}" config --quiet
 
 # Preserve the exact images currently serving traffic. If the new API never becomes ready they
@@ -32,7 +42,7 @@ trap 'rm -f "$rollback_file"' EXIT
 # A rollback aid that can refuse a deploy is worse than no rollback aid at all. Losing the snapshot
 # for one service costs the ability to roll THAT service back automatically; refusing to deploy
 # costs the release. Each service is skipped with a line on stderr and the deploy carries on.
-for service in api maintenance minecraft-bot; do
+for service in api maintenance minecraft-bot minecraft-bot-vault; do
   # `head -n 1` because a scaled service prints several ids and `docker inspect` wants one.
   container_id="$("${compose[@]}" ps -q "$service" 2>/dev/null | head -n 1 || true)"
   if [[ -z "$container_id" ]]; then
