@@ -150,7 +150,13 @@ function build() {
     button.type = 'button';
     button.className = `roulette__number roulette__number--${color(value)}`;
     button.dataset.selection = `straight:${value}`;
-    button.textContent = String(value);
+    /* The label is an element rather than a text node so it can be a flex child that shrinks
+       beside the stake chip. A bare text node cannot be given min-width, which is what made the
+       first version stack the chip on top of the label instead of under it. */
+    const face = document.createElement('span');
+    face.className = 'roulette__face';
+    face.textContent = String(value);
+    button.append(face);
     numbers.append(button);
   }
   const outside = $('#rouletteOutside', root);
@@ -158,7 +164,10 @@ function build() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.selection = selection;
-    button.textContent = label;
+    const face = document.createElement('span');
+    face.className = 'roulette__face';
+    face.textContent = label;
+    button.append(face);
     if (selection === 'red' || selection === 'black') button.dataset.color = selection;
     outside.append(button);
   }
@@ -507,12 +516,19 @@ function mineBySelection() {
 }
 
 /**
- * Two figures per spot, and they are not the same question.
+ * Two figures per spot, and they answer different questions.
  *
- * The table's pool was the only one shown, in seven-pixel type in a corner — so the number a
- * player most wants back from the board — what THEY have on red — was either absent or
- * indistinguishable from somebody else's total. Their own stake now sits on the face of the spot at a size meant to
- * be read across the table, and the pool keeps its corner.
+ * The table's pool used to be the only one shown, in seven-pixel type in a corner, so the number a
+ * player most wants back from the board — what THEY have on red — was indistinguishable from
+ * everybody else's total.
+ *
+ * The first attempt at fixing that put the stake in an absolutely positioned pill, which landed on
+ * top of the label. Both now sit in the spot's normal flow as flex children: the label shrinks, the
+ * chip sits under it, and they cannot overlap because nothing is out of flow any more.
+ *
+ * The chip is truncated rather than wrapped, per the compact-label rule, and the full figure goes
+ * into the button's accessible name — a truncated number a screen reader cannot recover is a
+ * number the player does not have.
  */
 function paintPools() {
   const mine = mineBySelection();
@@ -522,11 +538,15 @@ function paintPools() {
 
     const own = mine.get(button.dataset.selection) ?? 0n;
     button.dataset.mine = own > 0n ? '1' : '0';
+    const name = labelFor(button.dataset.selection);
     if (own > 0n) {
       const chip = document.createElement('b');
       chip.className = 'roulette__mine';
       chip.textContent = money(Number(own));
       button.append(chip);
+      button.setAttribute('aria-label', `${name} — you have ${money(Number(own))} on this`);
+    } else {
+      button.setAttribute('aria-label', name);
     }
 
     const amount = Number(snapshot.pools?.[button.dataset.selection] || 0);

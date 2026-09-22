@@ -227,7 +227,16 @@
 .roulette__number,
 .roulette__outside button {
   position: relative;
+  /* A column, so the label and the stake are stacked by the layout rather than by one of them
+     being lifted out of flow and told where to sit. The first version absolutely positioned the
+     chip over a centred label, and on a narrow spot the two simply landed on each other. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   min-height: 48px;
+  padding: 5px 4px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 7px;
   color: #f5f5f7;
@@ -239,6 +248,16 @@
     border-color 0.16s,
     transform 0.16s,
     box-shadow 0.16s;
+}
+
+/* The label. `min-width: 0` is the whole point: a flex child will not shrink below its content
+   without it, so "Black" would force the spot wider rather than ellipsing inside it. */
+.roulette__face {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .roulette__number:hover,
@@ -269,64 +288,62 @@
     inset 0 0 16px rgba(255, 212, 0, 0.09);
 }
 
-/* The table's money on a spot. Deliberately small and cornered: it is context, not your position,
-   and it used to be the ONLY figure on the spot — which meant the number a player actually wanted
-   was indistinguishable from everybody else's. */
+/* The table's money on a spot: context, not your position, so it stays out of the way. Moved to
+   the top corner because the bottom of the spot now belongs to the stake chip. */
 .roulette__pool {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  color: rgba(255, 212, 0, 0.62);
+  top: 3px;
+  right: 4px;
+  color: rgba(255, 255, 255, 0.34);
   font:
     600 8px/1 'JetBrains Mono',
     monospace;
-}
-
-/* YOUR money on a spot.
-   A filled chip rather than more small text, because this is the one thing on the board a player
-   scans for mid-round and it has to survive being read at arm's length, at a glance, against a
-   red or black field. Centred under the label so the spot reads as one object: what it is, and
-   what you have on it. */
-.roulette__mine {
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  transform: translateX(-50%);
-  max-width: calc(100% - 8px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffe47a, #ffc400);
-  color: #201500;
-  font:
-    800 10px/1.2 'JetBrains Mono',
-    monospace;
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.45),
-    0 0 12px rgba(255, 196, 0, 0.35);
   pointer-events: none;
 }
 
-/* The spot itself says so too, so a covered number is findable without reading any figure. */
+/* YOUR money on a spot.
+   A solid chip under the label, in flow. Gold on a dark ink fill so it reads at a glance against
+   either a red or a black field without a glow doing the work — a spot that is lit AND carries a
+   bright pill is two signals for one fact, which is what made the first version shout. */
+.roulette__mine {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(10, 8, 2, 0.72);
+  color: #ffd400;
+  font:
+    700 10px/1.4 'JetBrains Mono',
+    monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+/* A straight-up number is 36px wide at its narrowest, and a pill with side padding has nowhere to
+   put a five-character figure inside that. On the number grid the chip drops its fill and becomes
+   plain gold digits — same information, none of the box. Anything that still will not fit ellipses
+   and stays recoverable through the button's accessible name. */
+.roulette__number .roulette__mine {
+  padding: 0;
+  background: none;
+  font-size: 9px;
+}
+
+/* And the spot's own edge says it is covered, so a backed number is findable across the board
+   without reading a single figure. One hairline, not a halo. */
 .roulette__number[data-mine='1'],
 .roulette__outside button[data-mine='1'] {
-  border-color: #ffc400;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 196, 0, 0.45),
-    0 0 14px -4px rgba(255, 196, 0, 0.7);
+  border-color: rgba(255, 212, 0, 0.72);
 }
 
-/* The label lifts to make room for the chip rather than sitting behind it. */
-.roulette__outside button[data-mine='1'] {
-  padding-bottom: 16px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .roulette__mine {
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
-  }
+/* The zero spans three rows on the desktop grid, so its column has room the others do not; the
+   chip is centred in that taller box rather than pinned under the label. */
+.roulette__number--green .roulette__mine {
+  font-size: 10px;
 }
 
 .roulette__outside {

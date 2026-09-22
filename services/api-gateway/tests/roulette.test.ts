@@ -356,5 +356,18 @@ describe('the roulette does not spoil its own spin', () => {
     // The spot itself is marked too, so a covered number is findable without reading a figure.
     assert.match(css, /\.roulette__mine \{/);
     assert.match(css, /\[data-mine='1'\]/);
+
+    /* The chip and the label share the spot's flow. The first version positioned the chip
+     * absolutely over a centred label and the two landed on each other on a narrow spot, which is
+     * the bug this shape exists to make unrepresentable — nothing out of flow cannot overlap. */
+    const chipRule = css.slice(css.indexOf('.roulette__mine {'));
+    const chipBody = chipRule.slice(0, chipRule.indexOf('}'));
+    assert.doesNotMatch(chipBody, /position:\s*absolute/);
+    /* And the label has to be shrinkable, or a flex child refuses to go below its content width
+     * and widens the spot instead of ellipsing inside it. */
+    const faceRule = css.slice(css.indexOf('.roulette__face {'));
+    assert.match(faceRule.slice(0, faceRule.indexOf('}')), /min-width:\s*0/);
+    // The full figure survives truncation through the accessible name.
+    assert.match(source, /you have \$\{money\(Number\(own\)\)\} on this/);
   });
 });
