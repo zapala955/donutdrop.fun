@@ -97,6 +97,12 @@ say "Wrote $secret_file and $auth_dir, owned by uid $bot_uid (the container's us
 # ── 5. add the entry to the credentials JSON ───────────────────────────────
 # Through python rather than sed: this file is JSON the API refuses to start without, and a
 # malformed edit takes the whole site down until somebody notices.
+#
+# ── AND IT MUST STAY ON ONE LINE ───────────────────────────────────────────
+# The API reads this through readSecretFile, which strips a single trailing newline and then
+# rejects any value that still contains one. Pretty-printing it is therefore not a formatting
+# preference, it is an outage: the JSON stays valid, every other tool reads it happily, and the
+# gateway will not boot. This wrote indent=2 once and took the site down with it.
 cp -a "$creds_file" "$creds_file.bak.$(date +%Y%m%d%H%M%S)"
 python3 - "$creds_file" "$vault_id" "$vault_secret" "$ign" <<'PY'
 import json, sys
@@ -110,12 +116,25 @@ if bot_id in creds:
 host = next((v.get('serverHost') for v in creds.values() if isinstance(v, dict)), 'donutsmp.net')
 # Exactly these three keys. The API rejects the whole file if any entry carries a fourth.
 creds[bot_id] = {'secret': secret, 'serverHost': host, 'username': username}
+# Compact, and on one line. See the heading above this block.
+rendered = json.dumps(creds, separators=(',', ':'))
+if '\n' in rendered or '\r' in rendered:
+    raise SystemExit('refusing to write a multi-line credentials file')
 with open(path, 'w', encoding='utf-8') as handle:
-    json.dump(creds, handle, indent=2)
-    handle.write('\n')
+    handle.write(rendered + '\n')
 print('  added %s (%s) alongside %d existing bot(s)' % (username, bot_id, len(creds) - 1))
 PY
-say "Updated $creds_file (backup kept beside it)"
+# ── the same read the API performs, before the API is asked to perform it ──
+# That the JSON parses was never the hard part. The shape contract on top of it -- exactly one
+# non-empty line -- is what the gateway actually enforces, and nothing checked it until the
+# container was already restarting into a crash loop.
+if [[ "$(wc -l <"$creds_file")" -gt 1 ]]; then
+  newest_backup="$(ls -t "$creds_file.bak."* 2>/dev/null | head -n 1)"
+  [[ -n "$newest_backup" ]] && cp -a "$newest_backup" "$creds_file"
+  die "the credentials file came out on more than one line and the API only accepts one.
+  The backup has been restored, so nothing is broken; this is a bug in this script."
+fi
+say "Updated $creds_file (one line, backup kept beside it)"
 
 # ── 6. the environment ─────────────────────────────────────────────────────
 cp -a "$env_file" "$env_file.bak.$(date +%Y%m%d%H%M%S)"
