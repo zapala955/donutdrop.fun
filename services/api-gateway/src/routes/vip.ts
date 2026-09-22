@@ -3,7 +3,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
-import { LADDER, MAX_RATE, RATE_SCALE, progressFor } from '../lib/vip.js';
+import { LADDER, MAX_RATE, RATE_SCALE, levelFor, vipStandingFor } from '../lib/vip.js';
 
 /**
  * The VIP ladder, and where one player stands on it.
@@ -75,37 +75,12 @@ export async function registerVipRoutes(app: FastifyInstance, db: Database, conf
     const accrued = BigInt(accrual.rows[0]?.accrued_minor ?? '0');
     const claimed = BigInt(accrual.rows[0]?.claimed_minor ?? '0');
 
-    const { current, next, ratio, remainingMinor } = progressFor(wagered);
+    const current = levelFor(wagered);
 
     return {
-      wageredMinor: wagered.toString(),
-      maxRatePercent: ratePercent(MAX_RATE),
-      current: {
-        level: current.level,
-        tier: current.tier,
-        tierLabel: current.tierLabel,
-        sub: current.sub,
-        label: current.label,
-        ratePercent: ratePercent(current.rakebackBps),
-        thresholdMinor: current.thresholdMinor.toString(),
-      },
-      next: next
-        ? {
-            level: next.level,
-            tier: next.tier,
-            tierLabel: next.tierLabel,
-            sub: next.sub,
-            label: next.label,
-            ratePercent: ratePercent(next.rakebackBps),
-            thresholdMinor: next.thresholdMinor.toString(),
-          }
-        : null,
-      progress: {
-        ratio,
-        remainingMinor: remainingMinor.toString(),
-        // The gain the next level actually buys, so the client never subtracts two rates itself.
-        rateGainPercent: next ? ratePercent(next.rakebackBps - current.rakebackBps) : 0,
-      },
+      /* The same shape GET /v1/balance returns, from the same function. The header pill is fed by
+       * whichever of the two answers most recently, so the two must not drift. */
+      ...vipStandingFor(wagered),
       rakeback: {
         accruedMinor: accrued.toString(),
         claimedMinor: claimed.toString(),

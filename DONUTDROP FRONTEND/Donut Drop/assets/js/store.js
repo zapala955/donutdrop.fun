@@ -619,6 +619,14 @@ export async function refreshBalance(notify = true) {
   const balance = await api.get('/v1/balance');
   state.balanceMinor = String(balance.balanceMinor || '0');
   state.balance = toSafeNumber(state.balanceMinor);
+  /* The VIP standing rides in on this response, because it changes at exactly the moment the
+   * balance does -- when a wager settles -- and the header pill was otherwise only correct
+   * until the first round of the session.
+   *
+   * MERGED, never assigned. This payload is the standing without the thirty-row ladder or the
+   * accrual figures, which the VIP page reads; overwriting would blank them between page loads.
+   * A key the balance does not carry keeps whatever the last full /v1/vip fetch put there. */
+  if (balance.vip) state.vip = { ...(state.vip || {}), ...balance.vip };
   if (notify) emit('balance');
   return state.balanceMinor;
 }

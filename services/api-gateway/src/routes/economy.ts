@@ -7,6 +7,7 @@ import { canonicalJson, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { vipStandingFor } from '../lib/vip.js';
 import { checkedItemValue, POSTGRES_BIGINT_MAX } from './upgrades.js';
 
 const fixedItemValuePattern = /^[1-9]\d{0,18}$/;
@@ -55,14 +56,34 @@ export async function registerEconomyRoutes(
 ) {
   const guards = createAuthGuards(db, config);
 
+  /**
+   * The balance, and the VIP standing that moves with it.
+   *
+   * The level pill in the header used to update only on a page load, because the standing came
+   * from GET /v1/vip and nothing re-fetched it. It changes at exactly one moment — when a wager
+   * settles — and that is the same moment the balance changes and this endpoint is re-fetched, so
+   * the standing rides along rather than costing a second request per round.
+   *
+   * It is one extra LEFT JOIN on the same primary key, and `vipStandingFor` is pure arithmetic
+   * over the total it returns. The thirty-row ladder and the accrual figures stay on /v1/vip:
+   * the ladder is fixed and the pill does not draw it.
+   */
   app.get('/v1/balance', { preHandler: guards.authenticate }, async (request) => {
-    const result = await db.query<{ balance_minor: string }>(
-      `SELECT COALESCE(w.balance_minor, 0)::bigint AS balance_minor
-         FROM users u LEFT JOIN user_wallets w ON w.user_id = u.id
+    const result = await db.query<{ balance_minor: string; wagered_minor: string }>(
+      `SELECT COALESCE(w.balance_minor, 0)::bigint AS balance_minor,
+              COALESCE(t.wagered_minor, 0)::bigint AS wagered_minor
+         FROM users u
+         LEFT JOIN user_wallets w ON w.user_id = u.id
+         LEFT JOIN user_wager_totals t ON t.user_id = u.id
         WHERE u.id = $1`,
       [request.authUser?.id],
     );
-    return { balanceMinor: result.rows[0]?.balance_minor ?? '0' };
+    const row = result.rows[0];
+    return {
+      balanceMinor: row?.balance_minor ?? '0',
+      // Absent rather than null when the programme is off, so the client leaves the pill hidden.
+      ...(config.vipEnabled ? { vip: vipStandingFor(BigInt(row?.wagered_minor ?? '0')) } : {}),
+    };
   });
 
   app.get(

@@ -200,6 +200,57 @@ export interface VipProgressEvent {
   readonly totalMinor: bigint;
 }
 
+/** Rates are hundredths of a basis point internally; the wire carries percent. */
+export function vipRatePercent(rate: number): number {
+  return rate / Number(RATE_SCALE / 100n);
+}
+
+/**
+ * Where one player stands on the ladder, WITHOUT the ladder itself.
+ *
+ * Split out of GET /v1/vip so GET /v1/balance can return the same shape. The level pill in the
+ * header needs exactly this and nothing else, and it has to be right the instant a wager settles
+ * -- which is the same instant the balance changes. Riding along with the balance is what makes
+ * the pill live without a second request per round.
+ *
+ * A pure function of one number. There is no stored level to go stale: `wagered_minor` is the
+ * only input, and the rate this reports is produced by the same function that priced the
+ * player's last wager.
+ */
+export function vipStandingFor(wageredMinor: bigint) {
+  const { current, next, ratio, remainingMinor } = progressFor(wageredMinor);
+  return {
+    wageredMinor: wageredMinor.toString(),
+    maxRatePercent: vipRatePercent(MAX_RATE),
+    current: {
+      level: current.level,
+      tier: current.tier,
+      tierLabel: current.tierLabel,
+      sub: current.sub,
+      label: current.label,
+      ratePercent: vipRatePercent(current.rakebackBps),
+      thresholdMinor: current.thresholdMinor.toString(),
+    },
+    next: next
+      ? {
+          level: next.level,
+          tier: next.tier,
+          tierLabel: next.tierLabel,
+          sub: next.sub,
+          label: next.label,
+          ratePercent: vipRatePercent(next.rakebackBps),
+          thresholdMinor: next.thresholdMinor.toString(),
+        }
+      : null,
+    progress: {
+      ratio,
+      remainingMinor: remainingMinor.toString(),
+      // The gain the next level actually buys, so the client never subtracts two rates itself.
+      rateGainPercent: next ? vipRatePercent(next.rakebackBps - current.rakebackBps) : 0,
+    },
+  };
+}
+
 /** Progress through the current level toward the next, as a 0-1 ratio and the gap remaining. */
 export function progressFor(wageredMinor: bigint): {
   current: VipLevel;

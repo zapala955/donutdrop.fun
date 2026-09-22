@@ -66,7 +66,8 @@ function paint() {
 
   root.appendChild(headline(data));
   root.appendChild(statCards(data));
-  root.appendChild(matrix(data));
+  // Same reason: the ladder only arrives with the page's own fetch, which is already in flight.
+  if (data.levels) root.appendChild(matrix(data));
 }
 
 function notice(message) {
@@ -127,7 +128,14 @@ function statCards(data) {
       data.next ? money(Number(data.progress.remainingMinor)) : '—',
       null,
     ],
-    ['VIP rakeback ready', money(Number(data.rakeback.claimableMinor)), 'gold'],
+    /* The balance response carries the standing but not the accrual, so between a wager and this
+     * page's own fetch `rakeback` is simply not there yet. An em dash says "not known" where a
+     * zero would say "nothing owed", and those are very different sentences about money. */
+    [
+      'VIP rakeback ready',
+      data.rakeback ? money(Number(data.rakeback.claimableMinor)) : '—',
+      'gold',
+    ],
   ];
   for (const [label, value, tone] of cells) {
     const cell = el('div', 'vip__stat');

@@ -61,17 +61,33 @@ export function parseAmount(input) {
 }
 
 /* The inverse: the shortest string that parseAmount turns back into this exact number, so a field
- * can be re-rendered as "1.5m" without the value drifting on the round trip. */
+ * can be re-rendered as "1.5m" without the value drifting on the round trip.
+ *
+ * ONLY THE LARGEST UNIT THAT APPLIES IS CONSIDERED, and that is the whole fix here.
+ *
+ * This used to walk t → b → m → k and take the first unit that could express the value in at most
+ * two decimal places. A balance of 100,101,500 is not two decimals of a million, so it fell
+ * through to thousands and Max filled the field with "100101.5k" — an exact, round-tripping,
+ * completely unreadable rendering of a hundred million. A figure is only ever shown in the unit
+ * it actually belongs to; if that unit cannot carry it, the plain digits are the honest answer.
+ *
+ * The decimal limit is gone with it. parseAmount takes any number of decimal places, so
+ * "100.1015m" survives the trip exactly, and the round trip is asserted here rather than assumed.
+ * Shortest still wins on a tie-break against the plain digits, so 1234 stays 1234 rather than
+ * becoming a longer "1.234k". */
 export function formatAmountInput(value) {
   const n = Math.trunc(Number(value) || 0);
   if (n <= 0) return '0';
+  const plain = String(n);
   for (const [suffix, scale] of [['t', 1e12], ['b', 1e9], ['m', 1e6], ['k', 1e3]]) {
-    if (n >= scale && n % (scale / 100) === 0) {
-      const scaled = n / scale;
-      return (Number.isInteger(scaled) ? String(scaled) : scaled.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + suffix;
-    }
+    if (n < scale) continue;
+    const candidate = String(n / scale) + suffix;
+    /* Verified, not trusted: dividing and re-multiplying by a power of ten is exact for every
+     * value this field can hold, but the check costs nothing and a stake that drifted by a unit
+     * between the box and the button is not a bug anybody would enjoy finding later. */
+    return parseAmount(candidate) === n && candidate.length <= plain.length ? candidate : plain;
   }
-  return String(n);
+  return plain;
 }
 
 export const pct = (x, d = 1) => (x * 100).toFixed(d) + '%';
