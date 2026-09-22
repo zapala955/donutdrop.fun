@@ -640,6 +640,13 @@ const environmentSchema = z
      * the teller's transfer to the player. It exists so the two do not land back to back in the
      * server's own chat log, where the pairing would be obvious to anybody watching it. */
     TELLER_FLOAT_TARGET_MINOR: nonNegativeBigintString.default('0'),
+    /* What the teller is allowed to accumulate before it is emptied down to the float.
+     *
+     * A threshold rather than a continuous trickle: sweeping on every deposit would put an
+     * in-game /pay behind each one, and the public account is only worth emptying once there is
+     * something on it worth taking. At the default the teller may hold up to $50M, and crossing
+     * that sends everything above the float across in one transfer. */
+    TELLER_SWEEP_THRESHOLD_MINOR: nonNegativeBigintString.default('50000000'),
     WITHDRAWAL_HOP_DELAY_SECONDS: z.coerce.number().int().min(0).max(300).default(3),
     MINECRAFT_TRANSFERS_ENABLED: booleanString,
     // Website-only items mean the bot custodies nothing for players, so its real Minecraft
@@ -1104,6 +1111,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     devLoginToken: env.DEV_LOGIN_TOKEN,
     devLoginBalanceMinor: BigInt(env.DEV_LOGIN_BALANCE_MINOR),
     tellerFloatTargetMinor: BigInt(env.TELLER_FLOAT_TARGET_MINOR),
+    tellerSweepThresholdMinor: BigInt(env.TELLER_SWEEP_THRESHOLD_MINOR),
     withdrawalHopDelaySeconds: env.WITHDRAWAL_HOP_DELAY_SECONDS,
     minecraftTransfersEnabled: env.MINECRAFT_TRANSFERS_ENABLED,
     physicalCustodyEnabled: env.PHYSICAL_CUSTODY_ENABLED,

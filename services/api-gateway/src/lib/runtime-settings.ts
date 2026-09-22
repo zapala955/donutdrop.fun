@@ -395,7 +395,16 @@ export const runtimeSettingDefinitions = {
   tellerFloatTargetMinor: {
     kind: 'bigint',
     group: 'bots',
-    label: 'Teller float (swept above this)',
+    label: 'Teller float (swept down to this)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  /* The teller is emptied once it is holding this much, not continuously. Below it nothing
+   * moves, which keeps one in-game transfer from riding behind every single deposit. */
+  tellerSweepThresholdMinor: {
+    kind: 'bigint',
+    group: 'bots',
+    label: 'Sweep the teller once it holds this much',
     min: 0n,
     max: BIGINT_MAX,
   },

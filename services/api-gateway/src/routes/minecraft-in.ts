@@ -530,9 +530,20 @@ export async function registerMinecraftInternalRoutes(
         /* A bot that cannot move items is still offered the work that does not involve any.
          * Item jobs stay invisible to it rather than being claimed and failed, which would burn
          * the attempt budget and dead-letter a withdrawal the bot was never able to service. */
+        /* vault_sweep and vault_release belong in this list for exactly the reason the
+         * comment above gives. They move a number through the server's own /pay and never open
+         * an inventory, so holding them to item capability -- a matched reconciliation, a fresh
+         * snapshot, the transfer flag -- made them invisible on every deployment that has
+         * physical transfers switched off, which is all of them. A vault release sat queued and
+         * due while the vault polled past it every two seconds, and the withdrawal behind it
+         * waited forever with nothing logged at either end.
+         *
+         * The completion path in processJobResult already treats these two as cash-only. This is
+         * the same judgement, on the side that hands the work out. */
         `SELECT id, kind, reference_id, payload FROM bot_jobs
           WHERE bot_id = $1 AND attempts < 5 AND available_at <= now() AND status = 'queued'
-            AND (kind IN ('cash_payout', 'admin_payout', 'reconnect') OR $2::boolean)
+            AND (kind IN ('cash_payout', 'admin_payout', 'reconnect', 'vault_sweep', 'vault_release')
+                 OR $2::boolean)
           ORDER BY available_at, created_at FOR UPDATE SKIP LOCKED LIMIT 1`,
         [body.botId, capability.item_capable],
       );

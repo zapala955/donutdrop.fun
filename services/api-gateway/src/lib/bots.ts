@@ -209,6 +209,14 @@ export async function queueVaultSweep(
   client: DbClient,
   config: AppConfig,
   teller: { id: string; username: string },
+  /* What the teller is really holding, when the caller knows.
+   *
+   * The tracked figure only counts what has moved THROUGH the site since the ledger started, so
+   * on an account that already held money it reads zero beside millions. The background sweeper
+   * reads the real balance from DonutSMP and passes it here; callers inside a request
+   * transaction leave it out and the tracked figure is used, which is the conservative
+   * direction -- it under-sweeps rather than asking for money that is not there. */
+  availableMinor?: bigint,
 ): Promise<void> {
   const vault = await findVaultBot(client, config);
   // No vault provisioned: this is a teller-only deployment and there is nowhere to sweep to.
@@ -221,14 +229,22 @@ export async function queueVaultSweep(
   );
   if (existing.rowCount) return;
 
-  const balance = await client.query<{ tracked_balance_minor: string }>(
-    'SELECT tracked_balance_minor FROM bot_accounts WHERE id = $1 FOR UPDATE',
-    [teller.id],
-  );
-  const held = BigInt(balance.rows[0]?.tracked_balance_minor ?? '0');
+  let held = availableMinor;
+  if (held === undefined) {
+    const balance = await client.query<{ tracked_balance_minor: string }>(
+      'SELECT tracked_balance_minor FROM bot_accounts WHERE id = $1 FOR UPDATE',
+      [teller.id],
+    );
+    held = BigInt(balance.rows[0]?.tracked_balance_minor ?? '0');
+  }
+
+  /* A threshold, not a trickle. Below it nothing moves, so an in-game transfer does not ride
+   * behind every single deposit; above it the account is emptied in one go. */
+  if (held < config.tellerSweepThresholdMinor) return;
+
   const excess = held - config.tellerFloatTargetMinor;
-  /* Nothing above the float, nothing to do. Also the guard against a negative tracked balance
-   * producing a "sweep" that would ask the teller to pay a negative amount. */
+  /* Nothing above the float, nothing to do. Also the guard against a negative balance producing
+   * a "sweep" that would ask the teller to pay a negative amount. */
   if (excess <= 0n) return;
 
   const reference = randomUUID();

@@ -43,6 +43,7 @@ import { registerSocialRoutes } from './routes/social.js';
 import { registerRewardRoutes } from './routes/rewards.js';
 import { registerRouletteRoutes } from './routes/roulette.js';
 import { registerVipRoutes } from './routes/vip.js';
+import { startTellerSweeper } from './lib/teller-sweeper.js';
 import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
 import { registerUpgradeRoutes } from './routes/upgrades.js';
@@ -292,7 +293,14 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
     return send(500, errorBody('INTERNAL_ERROR', 'An internal error occurred'));
   });
 
+  /* Empties the teller into the vault once it is holding enough to be worth taking. A timer
+   * rather than part of the deposit path, because the decision needs the bot's real in-game
+   * balance and that is an HTTP call -- see lib/teller-sweeper.ts. Started only where a real
+   * Database is in play; the unit tests inject doubles that cannot answer it. */
+  const stopTellerSweeper = suppliedDatabase ? undefined : startTellerSweeper(db, config, app.log);
+
   app.addHook('onClose', async () => {
+    stopTellerSweeper?.();
     await db.close();
     if (redis) await redis.quit();
   });

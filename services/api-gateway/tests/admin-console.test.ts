@@ -223,10 +223,23 @@ describe('bot reconnect', () => {
     /* None of the non-item kinds opens the inventory, so none is gated on item capability — the
      * bug this mirrors left a queued payout indistinguishable from an empty queue. */
     const source = await routes('minecraft-in');
-    assert.match(
-      source,
-      /AND \(kind IN \('cash_payout', 'admin_payout', 'reconnect'\) OR \$2::boolean\)/,
+    /* Membership rather than the exact string: the list grows -- vault_sweep and vault_release
+     * joined it -- and pinning its spelling turned every legitimate addition into a failure that
+     * said nothing about whether the rule still held. What must stay true is that each non-item
+     * kind is claimable without item capability, and that the gate itself is still there. */
+    const predicate = source.slice(
+      source.indexOf('SELECT id, kind, reference_id, payload FROM bot_jobs'),
     );
+    const claimable = predicate.slice(0, predicate.indexOf('ORDER BY'));
+    for (const kind of ['cash_payout', 'admin_payout', 'reconnect']) {
+      assert.ok(claimable.includes(`'${kind}'`), `${kind} is gated on item capability`);
+    }
+    // The gate still exists: an item job is offered only to a bot that can move items.
+    assert.ok(claimable.includes('$2::boolean'));
+    // And nothing that opens an inventory has been let onto the list.
+    for (const kind of ['withdrawal', 'inventory_resync']) {
+      assert.ok(!claimable.includes(`'${kind}'`), `${kind} opens the inventory and must stay gated`);
+    }
   });
 });
 
