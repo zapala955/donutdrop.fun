@@ -6,7 +6,13 @@ import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { liveEvents } from '../lib/live-events.js';
 import { isValidCurve, settleRace } from '../lib/rewards.js';
+import {
+  RuntimeSettings,
+  runtimeSettingKeys,
+  type RuntimeSettingKey,
+} from '../lib/runtime-settings.js';
 import { safeText } from '../lib/sanitize.js';
 import { parseWith } from '../lib/validation.js';
 import { refundWithdrawal } from './cash-withdrawals.js';
@@ -123,6 +129,22 @@ const questUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
+const runtimeSettingsUpdateSchema = z
+  .object({
+    settings: z.record(z.string(), z.union([z.boolean(), z.number(), z.string()])),
+    reason: safeText(3, 256),
+  })
+  .strict()
+  .refine((value) => Object.keys(value.settings).length > 0, {
+    path: ['settings'],
+    message: 'Choose at least one setting',
+  });
+const runtimeSettingsResetSchema = z
+  .object({
+    keys: z.array(z.enum(runtimeSettingKeys as [RuntimeSettingKey, ...RuntimeSettingKey[]])).min(1),
+    reason: safeText(3, 256),
+  })
+  .strict();
 
 interface EntityRow {
   [column: string]: unknown;
@@ -140,6 +162,7 @@ export async function registerAdminOperationRoutes(
   app: FastifyInstance,
   db: Database,
   config: AppConfig,
+  runtimeSettings = new RuntimeSettings(config),
 ) {
   const guards = createAuthGuards(db, config);
   const requireAdminRead = async (request: Parameters<typeof guards.authenticate>[0]) => {
@@ -682,8 +705,9 @@ export async function registerAdminOperationRoutes(
   });
 
   app.get('/v1/admin/system-config', { preHandler: requireAdminRead }, async () => ({
-    restartRequired: true,
-    note: 'Security and economic trust roots are managed in the VPS environment and require a controlled restart.',
+    restartRequired: false,
+    note: 'Operational controls apply immediately. Security keys, custody credentials and game outcome maths remain deployment-only.',
+    runtimeSettings: runtimeSettings.rows(),
     config: {
       environment: config.environment,
       appOrigin: config.appOrigin,
@@ -693,34 +717,87 @@ export async function registerAdminOperationRoutes(
       minMultiplierBps: config.minMultiplierBps,
       maxMultiplierBps: config.maxMultiplierBps,
       maxWinChancePpm: config.maxWinChancePpm,
-      upgradeMaxStakeMinor: config.upgradeMaxStakeMinor.toString(),
-      rouletteEnabled: config.rouletteEnabled,
-      rouletteRoundSeconds: config.rouletteRoundSeconds,
-      rouletteSpinSeconds: config.rouletteSpinSeconds,
-      rouletteMinStakeMinor: config.rouletteMinStakeMinor.toString(),
-      rouletteMaxStakeMinor: config.rouletteMaxStakeMinor.toString(),
       houseStockUnlimited: config.houseStockUnlimited,
       cashOnlyPlay: config.cashOnlyPlay,
       minecraftTransfersEnabled: config.minecraftTransfersEnabled,
       physicalCustodyEnabled: config.physicalCustodyEnabled,
-      chatEnabled: config.chatEnabled,
-      chatSlowModeSeconds: config.chatSlowModeSeconds,
-      vipEnabled: config.vipEnabled,
-      rakebackEnabled: config.rakebackEnabled,
-      skillDuelEnabled: config.skillDuelEnabled,
-      vaultJackpotEnabled: config.vaultJackpotEnabled,
-      lavaRainEnabled: config.lavaRainEnabled,
-      tipsEnabled: config.tipsEnabled,
-      sideBetsEnabled: config.sideBetsEnabled,
-      racesEnabled: config.racesEnabled,
-      creatorProgrammeEnabled: config.creatorProgrammeEnabled,
-      referralsEnabled: config.referralsEnabled,
       discordControlEnabled: config.discordControlEnabled,
       turnstileEnabled: config.turnstileEnabled,
       adminCount: config.adminMinecraftIds.size,
       provisionedBotCount: config.botCredentials.size,
     },
   }));
+
+  app.patch(
+    '/v1/admin/runtime-settings',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const body = parseWith(runtimeSettingsUpdateSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      const parsed = runtimeSettings.validate(body.settings);
+      await db.transaction(async (client) => {
+        for (const [key, value] of parsed) {
+          await client.query(
+            `INSERT INTO runtime_settings(key, value, updated_by, updated_at)
+             VALUES ($1, $2::jsonb, $3, now())
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
+               updated_by = EXCLUDED.updated_by, updated_at = now()`,
+            [key, JSON.stringify(RuntimeSettings.databaseValue(value)), actor],
+          );
+        }
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'runtime_settings.update',
+          targetType: 'runtime_settings',
+          targetId: [...parsed.keys()].join(','),
+          details: {
+            reason: body.reason,
+            settings: Object.fromEntries(
+              [...parsed].map(([key, value]) => [key, RuntimeSettings.databaseValue(value)]),
+            ),
+          },
+        });
+      });
+      runtimeSettings.apply(parsed, actor);
+      liveEvents.publish('settings');
+      if (parsed.has('roulettePaused') || parsed.has('rouletteEnabled')) {
+        liveEvents.publish('roulette');
+      }
+      if (parsed.has('chatEnabled') || parsed.has('chatSlowModeSeconds')) {
+        liveEvents.publish('chat');
+      }
+      return { settings: runtimeSettings.rows() };
+    },
+  );
+
+  app.post(
+    '/v1/admin/runtime-settings/reset',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const body = parseWith(runtimeSettingsResetSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      const keys = [...new Set(body.keys)];
+      await db.transaction(async (client) => {
+        await client.query('DELETE FROM runtime_settings WHERE key = ANY($1::text[])', [keys]);
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'runtime_settings.reset',
+          targetType: 'runtime_settings',
+          targetId: keys.join(','),
+          details: { reason: body.reason, keys },
+        });
+      });
+      runtimeSettings.reset(keys);
+      liveEvents.publish('settings');
+      if (keys.includes('roulettePaused') || keys.includes('rouletteEnabled')) {
+        liveEvents.publish('roulette');
+      }
+      if (keys.includes('chatEnabled') || keys.includes('chatSlowModeSeconds')) {
+        liveEvents.publish('chat');
+      }
+      return { settings: runtimeSettings.rows() };
+    },
+  );
 }
 
 function validateRace(

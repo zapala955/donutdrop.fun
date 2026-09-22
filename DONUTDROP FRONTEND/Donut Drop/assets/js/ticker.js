@@ -27,7 +27,8 @@ import { state, bus, refreshActivity } from './store.js';
 import { $, el } from './util.js';
 import { API_BASE_URL } from './api.js';
 
-const REFRESH_MS = 8000;
+// Recovery-only fallback; normal updates are pushed by the shared live-event stream.
+const REFRESH_MS = 30_000;
 const MAX_ROWS = 40;
 
 /* Hex colours arrive from the factions table. The DB constrains the format, but a value that
@@ -62,8 +63,8 @@ export function initTicker(mount) {
     if (['activity', 'ready', 'case-open', 'upgrade'].includes(event.detail)) paint();
   });
 
-  /* Polled, because the backend has no realtime channel. Paused while the tab is hidden so a
-   * backgrounded page stops asking. */
+  /* A slow recovery poll remains in case a browser or intermediary cannot hold the live stream.
+   * The normal path is event-driven and makes no request while the feed is idle. */
   const tick = () => {
     if (document.visibilityState !== 'visible') return;
     refreshActivity().catch(() => undefined);

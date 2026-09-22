@@ -7,7 +7,7 @@ export interface AuthUser {
   minecraftIdentity: string;
   minecraftUsername: string;
   role: 'player' | 'admin';
-  status: 'pending_compliance' | 'active' | 'suspended' | 'self_excluded' | 'closed';
+  status: 'active' | 'suspended' | 'closed';
   csrfHash: Buffer;
 }
 

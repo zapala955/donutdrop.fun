@@ -464,6 +464,18 @@ const environmentSchema = z
     ROULETTE_SPIN_SECONDS: z.coerce.number().int().min(1).max(10).default(3),
     ROULETTE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     ROULETTE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    /* The table limit: everything one player may have riding on a single spin, across every chip
+     * they have placed on it.
+     *
+     * This is a SEPARATE ceiling from ROULETTE_MAX_STAKE_MINOR, which bounds one chip. Without it
+     * the per-chip cap is not a limit at all — a player can place it again, and again, because
+     * every chip is a fresh request that passes the same check in isolation.
+     *
+     * It bounds STAKE, not the house's exposure, and those are very different numbers on this
+     * game. $5B spread across red and black is a player risking almost nothing; $5B on one number
+     * is a $166B liability at the configured edge. The admin table prints the per-pocket liability
+     * for exactly that reason, and this figure should be read with it rather than instead of it. */
+    ROULETTE_MAX_ROUND_STAKE_MINOR: positiveBigintString.default('5000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -721,6 +733,20 @@ const environmentSchema = z
         code: 'custom',
         path: ['ROULETTE_MAX_STAKE_MINOR'],
         message: 'must be at least ROULETTE_MIN_STAKE_MINOR',
+      });
+    }
+    /* A round limit under the chip limit makes the chip limit unreachable: the first chip at the
+     * advertised maximum would be refused by a ceiling the player was never shown. Whichever way
+     * round an operator meant it, one of the two figures is then a lie, so the process refuses the
+     * pair rather than picking one. */
+    if (
+      env.ROULETTE_ENABLED &&
+      BigInt(env.ROULETTE_MAX_ROUND_STAKE_MINOR) < BigInt(env.ROULETTE_MAX_STAKE_MINOR)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ROULETTE_MAX_ROUND_STAKE_MINOR'],
+        message: 'must be at least ROULETTE_MAX_STAKE_MINOR: a round limit below the chip limit makes the chip limit unreachable',
       });
     }
     /* A rake that rounds to nothing on the smallest legal duel is a free mode. Integer division
@@ -1050,6 +1076,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     rouletteSpinSeconds: env.ROULETTE_SPIN_SECONDS,
     rouletteMinStakeMinor: BigInt(env.ROULETTE_MIN_STAKE_MINOR),
     rouletteMaxStakeMinor: BigInt(env.ROULETTE_MAX_STAKE_MINOR),
+    rouletteMaxRoundStakeMinor: BigInt(env.ROULETTE_MAX_ROUND_STAKE_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

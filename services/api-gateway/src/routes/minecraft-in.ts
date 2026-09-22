@@ -711,8 +711,7 @@ async function processDeposit(
   >(
     `SELECT d.id, d.user_id, d.bot_id, d.status AS deposit_status, d.expires_at,
             u.normalized_username, u.minecraft_identity, u.status,
-            u.country_code, u.terms_accepted_at,
-            u.age_verified_at, u.kyc_status, r.cooldown_until, r.self_excluded_until,
+            u.terms_accepted_at,
             b.status AS bot_status, b.reconciliation_status,
             b.transfer_capable, b.last_heartbeat_at, b.last_snapshot_at,
             lease.authorization_event_id AS lease_id, lease.bot_id AS lease_bot_id,

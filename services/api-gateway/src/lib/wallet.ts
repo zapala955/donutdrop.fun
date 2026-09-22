@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DbClient } from './db.js';
+import { publishLiveSoon } from './live-events.js';
 
 /**
  * The cash ledger, on its own.
@@ -94,5 +95,9 @@ export async function creditWallet(
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [randomUUID(), userId, amountMinor.toString(), balanceAfter, kind, referenceId],
   );
+  // The caller still owns the transaction. Delay the invalidation by one event-loop turn so the
+  // browser cannot race the COMMIT and read the old balance; a harmless refresh is the worst case
+  // if the surrounding transaction subsequently rolls back.
+  publishLiveSoon('balance', [userId]);
   return balanceAfter;
 }

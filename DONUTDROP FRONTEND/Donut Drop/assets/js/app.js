@@ -43,6 +43,7 @@ import { mountHero3d } from './hero3d.js';
 import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
+import { initLiveEvents } from './live.js';
 import {
   currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1165,13 +1166,14 @@ captureReferralCode();
 if (pendingReferralCode() && !state.authenticated) {
   openLoginModal();
 }
+initLiveEvents();
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;
   const refreshes = [refreshActivity()];
   if (state.authenticated) refreshes.push(refreshBalance());
   Promise.allSettled(refreshes).catch(() => undefined);
-}, 15_000);
+}, 60_000);
 
 /* Deposits land while the player is staring at the page waiting for them, so they get their own
  * beat rather than sharing the slow one above. Six seconds is the same cadence the chat rail

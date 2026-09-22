@@ -33,7 +33,8 @@ import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, API_BASE_URL } from './api.js';
 
-const POLL_MS = 6000;
+// Recovery-only fallback. New messages arrive over /v1/live while the connection is healthy.
+const POLL_MS = 30_000;
 const RAIN_POLL_MS = 8000;
 const MAX_LINES = 60;
 const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);

@@ -10,9 +10,19 @@ const ORDER = Object.freeze([
   31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ]);
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-// The local clock still paints at 10 fps. Only canonical round state needs the network, and this
-// cadence keeps roulette plus the shell's chat/feed/deposit polls inside the shared API budget.
-const POLL_MS = 1_250;
+// Live invalidations are the normal path. A slow poll repairs missed events; old browsers without
+// EventSource use a faster fallback and are still subject to the freshness lock below.
+const LIVE_SUPPORTED = 'EventSource' in window;
+const POLL_MS = LIVE_SUPPORTED ? 15_000 : 2_500;
+const LIVE_STALE_MS = 6_000;
+/* The floor on how long a snapshot stays trustworthy without the event stream.
+ *
+ * It has to cover the longest gap the deadline chain can leave, which is a whole betting window:
+ * the client refreshes when the round opens and again when it closes, and nothing happens in
+ * between because nothing CAN happen in between. A fixed 4.5s here locked betting four seconds
+ * into every ten-second round on any browser whose event stream was not delivering. The real
+ * window is read from the round the server published. */
+const POLL_STALE_FLOOR_MS = 4_500;
 const CHIPS = Object.freeze([
   [100_000n, '$100K'],
   [500_000n, '$500K'],
@@ -46,6 +56,9 @@ let placing = false;
 let seenResultId = null;
 let pendingResultId = null;
 let wheelRotation = 0;
+let lastSuccessfulSyncMs = 0;
+let lastLivePulseMs = 0;
+let deadlineTimer = null;
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -57,6 +70,15 @@ export function mountRoulette(view) {
       if (!view.hidden) void refresh();
     }, POLL_MS);
     window.setInterval(paintClock, 100);
+    window.addEventListener('donut:roulette', () => {
+      if (!view.hidden) void refresh();
+    });
+    window.addEventListener('donut:live-status', (event) => {
+      if (event.detail?.connected) lastLivePulseMs = Number(event.detail.at) || Date.now();
+      else if (event.detail?.supported !== false) lastLivePulseMs = 0;
+      paintClock();
+      if (event.detail?.connected && !view.hidden) void refresh();
+    });
   }
   void refresh();
 }
@@ -210,16 +232,36 @@ function syncSelection() {
   paintControls();
 }
 
+/** Everything this player already has riding on the open round. */
+function roundStakedMinor() {
+  return (snapshot?.yourBets || []).reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
+}
+
+/** What is left of the table limit, floored at zero. */
+function roundAllowanceMinor() {
+  const cap = BigInt(snapshot?.config?.maxRoundStakeMinor || '0');
+  if (cap <= 0n) return null;
+  const left = cap - roundStakedMinor();
+  return left > 0n ? left : 0n;
+}
+
 function paintControls() {
   const min = BigInt(snapshot?.config?.minStakeMinor || '0');
   const max = BigInt(snapshot?.config?.maxStakeMinor || '0');
-  const tableLocked = placing || !isBettingOpen() || !state.authenticated;
+  const allowance = roundAllowanceMinor();
+  /* At the table limit the whole board goes dead, not just the chips. A layout that leaves the
+     numbers pressable and answers every one of them with the same refusal is a board that looks
+     broken; the player has not done anything wrong, they have finished betting this spin. */
+  const atLimit = allowance !== null && allowance < min;
+  const tableLocked = placing || !isBettingOpen() || !state.authenticated || atLimit;
   root.querySelectorAll('[data-selection]').forEach((button) => {
     button.disabled = tableLocked;
   });
   root.querySelectorAll('[data-chip]').forEach((button) => {
     const value = BigInt(button.dataset.chip);
-    const inLimits = value >= min && value <= max;
+    /* A chip is offered only if it would still fit. The server decides, under a lock; this is
+       here so the limit is visible before it is hit rather than arriving as a rejection. */
+    const inLimits = value >= min && value <= max && (allowance === null || value <= allowance);
     button.disabled = placing || !snapshot || !inLimits;
     button.classList.toggle('is-selected', value === amountMinor);
     button.setAttribute('aria-pressed', value === amountMinor ? 'true' : 'false');
@@ -241,7 +283,66 @@ function remainingMs() {
 }
 
 function isBettingOpen() {
-  return Boolean(snapshot) && untilOpenMs() <= 0 && remainingMs() > 0;
+  return Boolean(snapshot?.round) && connectionFresh() && untilOpenMs() <= 0 && remainingMs() > 0;
+}
+
+/**
+ * Whether this page is current enough to bet from.
+ *
+ * EITHER source counts. This used to trust only the event stream whenever the browser HAD an
+ * EventSource, which meant a stream that connected and then stopped delivering left
+ * `lastLivePulseMs` stale forever — betting locked, permanently, on a page that was refreshing
+ * perfectly well over HTTP. A transport nobody can see failing is not a reason to refuse a player
+ * who is looking at a live snapshot.
+ *
+ * Leaning permissive is the safe direction here: the server re-checks the round under a lock and
+ * answers a late chip with ROUND_CLOSED, so being too generous costs one rejected bet, while being
+ * too strict costs the whole game.
+ */
+function connectionFresh() {
+  if (!lastSuccessfulSyncMs) return false;
+  const liveFresh = lastLivePulseMs > 0 && Date.now() - lastLivePulseMs <= LIVE_STALE_MS;
+  const window = Math.max(
+    POLL_STALE_FLOOR_MS,
+    (Number(snapshot?.config?.roundSeconds || 0) + Number(snapshot?.config?.spinSeconds || 0)) *
+      1000 +
+      3_000,
+  );
+  const pollFresh = Date.now() - lastSuccessfulSyncMs <= window;
+  return liveFresh || pollFresh;
+}
+
+/**
+ * Refresh exactly when the table is next due to change, rather than hoping a poll lands on it.
+ *
+ * The round carries its own two deadlines, so the client already knows when the wheel starts and
+ * when betting closes. Waiting for a blind interval to rediscover that is how a 15-second poll
+ * ended up slower than a 13-second round: miss one live event and the page sits on SETTLING until
+ * something else happens to fetch.
+ *
+ * Two timed requests per round replaces both the old 1.25s poll and the dependence on the event
+ * stream — fewer requests than either, and correct on its own if the stream never delivers. Live
+ * events still arrive first when they work; this is what makes them an optimisation rather than a
+ * requirement.
+ */
+function scheduleDeadlineRefresh() {
+  window.clearTimeout(deadlineTimer);
+  if (!root?.isConnected) return;
+  const untilOpen = untilOpenMs();
+  const untilClose = remainingMs();
+  /* +250ms so the request lands just AFTER the server's own boundary rather than racing it into
+     an answer that still shows the old round. A rollover in progress retries once a second, which
+     is self-limiting: it stops the moment the next round exists. */
+  const delay = !snapshot?.round
+    ? 5_000
+    : untilOpen > 0
+      ? untilOpen + 250
+      : untilClose > 0
+        ? untilClose + 250
+        : 1_000;
+  deadlineTimer = window.setTimeout(() => {
+    void refresh();
+  }, Math.max(250, Math.min(delay, 30_000)));
 }
 
 function paintPhase() {
@@ -249,6 +350,16 @@ function paintPhase() {
   if (!phase) return;
   if (!snapshot) {
     phase.textContent = 'Connecting to the table…';
+    return;
+  }
+  if (!connectionFresh()) {
+    phase.textContent = 'Reconnecting… bets are locked';
+    return;
+  }
+  if (!snapshot.round) {
+    phase.textContent = snapshot.config?.paused
+      ? 'Table paused after the last round'
+      : 'Preparing the next round…';
     return;
   }
   if (untilOpenMs() > 0) {
@@ -273,15 +384,29 @@ function paintClock() {
   const untilOpen = Math.max(0, untilOpenMs());
   const remaining = Math.max(0, remainingMs());
   const spinning = Boolean(snapshot) && untilOpen > 0;
+  const stale = Boolean(snapshot) && !connectionFresh();
   const clock = $('#rouletteClock', root);
   if (clock) {
-    clock.textContent = spinning
-      ? 'SPINNING'
-      : remaining > 0
-        ? `${(remaining / 1000).toFixed(1)}s`
-        : 'SETTLING';
+    clock.textContent = stale
+      ? 'RECONNECTING'
+      : !snapshot?.round && snapshot?.config?.paused
+        ? 'PAUSED'
+        : spinning
+          ? 'SPINNING'
+          : remaining > 0
+            ? `${(remaining / 1000).toFixed(1)}s`
+            : 'SETTLING';
   }
-  root.dataset.phase = spinning ? 'spinning' : remaining > 0 ? 'betting' : 'settling';
+  root.dataset.phase = stale
+    ? 'reconnecting'
+    : !snapshot?.round
+      ? 'paused'
+      : spinning
+        ? 'spinning'
+        : remaining > 0
+          ? 'betting'
+          : 'settling';
+  root.dataset.connection = stale ? 'stale' : 'live';
   root.classList.toggle('is-locked', !isBettingOpen());
   paintPhase();
   paintControls();
@@ -293,6 +418,7 @@ async function refresh() {
   try {
     const next = await api.get('/v1/roulette');
     const receivedAt = Date.now();
+    lastSuccessfulSyncMs = receivedAt;
     serverOffsetMs = Date.parse(next.serverTime) - receivedAt;
     const newest = next.history?.[0];
     const spinInProgress = Date.parse(next.round?.opensAt || '') > Date.now() + serverOffsetMs;
@@ -305,10 +431,21 @@ async function refresh() {
     if (shouldSpin) pendingResultId = newest.id;
     snapshot = next;
     paint();
-    if (shouldSpin) spinTo(newest.result, next.yourPreviousBets || [], next.round.opensAt);
+    if (shouldSpin) {
+      const spinEndsAt =
+        next.round?.opensAt ||
+        new Date(Date.parse(next.serverTime) + Number(next.config?.spinSeconds || 0) * 1000).toISOString();
+      spinTo(newest.result, next.yourPreviousBets || [], spinEndsAt);
+    }
     else if (newest?.result != null && wheelRotation === 0) setWheel(newest.result);
+    scheduleDeadlineRefresh();
   } catch (error) {
-    if (!snapshot) root.dataset.error = '1';
+    root.dataset.error = '1';
+    lastLivePulseMs = 0;
+    paintClock();
+    /* A failed fetch still has to come back. Without this the deadline chain ends on the first
+       blip and the table never recovers on its own. */
+    scheduleDeadlineRefresh();
   } finally {
     polling = false;
   }
@@ -317,11 +454,15 @@ async function refresh() {
 function paint() {
   root.dataset.error = '';
   const config = snapshot.config;
-  $('#rouletteRound', root).textContent = snapshot.round.id;
-  $('#rouletteCommit', root).textContent = snapshot.round.serverSeedHash;
+  $('#rouletteRound', root).textContent = snapshot.round?.id || 'Paused';
+  $('#rouletteCommit', root).textContent = snapshot.round?.serverSeedHash || '—';
   $('#rouletteEdge', root).textContent = `${(config.houseEdgeBps / 100).toFixed(2)}%`;
   $('#rouletteLimits', root).textContent =
-    `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max · ${config.spinSeconds}s spin then ${config.roundSeconds}s betting`;
+    `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max per chip`
+    + (config.maxRoundStakeMinor
+      ? ` · ${money(Number(config.maxRoundStakeMinor))} table limit per spin`
+      : '')
+    + ` · ${config.spinSeconds}s spin then ${config.roundSeconds}s betting`;
 
   paintHistory();
 
@@ -388,8 +529,15 @@ function paintBets() {
       host.append(row);
     }
   }
-  const total = bets.reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
-  $('#rouletteMineTotal', root).textContent = money(Number(total));
+  /* The total, and what is left of the table limit beside it. A running total on its own answers
+     "how much am I in for"; the pair answers "can I place another chip", which is the question
+     somebody looking at this line is actually asking. */
+  const total = roundStakedMinor();
+  const allowance = roundAllowanceMinor();
+  $('#rouletteMineTotal', root).textContent =
+    allowance === null
+      ? money(Number(total))
+      : `${money(Number(total))} · ${money(Number(allowance))} left`;
 }
 
 function paintPublicBets() {

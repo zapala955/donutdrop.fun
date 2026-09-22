@@ -1,0 +1,30 @@
+name: production-uptime
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      ALERT_WEBHOOK_URL: ${{ secrets.UPTIME_ALERT_WEBHOOK_URL }}
+    steps:
+      - name: Check public readiness and homepage
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 2 --retry-all-errors \
+            --max-time 15 https://donutdrop.fun/health/ready | grep -q '"status":"ready"'
+          curl --fail --silent --show-error --retry 2 --retry-all-errors \
+            --max-time 15 --head https://donutdrop.fun/ >/dev/null
+      - name: Send failure alert
+        if: failure() && env.ALERT_WEBHOOK_URL != ''
+        run: |
+          payload="$(jq -n --arg message 'Donut Drop external uptime check failed. Inspect the production workflow and VPS.' '{content:$message}')"
+          curl --fail --silent --show-error -H 'content-type: application/json' \
+            --data "$payload" "$ALERT_WEBHOOK_URL"

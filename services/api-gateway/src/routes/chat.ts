@@ -6,6 +6,7 @@ import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { liveEvents } from '../lib/live-events.js';
 import { safePublicText, safeText } from '../lib/sanitize.js';
 import { levelFor } from '../lib/vip.js';
 import { parseWith } from '../lib/validation.js';
@@ -211,6 +212,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
         if (!row) throw new Error('Chat insert returned no row');
         return row;
       });
+      liveEvents.publish('chat');
 
       return reply.code(201).send({
         message: {
@@ -240,7 +242,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
       const actor = requireUserId(request.authUser?.id);
       const clearId = randomUUID();
 
-      return db.transaction(async (client) => {
+      const result = await db.transaction(async (client) => {
         const cleared = await client.query(
           `UPDATE chat_messages
               SET deleted_at = now(), deleted_by = $1
@@ -270,6 +272,8 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
           clearedAt: reset.cleared_at,
         };
       });
+      liveEvents.publish('chat');
+      return result;
     },
   );
 
@@ -305,6 +309,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
           details: { reason: body.reason, authorUserId: result.rows[0].user_id },
         });
       });
+      liveEvents.publish('chat');
       return { deleted: true };
     },
   );

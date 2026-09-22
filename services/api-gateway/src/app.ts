@@ -13,6 +13,8 @@ import { Database } from './lib/db.js';
 import { sessionCookieName } from './lib/auth.js';
 import { assertRuntimeDatabaseRole } from './lib/database-role.js';
 import { AppError } from './lib/errors.js';
+import { RuntimeSettings } from './lib/runtime-settings.js';
+import { registerLiveEventRoutes } from './lib/live-events.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerActivityRoutes } from './routes/activity.js';
 import { registerBattleRoutes } from './routes/battles.js';
@@ -86,6 +88,11 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   });
   const db = suppliedDatabase ?? new Database(config);
   if (!suppliedDatabase) await assertRuntimeDatabaseRole(db);
+  const runtimeSettings = new RuntimeSettings(config);
+  // Unit tests inject intentionally tiny database doubles. Production owns its Database instance
+  // and must load persisted controls before a route can observe the deployment defaults.
+  if (!suppliedDatabase) await runtimeSettings.load(db);
+  config = runtimeSettings.config;
   const redis = config.redisUrl
     ? new Redis(config.redisUrl, {
         lazyConnect: false,
@@ -200,6 +207,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   });
 
   await registerHealthRoutes(app, db, redis);
+  await registerLiveEventRoutes(app, db, config);
   await registerAuthRoutes(app, db, config);
   await registerPayLoginRoutes(app, db, config);
   await registerAccountRoutes(app, db, config);
@@ -222,14 +230,14 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerEngagementRoutes(app, db, config);
   await registerReferralRoutes(app, db, config);
   await registerRewardRoutes(app, db, config);
-  await registerRouletteRoutes(app, db, config);
+  await registerRouletteRoutes(app, db, config, runtimeSettings);
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   // Registers nothing unless DEV_LOGIN_ENABLED is on, and config refuses to boot with it on
   // in production. See routes/dev.ts for the full fencing.
   await registerDevRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
-  await registerAdminOperationRoutes(app, db, config);
+  await registerAdminOperationRoutes(app, db, config, runtimeSettings);
   /* Registers nothing at all unless DISCORD_CONTROL_ENABLED is on — see the note in the module.
    * Sits next to the admin routes because that is what it is: a second, narrower door into the
    * same privileges, and the two belong where a reader finds them together. */

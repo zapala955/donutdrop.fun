@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Donut Drop encrypted backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

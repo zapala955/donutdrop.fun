@@ -394,10 +394,19 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
              ('user_wallets', 'balance_minor'),
              ('case_rounds', 'pool_snapshot'),
              ('case_rounds', 'awarded_weight'),
-             ('inventory_sales', 'proceeds_minor')
+             ('inventory_sales', 'proceeds_minor'),
+             ('runtime_settings', 'value')
            )`,
       );
-      assert.equal(columns.rowCount, 15);
+      assert.equal(columns.rowCount, 16);
+
+      const removedComplianceColumns = await owner.query(
+        `SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND column_name IN ('kyc_status', 'country_code', 'age_verified_at',
+                                'cooldown_until', 'self_excluded_until')`,
+      );
+      assert.equal(removedComplianceColumns.rowCount, 0);
 
       const ownership = await owner.query<{ tableowner: string }>(
         `SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public'`,
@@ -430,9 +439,36 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await assertRuntimeDatabaseRole(runtime);
         await assert.doesNotReject(runtime.query('SELECT count(*) FROM audit_log'));
         const readiness = await runtime.query<{ ready: boolean }>(
-          'SELECT public.donut_schema_ready_v31() AS ready',
+          'SELECT public.donut_schema_ready_v41() AS ready',
         );
         assert.equal(readiness.rows[0]?.ready, true);
+        // Parse and execute the two operational queries that previously survived unit tests while
+        // selecting columns migration 036 had removed. LIMIT 0/WHERE false still makes PostgreSQL
+        // resolve every relation and column without needing fixture rows.
+        await assert.doesNotReject(
+          runtime.query(
+            `SELECT u.id, u.minecraft_username, u.role, u.status,
+                    u.created_at, u.last_login_at,
+                    COALESCE(w.balance_minor, 0)::text AS balance_minor
+               FROM users u LEFT JOIN user_wallets w ON w.user_id = u.id
+              WHERE false LIMIT 0`,
+          ),
+        );
+        await assert.doesNotReject(
+          runtime.query(
+            `SELECT d.id, d.user_id, d.bot_id, d.status AS deposit_status, d.expires_at,
+                    u.normalized_username, u.minecraft_identity, u.status, u.terms_accepted_at,
+                    b.status AS bot_status, b.reconciliation_status, b.transfer_capable,
+                    b.last_heartbeat_at, b.last_snapshot_at,
+                    lease.authorization_event_id AS lease_id, lease.bot_id AS lease_bot_id,
+                    lease.token_hash AS lease_token_hash, lease.expires_at AS lease_expires_at
+               FROM deposit_intents d
+               JOIN users u ON u.id = d.user_id
+               JOIN bot_accounts b ON b.id = d.bot_id
+               LEFT JOIN deposit_authorization_leases lease ON lease.deposit_id = d.id
+              WHERE false LIMIT 0`,
+          ),
+        );
 
         for (const statement of [
           'ALTER TABLE audit_log ADD COLUMN privilege_escape text',

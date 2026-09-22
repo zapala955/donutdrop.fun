@@ -1,0 +1,12 @@
+[Unit]
+Description=Isolated Donut Drop backup restore drill
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=BACKUP_ENV_FILE=/opt/donutdrop/shared/backup.env
+ExecStart=/opt/donutdrop/app/infra/vps/restore-drill.sh
+User=root
+Nice=10
+IOSchedulingClass=idle

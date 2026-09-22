@@ -10,6 +10,8 @@ import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { maskedName } from '../lib/masked-name.js';
+import { RuntimeSettings } from '../lib/runtime-settings.js';
+import { liveEvents } from '../lib/live-events.js';
 import {
   rouletteColor,
   roulettePayout,
@@ -140,7 +142,11 @@ async function createRound(
 }
 
 /** Settle every due shared round and return the one betting window currently open. */
-async function currentRound(client: DbClient, config: AppConfig): Promise<RoundRow> {
+async function currentRound(
+  client: DbClient,
+  config: AppConfig,
+  createNext = true,
+): Promise<RoundRow | null> {
   /* The common path is read-only. Hundreds of viewers can read the same active round without
    * queueing behind an exclusive row/advisory lock; only the request that notices a missing or
    * expired round enters the rollover path below. */
@@ -161,7 +167,7 @@ async function currentRound(client: DbClient, config: AppConfig): Promise<RoundR
      ORDER BY opens_at LIMIT 1 FOR UPDATE`,
   );
   const round = selected.rows[0];
-  if (!round) return createRound(client, config);
+  if (!round) return createNext ? createRound(client, config) : null;
   if (round.closes_at.getTime() > Date.now()) return round;
 
   const seed = decryptSecret(
@@ -211,13 +217,14 @@ async function currentRound(client: DbClient, config: AppConfig): Promise<RoundR
       bets.rows.length,
     ],
   );
-  return createRound(client, config, config.rouletteSpinSeconds);
+  return createNext ? createRound(client, config, config.rouletteSpinSeconds) : null;
 }
 
 export async function registerRouletteRoutes(
   app: FastifyInstance,
   db: Database,
   config: AppConfig,
+  runtimeSettings = new RuntimeSettings(config),
 ) {
   const guards = createAuthGuards(db, config);
   const softAuth = softAuthenticate(guards);
@@ -232,7 +239,7 @@ export async function registerRouletteRoutes(
     assertEnabled();
     const viewerId = request.authUser?.id ?? null;
     return db.transaction(async (client) => {
-      const round = await currentRound(client, config);
+      const round = await currentRound(client, config, !runtimeSettings.roulettePaused);
       const [history, pools, publicBets, mine, previousMine] = await Promise.all([
         client.query<RoundRow>(
           `SELECT * FROM roulette_rounds WHERE status = 'settled'
@@ -241,7 +248,7 @@ export async function registerRouletteRoutes(
         client.query<{ selection: RouletteSelection; amount_minor: string }>(
           `SELECT selection, sum(stake_minor)::text AS amount_minor
              FROM roulette_bets WHERE round_id = $1 GROUP BY selection`,
-          [round.id],
+          [round?.id ?? null],
         ),
         client.query<PublicBetRow>(
           `SELECT b.id, u.id AS player_id,
@@ -252,13 +259,13 @@ export async function registerRouletteRoutes(
             WHERE b.round_id = $1
             ORDER BY b.created_at DESC, b.id DESC
             LIMIT 100`,
-          [round.id],
+          [round?.id ?? null],
         ),
         viewerId
           ? client.query<BetRow>(
               `SELECT * FROM roulette_bets WHERE round_id = $1 AND user_id = $2
                ORDER BY created_at, id`,
-              [round.id, viewerId],
+              [round?.id ?? null, viewerId],
             )
           : Promise.resolve({ rows: [] as BetRow[] }),
         viewerId
@@ -281,7 +288,7 @@ export async function registerRouletteRoutes(
       };
       return {
         serverTime: new Date().toISOString(),
-        round: roundView(round),
+        round: round ? roundView(round) : null,
         history: history.rows.map(roundView),
         pools: Object.fromEntries(pools.rows.map((row) => [row.selection, row.amount_minor])),
         publicBets: publicBets.rows.map((bet) => ({
@@ -298,9 +305,11 @@ export async function registerRouletteRoutes(
         config: {
           minStakeMinor: config.rouletteMinStakeMinor.toString(),
           maxStakeMinor: config.rouletteMaxStakeMinor.toString(),
+          maxRoundStakeMinor: config.rouletteMaxRoundStakeMinor.toString(),
           roundSeconds: config.rouletteRoundSeconds,
           spinSeconds: config.rouletteSpinSeconds,
           houseEdgeBps: config.houseEdgeBps,
+          paused: runtimeSettings.roulettePaused,
           payoutBps: {
             straight: roulettePayoutBps(sample.straight, config.houseEdgeBps),
             dozen: roulettePayoutBps(sample.dozen, config.houseEdgeBps),
@@ -347,7 +356,8 @@ export async function registerRouletteRoutes(
         }
 
         await assertGameEligible(client, userId);
-        const visibleRound = await currentRound(client, config);
+        const visibleRound = await currentRound(client, config, !runtimeSettings.roulettePaused);
+        if (!visibleRound) conflict('ROULETTE_PAUSED', 'Roulette is paused between rounds');
         /* A share lock lets many players place chips concurrently, but makes settlement wait until
          * every accepted debit and bet row has committed. If rollover won the race, this query
          * returns nothing and the stale request cannot land on the next spin by accident. */
@@ -368,6 +378,37 @@ export async function registerRouletteRoutes(
         }
         if (round.closes_at.getTime() <= Date.now()) {
           conflict('ROUND_CLOSED', 'That roulette round has closed');
+        }
+
+        /* The table limit: everything this player already has riding on this spin, plus this chip.
+         *
+         * Serialised on the player rather than on the chip. The idempotency lock above is keyed by
+         * idempotency key, so two DIFFERENT chips from the same player run concurrently — and two
+         * concurrent reads of a 4B total would each see room for another 1B and both commit. A
+         * per-player lock is what makes the sum a decision rather than an observation.
+         *
+         * Keyed on the player alone, not the player and the round: a player can only ever be
+         * betting on the open round, so there is nothing a second key would separate. Taken AFTER
+         * the idempotency lock and after currentRound, so the lock order is the same on every path
+         * through this handler and no two requests can hold one another's next lock. */
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8831))', [
+          `roulette-round-stake:${userId}`,
+        ]);
+        const placedSoFar = await client.query<{ staked_minor: string }>(
+          `SELECT coalesce(sum(stake_minor), 0)::text AS staked_minor
+             FROM roulette_bets WHERE round_id = $1 AND user_id = $2`,
+          [round.id, userId],
+        );
+        const alreadyStaked = BigInt(placedSoFar.rows[0]?.staked_minor ?? '0');
+        if (alreadyStaked + stake > config.rouletteMaxRoundStakeMinor) {
+          const remaining = config.rouletteMaxRoundStakeMinor - alreadyStaked;
+          throw new AppError(
+            409,
+            'ROUND_STAKE_LIMIT',
+            remaining > 0n
+              ? `That chip would put you over the table limit for this spin. You have ${remaining} left.`
+              : 'You are at the table limit for this spin.',
+          );
         }
 
         await client.query(
@@ -415,6 +456,8 @@ export async function registerRouletteRoutes(
         if (!bet) throw new Error('Roulette bet insert returned no row');
         return { bet, balanceAfterMinor: balanceAfter, replay: false };
       });
+      liveEvents.publish('roulette');
+      liveEvents.publish('balance', [userId]);
 
       return reply.code(placed.replay ? 200 : 201).send({
         bet: betView(placed.bet),
@@ -423,4 +466,100 @@ export async function registerRouletteRoutes(
       });
     },
   );
+
+  const requireAdminRead = async (request: FastifyRequest) => {
+    await guards.authenticate(request);
+    if (request.authUser?.role !== 'admin' || request.authUser.status !== 'active') {
+      throw new AppError(403, 'ADMIN_REQUIRED', 'Administrator access is required');
+    }
+  };
+
+  app.get('/v1/admin/roulette', { preHandler: requireAdminRead }, async () => {
+    assertEnabled();
+    return db.transaction(async (client) => {
+      const round = await currentRound(client, config, !runtimeSettings.roulettePaused);
+      const [history, bets] = await Promise.all([
+        client.query<RoundRow>(
+          `SELECT * FROM roulette_rounds WHERE status = 'settled'
+           ORDER BY closes_at DESC LIMIT 25`,
+        ),
+        round
+          ? client.query<BetRow & { minecraft_username: string }>(
+              `SELECT b.*, u.minecraft_username
+                 FROM roulette_bets b JOIN users u ON u.id = b.user_id
+                WHERE b.round_id = $1 ORDER BY b.created_at, b.id`,
+              [round.id],
+            )
+          : Promise.resolve({ rows: [] as Array<BetRow & { minecraft_username: string }> }),
+      ]);
+
+      const liabilities = Array.from({ length: 37 }, (_, result) => {
+        let payout = 0n;
+        for (const bet of bets.rows) {
+          payout += roulettePayout(
+            BigInt(bet.stake_minor),
+            bet.selection,
+            result,
+            bet.payout_bps,
+          );
+        }
+        return { result, payoutMinor: payout.toString() };
+      });
+      const totalStake = bets.rows.reduce((sum, bet) => sum + BigInt(bet.stake_minor), 0n);
+      const maximumLiability = liabilities.reduce(
+        (maximum, row) => (BigInt(row.payoutMinor) > maximum ? BigInt(row.payoutMinor) : maximum),
+        0n,
+      );
+
+      return {
+        serverTime: new Date().toISOString(),
+        paused: runtimeSettings.roulettePaused,
+        round: round ? roundView(round) : null,
+        totalStakeMinor: totalStake.toString(),
+        maximumPayoutMinor: maximumLiability.toString(),
+        liabilities,
+        bets: bets.rows.map((bet) => ({
+          ...betView(bet),
+          userId: bet.user_id,
+          player: bet.minecraft_username,
+        })),
+        history: history.rows.map(roundView),
+      };
+    });
+  });
+
+  /* Settlement cannot depend on somebody keeping the page open. One lightweight scheduler owns
+   * rollover; the advisory lock in currentRound keeps it correct if a second API process starts.
+   * Browsers are notified only when the shared round changes, not once per animation frame. */
+  if (typeof app.addHook === 'function') {
+    let running = false;
+    let lastRoundId: string | null | undefined;
+    /* The body is wrapped rather than passed as an async callback. setInterval discards whatever
+       it is handed, so an async function here is a promise nobody holds — the try/finally below
+       already makes that safe, but the shape is the one that stops being safe the moment somebody
+       adds an await outside it. */
+    const timer = setInterval(() => {
+      void (async () => {
+      if (running || !config.rouletteEnabled) return;
+      running = true;
+      try {
+        const round = await db.transaction((client) =>
+          currentRound(client, config, !runtimeSettings.roulettePaused),
+        );
+        const nextId = round?.id ?? null;
+        if (lastRoundId !== undefined && nextId !== lastRoundId) {
+          liveEvents.publish('roulette');
+          liveEvents.publish('activity');
+        }
+        lastRoundId = nextId;
+      } catch (error) {
+        app.log.error({ err: error }, 'Roulette rollover failed');
+      } finally {
+        running = false;
+      }
+      })();
+    }, 750);
+    timer.unref?.();
+    app.addHook('onClose', async () => clearInterval(timer));
+  }
 }

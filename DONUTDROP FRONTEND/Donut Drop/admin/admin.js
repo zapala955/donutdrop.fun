@@ -1957,14 +1957,145 @@ async function loadAudit() {
   );
 }
 
+let rouletteAdminState = null;
+
+async function loadRoulette() {
+  const data = await api.get('/v1/admin/roulette');
+  rouletteAdminState = data;
+  const round = data.round;
+  renderStats($('rouletteStats'), [
+    ['State', data.paused ? 'Paused after round' : round ? 'Running' : 'Starting'],
+    ['Round', round?.id ?? '—'],
+    ['Closes', round ? new Date(round.closesAt).toLocaleString() : '—'],
+    ['Chips', data.bets?.length ?? 0],
+    ['Total stake', amountText(data.totalStakeMinor ?? 0)],
+    ['Maximum payout exposure', amountText(data.maximumPayoutMinor ?? 0)],
+  ]);
+  const pause = $('toggleRoulettePause');
+  pause.textContent = data.paused ? 'Resume table' : 'Pause after round';
+  pause.classList.toggle('btn--danger', !data.paused);
+
+  table(
+    $('rouletteBetTable'),
+    ['Player', 'Selection', 'Stake', 'Return', 'Placed'],
+    data.bets ?? [],
+    (bet) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(bet.player),
+        cell(bet.selection, { mono: true }),
+        cell(amountText(bet.stakeMinor), { mono: true }),
+        cell(bet.payoutMinor === null ? 'pending' : amountText(bet.payoutMinor), { mono: true }),
+        cell(bet.createdAt),
+      );
+      return tr;
+    },
+  );
+  table(
+    $('rouletteHistoryTable'),
+    ['Closed', 'Result', 'Bets', 'Staked', 'Paid', 'Commitment', 'Seed / digest'],
+    data.history ?? [],
+    (entry) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(entry.closesAt),
+        cell(`${entry.result} ${entry.color}`, { mono: true }),
+        cell(entry.betCount, { mono: true }),
+        cell(amountText(entry.totalStakedMinor), { mono: true }),
+        cell(amountText(entry.totalPayoutMinor), { mono: true }),
+        cell(entry.serverSeedHash, { mono: true }),
+        cell(`${entry.serverSeed ?? '—'} / ${entry.rngDigest ?? '—'}`, { mono: true }),
+      );
+      return tr;
+    },
+  );
+}
+
+async function toggleRoulettePause() {
+  const paused = Boolean(rouletteAdminState?.paused);
+  const reason = await confirmAction(
+    paused
+      ? 'Resume Roulette and create the next shared round?'
+      : 'Pause Roulette after the current betting window settles? Existing bets will still resolve.',
+  );
+  if (!reason) return;
+  await api.patch('/v1/admin/runtime-settings', {
+    settings: { roulettePaused: !paused },
+    reason,
+  });
+  toast(paused ? 'Roulette resumed.' : 'Roulette will pause after this round.');
+  await loadRoulette();
+}
+
+async function editRuntimeSetting(setting) {
+  const values = await editRecord({
+    title: setting.label,
+    description: `Deployment default: ${setting.defaultValue}`,
+    fields: [
+      {
+        name: 'value',
+        label: setting.kind === 'bigint' ? 'Value (minor units or 10m shorthand)' : 'Value',
+        type: setting.kind === 'boolean' ? 'checkbox' : setting.kind === 'integer' ? 'number' : 'text',
+        value: setting.value,
+        min: setting.min ?? undefined,
+        max: setting.max ?? undefined,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Apply immediately',
+  });
+  if (!values) return;
+  let value = values.value;
+  if (setting.kind === 'integer') value = Number(value);
+  if (setting.kind === 'bigint') {
+    const exact = /^(0|[1-9]\d*)$/.test(value) ? BigInt(value) : parseAmount(value);
+    if (exact === null) throw new ApiError(0, 'INVALID_AMOUNT', 'Enter a valid non-negative amount');
+    value = exact.toString();
+  }
+  await api.patch('/v1/admin/runtime-settings', {
+    settings: { [setting.key]: value },
+    reason: values.reason,
+  });
+  toast(`${setting.label} updated.`);
+  await loadSystem();
+}
+
+async function resetRuntimeSetting(setting) {
+  const reason = await confirmAction(
+    `Reset ${setting.label} to its VPS default (${setting.defaultValue})?`,
+  );
+  if (!reason) return;
+  await api.post('/v1/admin/runtime-settings/reset', { keys: [setting.key], reason });
+  toast(`${setting.label} reset.`);
+  await loadSystem();
+}
+
 async function loadSystem() {
   const data = await api.get('/v1/admin/system-config');
   $('systemNote').textContent = data.note;
-  const rows = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
-  table($('systemTable'), ['Setting', 'Current value', 'Management'], rows, (row) => {
+  const runtimeRows = data.runtimeSettings ?? [];
+  table($('systemTable'), ['Group', 'Setting', 'Current value', 'Source', 'Actions'], runtimeRows, (row) => {
     const tr = document.createElement('tr');
-    tr.append(cell(row.key, { mono: true }), cell(row.value, { mono: true }));
-    tr.append(cell('VPS environment + controlled restart'));
+    tr.append(
+      cell(row.group),
+      cell(row.label),
+      cell(row.value, { mono: true }),
+      cell(row.overridden ? 'Admin override' : 'VPS default'),
+      actions(
+        button('Edit', () => editRuntimeSetting(row)),
+        button('Reset', () => resetRuntimeSetting(row), { disabled: !row.overridden }),
+      ),
+    );
+    return tr;
+  });
+  const protectedRows = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
+  table($('protectedSystemTable'), ['Setting', 'Current value', 'Management'], protectedRows, (row) => {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(row.key, { mono: true }),
+      cell(row.value, { mono: true }),
+      cell('VPS environment + controlled restart'),
+    );
     return tr;
   });
 }
@@ -2015,6 +2146,7 @@ const LOADERS = {
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
   economy: loadEconomy,
+  roulette: loadRoulette,
   catalog: loadCatalog,
   cases: loadCases,
   /* The payout log is the receipt for the Pay button above it, so it is never stale relative to
@@ -2123,6 +2255,7 @@ async function start() {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }
   $('publishLadder').addEventListener('click', () => void publishLadder());
+  $('toggleRoulettePause').addEventListener('click', () => void toggleRoulettePause());
   $('createCatalogItem').addEventListener('click', () => void createCatalogItem());
   $('createCase').addEventListener('click', () => void editCase());
   $('timeoutPlayer').addEventListener('click', () => void issueTimeout());

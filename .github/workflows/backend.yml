@@ -43,6 +43,8 @@ jobs:
       - name: Prepare Compose smoke-test secrets
         run: |
           mkdir -p .secrets/minecraft-auth
+          mkdir -p .wal-archive
+          chmod 0777 .wal-archive
           chmod 700 .secrets/minecraft-auth
           printf '%s' 'CiSuperuserPassword_7f82d19a_Only' > .secrets/postgres-superuser-password
           printf '%s' 'CiMigratorPassword_4c31a76f_Onlyxx' > .secrets/postgres-migrator-password

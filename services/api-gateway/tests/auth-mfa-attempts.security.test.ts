@@ -168,7 +168,7 @@ class SerializedMfaDatabase {
           minecraft_identity: adminIdentity,
           minecraft_username: 'Administrator',
           role: 'admin',
-          status: 'pending_compliance',
+          status: 'active',
         },
       ]);
     }

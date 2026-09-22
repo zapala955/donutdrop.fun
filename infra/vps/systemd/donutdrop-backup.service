@@ -1,0 +1,13 @@
+[Unit]
+Description=Encrypted off-host Donut Drop PostgreSQL backup
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=COMPOSE_ENV_FILE=/opt/donutdrop/shared/donutdrop.env
+Environment=BACKUP_ENV_FILE=/opt/donutdrop/shared/backup.env
+ExecStart=/opt/donutdrop/app/infra/vps/backup-postgres.sh
+User=root
+Nice=10
+IOSchedulingClass=idle

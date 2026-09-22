@@ -135,7 +135,7 @@ export async function registerDiscordControlRoutes(
      * the platform matches on, so this agrees with every other lookup rather than inventing a
      * second notion of "the same player". */
     const result = await db.query<Record<string, unknown>>(
-      `SELECT u.id, u.minecraft_username, u.role, u.status, u.kyc_status,
+      `SELECT u.id, u.minecraft_username, u.role, u.status,
               u.created_at, u.last_login_at,
               COALESCE(w.balance_minor, 0)::text AS balance_minor
          FROM users u
@@ -267,11 +267,6 @@ export async function registerDiscordControlRoutes(
         'ADMIN_TARGET_FORBIDDEN',
         'Administrator accounts cannot be changed from Discord',
       );
-    }
-    /* Self-exclusion is a responsible-gambling state with its own expiry rules, and stamping
-     * `active` over it from a chat command would quietly end a period the player asked for. */
-    if (user.status === 'self_excluded') {
-      conflict('SELF_EXCLUSION_LOCKED', 'Self-excluded accounts require a dashboard review');
     }
     if (!payload.suspended && user.status === 'closed') {
       conflict('ACCOUNT_STATUS_LOCKED', 'Closed accounts require a dashboard review');

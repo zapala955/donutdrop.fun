@@ -62,6 +62,9 @@
           <button class="tab" type="button" data-panel="economy" aria-selected="false">
             Economy
           </button>
+          <button class="tab" type="button" data-panel="roulette" aria-selected="false">
+            Roulette
+          </button>
           <button class="tab" type="button" data-panel="catalog" aria-selected="false">
             Catalog
           </button>
@@ -134,6 +137,24 @@
           <div class="tablewrap"><table class="grid" id="itemTable"></table></div>
           <div class="panel__head panel__head--sub"><h3>Inventory lots</h3></div>
           <div class="tablewrap"><table class="grid" id="inventoryTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="roulette" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Roulette operations</h2>
+              <span class="hint">Live round, exposure, bets and committed fairness data. Results cannot be overridden.</span>
+            </div>
+            <div class="rowacts">
+              <button class="btn btn--danger" type="button" id="toggleRoulettePause">Pause after round</button>
+              <button class="btn" type="button" data-refresh="roulette">Refresh</button>
+            </div>
+          </div>
+          <div class="stats" id="rouletteStats"></div>
+          <div class="panel__head panel__head--sub"><h3>Current-round bets</h3></div>
+          <div class="tablewrap"><table class="grid" id="rouletteBetTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Recent rounds &amp; fairness</h3></div>
+          <div class="tablewrap"><table class="grid" id="rouletteHistoryTable"></table></div>
         </section>
 
         <section class="panel" data-panel="cases" hidden>
@@ -266,7 +287,13 @@
             </div>
             <button class="btn" type="button" data-refresh="system">Refresh</button>
           </div>
+          <p class="hint">Click an operational setting to edit it immediately. Reset removes the override and restores the VPS default.</p>
           <div class="tablewrap"><table class="grid" id="systemTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Deployment-only trust settings</h3>
+            <span class="hint">Read-only here so a stolen browser session cannot rewrite security or game maths.</span>
+          </div>
+          <div class="tablewrap"><table class="grid" id="protectedSystemTable"></table></div>
         </section>
       </div>
     </main>

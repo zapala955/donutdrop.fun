@@ -6,6 +6,7 @@ import { accrueReferralWager } from './referrals.js';
 import { accrueAndDrawJackpot, type JackpotOutcome } from './jackpot.js';
 import { accrueRakeback, houseMarginMinor, recordRaceWager } from './rewards.js';
 import { recordVipWager } from './vip.js';
+import { publishLiveSoon } from './live-events.js';
 
 /* The cash credit itself lives in wallet.ts and is re-exported here, because every game route
  * already reaches for it through this module and the referral engine below needs it too. */
@@ -168,6 +169,8 @@ export async function recordWager(
    * standing. Callers that want to announce a level-up or a jackpot read the result; callers that
    * do not can ignore it exactly as they ignore everything above. */
   const vip = await recordVipWager(client, config, userId, amountMinor);
+  publishLiveSoon('activity');
+  publishLiveSoon('balance', [userId]);
   return { vip, jackpot };
 }
 

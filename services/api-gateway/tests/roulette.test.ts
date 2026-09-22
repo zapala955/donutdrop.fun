@@ -113,8 +113,11 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /\[1_000_000_000n, '\$1B'\]/);
     assert.match(client, /void place\(selected\)/);
     assert.match(client, /if \(placing \|\| !isBettingOpen\(\)\) return/);
-    assert.match(client, /spinTo\(newest\.result,[\s\S]*next\.round\.opensAt\)/);
+    assert.match(client, /spinTo\(newest\.result,[\s\S]*spinEndsAt\)/);
     assert.match(client, /Wheel spinning · bets are locked/);
+    assert.match(client, /connectionFresh\(\)/);
+    assert.match(client, /Reconnecting… bets are locked/);
+    assert.match(client, /donut:roulette/);
     assert.doesNotMatch(client, /<span>DONUT<\/span>/);
     assert.match(html, /href="\/roulette" data-route="roulette"/);
     assert.match(html, /data-view="roulette"/);
@@ -182,5 +185,119 @@ describe('roulette persistence and client contract', () => {
     assert.match(chat, /msg__badge--roulette/);
     assert.match(chat, /flexwin__roulette/);
     assert.match(chat, /Roulette · \$\{count\}/);
+  });
+});
+
+describe('the roulette table limit', () => {
+  const repo = path.resolve(import.meta.dirname, '../../..');
+  const route = () =>
+    readFile(path.join(repo, 'services/api-gateway/src/routes/roulette.ts'), 'utf8');
+
+  it('caps what one player can have riding on a single spin', async () => {
+    /* The per-chip maximum is not a limit on its own: a player can place it again, and again,
+     * because every chip is a fresh request that passes the same check in isolation. This is the
+     * ceiling on the sum. */
+    const source = await route();
+    assert.match(source, /config\.rouletteMaxRoundStakeMinor/);
+    assert.match(source, /ROUND_STAKE_LIMIT/);
+    assert.match(
+      source,
+      /SELECT coalesce\(sum\(stake_minor\), 0\)::text AS staked_minor\s*\n\s*FROM roulette_bets WHERE round_id = \$1 AND user_id = \$2/,
+    );
+  });
+
+  it('serialises the sum on the player, because the chips race each other', async () => {
+    /* The idempotency lock is keyed by idempotency key, so two DIFFERENT chips from one player run
+     * concurrently. Two concurrent reads of a 4B total would each see room for another 1B and both
+     * commit, which is how a table limit becomes a suggestion. */
+    const source = await route();
+    assert.match(source, /roulette-round-stake:\$\{userId\}/);
+    const check = source.indexOf('roulette-round-stake');
+    const sum = source.indexOf('AS staked_minor');
+    assert.ok(check > 0 && sum > check, 'the lock must be taken before the sum is read');
+  });
+
+  it('refuses a round limit below the chip limit rather than picking one', async () => {
+    /* Either way round an operator meant it, one of the two published figures would be a lie: a
+     * first chip at the advertised maximum would be refused by a ceiling nobody was shown. */
+    const config = await readFile(
+      path.join(repo, 'services/api-gateway/src/config.ts'),
+      'utf8',
+    );
+    assert.match(config, /ROULETTE_MAX_ROUND_STAKE_MINOR: positiveBigintString\.default\('5000000000'\)/);
+    assert.match(
+      config,
+      /BigInt\(env\.ROULETTE_MAX_ROUND_STAKE_MINOR\) < BigInt\(env\.ROULETTE_MAX_STAKE_MINOR\)/,
+    );
+  });
+
+  it('shows the limit before it is hit, and stops offering chips that will not fit', async () => {
+    const client = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/roulette.js'),
+      'utf8',
+    );
+    assert.match(client, /maxRoundStakeMinor/);
+    assert.match(client, /function roundAllowanceMinor\(\)/);
+    // A chip is offered only while it still fits, and the board goes dead at the limit.
+    assert.match(client, /allowance === null \|\| value <= allowance/);
+    assert.match(client, /const atLimit = allowance !== null && allowance < min;/);
+  });
+});
+
+describe('the roulette client keeps itself current', () => {
+  const repo = path.resolve(import.meta.dirname, '../../..');
+  const client = () =>
+    readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/roulette.js'), 'utf8');
+
+  it('refreshes on the round’s own deadlines rather than on a blind interval', async () => {
+    /* The bug this replaces: the fallback poll was raised to 15s on the assumption that live
+     * events would carry the loop. A round is roundSeconds + spinSeconds — thirteen by default —
+     * so one missed event left the page blind for longer than a whole round and it sat on
+     * SETTLING until something else happened to fetch.
+     *
+     * The round publishes both of its own boundaries, so the client can ask at exactly the moment
+     * the answer changes. Two timed requests per round, correct even if the stream never
+     * delivers. */
+    const source = await client();
+    assert.match(source, /function scheduleDeadlineRefresh\(\)/);
+    assert.match(source, /untilOpen > 0\s*\n?\s*\?\s*untilOpen \+ 250/);
+    assert.match(source, /untilClose > 0/);
+    // Re-armed on both outcomes, or the chain ends at the first blip and never recovers.
+    assert.equal(
+      (source.match(/scheduleDeadlineRefresh\(\);/g) ?? []).length >= 2,
+      true,
+      'the chain must be re-armed after a failed refresh as well as a successful one',
+    );
+  });
+
+  it('never lets the blind poll be slower than a round on its own', async () => {
+    /* A backstop is fine; a backstop that is the ONLY mechanism and is slower than the game is
+     * not. Asserted as a relationship rather than a number so raising the poll cannot silently
+     * outrun the round again. */
+    const source = await client();
+    const poll = Number(/const POLL_MS = [^;]*?(\d[\d_]*)\s*;/.exec(source)?.[1]?.replace(/_/g, ''));
+    assert.ok(Number.isFinite(poll), 'POLL_MS must be readable');
+    const config = await readFile(
+      path.join(repo, 'services/api-gateway/src/config.ts'),
+      'utf8',
+    );
+    const round = Number(/ROULETTE_ROUND_SECONDS:[^;]*?default\((\d+)\)/.exec(config)?.[1]);
+    const spin = Number(/ROULETTE_SPIN_SECONDS:[^;]*?default\((\d+)\)/.exec(config)?.[1]);
+    assert.ok(Number.isFinite(round) && Number.isFinite(spin));
+    // Either the poll is faster than a round, or the deadline chain is there to carry it.
+    assert.ok(
+      poll <= (round + spin) * 1000 || /function scheduleDeadlineRefresh\(\)/.test(source),
+      'a poll slower than one round needs the deadline refresh to remain correct',
+    );
+  });
+
+  it('does not lock betting when only one of the two freshness sources is alive', async () => {
+    /* Trusting the event stream alone meant a stream that connected and then went quiet left
+     * betting locked forever on a page that was fetching perfectly well. */
+    const source = await client();
+    assert.match(source, /return liveFresh \|\| pollFresh;/);
+    /* And the poll window has to cover the longest gap the deadline chain leaves, which is a whole
+     * betting window — a fixed 4.5s locked betting part-way into every round. */
+    assert.match(source, /roundSeconds \|\| 0\) \+ Number\(snapshot\?\.config\?\.spinSeconds/);
   });
 });

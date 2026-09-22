@@ -1,0 +1,10 @@
+[Unit]
+Description=Monthly Donut Drop restore drill
+
+[Timer]
+OnCalendar=Sun *-*-01..07 05:15:00 UTC
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
