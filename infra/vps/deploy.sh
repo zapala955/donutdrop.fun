@@ -19,14 +19,34 @@ compose=(docker compose --env-file "$env_file" -f "$compose_file")
 # additive by policy; the update wrapper separately restores the checked-out static frontend.
 rollback_file="$(mktemp)"
 trap 'rm -f "$rollback_file"' EXIT
+#
+# EVERY STEP HERE IS BEST-EFFORT, ON PURPOSE.
+#
+# The first version tagged the running image with no guard, under `set -e`. A container whose image
+# id no longer resolves in the local store — pruned, or rebuilt under the same tag and since
+# collected — made `docker image tag` exit non-zero, and that killed the deploy before a single
+# container had been touched:
+#
+#     Error response from daemon: No such image: sha256:c043e7d15bec...
+#
+# A rollback aid that can refuse a deploy is worse than no rollback aid at all. Losing the snapshot
+# for one service costs the ability to roll THAT service back automatically; refusing to deploy
+# costs the release. Each service is skipped with a line on stderr and the deploy carries on.
 for service in api maintenance minecraft-bot; do
-  container_id="$("${compose[@]}" ps -q "$service" 2>/dev/null || true)"
+  # `head -n 1` because a scaled service prints several ids and `docker inspect` wants one.
+  container_id="$("${compose[@]}" ps -q "$service" 2>/dev/null | head -n 1 || true)"
   if [[ -z "$container_id" ]]; then
     continue
   fi
-  image_ref="$(docker inspect --format '{{.Config.Image}}' "$container_id")"
+  image_ref="$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  image_id="$(docker inspect --format '{{.Image}}' "$container_id" 2>/dev/null || true)"
   rollback_ref="donutdrop-rollback-${service}:previous"
-  docker image tag "$(docker inspect --format '{{.Image}}' "$container_id")" "$rollback_ref"
+  if [[ -z "$image_ref" || -z "$image_id" ]] \
+    || ! docker image inspect "$image_id" >/dev/null 2>&1 \
+    || ! docker image tag "$image_id" "$rollback_ref" 2>/dev/null; then
+    echo "No rollback snapshot for $service; deploying without one." >&2
+    continue
+  fi
   printf '%s|%s|%s\n' "$service" "$image_ref" "$rollback_ref" >>"$rollback_file"
 done
 
@@ -60,8 +80,13 @@ echo "Deployment did not become ready within 120 seconds" >&2
 if [[ -s "$rollback_file" ]]; then
   echo "Restoring the previous service images..." >&2
   while IFS='|' read -r service image_ref rollback_ref; do
-    docker image tag "$rollback_ref" "$image_ref"
-    "${compose[@]}" up -d --no-build --no-deps --force-recreate "$service"
+    # Same reasoning as the snapshot above: one service that cannot be restored must not abandon
+    # the rest of the rollback half-finished.
+    if ! docker image tag "$rollback_ref" "$image_ref" 2>/dev/null; then
+      echo "Could not restore the previous image for $service." >&2
+      continue
+    fi
+    "${compose[@]}" up -d --no-build --no-deps --force-recreate "$service" || true
   done <"$rollback_file"
   "${compose[@]}" up -d --no-build --no-deps --force-recreate nginx
   for attempt in $(seq 1 30); do
