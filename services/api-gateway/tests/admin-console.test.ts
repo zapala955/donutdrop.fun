@@ -87,6 +87,36 @@ describe('admin player management', () => {
     assert.doesNotMatch(console_, /Make admin|Remove admin/);
     assert.match(console_, /not editable here/);
   });
+
+  /**
+   * Every audit reason in the console has to be sendable.
+   *
+   * The server holds all ten of them to safeText(3, 256) and withholds the field-level detail from
+   * the response on purpose, so a reason the browser accepted and the schema refused surfaces as
+   * `VALIDATION_ERROR: the request is invalid` and nothing else. The editor dialog builds its
+   * inputs in script; without a length bound on them, a two-character reason was unsendable and
+   * unexplainable at the same time.
+   */
+  it('bounds the audit reason in the dialog, so a short one cannot be sent', async () => {
+    const [console_, markup] = await Promise.all([
+      readFile(
+        path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/Donut Drop/admin/admin.js'),
+        'utf8',
+      ),
+      readFile(
+        path.resolve(
+          import.meta.dirname,
+          '../../../DONUTDROP FRONTEND/Donut Drop/admin/index.html',
+        ),
+        'utf8',
+      ),
+    ]);
+    // The script-built dialog, matching safeText(3, 256) on the other end.
+    assert.match(console_, /field\.name === 'reason' \? \{ minlength: 3, maxlength: 256 \}/);
+    assert.match(console_, /input\.minLength = bounds\.minlength/);
+    // The hand-written confirm dialog, which has always carried the same bound.
+    assert.match(markup, /id="confirmReason"[\s\S]*?minlength="3"/);
+  });
 });
 
 describe('admin payouts', () => {

@@ -241,6 +241,23 @@ function editRecord({ title, description = '', fields, submitLabel = 'Save' }) {
         field.type === 'checkbox' ? field.required === true : field.required !== false;
       if (field.type === 'checkbox') input.checked = Boolean(field.value);
       else input.value = field.value ?? '';
+      /* Every dialog's `reason` is the same audit field, and the server holds all ten of them to
+       * safeText(3, 256). This form built its inputs without a length bound, so a two-character
+       * reason passed the browser, failed the schema, and came back as `VALIDATION_ERROR: the
+       * request is invalid` -- with the offending field named only in the server-side detail the
+       * response deliberately withholds. The bound belongs on the input, where it can be met
+       * before anything is sent rather than guessed at afterwards.
+       *
+       * The confirm dialog beside this one has carried minlength="3" in its markup all along;
+       * this is the same contract for the dialogs that are built in script. */
+      const bounds = field.name === 'reason' ? { minlength: 3, maxlength: 256 } : field;
+      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+        if (bounds.minlength !== undefined) input.minLength = bounds.minlength;
+        if (bounds.maxlength !== undefined) input.maxLength = bounds.maxlength;
+      }
+      if (field.name === 'reason' && !field.placeholder) {
+        input.placeholder = 'At least 3 characters — recorded in the audit log';
+      }
       if (field.placeholder) input.placeholder = field.placeholder;
       if (field.min !== undefined) input.min = String(field.min);
       if (field.max !== undefined) input.max = String(field.max);
