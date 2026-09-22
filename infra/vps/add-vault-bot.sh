@@ -69,9 +69,30 @@ read -r _
 # that makes the two sides disagree about the key.
 install -d -m 0700 "$(dirname "$secret_file")"
 printf '%s' "$vault_secret" >"$secret_file"
+install -d "$auth_dir"
+
+# ── OWNED BY THE CONTAINER'S USER, NOT BY ROOT ─────────────────────────────
+# bot.Dockerfile ends in `USER node`, which is uid 1000, and compose bind-mounts a file secret
+# straight through with the host's own ownership. Written as root at 0600 the bot cannot read its
+# own secret and dies on EACCES before it has done anything; the auth directory is worse, because
+# it has to WRITE its Microsoft token cache there and would fail the same way a moment later.
+#
+# 1000:1000 with the modes kept tight, rather than 0644: the secret authenticates every message
+# this bot sends to the gateway and does not belong to every account on the host.
+bot_uid=1000
+chown "$bot_uid:$bot_uid" "$secret_file" "$auth_dir"
 chmod 0600 "$secret_file"
-install -d -m 0700 "$auth_dir"
-say "Wrote $secret_file and created $auth_dir"
+chmod 0700 "$auth_dir"
+
+# Proven, not assumed. Checking it here costs one command and turns a container that crash-loops
+# on a stack trace into a message that says which file and why.
+if ! su -s /bin/sh -c "test -r '$secret_file'" "#$bot_uid" 2>/dev/null; then
+  die "uid $bot_uid still cannot read $secret_file. The container runs as that user and will not start."
+fi
+if ! su -s /bin/sh -c "test -w '$auth_dir'" "#$bot_uid" 2>/dev/null; then
+  die "uid $bot_uid cannot write to $auth_dir. The bot stores its Microsoft session there."
+fi
+say "Wrote $secret_file and $auth_dir, owned by uid $bot_uid (the container's user)"
 
 # ── 5. add the entry to the credentials JSON ───────────────────────────────
 # Through python rather than sed: this file is JSON the API refuses to start without, and a
