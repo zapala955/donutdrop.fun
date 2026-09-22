@@ -9,6 +9,7 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { recordBotTransfer } from '../lib/bots.js';
+import { DonutSmpApi, MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
 import {
@@ -153,6 +154,9 @@ interface AdminEntityRow {
 
 export async function registerAdminRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);
+  /* Read-only, and the only thing on this platform that can say what a bot is really holding.
+   * Constructed once: it carries no connection, just the key and the base URL. */
+  const donutsmp = new DonutSmpApi(config);
   const provisionedBotIds = [...config.botCredentials.keys()];
   const requireAdminRead = async (request: Parameters<typeof guards.authenticate>[0]) => {
     await guards.authenticate(request);
@@ -171,8 +175,21 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     return { items: result.rows };
   });
 
+  /**
+   * The bots, with what each one is ACTUALLY holding in game.
+   *
+   * `tracked_balance_minor` is what the platform believes, maintained from the receipts and payout
+   * confirmations the bots report. It is not an authority, and on a float that has just been
+   * switched on it is simply zero while the account holds millions. The real figure comes from
+   * DonutSMP's own stats endpoint, which is the only source that can settle the difference.
+   *
+   * Best-effort, and deliberately so. A stats API that is slow, rate-limited or unconfigured must
+   * leave the console usable -- an operator still needs to quarantine a bot when DonutSMP is
+   * down. Each lookup resolves to a figure or to a reason, never to a rejection that takes the
+   * whole table with it.
+   */
   app.get('/v1/admin/bots', { preHandler: requireAdminRead }, async () => {
-    const result = await db.query(
+    const result = await db.query<{ id: string; username: string } & Record<string, unknown>>(
       `SELECT b.id, b.username, b.status, b.server_host, b.last_heartbeat_at,
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
               b.role, b.tracked_balance_minor,
@@ -180,7 +197,33 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
          FROM bot_accounts b ORDER BY b.role, b.username`,
     );
-    return { bots: result.rows, floatTargetMinor: config.tellerFloatTargetMinor.toString() };
+
+    // In parallel: two bots must not cost two round trips end to end.
+    const live = await Promise.all(
+      result.rows.map(async (bot) => {
+        if (!donutsmp.configured) return { live: null, error: 'DONUTSMP_API_UNCONFIGURED' };
+        try {
+          /* fetchMoneyMinor returns HUNDREDTHS of a DonutSMP dollar. Every figure in this
+           * platform's ledger is a whole dollar -- see the note on the pay-login credit in
+           * routes/auth.ts, where scaling by a hundred once paid a $930 nonce out as $93,000.
+           * Dividing here keeps the console's columns in one unit. */
+          const hundredths = await donutsmp.fetchMoneyMinor(bot.username);
+          return { live: (hundredths / MONEY_MINOR_SCALE).toString(), error: null };
+        } catch (error) {
+          const code = error instanceof AppError ? error.code : 'DONUTSMP_API_FAILED';
+          return { live: null, error: code };
+        }
+      }),
+    );
+
+    return {
+      bots: result.rows.map((bot, index) => ({
+        ...bot,
+        live_balance_minor: live[index]?.live ?? null,
+        live_balance_error: live[index]?.error ?? null,
+      })),
+      floatTargetMinor: config.tellerFloatTargetMinor.toString(),
+    };
   });
 
   /**

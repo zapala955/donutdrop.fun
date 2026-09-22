@@ -356,6 +356,37 @@ function amountText(minor) {
 }
 
 /**
+ * The same figure, readable at a glance: $1.93m rather than $1,932,525.
+ *
+ * Used where a column is SCANNED -- balances, ledger rows -- and never where a number is being
+ * acted on. amountText stays the default for anything an operator is about to approve or pay,
+ * because $1.93m is three different amounts and a payout confirmation must say which one.
+ *
+ * BigInt all the way down. These balances pass 2^53 and a Number here would round the figure
+ * somebody is reading to decide whether the float is right.
+ */
+function compactAmount(minor) {
+  const value = typeof minor === 'bigint' ? minor : BigInt(minor ?? 0);
+  const sign = value < 0n ? '-' : '';
+  const n = value < 0n ? -value : value;
+  for (const [suffix, scale] of [
+    ['t', 1000000000000n],
+    ['b', 1000000000n],
+    ['m', 1000000n],
+    ['k', 1000n],
+  ]) {
+    if (n < scale) continue;
+    /* Two decimals, produced by integer arithmetic rather than by dividing into a float:
+     * 1932525 -> 1.93m. Trailing zeros are dropped so a round figure reads as 2m, not 2.00m. */
+    const whole = n / scale;
+    const rest = ((n % scale) * 100n) / scale;
+    const decimals = rest.toString().padStart(2, '0').replace(/0+$/, '');
+    return sign + '$' + whole.toString() + (decimals ? '.' + decimals : '') + suffix;
+  }
+  return sign + '$' + n.toString();
+}
+
+/**
  * The same dialog, plus an amount.
  *
  * The parsed figure is echoed under the field as it is typed, so the shorthand is never the last
@@ -728,7 +759,23 @@ async function loadBots() {
        * a player, and an operator glancing at this table should be able to see which one that is
        * without reading the column header. */
       role.append(pill(bot.role === 'vault' ? 'VAULT' : 'teller', bot.role === 'vault' ? 'warn' : 'ok'));
-      tr.append(role, cell(amountText(bot.tracked_balance_minor), { mono: true }));
+
+      /* What the account is really holding, read from DonutSMP, not what this platform believes.
+       * The tracked figure is maintained from receipts and starts at zero on a float that has
+       * just been switched on -- which is why this column read $0 beside an account holding
+       * millions. The tracked number is still worth seeing, so it rides in the tooltip next to
+       * the exact live figure; the cell itself stays scannable. */
+      // `live` is already the liveness flag further down this function; this is the balance.
+      const liveBalance = bot.live_balance_minor;
+      const holding = document.createElement('td');
+      holding.className = 'mono';
+      holding.textContent =
+        liveBalance === null || liveBalance === undefined ? '—' : compactAmount(liveBalance);
+      holding.title =
+        liveBalance === null || liveBalance === undefined
+          ? `DonutSMP did not answer (${bot.live_balance_error || 'unknown'}). Tracked: ${amountText(bot.tracked_balance_minor)}`
+          : `Live: ${amountText(liveBalance)}\nTracked by the platform: ${amountText(bot.tracked_balance_minor)}`;
+      tr.append(role, holding);
       const status = document.createElement('td');
       status.append(
         pill(
@@ -920,13 +967,22 @@ async function changeBotRole(bot) {
  * sum of its own history.
  */
 async function reconcileBot(bot) {
+  const live = bot.live_balance_minor;
   const values = await editRecord({
     title: `Reconcile ${bot.username}`,
     description:
-      `Tracked: ${amountText(bot.tracked_balance_minor)}. Enter what /balance actually says ` +
-      'in game. The difference is written to the log as an adjustment.',
+      `Tracked: ${amountText(bot.tracked_balance_minor)}.` +
+      (live === null || live === undefined
+        ? ' DonutSMP could not be reached, so enter what /balance says in game.'
+        : ` DonutSMP reports ${amountText(live)}, filled in below.`) +
+      ' The difference is written to the log as an adjustment.',
     fields: [
-      { name: 'observed', label: 'Observed balance (e.g. 1.5b)' },
+      // Prefilled from the live reading, so the common case is read it, agree, submit.
+      {
+        name: 'observed',
+        label: 'Observed balance (e.g. 1.5b)',
+        value: live === null || live === undefined ? '' : String(live),
+      },
       { name: 'reason', label: 'Audit reason', wide: true },
     ],
     submitLabel: 'Write the adjustment',
@@ -1008,12 +1064,12 @@ async function loadBotLedger() {
         /* Signed, because a column of bare figures cannot say which way the money went and the
            direction is the single most important thing about a row in a money log. */
         cell(
-          `${row.direction === 'in' ? '+' : '−'}${amountText(row.amount_minor)}`,
+          `${row.direction === 'in' ? '+' : '−'}${compactAmount(row.amount_minor)}`,
           { mono: true },
         ),
         cell(row.counterparty),
         cell(row.player_username),
-        cell(amountText(row.balance_after_minor), { mono: true }),
+        cell(compactAmount(row.balance_after_minor), { mono: true }),
       );
       return tr;
     },
