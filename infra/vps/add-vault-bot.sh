@@ -132,8 +132,15 @@ say "Updated $env_file (backup kept beside it)"
 compose=(docker compose --env-file "$env_file" -f "$compose_file" --profile vault)
 "${compose[@]}" config --quiet || die "compose rejected the configuration; both backups are beside the originals"
 
-say "Restarting the API so it loads the new credentials"
-"${compose[@]}" up -d --build api
+# --force-recreate, not a plain `up -d`.
+#
+# The only thing that changed is the CONTENTS of a bind-mounted secret file, and compose hashes
+# the service definition rather than what its mounts contain -- so `up -d` sees nothing to do,
+# leaves the container running, and the API keeps serving from the credentials it parsed at
+# startup. It then rejects the new bot's signature, and the bot reports an unsigned reply rather
+# than the 401 behind it.
+say "Recreating the API so it re-reads the credentials file"
+"${compose[@]}" up -d --build --force-recreate api
 
 say "Starting the vault bot"
 "${compose[@]}" up -d --build minecraft-bot-vault

@@ -209,6 +209,41 @@ async function readBoundedResponse(response: Response): Promise<string> {
   return Buffer.concat(chunks, total).toString('utf8');
 }
 
+/**
+ * Explains an unsigned reply, instead of only noting that it was unsigned.
+ *
+ * The gateway signs every response it produces for a bot it RECOGNISED, failures included. So an
+ * unsigned reply almost always means the opposite of a signing problem: the request was rejected
+ * before it reached a handler, because the gateway does not know this bot at all. The old message
+ * -- "API response authentication timestamp is missing or malformed" -- described the symptom and
+ * threw away the status code and error code that name the cause, which turned a 401 into a
+ * mystery repeated every two seconds.
+ *
+ * The status is put in the MESSAGE only. It still throws, on the same path as before, so an
+ * attacker who can inject an unsigned error still cannot steer the retry, quarantine or
+ * job-failure logic the caller drives from these results -- which is what the check is for.
+ */
+function unsignedResponseError(response: Response, body: unknown): Error {
+  if (response.ok) {
+    return new Error('API response authentication timestamp is missing or malformed');
+  }
+  const code =
+    body && typeof body === 'object' && 'error' in body
+      ? ((body as { error?: { code?: unknown } }).error?.code ?? undefined)
+      : undefined;
+  const named = typeof code === 'string' ? ` (${code})` : '';
+  const hint =
+    response.status === 401 || response.status === 403
+      ? ' The gateway did not recognise this bot: check BOT_ID and its entry in' +
+        ' BOT_CREDENTIALS_JSON, and note the API only reads that file when it STARTS -- adding a' +
+        ' bot needs the API container recreated, not just redeployed.'
+      : '';
+  return new Error(
+    `API ${response.status}${named} and the reply was not signed, so it is unauthenticated` +
+      ` and reported for diagnosis only.${hint}`,
+  );
+}
+
 export class ApiClient {
   constructor(private readonly config: BotConfig) {}
 
@@ -435,7 +470,7 @@ export class ApiClient {
     const responseTimestamp = response.headers.get('x-api-timestamp') ?? '';
     const suppliedSignature = response.headers.get('x-api-signature') ?? '';
     if (!/^\d{13}$/.test(responseTimestamp)) {
-      throw new Error('API response authentication timestamp is missing or malformed');
+      throw unsignedResponseError(response, responseBody);
     }
     const responseTime = Number(responseTimestamp);
     if (
