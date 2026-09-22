@@ -35,6 +35,79 @@ interface JobClaimState {
   readonly inventoryRevision: number;
 }
 
+/**
+ * Renders a kick reason as something a person can read.
+ *
+ * The server sends a chat component -- a nested object of text, translate keys and `extra` arrays
+ * -- and sometimes that object as a JSON string. `String(reason)` on it produces the literal text
+ * "[object Object]", which is what every kick in this log said until now: the one field that
+ * explains why the bot cannot stay connected, reliably discarded before it was written down.
+ */
+export function describeKick(reason: unknown, depth = 0): string {
+  if (depth > 8) return '';
+  if (typeof reason === 'string') {
+    const trimmed = reason.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return describeKick(JSON.parse(trimmed), depth + 1);
+      } catch {
+        // Not JSON after all; it is already the message.
+      }
+    }
+    return trimmed.slice(0, 500);
+  }
+  if (Array.isArray(reason)) {
+    return reason
+      .map((part) => describeKick(part, depth + 1))
+      .join('')
+      .slice(0, 500);
+  }
+  if (reason && typeof reason === 'object') {
+    const node = reason as Record<string, unknown>;
+    let text = '';
+    if (typeof node['text'] === 'string') text += node['text'];
+    // A translated kick ("multiplayer.disconnect.duplicate_login") carries its key, not its text.
+    if (!text && typeof node['translate'] === 'string') text += node['translate'];
+    if (node['with'] !== undefined) text += describeKick(node['with'], depth + 1);
+    if (node['extra'] !== undefined) text += describeKick(node['extra'], depth + 1);
+    if (text.trim()) return text.trim().slice(0, 500);
+    /* Nothing recognisable in it. The raw JSON is still infinitely more use than the word
+     * "object", so it goes in the log rather than being thrown away. */
+    try {
+      return JSON.stringify(reason).slice(0, 500);
+    } catch {
+      return '[unserializable kick reason]';
+    }
+  }
+  return String(reason).slice(0, 500);
+}
+
+/**
+ * Closes a Minecraft connection whatever state it is in.
+ *
+ * mineflayer attaches `quit` during login, so a bot that is still connecting does not have one.
+ * `end` exists earlier. Trying both means a shutdown cannot leave a socket open behind it.
+ */
+function closeConnection(bot: Bot, reason: string, onError: (error: unknown) => void): void {
+  const handle = bot as unknown as {
+    quit?: (reason?: string) => void;
+    end?: (reason?: string) => void;
+  };
+  try {
+    if (typeof handle.quit === 'function') {
+      handle.quit(reason);
+      return;
+    }
+    if (typeof handle.end === 'function') {
+      handle.end(reason);
+      return;
+    }
+    onError(new Error('the connection exposes neither quit() nor end()'));
+  } catch (error) {
+    onError(error);
+  }
+}
+
 export class MinecraftWorker {
   private bot: Bot | undefined;
   private stopped = false;
@@ -90,7 +163,14 @@ export class MinecraftWorker {
     this.timers.clear();
     if (this.bot) {
       await this.heartbeat(false).catch(() => undefined);
-      this.bot.quit('Worker shutdown');
+      /* `quit` is attached while the bot finishes logging in, so a worker stopped mid-connect --
+       * which is exactly what happens when the server is refusing the connection and the bot is
+       * looping on it -- hits `this.bot.quit is not a function` and never closes the socket. An
+       * unclosed session is not harmless here: the server can still believe the account is
+       * connected, and kick the next attempt as a duplicate login. */
+      closeConnection(this.bot, 'Worker shutdown', (error) =>
+        this.log.warn({ err: error }, 'could not close the Minecraft connection cleanly'),
+      );
     }
   }
 
@@ -201,7 +281,7 @@ export class MinecraftWorker {
     });
     bot.on('windowClose', () => this.markInventoryDirty());
     bot.on('kicked', (reason) =>
-      this.log.warn({ reason: String(reason).slice(0, 500) }, 'Bot kicked'),
+      this.log.warn({ reason: describeKick(reason) }, 'Bot kicked'),
     );
     bot.on('error', (error) => this.log.error({ err: error }, 'Mineflayer error'));
     bot.once('end', (reason) => {
@@ -231,13 +311,11 @@ export class MinecraftWorker {
     const bot = this.bot;
     if (!bot) return;
     this.invalidateSnapshotState();
-    try {
-      bot.quit(reason);
-    } catch (error) {
-      /* Already gone. The `end` handler has fired or is about to, so the reconnect is booked
-       * either way and there is nothing here worth failing over. */
-      this.log.warn({ err: error }, 'quit during operator reconnect threw');
-    }
+    /* Already gone is fine: the `end` handler has fired or is about to, so the reconnect is
+     * booked either way and there is nothing here worth failing over. */
+    closeConnection(bot, reason, (error) =>
+      this.log.warn({ err: error }, 'quit during operator reconnect threw'),
+    );
   }
 
   private schedule(callback: () => void, milliseconds: number): void {
