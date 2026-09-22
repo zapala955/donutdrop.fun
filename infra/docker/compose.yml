@@ -175,6 +175,8 @@ services:
       REFERRAL_BONUS_MINOR: '${REFERRAL_BONUS_MINOR:-10000000}'
       REFERRAL_BONUS_WAGER_MINOR: '${REFERRAL_BONUS_WAGER_MINOR:-100000000}'
       DEV_LOGIN_ENABLED: 'false'
+      TELLER_FLOAT_TARGET_MINOR: '${TELLER_FLOAT_TARGET_MINOR:-0}'
+      WITHDRAWAL_HOP_DELAY_SECONDS: '${WITHDRAWAL_HOP_DELAY_SECONDS:-3}'
       MINECRAFT_TRANSFERS_ENABLED: 'false'
       PHYSICAL_CUSTODY_ENABLED: '${PHYSICAL_CUSTODY_ENABLED:-false}'
       DONUTSMP_API_BASE_URL: '${DONUTSMP_API_BASE_URL:-https://api.donutsmp.net}'
@@ -329,6 +331,60 @@ services:
     pids_limit: 256
     logging: *json-logging
 
+  # ── the vault ──
+  # The second in-game account: it holds the float and its username is never shown to a player.
+  #
+  # Opt in with `--profile vault`, exactly like the Discord bot. Without the profile this service
+  # is not created at all, so a platform running a single bot carries no container crash-looping
+  # on credentials that were never issued -- and every variable below is DEFAULTED rather than
+  # required, because compose interpolates the whole file before it applies profiles and a `:?`
+  # here would stop the entire stack for everyone who has not set one.
+  #
+  # It runs the same image and the same code as the teller. Nothing in the bot knows which role it
+  # is playing; the gateway decides who pays whom and hands it a job.
+  minecraft-bot-vault:
+    profiles: ['vault']
+    build:
+      context: ../..
+      dockerfile: infra/docker/bot.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:3001/internal/v1/minecraft
+      BOT_ID: ${VAULT_BOT_ID:-00000000-0000-4000-8000-000000000000}
+      BOT_WEBHOOK_SECRET_FILE: /run/secrets/vault_bot_webhook_secret
+      BOT_POLL_INTERVAL_MS: '${BOT_POLL_INTERVAL_MS:-2000}'
+      BOT_TRANSFERS_ENABLED: 'false'
+      MINECRAFT_HOST: '${MINECRAFT_HOST:-donutsmp.net}'
+      MINECRAFT_PORT: '${MINECRAFT_PORT:-25565}'
+      MINECRAFT_VERSION: '${MINECRAFT_VERSION:-false}'
+      MINECRAFT_AUTH: microsoft
+      MINECRAFT_USERNAME: ${VAULT_MINECRAFT_USERNAME:-unset}
+      MINECRAFT_EXPECTED_USERNAME: ${VAULT_MINECRAFT_EXPECTED_USERNAME:-unset}
+      MINECRAFT_PROFILES_FOLDER: /var/lib/donut-bot/auth
+      LOG_LEVEL: '${BOT_LOG_LEVEL:-info}'
+    secrets: [vault_bot_webhook_secret]
+    volumes:
+      - type: bind
+        # Its own directory. Two bots sharing one Microsoft profile folder would fight over the
+        # same cached token and log each other out.
+        source: ${VAULT_BOT_AUTH_DIRECTORY:-/opt/donutdrop/shared/vault-bot-auth}
+        target: /var/lib/donut-bot/auth
+        bind:
+          create_host_path: false
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    networks: [bot-control, bot-egress]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+    logging: *json-logging
+
   discord-bot:
     # Opt in with `--profile discord`. Without it this service is not created at all, so a stack
     # that has no Discord application does not carry a container crash-looping on a missing token.
@@ -435,6 +491,10 @@ secrets:
   # Defaulted rather than required. Compose interpolates every variable in the file before it
   # applies profiles, so a `:?` here made the Discord files mandatory for the entire stack — the
   # API would not start, and `docker compose exec postgres` would not even run.
+  # Defaulted for the same reason as the Discord files below: a stack without a vault must still
+  # resolve every variable in this file.
+  vault_bot_webhook_secret:
+    file: ${VAULT_BOT_WEBHOOK_SECRET_FILE:-/opt/donutdrop/shared/secrets/vault-bot-webhook-secret}
   discord_bot_token:
     file: ${DISCORD_BOT_TOKEN_FILE:-/opt/donutdrop/shared/secrets/discord-bot-token}
   discord_control_hmac_key:

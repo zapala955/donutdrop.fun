@@ -8,6 +8,7 @@ import { canonicalJson, safeEqualText, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { recordBotTransfer } from '../lib/bots.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
 import {
@@ -66,6 +67,28 @@ const botQuarantineSchema = z
   .object({
     quarantined: z.boolean(),
     reason: safeText(3, 256),
+  })
+  .strict();
+/* Teller or vault. The teller is the account players see; the vault holds the float behind it. */
+const botRoleSchema = z
+  .object({
+    role: z.enum(['teller', 'vault']),
+    reason: safeText(3, 256),
+  })
+  .strict();
+/* The balance an operator has actually read off the account in game. The difference against the
+ * tracked figure is written as a ledger row rather than replacing it. */
+const botReconcileSchema = z
+  .object({
+    observedBalanceMinor: z.string().regex(/^(0|[1-9]\d{0,18})$/),
+    reason: safeText(3, 256),
+  })
+  .strict();
+const botTransferQuerySchema = z
+  .object({
+    botId: z.uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    offset: z.coerce.number().int().min(0).max(100_000).default(0),
   })
   .strict();
 /* Whether this account may trade right now. An operator's call, and reversible.
@@ -152,11 +175,136 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     const result = await db.query(
       `SELECT b.id, b.username, b.status, b.server_host, b.last_heartbeat_at,
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
+              b.role, b.tracked_balance_minor,
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
-         FROM bot_accounts b ORDER BY b.username`,
+         FROM bot_accounts b ORDER BY b.role, b.username`,
     );
-    return { bots: result.rows };
+    return { bots: result.rows, floatTargetMinor: config.tellerFloatTargetMinor.toString() };
+  });
+
+  /**
+   * Every movement of money into or out of the bots, newest first.
+   *
+   * This is the answer to "where did that go". A deposit lands on the teller, a sweep moves it to
+   * the vault, a release moves part of it back and a payout sends it to a player -- four rows
+   * that together account for one player's money end to end, each carrying the balance it left
+   * behind.
+   */
+  app.get('/v1/admin/bot-transfers', { preHandler: requireAdminRead }, async (request) => {
+    const query = parseWith(botTransferQuerySchema, request.query);
+    const result = await db.query(
+      `SELECT t.id, t.created_at, t.direction, t.amount_minor, t.balance_after_minor,
+              t.reason, t.counterparty, t.reference_id, t.note,
+              b.username AS bot_username, b.role AS bot_role,
+              u.minecraft_username AS player_username,
+              a.minecraft_username AS actor_username
+         FROM bot_transfers t
+         JOIN bot_accounts b ON b.id = t.bot_id
+         LEFT JOIN users u ON u.id = t.user_id
+         LEFT JOIN users a ON a.id = t.actor_user_id
+        WHERE ($1::uuid IS NULL OR t.bot_id = $1)
+        ORDER BY t.created_at DESC, t.id
+        LIMIT $2 OFFSET $3`,
+      [query.botId ?? null, query.limit, query.offset],
+    );
+    return { transfers: result.rows, limit: query.limit, offset: query.offset };
+  });
+
+  /**
+   * Which bot is the public face and which one holds the float.
+   *
+   * Changing a role changes where money is routed on the very next deposit, so it is an ordinary
+   * audited write with a mandatory reason like every other one here. The guard below is the part
+   * worth reading: a platform with no teller has nowhere to send a player, and every deposit
+   * screen and login card would start answering BOT_OFFLINE.
+   */
+  app.patch('/v1/admin/bots/:id/role', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(botRoleSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const current = await client.query<{ username: string; role: string }>(
+        'SELECT username, role FROM bot_accounts WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      const bot = current.rows[0];
+      if (!bot) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+      if (bot.role !== body.role && body.role === 'vault') {
+        const remaining = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM bot_accounts
+            WHERE role = 'teller' AND id <> $1`,
+          [params.id],
+        );
+        if (remaining.rows[0]?.count === '0') {
+          conflict(
+            'LAST_TELLER',
+            'At least one bot must stay a teller: it is the account players pay and are paid by',
+          );
+        }
+      }
+      const updated = await client.query<AdminEntityRow>(
+        `UPDATE bot_accounts SET role = $2, updated_at = now()
+          WHERE id = $1 RETURNING id, username, role, tracked_balance_minor`,
+        [params.id, body.role],
+      );
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'bot.role',
+        targetType: 'bot',
+        targetId: params.id,
+        details: { username: bot.username, from: bot.role, to: body.role, reason: body.reason },
+      });
+      return { bot: updated.rows[0] };
+    });
+  });
+
+  /**
+   * Corrects the tracked balance to what the account is really holding.
+   *
+   * The tracked figure is maintained from receipts and payout confirmations, and it drifts:
+   * somebody pays the bot by hand, a receipt is missed while it is disconnected. This writes the
+   * difference as an ordinary ledger row rather than overwriting the number, so the correction is
+   * as visible afterwards as everything else in the log and the running balance stays the sum of
+   * its own history.
+   */
+  app.post('/v1/admin/bots/:id/reconcile', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(botReconcileSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const current = await client.query<{ username: string; tracked_balance_minor: string }>(
+        'SELECT username, tracked_balance_minor FROM bot_accounts WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      const bot = current.rows[0];
+      if (!bot) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+      const observed = BigInt(body.observedBalanceMinor);
+      const delta = observed - BigInt(bot.tracked_balance_minor);
+      if (delta === 0n) return { bot: { id: params.id, adjustedMinor: '0' } };
+      await recordBotTransfer(client, {
+        botId: params.id,
+        direction: delta > 0n ? 'in' : 'out',
+        counterparty: 'reconciliation',
+        amountMinor: delta > 0n ? delta : -delta,
+        reason: 'adjustment',
+        note: body.reason,
+        actorUserId: actor,
+      });
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'bot.reconcile',
+        targetType: 'bot',
+        targetId: params.id,
+        details: {
+          username: bot.username,
+          from: bot.tracked_balance_minor,
+          to: observed.toString(),
+          reason: body.reason,
+        },
+      });
+      return { bot: { id: params.id, adjustedMinor: delta.toString() } };
+    });
   });
 
   app.patch(
@@ -1078,7 +1226,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           conflict('WITHDRAWAL_NOT_PENDING', 'That payout is not waiting for approval');
           throw new AppError(409, 'WITHDRAWAL_NOT_PENDING', 'Unreachable');
         }
-        await queueWithdrawalJob(client, row);
+        await queueWithdrawalJob(client, config, row);
         await appendAudit(client, config, {
           actorUserId: actor,
           action: 'cash_withdrawal.approve',

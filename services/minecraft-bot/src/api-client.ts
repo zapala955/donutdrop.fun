@@ -42,6 +42,22 @@ const cashPayoutPayloadSchema = z
 /* An operator-ordered payment out of the bot's own balance. Same shape as a cash payout minus
  * the withdrawal it does not have, and the amount is a decimal string for the same reason: these
  * figures run past 2^53 and a payout that silently rounds pays the wrong number. */
+/* A transfer between the platform's own two accounts.
+ *
+ * `toBotId` is the receiving bot's row, which the gateway uses to book the other half of the
+ * movement; the bot itself only needs `payee` and the amount, and does not act on it. It is
+ * validated here regardless, because a payload the schema has not fully described is a payload
+ * nobody is checking. */
+const internalTransferPayloadSchema = z
+  .object({
+    payee: z.string().regex(/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/),
+    amountMinor: z.string().regex(/^[1-9]\d{0,18}$/),
+    toBotId: z.uuid(),
+    // Present on a release, which settles a withdrawal; absent on a sweep, which settles nothing.
+    withdrawalId: z.uuid().optional(),
+  })
+  .strict();
+
 const adminPayoutPayloadSchema = z
   .object({
     payoutId: z.uuid(),
@@ -53,7 +69,15 @@ const adminPayoutPayloadSchema = z
 const botJobSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(['withdrawal', 'inventory_resync', 'cash_payout', 'admin_payout', 'reconnect']),
+    kind: z.enum([
+      'withdrawal',
+      'inventory_resync',
+      'cash_payout',
+      'admin_payout',
+      'reconnect',
+      'vault_sweep',
+      'vault_release',
+    ]),
     reference_id: z.uuid(),
     payload: z.unknown(),
     leaseToken: z.string().regex(/^[a-f0-9]{64}$/),
@@ -306,6 +330,18 @@ export class ApiClient {
       }
       return { ...result.job, kind: 'admin_payout', payload };
     }
+    if (result.job.kind === 'vault_sweep' || result.job.kind === 'vault_release') {
+      const payload = internalTransferPayloadSchema.parse(result.job.payload);
+      /* A release settles a withdrawal and its envelope names the same one. A sweep settles
+       * nothing and references only itself, so there is no identifier to cross-check. */
+      if (
+        result.job.kind === 'vault_release' &&
+        payload.withdrawalId !== result.job.reference_id
+      ) {
+        throw new Error('Vault release job identifiers do not match');
+      }
+      return { ...result.job, kind: result.job.kind, payload };
+    }
     if (result.job.kind === 'reconnect') {
       return { ...result.job, kind: 'reconnect', payload: result.job.payload };
     }
@@ -487,6 +523,20 @@ export interface AdminPayoutBotJob extends BotJobBase {
   payload: { payoutId: string; payee: string; amountMinor: string };
 }
 
+/**
+ * Money moving between the platform's own two accounts.
+ *
+ * `vault_sweep` is the teller emptying itself down to its float; `vault_release` is the vault
+ * funding a withdrawal the teller cannot cover alone. Physically identical to a cash payout --
+ * one /pay and one receipt -- and the worker runs all of them through the same code. They are
+ * separate kinds because the GATEWAY does entirely different things on completion: a sweep books
+ * two ledger legs and stops, a release books the same two and then queues the player's hop.
+ */
+export interface InternalTransferBotJob extends BotJobBase {
+  kind: 'vault_sweep' | 'vault_release';
+  payload: { payee: string; amountMinor: string; toBotId: string; withdrawalId?: string | undefined };
+}
+
 /** Drop the connection and come back. Carries no payload and moves no money. */
 export interface ReconnectBotJob extends BotJobBase {
   kind: 'reconnect';
@@ -498,4 +548,5 @@ export type BotJob =
   | InventoryResyncBotJob
   | CashPayoutBotJob
   | AdminPayoutBotJob
+  | InternalTransferBotJob
   | ReconnectBotJob;

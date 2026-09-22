@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import mineflayer, { type Bot } from 'mineflayer';
 import type { Logger } from 'pino';
 import type { BotConfig } from './config.js';
-import type { AdminPayoutBotJob, ApiClient, BotJob, CashPayoutBotJob } from './api-client.js';
+import type {
+  AdminPayoutBotJob,
+  ApiClient,
+  BotJob,
+  CashPayoutBotJob,
+  InternalTransferBotJob,
+} from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
 import {
@@ -693,8 +699,11 @@ export class MinecraftWorker {
    * reported as non-retryable and parked for a human, because a retry after an unknown outcome is
    * how a player gets paid twice.
    */
+  /* Four kinds, one act: /pay somebody an exact amount and wait for the server to say it landed.
+   * Two of them pay a player and two pay the platform's other bot; nothing here needs to know
+   * which, because the payee is already decided by the time a job reaches this bot. */
   private async sendCashPayout(
-    job: CashPayoutBotJob | AdminPayoutBotJob,
+    job: CashPayoutBotJob | AdminPayoutBotJob | InternalTransferBotJob,
     claimState: JobClaimState,
   ): Promise<void> {
     const { payee, amountMinor } = job.payload;
@@ -784,7 +793,16 @@ export class MinecraftWorker {
      * transfer flag, does not invalidate the snapshot, and does not run the reconciliation
      * afterwards. It is handled before the inventory-strict check below, because holding a
      * payment to the state of an inventory it never opens is what kept one queued indefinitely. */
-    if (job.kind === 'cash_payout' || job.kind === 'admin_payout') {
+    if (
+      job.kind === 'cash_payout' ||
+      job.kind === 'admin_payout' ||
+      /* The two bot-to-bot legs. Identical machinery: one /pay command and a confirmation from
+       * the server's own receipt, with another of our accounts as the payee rather than a
+       * player. The bot is not told which of the two roles it is playing and does not need to
+       * be -- the gateway decides who pays whom, and this only carries it out. */
+      job.kind === 'vault_sweep' ||
+      job.kind === 'vault_release'
+    ) {
       await this.sendCashPayout(job, claimState);
       return;
     }

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
+import { findVaultBot, pickBot } from '../lib/bots.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
@@ -114,14 +115,136 @@ export async function refundWithdrawal(
   );
 }
 
-/** Queues the bot job for an approved or auto-approved payout. */
+/**
+ * Sends an approved payout on its way, out of whichever pocket can cover it.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * ONE HOP OR TWO
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * If the teller already holds enough, it pays the player directly and the vault is never
+ * involved -- that is what the float is for. If it does not, the vault is asked for enough to
+ * cover the payout AND to put the teller back on its float, and the payout itself is queued only
+ * once that first transfer confirms.
+ *
+ * A deployment with no vault provisioned takes the direct path unconditionally, which is exactly
+ * what this function did before there were two bots.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * THE VAULT DOES NOT HAVE TO BE ONLINE
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * The release is queued whatever the vault is currently doing. A job row waits in `bot_jobs`
+ * until the vault reconnects and claims it, so a vault that is down delays a withdrawal instead
+ * of failing it. The player's balance is already debited by this point; turning that into a
+ * refusal would be a second movement of their money that nobody asked for.
+ */
 export async function queueWithdrawalJob(
   client: DbClient,
+  config: AppConfig,
   withdrawal: { id: string; bot_id: string; payee_username: string; amount_minor: string },
 ): Promise<void> {
+  const amount = BigInt(withdrawal.amount_minor);
+  const vault = await findVaultBot(client, config);
+
+  const payPlayerDirectly = async (availableIn = 0) => {
+    await client.query(
+      `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
+       VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
+       ON CONFLICT (kind, reference_id) DO NOTHING`,
+      [
+        randomUUID(),
+        withdrawal.bot_id,
+        withdrawal.id,
+        JSON.stringify({
+          withdrawalId: withdrawal.id,
+          payee: withdrawal.payee_username,
+          amountMinor: withdrawal.amount_minor,
+        }),
+        availableIn,
+      ],
+    );
+  };
+
+  // Single-bot deployment: nothing to route through, so this is the old behaviour unchanged.
+  if (!vault) {
+    await payPlayerDirectly();
+    return;
+  }
+
+  /* The teller's row is locked before its balance is read, because two withdrawals deciding at
+   * the same instant that the float covers them would both take the direct path and the second
+   * would find the money gone. */
+  const teller = await client.query<{ tracked_balance_minor: string; username: string }>(
+    'SELECT tracked_balance_minor, username FROM bot_accounts WHERE id = $1 FOR UPDATE',
+    [withdrawal.bot_id],
+  );
+  const held = BigInt(teller.rows[0]?.tracked_balance_minor ?? '0');
+
+  if (held >= amount) {
+    await client.query(
+      "UPDATE cash_withdrawals SET funding = 'float', updated_at = now() WHERE id = $1",
+      [withdrawal.id],
+    );
+    await payPlayerDirectly();
+    return;
+  }
+
+  /* Enough to pay the player and leave the teller sitting on its float afterwards, so a run of
+   * withdrawals does not mean a trip to the vault for every one of them. With the float at zero
+   * this is exactly the payout amount, and every withdrawal is a strict pass-through. */
+  const release = amount + config.tellerFloatTargetMinor - held;
   await client.query(
     `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload)
-     VALUES ($1, $2, 'cash_payout', $3, $4)
+     VALUES ($1, $2, 'vault_release', $3, $4)
+     ON CONFLICT (kind, reference_id) DO NOTHING`,
+    [
+      randomUUID(),
+      vault.id,
+      withdrawal.id,
+      JSON.stringify({
+        withdrawalId: withdrawal.id,
+        payee: teller.rows[0]?.username ?? '',
+        amountMinor: release.toString(),
+        toBotId: withdrawal.bot_id,
+      }),
+    ],
+  );
+  await client.query(
+    `UPDATE cash_withdrawals SET status = 'awaiting_vault', funding = 'vault', updated_at = now()
+      WHERE id = $1 AND status IN ('queued', 'pending_approval')`,
+    [withdrawal.id],
+  );
+}
+
+/**
+ * Queues the player-facing hop of a two-hop withdrawal, once the vault's transfer has confirmed.
+ *
+ * Delayed by `withdrawalHopDelaySeconds`. The two transfers are otherwise adjacent in the
+ * server's own public chat log, where the pairing -- an unknown account paying the teller, the
+ * teller immediately paying a player the same amount -- is exactly what the split was meant to
+ * hide.
+ */
+export async function queueWithdrawalPayoutAfterRelease(
+  client: DbClient,
+  config: AppConfig,
+  withdrawalId: string,
+): Promise<void> {
+  const row = await client.query<{
+    id: string;
+    bot_id: string;
+    payee_username: string;
+    amount_minor: string;
+  }>(
+    `UPDATE cash_withdrawals
+        SET status = 'queued', vault_released_at = now(), updated_at = now()
+      WHERE id = $1 AND status = 'awaiting_vault'
+      RETURNING id, bot_id, payee_username, amount_minor`,
+    [withdrawalId],
+  );
+  const withdrawal = row.rows[0];
+  if (!withdrawal) return;
+  await client.query(
+    `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
+     VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
      ON CONFLICT (kind, reference_id) DO NOTHING`,
     [
       randomUUID(),
@@ -132,6 +255,7 @@ export async function queueWithdrawalJob(
         payee: withdrawal.payee_username,
         amountMinor: withdrawal.amount_minor,
       }),
+      config.withdrawalHopDelaySeconds,
     ],
   );
 }
@@ -142,27 +266,10 @@ export async function registerCashWithdrawalRoutes(
   config: AppConfig,
 ) {
   const guards = createAuthGuards(db, config);
-  const provisionedBotIds = [...config.botCredentials.keys()];
 
-  /** The bot that will actually send the command, or nothing if none is fit to. */
-  async function onlineBot(client: DbClient): Promise<{ id: string; username: string } | null> {
-    const bots = await client.query<{ id: string; username: string; server_host: string }>(
-      `SELECT id, username, server_host FROM bot_accounts
-        WHERE id = ANY($1::uuid[]) AND status = 'online'
-          AND last_heartbeat_at > now() - interval '45 seconds'
-        ORDER BY last_heartbeat_at DESC`,
-      [provisionedBotIds],
-    );
-    const match = bots.rows.find((candidate) => {
-      const provisioned = config.botCredentials.get(candidate.id);
-      return (
-        provisioned &&
-        candidate.username.toLowerCase() === provisioned.username.toLowerCase() &&
-        candidate.server_host.toLowerCase().replace(/\.$/, '') === provisioned.serverHost
-      );
-    });
-    return match ? { id: match.id, username: match.username } : null;
-  }
+  /* The teller, always. A withdrawal has to arrive from the account players already associate
+   * with the site, and the vault's name must never appear on a payment a player receives. */
+  const onlineBot = (client: DbClient) => pickBot(client, config, 'teller');
 
   app.get(
     '/v1/cash-withdrawals/info',
@@ -322,7 +429,7 @@ export async function registerCashWithdrawalRoutes(
         );
 
         if (!needsApproval) {
-          await queueWithdrawalJob(client, {
+          await queueWithdrawalJob(client, config, {
             id: withdrawalId,
             bot_id: bot.id,
             payee_username: payee,

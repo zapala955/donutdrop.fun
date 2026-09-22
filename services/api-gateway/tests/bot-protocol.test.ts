@@ -165,6 +165,11 @@ describe('internal bot protocol', () => {
         if (sql.includes('UPDATE user_wallets')) {
           return { rows: [{ balance_minor: '1200' }], rowCount: 1 };
         }
+        /* The receipt now also books the money onto the bot that received it, so the running
+         * balance on bot_accounts moves in the same transaction as the player's wallet. */
+        if (sql.includes('UPDATE bot_accounts')) {
+          return { rows: [{ tracked_balance_minor: '1200' }], rowCount: 1 };
+        }
         return { rows: [], rowCount: 1 };
       },
     } as unknown as DbClient;

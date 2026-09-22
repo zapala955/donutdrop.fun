@@ -625,6 +625,22 @@ const environmentSchema = z
     DEV_LOGIN_ENABLED: booleanString,
     DEV_LOGIN_TOKEN: z.string().min(24).max(256).default(''),
     DEV_LOGIN_BALANCE_MINOR: positiveBigintString.default('50000000'),
+    /* ── the teller and the vault ──
+     *
+     * Two in-game accounts. The teller is the public face -- deposits, logins and the account a
+     * withdrawal visibly arrives from -- and the vault holds the float behind it, never named to
+     * a player. A deployment with one provisioned bot has a teller and no vault, and works.
+     *
+     * TELLER_FLOAT_TARGET_MINOR is what the teller is allowed to keep. Anything above it is swept
+     * to the vault; a withdrawal the float covers is paid straight out without involving the
+     * vault at all. Zero sweeps everything and makes every withdrawal a two-hop, which is the
+     * safest setting and the slowest.
+     *
+     * WITHDRAWAL_HOP_DELAY_SECONDS is the pause between the vault's transfer to the teller and
+     * the teller's transfer to the player. It exists so the two do not land back to back in the
+     * server's own chat log, where the pairing would be obvious to anybody watching it. */
+    TELLER_FLOAT_TARGET_MINOR: nonNegativeBigintString.default('0'),
+    WITHDRAWAL_HOP_DELAY_SECONDS: z.coerce.number().int().min(0).max(300).default(3),
     MINECRAFT_TRANSFERS_ENABLED: booleanString,
     // Website-only items mean the bot custodies nothing for players, so its real Minecraft
     // inventory is irrelevant and must not reconcile against the ledger. Enable only when
@@ -1087,6 +1103,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     devLoginEnabled: env.DEV_LOGIN_ENABLED,
     devLoginToken: env.DEV_LOGIN_TOKEN,
     devLoginBalanceMinor: BigInt(env.DEV_LOGIN_BALANCE_MINOR),
+    tellerFloatTargetMinor: BigInt(env.TELLER_FLOAT_TARGET_MINOR),
+    withdrawalHopDelaySeconds: env.WITHDRAWAL_HOP_DELAY_SECONDS,
     minecraftTransfersEnabled: env.MINECRAFT_TRANSFERS_ENABLED,
     physicalCustodyEnabled: env.PHYSICAL_CUSTODY_ENABLED,
     donutsmpApiBaseUrl: env.DONUTSMP_API_BASE_URL,

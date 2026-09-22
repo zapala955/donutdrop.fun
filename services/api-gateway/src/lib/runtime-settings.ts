@@ -16,6 +16,7 @@ type SettingGroup =
   | 'jackpot'
   | 'rain'
   | 'social'
+  | 'bots'
   | 'limits';
 
 interface Definition {
@@ -383,6 +384,29 @@ export const runtimeSettingDefinitions = {
     label: 'Discord flex threshold',
     min: 1n,
     max: BIGINT_MAX,
+  },
+
+  /* ── the teller's float ──
+   *
+   * How much the public-facing bot is allowed to hold. Everything above it is swept to the vault,
+   * so this is the ceiling on what is sitting on the account whose name every player knows.
+   * Raising it means fewer in-game transfers and faster withdrawals; lowering it means less
+   * exposed. Zero sweeps everything. */
+  tellerFloatTargetMinor: {
+    kind: 'bigint',
+    group: 'bots',
+    label: 'Teller float (swept above this)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  /* The pause between the vault paying the teller and the teller paying the player, so the two
+   * legs are not adjacent in the server's public chat log. */
+  withdrawalHopDelaySeconds: {
+    kind: 'integer',
+    group: 'bots',
+    label: 'Delay between withdrawal hops (seconds)',
+    min: 0n,
+    max: 300n,
   },
 
   /* ── the single largest thing one roll may risk ── */

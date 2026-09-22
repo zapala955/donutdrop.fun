@@ -208,6 +208,18 @@
             >
           </div>
           <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
+
+          <!-- The money ledger for the bots themselves: every deposit received, every sweep to
+           the vault, every release back, every payout sent. One player's money can be followed
+           end to end through four rows here, each carrying the balance it left behind. -->
+          <div class="panel__head panel__head--sub">
+            <h3>Bot transaction log</h3>
+            <span class="hint" id="botLedgerHint"></span>
+          </div>
+          <div class="settingbar">
+            <div class="chips" id="botLedgerFilter" role="group" aria-label="Filter by bot"></div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="botLedgerTable"></table></div>
         </section>
 
         <section class="panel" data-panel="jobs" hidden>

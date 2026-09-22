@@ -76,7 +76,7 @@ describe('cash payment deposits', () => {
       query: async (sql: string, values?: readonly unknown[]) => {
         statements.push(values ? { sql, values } : { sql });
         if (sql.includes('FROM bot_accounts')) {
-          return result([{ id: botId, username: 'DonutBot', server_host: 'donutsmp.net' }]);
+          return result([{ id: botId, username: 'DonutBot', server_host: 'donutsmp.net', role: 'teller', tracked_balance_minor: '0' }]);
         }
         return result([]);
       },

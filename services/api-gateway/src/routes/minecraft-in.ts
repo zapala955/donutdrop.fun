@@ -12,9 +12,10 @@ import {
 import { canonicalJson, safeEqualBuffer, sha256, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { queueVaultSweep, recordBotTransfer } from '../lib/bots.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { MINECRAFT_USERNAME_PATTERN, platformIdentityFor } from '../lib/minecraft-username.js';
-import { refundWithdrawal } from './cash-withdrawals.js';
+import { queueWithdrawalPayoutAfterRelease, refundWithdrawal } from './cash-withdrawals.js';
 import { parseWith } from '../lib/validation.js';
 import { creditWallet } from '../lib/wallet.js';
 
@@ -287,13 +288,13 @@ export async function registerMinecraftInternalRoutes(
             await processSnapshot(client, event, config);
             break;
           case 'job_result':
-            await processJobResult(client, event);
+            await processJobResult(client, event, config);
             break;
           case 'payment_observed':
             await processPaymentObserved(client, event);
             break;
           case 'cash_payment_observed':
-            await processCashPaymentObserved(client, event);
+            await processCashPaymentObserved(client, event, config);
             break;
         }
         return { accepted: true, duplicate: false };
@@ -868,15 +869,53 @@ function displayedPaymentAmount(displayed: string): bigint | undefined {
 async function processCashPaymentObserved(
   client: DbClient,
   event: z.infer<typeof cashPaymentEvent>,
+  config: AppConfig,
 ): Promise<void> {
   const amount = displayedPaymentAmount(event.displayedAmount);
 
-  let status: 'credited' | 'login_payment' | 'unlinked' | 'manual_review' = 'manual_review';
+  let status:
+    | 'credited'
+    | 'login_payment'
+    | 'unlinked'
+    | 'manual_review'
+    | 'internal_transfer' = 'manual_review';
   let userId: string | undefined;
   let walletBalanceAfter: string | undefined;
   /* Which key found the account. "Credited by name" is a materially weaker claim than "credited by
    * UUID", and the receipt records which one happened rather than leaving it to be inferred. */
   let attributedBy: 'uuid' | 'username' | undefined;
+
+  /* Money arriving from one of our OWN bots is an internal leg, not somebody's deposit.
+   *
+   * This is what a teller-to-vault sweep looks like from the vault's side. It has to be caught
+   * before the account lookup below, because a bot's in-game name is a real Minecraft name: if
+   * anybody ever signs into the site with the account the vault runs on, `normalized_username`
+   * would match and the sweep would be credited to them as a deposit. The balance leg is booked
+   * by the job that sent it, so nothing is recorded here beyond the receipt. */
+  const internalSender = await client.query<{ id: string }>(
+    'SELECT id FROM bot_accounts WHERE lower(username) = lower($1) LIMIT 1',
+    [event.payer],
+  );
+  /* `rows[0]`, not `rowCount`. On a SELECT the returned row IS the evidence, and this branch
+   * decides whether somebody's deposit is credited at all -- a count that disagreed with the rows
+   * beside it would silently swallow a real payment. */
+  if (internalSender.rows[0]) {
+    await client.query(
+      `INSERT INTO cash_payment_receipts
+         (event_id, bot_id, payer_username, payer_uuid, displayed_amount, amount_minor, user_id,
+          status, attributed_by, wallet_balance_after_minor)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, 'internal_transfer', NULL, NULL)`,
+      [
+        event.eventId,
+        event.botId,
+        event.payer,
+        event.payerUuid ?? null,
+        event.displayedAmount,
+        amount?.toString() ?? null,
+      ],
+    );
+    return;
+  }
 
   if (amount !== undefined) {
     const login = await client.query<{ id: string }>(
@@ -946,6 +985,116 @@ async function processCashPaymentObserved(
       walletBalanceAfter ?? null,
     ],
   );
+
+  /* The bot is now holding this money, whether it turned out to be a deposit or a login nonce.
+   *
+   * Booked against the receipt's own event id, so a bot re-reporting the same receipt after a
+   * reconnect moves the tracked balance once. An 'unlinked' payment is booked too: the money is
+   * genuinely on the account even though nobody could be credited for it, and a float that
+   * ignored it would be wrong by exactly that much. */
+  if (amount !== undefined && amount > 0n && (status === 'credited' || status === 'login_payment' || status === 'unlinked')) {
+    const booked = await recordBotTransfer(client, {
+      botId: event.botId,
+      direction: 'in',
+      counterparty: event.payer,
+      amountMinor: amount,
+      reason: status === 'login_payment' ? 'login' : 'deposit',
+      referenceId: event.eventId,
+      userId: userId ?? null,
+    });
+    /* Only on a first booking. A replayed receipt must not re-queue a sweep sized against a
+     * balance the first one has already moved. */
+    if (booked !== null) {
+      const teller = await client.query<{ id: string; username: string; role: string }>(
+        'SELECT id, username, role FROM bot_accounts WHERE id = $1',
+        [event.botId],
+      );
+      const row = teller.rows[0];
+      if (row && row.role === 'teller') {
+        await queueVaultSweep(client, config, { id: row.id, username: row.username });
+      }
+    }
+  }
+}
+
+/**
+ * Books the teller's side of a payout to a player.
+ *
+ * The money left the bot the moment the server confirmed the command, so the tracked balance has
+ * to follow it. Idempotent on the job id: a result replayed after a reconnect books nothing.
+ */
+async function bookPayoutLeg(
+  client: DbClient,
+  jobId: string,
+  botId: string,
+  withdrawalId: string,
+): Promise<void> {
+  const withdrawal = await client.query<{ payee_username: string; amount_minor: string }>(
+    'SELECT payee_username, amount_minor FROM cash_withdrawals WHERE id = $1',
+    [withdrawalId],
+  );
+  const row = withdrawal.rows[0];
+  if (!row) return;
+  await recordBotTransfer(client, {
+    botId,
+    direction: 'out',
+    counterparty: row.payee_username,
+    amountMinor: BigInt(row.amount_minor),
+    reason: 'withdrawal',
+    referenceId: jobId,
+  });
+}
+
+/**
+ * Books both halves of a transfer between our own two bots.
+ *
+ * One statement pair per side, against the same job id, so the pair is atomic with the job's own
+ * completion and a replayed result books neither side twice. The receiving bot reports the same
+ * money arriving as a payment receipt, which is recorded as `internal_transfer` and credits
+ * nobody -- if this booked only the sender, the vault's balance would never move.
+ */
+async function bookInternalTransfer(
+  client: DbClient,
+  jobId: string,
+  senderBotId: string,
+  kind: 'vault_sweep' | 'vault_release',
+  referenceId: string,
+): Promise<void> {
+  const job = await client.query<{ payload: { payee?: string; amountMinor?: string; toBotId?: string } }>(
+    'SELECT payload FROM bot_jobs WHERE id = $1',
+    [jobId],
+  );
+  const payload = job.rows[0]?.payload;
+  const amount = payload?.amountMinor ? BigInt(payload.amountMinor) : 0n;
+  const recipientId = payload?.toBotId;
+  if (amount <= 0n || !recipientId) return;
+
+  const sender = await client.query<{ username: string }>(
+    'SELECT username FROM bot_accounts WHERE id = $1',
+    [senderBotId],
+  );
+  const reason = kind === 'vault_sweep' ? 'sweep' : 'release';
+  // A sweep has no withdrawal behind it, so its reference is the job; a release names the payout.
+  const reference = kind === 'vault_sweep' ? jobId : referenceId;
+
+  await recordBotTransfer(client, {
+    botId: senderBotId,
+    direction: 'out',
+    counterparty: payload?.payee ?? '',
+    counterpartyBotId: recipientId,
+    amountMinor: amount,
+    reason,
+    referenceId: reference,
+  });
+  await recordBotTransfer(client, {
+    botId: recipientId,
+    direction: 'in',
+    counterparty: sender.rows[0]?.username ?? '',
+    counterpartyBotId: senderBotId,
+    amountMinor: amount,
+    reason,
+    referenceId: reference,
+  });
 }
 
 async function processSnapshot(
@@ -1067,6 +1216,7 @@ async function quarantineBotAndJobs(
 async function processJobResult(
   client: DbClient,
   event: z.infer<typeof jobResultEvent>,
+  config: AppConfig,
 ): Promise<void> {
   const result = await client.query<{
     id: string;
@@ -1129,7 +1279,15 @@ async function processJobResult(
      * inventory reconciliation here would dead-letter every payout on a platform where physical
      * item transfer is deliberately switched off. */
     const cashOnly =
-      job.kind === 'cash_payout' || job.kind === 'admin_payout' || job.kind === 'reconnect';
+      job.kind === 'cash_payout' ||
+      job.kind === 'admin_payout' ||
+      job.kind === 'reconnect' ||
+      /* Both bot-to-bot legs move a number through the server's own /pay and never touch an
+       * inventory, so they are held to liveness alone. Requiring transfer_capable and a matched
+       * reconciliation here would strand the platform's own float on a site where physical item
+       * transfer is deliberately switched off, which is every site this runs on today. */
+      job.kind === 'vault_sweep' ||
+      job.kind === 'vault_release';
     const safeBot =
       cashOnly
         ? await client.query(
@@ -1176,6 +1334,16 @@ async function processJobResult(
           [job.reference_id],
         );
       }
+      /* A release that cannot be sent leaves a withdrawal in `awaiting_vault` with no job behind
+       * it, which is a payout that waits forever in a state that looks like ordinary patience.
+       * Name it so it appears in the console's attention list instead. */
+      if (job.kind === 'vault_release') {
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'manual_review', error_code = 'BOT_STATE_UNSAFE',
+                  updated_at = now() WHERE id = $1 AND status = 'awaiting_vault'`,
+          [job.reference_id],
+        );
+      }
       return;
     }
     await client.query(
@@ -1189,6 +1357,20 @@ async function processJobResult(
           WHERE id = $1 AND status IN ('queued', 'processing')`,
         [job.reference_id],
       );
+      await bookPayoutLeg(client, job.id, event.botId, job.reference_id);
+    }
+    /* A bot-to-bot leg. Both sides are booked here rather than on the receiving bot's own
+     * payment receipt, because that receipt is marked `internal_transfer` and deliberately
+     * credits nobody -- this is the only place that knows the transfer was ours and what it
+     * was for. */
+    if (job.kind === 'vault_sweep' || job.kind === 'vault_release') {
+      await bookInternalTransfer(client, job.id, event.botId, job.kind, job.reference_id);
+      if (job.kind === 'vault_release') {
+        /* The player's hop, delayed. The vault paying the teller and the teller paying the
+         * player land in the same public chat log, and back to back the pairing is obvious to
+         * anybody reading it. */
+        await queueWithdrawalPayoutAfterRelease(client, config, job.reference_id);
+      }
     }
     if (job.kind === 'admin_payout') {
       await client.query(

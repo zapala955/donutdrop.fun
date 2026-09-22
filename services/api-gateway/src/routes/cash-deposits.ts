@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
+import { pickBot } from '../lib/bots.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 
@@ -11,7 +12,6 @@ export async function registerCashDepositRoutes(
   config: AppConfig,
 ) {
   const guards = createAuthGuards(db, config);
-  const provisionedBotIds = [...config.botCredentials.keys()];
 
   app.get(
     '/v1/cash-deposits/info',
@@ -20,21 +20,11 @@ export async function registerCashDepositRoutes(
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     },
     async () => {
-      const bots = await db.query<{ id: string; username: string; server_host: string }>(
-        `SELECT id, username, server_host FROM bot_accounts
-          WHERE id = ANY($1::uuid[]) AND status = 'online'
-            AND last_heartbeat_at > now() - interval '45 seconds'
-          ORDER BY last_heartbeat_at DESC`,
-        [provisionedBotIds],
-      );
-      const bot = bots.rows.find((candidate) => {
-        const provisioned = config.botCredentials.get(candidate.id);
-        return (
-          provisioned &&
-          candidate.username.toLowerCase() === provisioned.username.toLowerCase() &&
-          candidate.server_host.toLowerCase().replace(/\.$/, '') === provisioned.serverHost
-        );
-      });
+      /* The teller, and only ever the teller. This endpoint's whole output is a username a
+       * player is told to send money to, so it is the one place the vault's name must never be
+       * able to reach. Asking by role rather than by "whichever is online" is what guarantees
+       * that, rather than the ordering of a query. */
+      const bot = await pickBot(db, config, 'teller');
       if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
 
       return {

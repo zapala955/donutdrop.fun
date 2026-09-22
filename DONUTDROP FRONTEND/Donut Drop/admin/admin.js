@@ -709,15 +709,26 @@ function renderPlayerActions(user, data) {
   host.append(note);
 }
 
+/* Which bot the transaction log below is filtered to, and the bots it can be filtered by.
+ * Held between renders so switching tabs does not silently reset an operator's filter. */
+const botLedgerState = { botId: null, bots: [] };
+
 async function loadBots() {
   const data = await api.get('/v1/admin/bots');
+  botLedgerState.bots = data.bots ?? [];
   table(
     $('botTable'),
-    ['Bot', 'Status', 'Reconciliation', 'Transfers', 'Heartbeat', 'Open jobs', ''],
+    ['Bot', 'Role', 'Holding', 'Status', 'Reconciliation', 'Transfers', 'Heartbeat', 'Open jobs', ''],
     data.bots ?? [],
     (bot) => {
       const tr = document.createElement('tr');
       tr.append(cell(bot.username));
+      const role = document.createElement('td');
+      /* The vault is marked, not merely named. It is the account whose username must never reach
+       * a player, and an operator glancing at this table should be able to see which one that is
+       * without reading the column header. */
+      role.append(pill(bot.role === 'vault' ? 'VAULT' : 'teller', bot.role === 'vault' ? 'warn' : 'ok'));
+      tr.append(role, cell(amountText(bot.tracked_balance_minor), { mono: true }));
       const status = document.createElement('td');
       status.append(
         pill(
@@ -784,7 +795,24 @@ async function loadBots() {
         : 'The bot has not checked in recently enough to pay anybody';
       pay.addEventListener('click', () => void payFromBot(bot));
 
-      actions.append(rejoin, pay);
+      const roleButton = document.createElement('button');
+      roleButton.type = 'button';
+      roleButton.className = 'btn';
+      roleButton.textContent = bot.role === 'vault' ? 'Make teller' : 'Make vault';
+      roleButton.title =
+        bot.role === 'vault'
+          ? 'Put this account back in front of players'
+          : 'Hold the float on this account and stop showing its name to players';
+      roleButton.addEventListener('click', () => void changeBotRole(bot));
+
+      const reconcile = document.createElement('button');
+      reconcile.type = 'button';
+      reconcile.className = 'btn';
+      reconcile.textContent = 'Reconcile';
+      reconcile.title = "Correct the tracked balance to what the account is really holding";
+      reconcile.addEventListener('click', () => void reconcileBot(bot));
+
+      actions.append(rejoin, pay, roleButton, reconcile);
 
       const quarantining = bot.status !== 'quarantined';
       const button = document.createElement('button');
@@ -856,6 +884,140 @@ async function payFromBot(bot) {
   } catch (error) {
     toast(`${error.code}: ${error.message}`, 'bad');
   }
+}
+
+/**
+ * Moves a bot between the two roles.
+ *
+ * Spelled out rather than confirmed with a shrug, because this decides which account a player is
+ * told to pay from the very next deposit onward, and the whole point of the vault is that its
+ * name has never been published.
+ */
+async function changeBotRole(bot) {
+  const becomingVault = bot.role !== 'vault';
+  const reason = await confirmAction(
+    becomingVault
+      ? `Make ${bot.username} the vault? Its name stops appearing on deposit screens, login ` +
+          'cards and withdrawals, and it starts holding the float behind the teller.'
+      : `Make ${bot.username} a teller? Its name becomes public: players will be told to pay it ` +
+          'and will be paid by it.',
+  );
+  if (!reason) return;
+  await api.patch(`/v1/admin/bots/${bot.id}/role`, {
+    role: becomingVault ? 'vault' : 'teller',
+    reason,
+  });
+  toast(`${bot.username} is now ${becomingVault ? 'the vault' : 'a teller'}.`);
+  await loadBots();
+  await loadBotLedger();
+}
+
+/**
+ * Corrects the tracked balance to what the account is really holding.
+ *
+ * The difference is written into the log as its own row rather than overwriting the figure, so a
+ * correction is as visible afterwards as every other movement and the running balance stays the
+ * sum of its own history.
+ */
+async function reconcileBot(bot) {
+  const values = await editRecord({
+    title: `Reconcile ${bot.username}`,
+    description:
+      `Tracked: ${amountText(bot.tracked_balance_minor)}. Enter what /balance actually says ` +
+      'in game. The difference is written to the log as an adjustment.',
+    fields: [
+      { name: 'observed', label: 'Observed balance (e.g. 1.5b)' },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Write the adjustment',
+  });
+  if (!values) return;
+  const exact = /^(0|[1-9]\d*)$/.test(values.observed)
+    ? BigInt(values.observed)
+    : parseAmount(values.observed);
+  if (exact === null) throw new ApiError(0, 'INVALID_AMOUNT', 'Enter a valid non-negative amount');
+  const result = await api.post(`/v1/admin/bots/${bot.id}/reconcile`, {
+    observedBalanceMinor: exact.toString(),
+    reason: values.reason,
+  });
+  toast(
+    result.bot.adjustedMinor === '0'
+      ? 'Already correct; nothing written.'
+      : `Adjusted by ${amountText(result.bot.adjustedMinor)}.`,
+  );
+  await loadBots();
+  await loadBotLedger();
+}
+
+const LEDGER_REASON = {
+  deposit: 'Deposit in',
+  login: 'Login payment',
+  sweep: 'Swept to vault',
+  release: 'Released from vault',
+  withdrawal: 'Paid to player',
+  admin_payout: 'Operator payout',
+  adjustment: 'Manual adjustment',
+};
+
+async function loadBotLedger() {
+  const params = botLedgerState.botId
+    ? `?botId=${botLedgerState.botId}&limit=100`
+    : '?limit=100';
+  const data = await api.get(`/v1/admin/bot-transfers${params}`);
+  const rows = data.transfers ?? [];
+
+  const filter = $('botLedgerFilter');
+  if (filter) {
+    filter.replaceChildren();
+    const chips = [['All bots', null], ...botLedgerState.bots.map((bot) => [bot.username, bot.id])];
+    for (const [label, id] of chips) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.setAttribute('aria-pressed', String(botLedgerState.botId === id));
+      chip.textContent = label;
+      chip.addEventListener('click', () => {
+        botLedgerState.botId = id;
+        void loadBotLedger();
+      });
+      filter.append(chip);
+    }
+  }
+
+  const hint = $('botLedgerHint');
+  if (hint) {
+    hint.textContent = rows.length
+      ? `${rows.length} most recent movements. Every figure is what the bot held afterwards.`
+      : 'Nothing has moved through the bots yet.';
+  }
+
+  table(
+    $('botLedgerTable'),
+    ['When', 'Bot', 'Movement', 'Amount', 'Counterparty', 'Player', 'Balance after'],
+    rows,
+    (row) => {
+      const tr = document.createElement('tr');
+      const movement = document.createElement('td');
+      movement.append(
+        pill(LEDGER_REASON[row.reason] ?? row.reason, row.direction === 'in' ? 'ok' : 'warn'),
+      );
+      tr.append(
+        cell(row.created_at),
+        cell(`${row.bot_username} · ${row.bot_role}`),
+        movement,
+        /* Signed, because a column of bare figures cannot say which way the money went and the
+           direction is the single most important thing about a row in a money log. */
+        cell(
+          `${row.direction === 'in' ? '+' : '−'}${amountText(row.amount_minor)}`,
+          { mono: true },
+        ),
+        cell(row.counterparty),
+        cell(row.player_username),
+        cell(amountText(row.balance_after_minor), { mono: true }),
+      );
+      return tr;
+    },
+  );
 }
 
 async function loadPayouts() {
@@ -2108,6 +2270,7 @@ const GROUP_LABELS = {
   jackpot: 'Jackpot',
   rain: 'Lava Rain',
   social: 'Tips & side bets',
+  bots: 'Bots & float',
   limits: 'Limits',
 };
 
@@ -2286,6 +2449,8 @@ const LOADERS = {
   bots: async () => {
     await loadBots();
     await loadPayouts();
+    // Loaded after the bots, because the ledger's filter chips are named from that list.
+    await loadBotLedger();
   },
   jobs: loadJobs,
   moderation: loadModeration,

@@ -74,7 +74,7 @@ function fakeDb(options: {
     if (sql.includes('FROM bot_accounts')) {
       return options.botOnline === false
         ? result([])
-        : result([{ id: botId, username: 'DonutBot', server_host: 'donutsmp.net' }]);
+        : result([{ id: botId, username: 'DonutBot', server_host: 'donutsmp.net', role: 'teller', tracked_balance_minor: '0' }]);
     }
     if (sql.includes('FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key')) {
       return result([]);
