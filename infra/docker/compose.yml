@@ -19,7 +19,7 @@ services:
       - -c
       - wal_level=replica
       - -c
-      - archive_mode=on
+      - archive_mode=${POSTGRES_ARCHIVE_MODE:-off}
       - -c
       - archive_timeout=300
       - -c
@@ -33,7 +33,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ../postgres/init-runtime-role.sh:/docker-entrypoint-initdb.d/010-runtime-role.sh:ro
       - type: bind
-        source: ${POSTGRES_WAL_ARCHIVE_DIRECTORY:?Set a private PostgreSQL WAL archive directory}
+        source: ${POSTGRES_WAL_ARCHIVE_DIRECTORY:-/opt/donutdrop/shared/postgres-wal}
         target: /var/lib/postgresql/wal-archive
         bind:
           create_host_path: false
