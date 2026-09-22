@@ -14,15 +14,23 @@ import { creditWallet } from './wallet.js';
  * it returns a tenth of the edge. The product copy says 10% and means 10% of the edge.
  */
 
-export const RAKEBACK_TIERS = ['instant', 'daily', 'weekly', 'monthly'] as const;
+/**
+ * One tier, not four.
+ *
+ * The daily, weekly and monthly clocks were retired in migration 042, which folded whatever they
+ * still owed into the instant tier so no player lost a balance. What is left is the tier that
+ * never made anybody wait: a share of the house margin, claimable the moment there is one.
+ *
+ * The 'vip' tier is still written to `rakeback_accruals` and is deliberately not in this list. It
+ * is a share of the WAGER rather than of the margin, it accrues from lib/vip.ts, and it is
+ * claimed from the VIP page -- it shares a table with this and nothing else.
+ */
+export const RAKEBACK_TIERS = ['instant'] as const;
 export type RakebackTier = (typeof RAKEBACK_TIERS)[number];
 
-/** How long a tier must wait between claims. Instant is claimable whenever there is a balance. */
+/** Kept as a map because the claim path still reads a cooldown; the only tier left has none. */
 export const TIER_COOLDOWN_MS: Readonly<Record<RakebackTier, number>> = Object.freeze({
   instant: 0,
-  daily: 24 * 60 * 60 * 1000,
-  weekly: 7 * 24 * 60 * 60 * 1000,
-  monthly: 30 * 24 * 60 * 60 * 1000,
 });
 
 /** What a wager earns the house, before anything is carved back out of it. */

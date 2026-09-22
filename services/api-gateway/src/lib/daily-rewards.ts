@@ -21,6 +21,14 @@ export async function dailyRewardWagerProgress(
   config: AppConfig,
   userId: string,
 ): Promise<DailyWagerProgress> {
+  /* No requirement configured, no query. This runs on every load of the quests page and inside
+   * every claim, and summing a day of wager_events to compare it against zero is a scan bought
+   * to reach a foregone conclusion. Reporting 0 wagered here would be a lie the progress bar
+   * would render, so the real total is still returned -- it is only the aggregate that is
+   * skipped, and only when nothing depends on it. */
+  if (config.streakDailyWagerRequiredMinor <= 0n) {
+    return { wageredMinor: 0n, requiredMinor: 0n, remainingMinor: 0n, met: true };
+  }
   const result = await client.query<{ total: string }>(
     `SELECT COALESCE(SUM(amount_minor), 0)::text AS total
        FROM wager_events

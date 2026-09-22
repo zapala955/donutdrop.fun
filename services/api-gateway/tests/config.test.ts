@@ -30,7 +30,9 @@ describe('configuration', () => {
     assert.equal(config.secureCookies, false);
     assert.equal(config.dataEncryptionKey.length, 32);
     assert.equal(config.minecraftTransfersEnabled, false);
-    assert.equal(config.streakDailyWagerRequiredMinor, 10_000_000n);
+    /* Zero, and zero means no gate. The daily reward is a reason to come back, and one that
+     * first demands a stake is one most players meet by not coming back. */
+    assert.equal(config.streakDailyWagerRequiredMinor, 0n);
     assert.equal(config.rouletteEnabled, true);
     assert.equal(config.rouletteRoundSeconds, 10);
     assert.equal(config.rouletteSpinSeconds, 3);

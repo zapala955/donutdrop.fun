@@ -16,6 +16,64 @@ const economyMigrationPath = path.resolve(
   '../../../packages/db/migrations/008_cases_wallets_and_sales.sql',
 );
 
+/**
+ * A narrowed CHECK has to be reconciled with every writer, and a column DEFAULT is a writer.
+ *
+ * Migration 036 narrowed `users.status` and updated the existing rows, but left the default from
+ * migration 001 naming a status it had just removed. Nothing selected it and no row contained it,
+ * so nothing failed until the next person signed up -- and they had already paid the login nonce
+ * by the time the insert hit the constraint. This is the second time a narrowed CHECK has taken
+ * production down here; it is cheap to assert and expensive to rediscover.
+ */
+describe('narrowed CHECKs and the defaults that feed them', () => {
+  const statusValues = ['active', 'suspended', 'closed'];
+
+  it('leaves users.status with a default its own CHECK admits', async () => {
+    const [initial, compliance, repair] = await Promise.all([
+      readFile(migrationPath, 'utf8'),
+      readFile(
+        path.resolve(
+          import.meta.dirname,
+          '../../../packages/db/migrations/036_remove_compliance_apparatus.sql',
+        ),
+        'utf8',
+      ),
+      readFile(
+        path.resolve(
+          import.meta.dirname,
+          '../../../packages/db/migrations/043_fix_new_user_default_status.sql',
+        ),
+        'utf8',
+      ),
+    ]);
+
+    // The shape of the original mistake, kept so the assertion below has something to bite on.
+    assert.match(initial, /status varchar\(24\) NOT NULL DEFAULT 'pending_compliance'/);
+    assert.match(compliance, /CHECK \(status IN \('active', 'suspended', 'closed'\)\)/);
+
+    // The repair, and the only thing that actually matters: the default is now an allowed value.
+    const setDefault = /ALTER TABLE users ALTER COLUMN status SET DEFAULT '([a-z_]+)'/.exec(repair);
+    assert.ok(setDefault, 'migration 043 does not reset the users.status default');
+    assert.ok(
+      statusValues.includes(setDefault[1]!),
+      `users.status defaults to ${setDefault[1]}, which its CHECK does not allow`,
+    );
+  });
+
+  /* Belt to the migration's braces. Even with the default repaired, the one insert that creates a
+   * player should not be depending on a column default to produce a legal row. */
+  it('names status explicitly when creating a player, rather than trusting the default', async () => {
+    const route = await readFile(
+      path.resolve(import.meta.dirname, '../src/routes/auth.ts'),
+      'utf8',
+    );
+    const insert = route.slice(route.indexOf('INSERT INTO users'));
+    const columns = insert.slice(0, insert.indexOf('VALUES'));
+    assert.match(columns, /status/, 'the signup insert still relies on the users.status default');
+    assert.match(insert, /'active'/);
+  });
+});
+
 describe('database safety invariants', () => {
   it('keeps critical records append-only and idempotent', async () => {
     const sql = await readFile(migrationPath, 'utf8');

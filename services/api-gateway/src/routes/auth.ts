@@ -312,9 +312,15 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           role: 'player' | 'admin';
           status: string;
         }>(
+          /* `status` is named rather than left to the column default, and that is not tidiness.
+           * Migration 036 narrowed the status CHECK and left the default from migration 001
+           * pointing at a value it had just removed, so this insert -- the only path that relied
+           * on the default -- failed for every first-time signup, after they had paid. Naming it
+           * means a future change to the default cannot break account creation again. */
           `INSERT INTO users
-             (id, minecraft_identity, minecraft_username, normalized_username, role, last_login_at)
-           VALUES ($1, $2, $3::varchar(16), lower($3::varchar(16)), $4, now())
+             (id, minecraft_identity, minecraft_username, normalized_username, role, status,
+              last_login_at)
+           VALUES ($1, $2, $3::varchar(16), lower($3::varchar(16)), $4, 'active', now())
            ON CONFLICT (minecraft_identity) DO UPDATE
              SET minecraft_username = EXCLUDED.minecraft_username,
                  normalized_username = EXCLUDED.normalized_username,

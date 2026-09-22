@@ -1,4 +1,4 @@
-/* rewards.js — claimable referral rewards and the optional rakeback tiers in one place. */
+/* rewards.js — claimable referral rewards and the optional instant rakeback in one place. */
 import {
   state,
   bus,
@@ -11,12 +11,13 @@ import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 
-const TIERS = [
-  { key: 'instant', name: 'Instant', clock: 'No cooldown' },
-  { key: 'daily', name: 'Daily', clock: 'Every 24h' },
-  { key: 'weekly', name: 'Weekly', clock: 'Every 7d' },
-  { key: 'monthly', name: 'Monthly', clock: 'Every 30d' },
-];
+/* One tier. The daily, weekly and monthly clocks were retired server-side, and whatever they
+ * still owed was folded into this one, so nobody lost a balance in the move.
+ *
+ * Still a list rather than a single object: the card renderer reads the server's tier array and
+ * matches it against this, so a tier the server stops sending simply stops being drawn. That is
+ * what keeps a deploy in which the two sides disagree from rendering an empty card. */
+const TIERS = [{ key: 'instant', name: 'Instant', clock: 'No cooldown' }];
 
 let root = null;
 let ticker = 0;
@@ -102,7 +103,7 @@ function paint() {
 
   if (rakeback) {
     const section = el('section', 'rake__section');
-    section.appendChild(sectionTitle('Rakeback tiers'));
+    section.appendChild(sectionTitle('Rakeback'));
     const grid = el('div', 'rake__grid');
     const byTier = new Map(rakeback.tiers.map((tier) => [tier.tier, tier]));
     for (const meta of TIERS) {

@@ -213,35 +213,17 @@ export const runtimeSettingDefinitions = {
     max: 200n,
   },
 
-  /* ── the four rakeback clocks ──
+  /* ── rakeback ──
    *
-   * Shares of the house MARGIN, not of turnover, and the four are added together by the solvency
-   * guard below before any of them is allowed to take effect. */
+   * A share of the house MARGIN, not of turnover, and it is added to the VIP ladder and the
+   * referral share by the solvency guard below before it is allowed to take effect.
+   *
+   * One rate since migration 042. The daily, weekly and monthly clocks were retired, so raising
+   * this is how the programme is made more generous now. */
   rakebackInstantBps: {
     kind: 'integer',
     group: 'rakeback',
     label: 'Instant rakeback (bps of margin)',
-    min: 0n,
-    max: 10_000n,
-  },
-  rakebackDailyBps: {
-    kind: 'integer',
-    group: 'rakeback',
-    label: 'Daily rakeback (bps of margin)',
-    min: 0n,
-    max: 10_000n,
-  },
-  rakebackWeeklyBps: {
-    kind: 'integer',
-    group: 'rakeback',
-    label: 'Weekly rakeback (bps of margin)',
-    min: 0n,
-    max: 10_000n,
-  },
-  rakebackMonthlyBps: {
-    kind: 'integer',
-    group: 'rakeback',
-    label: 'Monthly rakeback (bps of margin)',
     min: 0n,
     max: 10_000n,
   },
@@ -428,9 +410,6 @@ type SettingValue = boolean | number | bigint;
  */
 const rakebackTierKeys = Object.freeze({
   rakebackInstantBps: 'instant',
-  rakebackDailyBps: 'daily',
-  rakebackWeeklyBps: 'weekly',
-  rakebackMonthlyBps: 'monthly',
 } as const);
 
 type RakebackTierKey = keyof typeof rakebackTierKeys;

@@ -70,6 +70,11 @@ function paint() {
   const wageredToday = money(Number(streak?.wageredTodayMinor ?? 0));
   const wagerRequired = money(Number(streak?.wagerRequirementMinor ?? 0));
   const wagerRemaining = money(Number(streak?.wagerRemainingMinor ?? 0));
+  /* The wager gate is off by default now, and at zero there is no progress to report -- printing
+   * "$0 / $0 wagered today" is a bar that looks broken rather than one that looks finished. The
+   * figures are still read from the server rather than assumed, because the gate remains
+   * configurable and can be switched back on from the admin console without a deploy. */
+  const gated = Number(streak?.wagerRequirementMinor ?? 0) > 0;
   const streakButton = !streak
     ? 'Loading…'
     : streak.claimedToday
@@ -77,9 +82,11 @@ function paint() {
       : streak.wagerRequirementMet
         ? `Claim ${money(Number(streak.nextRewardMinor))}`
         : `Wager ${wagerRemaining} more`;
-  const streakProgress = streak
-    ? `Longest ${streak.longestStreak} · ${wageredToday} / ${wagerRequired} wagered today`
-    : 'Loading daily progress';
+  const streakProgress = !streak
+    ? 'Loading daily progress'
+    : gated
+      ? `Longest ${streak.longestStreak} · ${wageredToday} / ${wagerRequired} wagered today`
+      : `Longest ${streak.longestStreak}`;
 
   root.innerHTML = `
     <section class="streak glass">

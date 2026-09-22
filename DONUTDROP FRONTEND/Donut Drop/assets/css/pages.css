@@ -116,7 +116,16 @@
 .rake__sumv { font: 800 1.1rem/1.1 var(--disp); color: var(--text); }
 .rake__sumv--gold { color: var(--gold-bright); }
 
-.rake__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); gap: 8px; }
+/* Held to a column width rather than a fraction of the row. This grid carried four tiers and now
+   carries one, and `1fr` would stretch that single card the full width of the page -- a claim
+   button two feet wide reads as a banner, not as a card. `auto-fit` still lays out several side
+   by side if a tier is ever added back. */
+.rake__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(198px, 320px));
+  justify-content: start;
+  gap: 8px;
+}
 .rake__card {
   display: flex; flex-direction: column; gap: 8px;
   padding: 15px; border-radius: var(--r);

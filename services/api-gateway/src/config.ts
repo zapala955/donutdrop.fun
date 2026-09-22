@@ -299,6 +299,18 @@ const positiveBigintString = z
     'must fit in a PostgreSQL bigint',
   );
 
+/* The same thing with zero admitted, for the settings where zero is a meaningful value -- "off"
+ * rather than "unset". Same re-test of the pattern inside the refinement, and for the same
+ * reason: zod runs every refinement even after the regex has already failed. */
+const nonNegativeBigintPattern = /^(0|[1-9]\d{0,18})$/;
+const nonNegativeBigintString = z
+  .string()
+  .regex(nonNegativeBigintPattern)
+  .refine(
+    (value) => !nonNegativeBigintPattern.test(value) || BigInt(value) <= POSTGRES_BIGINT_MAX,
+    'must fit in a PostgreSQL bigint',
+  );
+
 function commaSeparatedValuesAre(value: string, pattern: RegExp): boolean {
   if (value === '') return true;
   return value
@@ -410,7 +422,17 @@ const environmentSchema = z
     FACTION_WAR_DAYS: z.coerce.number().int().min(1).max(60).default(7),
     STREAK_BASE_REWARD_MINOR: positiveBigintString.default('25000'),
     STREAK_MAX_MULTIPLIER: z.coerce.number().int().min(1).max(50).default(7),
-    STREAK_DAILY_WAGER_REQUIRED_MINOR: positiveBigintString.default('10000000'),
+    /* How much a player must wager on the day before that day's reward can be claimed.
+     *
+     * ZERO MEANS NO REQUIREMENT, and zero is the default. The daily reward is a retention hook
+     * rather than a rebate, and a hook that first demands a stake is one most players meet by not
+     * coming back. The knob stays because it is runtime-manageable from the admin console, so the
+     * gate can be brought back without a deployment -- but it starts off, and at zero the check
+     * short-circuits before it reaches the database at all.
+     *
+     * `nonNegativeBigintString`, not `positiveBigintString`: the latter's pattern starts at 1 and
+     * would reject the default this now ships with. */
+    STREAK_DAILY_WAGER_REQUIRED_MINOR: nonNegativeBigintString.default('0'),
     /* Referrals. Two engines on one relationship, and both of them pay out of the house margin.
      *
      * The revenue share is a cut of the margin a referee's wagers earn the house, never a cut of
@@ -435,10 +457,9 @@ const environmentSchema = z
      * what is configurable is whether the programme runs at all. */
     VIP_ENABLED: booleanString,
     RAKEBACK_ENABLED: booleanString,
+    /* One rate now. The daily, weekly and monthly clocks were retired in migration 042; their
+     * rates are gone rather than set to zero, so nothing can quietly start paying them again. */
     RAKEBACK_INSTANT_BPS: z.coerce.number().int().min(0).max(10_000).default(1_000),
-    RAKEBACK_DAILY_BPS: z.coerce.number().int().min(0).max(10_000).default(500),
-    RAKEBACK_WEEKLY_BPS: z.coerce.number().int().min(0).max(10_000).default(300),
-    RAKEBACK_MONTHLY_BPS: z.coerce.number().int().min(0).max(10_000).default(200),
     /* 1v1 skill duels. The only mode on the platform with NO house edge on the outcome: the
      * house does not hold a side, so it takes 0% of the result and is paid a rake on the pot of
      * a duel it actually decided. That rake is the whole revenue of the mode, which is why it is
@@ -684,21 +705,21 @@ const environmentSchema = z
           'must be at least REFERRAL_BONUS_MINOR: a bonus larger than the wager that earns it pays out more than it takes in',
       });
     }
-    /* The four rakeback tiers are paid from one pot — the edge on a wager — so what matters is
-     * their sum, not any single rate. Above 100% the house is paying out more cash-back than the
-     * wager earned it, which is not a generous promotion but a negative-margin product that gets
-     * drained by anyone who notices. Refused at boot rather than discovered in a ledger. */
-    const rakebackTotalBps =
-      env.RAKEBACK_INSTANT_BPS +
-      env.RAKEBACK_DAILY_BPS +
-      env.RAKEBACK_WEEKLY_BPS +
-      env.RAKEBACK_MONTHLY_BPS;
-    if (env.RAKEBACK_ENABLED && rakebackTotalBps > 10_000) {
+    /* Rakeback is paid from one pot — the edge on a wager. Above 100% the house is paying out more
+     * cash-back than the wager earned it, which is not a generous promotion but a negative-margin
+     * product that gets drained by anyone who notices. Refused at boot rather than discovered in a
+     * ledger.
+     *
+     * This was a sum over four tiers until migration 042 retired three of them. The schema already
+     * caps the single remaining rate at 10000, so this cannot fire today — it is kept because the
+     * cap it states is a property of the programme rather than of the field, and a second rate
+     * added later would otherwise reintroduce the hole silently. */
+    if (env.RAKEBACK_ENABLED && env.RAKEBACK_INSTANT_BPS > 10_000) {
       context.addIssue({
         code: 'custom',
         path: ['RAKEBACK_INSTANT_BPS'],
         message:
-          'the four rakeback tiers must sum to at most 10000 bps: they all come out of one house margin',
+          'rakeback must be at most 10000 bps: it comes out of the same house margin as everything else',
       });
     }
     /* The duel rake is a house edge, and once skill duels are on it is very likely the SMALLEST
@@ -1016,12 +1037,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     streakDailyWagerRequiredMinor: BigInt(env.STREAK_DAILY_WAGER_REQUIRED_MINOR),
     vipEnabled: env.VIP_ENABLED,
     rakebackEnabled: env.RAKEBACK_ENABLED,
-    rakebackTierBps: Object.freeze({
-      instant: env.RAKEBACK_INSTANT_BPS,
-      daily: env.RAKEBACK_DAILY_BPS,
-      weekly: env.RAKEBACK_WEEKLY_BPS,
-      monthly: env.RAKEBACK_MONTHLY_BPS,
-    }),
+    rakebackTierBps: Object.freeze({ instant: env.RAKEBACK_INSTANT_BPS }),
     skillDuelEnabled: env.SKILL_DUEL_ENABLED,
     skillDuelRakeBps: env.SKILL_DUEL_RAKE_BPS,
     skillDuelMinStakeMinor: BigInt(env.SKILL_DUEL_MIN_STAKE_MINOR),

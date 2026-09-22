@@ -52,7 +52,10 @@ describe('rakeback rates', () => {
     assert.notEqual(rakebackMinor(settings, 'instant', 1_000_000n), 100_000n);
   });
 
-  it('keeps the four tiers together well inside the margin they are drawn from', () => {
+  /* Three of the four tiers were retired in migration 042. What this still has to hold is the
+   * property the four of them shared: rakeback is drawn from the margin and has to stay well
+   * inside it, whatever the programme is made of. */
+  it('keeps rakeback well inside the margin it is drawn from', () => {
     const settings = config();
     const wager = 10_000_000n;
     const margin = houseMarginMinor(settings, wager);
@@ -60,39 +63,83 @@ describe('rakeback rates', () => {
       (sum, tier) => sum + rakebackMinor(settings, tier, wager),
       0n,
     );
-    // 10 + 5 + 3 + 2 = 20% of the margin. The house keeps the other 80%.
-    assert.equal(total, margin / 5n);
+    // 10% of the margin, where the four together used to be 20%. The house keeps the rest.
+    assert.equal(total, margin / 10n);
     assert.equal(total < margin, true);
+  });
+
+  it('retires the daily, weekly and monthly clocks', () => {
+    assert.deepEqual([...RAKEBACK_TIERS], ['instant']);
+    assert.deepEqual(Object.keys(TIER_COOLDOWN_MS), ['instant']);
+    // The one tier left is the one that never made anybody wait.
+    assert.equal(TIER_COOLDOWN_MS.instant, 0);
   });
 
   it('truncates rather than rounding a fraction of a unit up', () => {
     const settings = config();
-    assert.equal(rakebackMinor(settings, 'monthly', 100n), 0n);
+    // 100 at a 10% edge is a margin of 10; 10% of that is 1 unit, and anything under rounds down.
+    assert.equal(rakebackMinor(settings, 'instant', 9n), 0n);
     assert.equal(rakebackMinor(settings, 'instant', 0n), 0n);
     assert.equal(rakebackMinor(settings, 'instant', -5n), 0n);
   });
 
-  it('refuses a combined rate that would outpay the margin', () => {
-    assert.throws(() =>
-      loadConfig({
-        ...baseEnv,
-        RAKEBACK_INSTANT_BPS: '5000',
-        RAKEBACK_DAILY_BPS: '4000',
-        RAKEBACK_WEEKLY_BPS: '3000',
-        RAKEBACK_MONTHLY_BPS: '1000',
-      }),
-    );
+  it('refuses a rate that would outpay the margin it is drawn from', () => {
+    // Past the field's own ceiling, so the schema refuses it before the programme check is reached.
+    assert.throws(() => loadConfig({ ...baseEnv, RAKEBACK_INSTANT_BPS: '10001' }));
   });
 
-  it('allows an overlarge combined rate only while the programme is off', () => {
-    assert.doesNotThrow(() =>
-      loadConfig({
-        ...baseEnv,
-        RAKEBACK_ENABLED: 'false',
-        RAKEBACK_INSTANT_BPS: '9000',
-        RAKEBACK_DAILY_BPS: '9000',
-      }),
+  /* The rates the retired tiers used to carry are no longer part of the contract. An env file
+   * left over from before must be ignored rather than silently resurrecting a second rate. */
+  it('ignores the retired tier rates if a deployment still sets them', () => {
+    const settings = loadConfig({
+      ...baseEnv,
+      RAKEBACK_DAILY_BPS: '9000',
+      RAKEBACK_WEEKLY_BPS: '9000',
+      RAKEBACK_MONTHLY_BPS: '9000',
+    });
+    assert.deepEqual(settings.rakebackTierBps, { instant: 1000 });
+  });
+});
+
+/**
+ * Migration 042 retires three of the four tiers, and the only thing that really matters about it
+ * is that it does not take anybody's money on the way past.
+ *
+ * `accrued_minor - claimed_minor` on a retired tier is cash a player earned and has not been paid.
+ * A monthly tier holds up to thirty days of it. Deleting those rows would have been the obvious
+ * way to write this migration and would have quietly confiscated every one of those balances.
+ */
+describe('retiring the rakeback tiers', () => {
+  const migration = () =>
+    readFile(
+      path.resolve(import.meta.dirname, '../../../packages/db/migrations/042_instant_rakeback_only.sql'),
+      'utf8',
     );
+
+  it('moves outstanding balances into the instant tier before deleting anything', async () => {
+    const sql = await migration();
+    const fold = sql.indexOf('INSERT INTO rakeback_accruals');
+    const remove = sql.indexOf('DELETE FROM rakeback_accruals');
+    assert.ok(fold > 0, 'migration does not fold the retired balances anywhere');
+    assert.ok(remove > fold, 'migration deletes the retired rows before moving what they owe');
+    // Only accrued_minor moves, so `claimed_minor <= accrued_minor` still holds afterwards.
+    assert.match(sql, /accrued_minor = rakeback_accruals\.accrued_minor \+ EXCLUDED\.accrued_minor/);
+    assert.match(sql, /sum\(accrued_minor - claimed_minor\)/);
+  });
+
+  /* Narrowing the tier CHECK is the tidy-looking move and the wrong one: migrations complete
+   * before the new container starts, so the build that still credits four tiers is serving live
+   * traffic while this runs, and a CHECK it violates aborts the settlement of every round. */
+  it('leaves the tier CHECK wide so the previous build cannot fail live settlements', async () => {
+    const sql = await migration();
+    assert.doesNotMatch(sql, /ADD CONSTRAINT rakeback_accruals_tier_check/);
+    assert.doesNotMatch(sql, /ADD CONSTRAINT rakeback_claims_tier_check/);
+  });
+
+  it('never touches the append-only claim history', async () => {
+    const sql = await migration();
+    assert.doesNotMatch(sql, /DELETE FROM rakeback_claims/);
+    assert.doesNotMatch(sql, /UPDATE rakeback_claims/);
   });
 });
 
@@ -111,36 +158,45 @@ describe('rakeback tier views', () => {
     assert.equal(instant?.availableAt, null);
   });
 
-  it('holds a tier shut until its cooldown expires', () => {
-    const justClaimed = new Date(now.getTime() - 60_000);
+  /* There is no cooldown left to expire, which is the point of keeping only this tier: a balance
+   * that exists is a balance that can be taken right now, however recently the last one was. */
+  it('never holds the instant tier shut, however recently it was claimed', () => {
+    const justClaimed = new Date(now.getTime() - 1000);
     const views = tierViews(
       config(),
-      [{ tier: 'daily', accrued_minor: '9000', claimed_minor: '1000', last_claim_at: justClaimed }],
+      [
+        {
+          tier: 'instant',
+          accrued_minor: '9000',
+          claimed_minor: '1000',
+          last_claim_at: justClaimed,
+        },
+      ],
       now,
     );
-    const daily = views.find((view) => view.tier === 'daily');
-    assert.equal(daily?.claimableMinor, '8000');
-    // Money has accrued since the claim, but the clock has not run out.
-    assert.equal(daily?.claimable, false);
-    assert.equal(
-      daily?.availableAt,
-      new Date(justClaimed.getTime() + TIER_COOLDOWN_MS.daily).toISOString(),
-    );
+    const instant = views.find((view) => view.tier === 'instant');
+    assert.equal(instant?.claimableMinor, '8000');
+    assert.equal(instant?.claimable, true);
+    assert.equal(instant?.availableAt, null);
   });
 
-  it('reopens a tier once the cooldown has passed', () => {
-    const longAgo = new Date(now.getTime() - TIER_COOLDOWN_MS.weekly - 1000);
+  /* Rows on the retired tiers are folded into instant by migration 042, but a deploy leaves a few
+   * seconds in which the previous build can still write one. The view must not resurrect it as a
+   * tier of its own. */
+  it('ignores a leftover row on a retired tier', () => {
     const views = tierViews(
       config(),
-      [{ tier: 'weekly', accrued_minor: '400', claimed_minor: '100', last_claim_at: longAgo }],
+      [{ tier: 'monthly', accrued_minor: '5000', claimed_minor: '0', last_claim_at: null }],
       now,
     );
-    const weekly = views.find((view) => view.tier === 'weekly');
-    assert.equal(weekly?.claimable, true);
-    assert.equal(weekly?.availableAt, null);
+    assert.deepEqual(
+      views.map((view) => view.tier),
+      ['instant'],
+    );
+    assert.equal(views[0]?.claimableMinor, '0');
   });
 
-  it('always returns all four tiers, even for a player with no rows at all', () => {
+  it('always returns the tier, even for a player with no rows at all', () => {
     const views = tierViews(config(), [], now);
     assert.deepEqual(
       views.map((view) => view.tier),

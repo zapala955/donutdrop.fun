@@ -37,7 +37,7 @@ describe('audited runtime settings', () => {
     assert.match(migration, /CREATE TABLE runtime_settings/);
     assert.match(migration, /jsonb_typeof\(value\) IN \('boolean', 'number', 'string'\)/);
     assert.match(migration, /CREATE FUNCTION donut_schema_ready_v41\(\)/);
-    assert.match(health, /donut_schema_ready_v41\(\)/);
+    assert.match(health, /donut_schema_ready_v42\(\)/);
     assert.match(route, /'\/v1\/admin\/runtime-settings'/);
     assert.match(route, /guards\.requireAdmin/);
     assert.match(route, /runtime_settings\.update/);
@@ -106,18 +106,25 @@ describe('audited runtime settings', () => {
     assert.equal(settings.config.raceLeaderboardSize, 25);
   });
 
-  /* The four rakeback rates hang off a nested frozen object, which a Proxy does not see through.
-   * Each is its own key and the composite is rebuilt on read, so this is the one control whose
-   * plumbing is not shared with the other fifty-eight. */
-  it('recomposes the nested rakeback object from its four separate keys', () => {
+  /* The rakeback rate hangs off a nested frozen object, which a Proxy does not see through. It is
+   * its own key and the composite is rebuilt on read, so this is the one control whose plumbing is
+   * not shared with the rest. */
+  it('recomposes the nested rakeback object from its own key', () => {
     const settings = new RuntimeSettings(config);
-    settings.apply(settings.validate({ rakebackDailyBps: 777 }), undefined);
-    assert.equal(settings.config.rakebackTierBps.daily, 777);
-    assert.equal(settings.config.rakebackTierBps.instant, config.rakebackTierBps.instant);
-    assert.equal(config.rakebackTierBps.daily, 500);
-    const row = settings.rows().find((entry) => entry.key === 'rakebackDailyBps');
-    assert.equal(row?.defaultValue, 500);
+    settings.apply(settings.validate({ rakebackInstantBps: 777 }), undefined);
+    assert.equal(settings.config.rakebackTierBps.instant, 777);
+    assert.equal(config.rakebackTierBps.instant, 1000);
+    const row = settings.rows().find((entry) => entry.key === 'rakebackInstantBps');
+    assert.equal(row?.defaultValue, 1000);
     assert.equal(row?.overridden, true);
+  });
+
+  /* The retired tiers must not be manageable, or the console would offer a rate nothing reads. */
+  it('drops the retired rakeback tiers from the allow-list', () => {
+    for (const key of ['rakebackDailyBps', 'rakebackWeeklyBps', 'rakebackMonthlyBps']) {
+      assert.equal(runtimeSettingKeys.includes(key as never), false, `${key} is retired`);
+    }
+    assert.equal(runtimeSettingKeys.includes('rakebackInstantBps'), true);
   });
 
   /**
