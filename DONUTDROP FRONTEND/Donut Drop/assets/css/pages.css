@@ -79,18 +79,18 @@
 
 /* Shared empty / disabled state. Every one of these routes can be switched off per deployment,
    and a disabled feature should read as "not on" rather than as a page that failed. */
-.rake__notice, .daily__notice, .dsync__notice, .race__notice, .creator__notice,
+.rake__notice, .daily__notice, .race__notice, .creator__notice,
 .board__notice, .stats__notice {
   padding: 22px 18px; border: 1px solid var(--line); border-radius: var(--r);
   background: var(--panel);
 }
-.rake__notice p, .daily__notice p, .dsync__notice p, .race__notice p, .creator__notice p,
+.rake__notice p, .daily__notice p, .race__notice p, .creator__notice p,
 .board__notice p, .stats__notice p {
   margin: 0; font-size: .75rem; color: var(--faint);
 }
 
 /* Shared small-caps key used above every figure on these pages. */
-.rake__sumk, .rake__label, .daily__statk, .dsync__label, .race__statk,
+.rake__sumk, .rake__label, .daily__statk, .race__statk,
 .creator__statk, .stats__k, .stats__label {
   font: 600 .6rem/1 var(--body); letter-spacing: .1em; text-transform: uppercase;
   color: var(--faint);
@@ -235,50 +235,34 @@
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    DISCORD
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
+/* The Discord tab: one invite card.
+   This block used to carry a verification portal -- a status badge, an OAuth button and two
+   progress conditions for the referral bonus. The Discord requirement was dropped from that
+   programme, so the page and its styles went with it. */
 .dsync { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.dsync__card, .dsync__unlock {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+.dsync__invite {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  padding: clamp(20px, 5vw, 32px);
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+  /* Held to a readable measure rather than stretched across a desktop: this is three lines of
+     text and a button, and a card the width of the viewport reads as an empty page. */
+  max-width: 34rem;
 }
-.dsync__card[data-on="1"] { border-color: rgba(255, 170, 0, .32); }
-.dsync__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dsync__badge {
-  padding: 4px 10px; border-radius: 999px;
-  border: 1px solid var(--line2); background: var(--panel2);
-  font: 800 .66rem/1.4 var(--mono); letter-spacing: .08em; color: var(--faint);
+/* Clearly above the body copy in both size and weight, so the card has one obvious start. */
+.dsync__invitetitle { font: 800 clamp(1.25rem, 4vw, 1.6rem)/1.15 var(--disp); color: var(--text); }
+.dsync__invitecopy { font-size: .9375rem; line-height: 1.55; color: var(--muted); max-width: 42ch; }
+.dsync__go {
+  /* 44px, because this is the only thing on the page worth pressing and it is pressed on a
+     phone more often than not. */
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 24px;
+  text-decoration: none; letter-spacing: .04em;
 }
-.dsync__badge[data-on="1"] {
-  color: var(--gold-bright); border-color: rgba(255, 170, 0, .45); background: rgba(255, 170, 0, .1);
-}
-.dsync__handle { font-size: .875rem; color: var(--text); }
-.dsync__go { justify-content: center; letter-spacing: .04em; }
-.dsync__prize { font: 800 1.2rem/1 var(--disp); color: var(--gold-bright); }
-
-.dsync__conds { display: flex; flex-direction: column; gap: 8px; }
-.dsync__cond {
-  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center;
-  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-s);
-  background: var(--panel2);
-}
-.dsync__cond[data-met="1"] { border-color: rgba(255, 170, 0, .3); background: rgba(255, 170, 0, .05); }
-.dsync__tick {
-  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
-  border: 1px solid var(--line2); font: 800 .7rem/1 var(--body); color: var(--faint);
-}
-.dsync__cond[data-met="1"] .dsync__tick {
-  color: var(--gold-bright); border-color: rgba(255, 170, 0, .5);
-}
-.dsync__condname { font-size: .75rem; color: var(--text); }
-.dsync__condval { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.dsync__track {
-  grid-column: 1 / -1; height: 4px; border-radius: 999px; overflow: hidden; background: var(--panel3);
-}
-.dsync__fill {
-  height: 100%; border-radius: 999px; transform-origin: left center;
-  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
-  transition: transform .5s cubic-bezier(.22, .61, .36, 1);
-}
-.dsync__payee { font-size: .75rem; color: var(--gold-deep); }
+/* An anchor styled as a button still needs its own visible focus ring: the button styles carry
+   a hover state and nothing a keyboard can see. */
+.dsync__go:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+/* The address in plain text, for somebody reading on a phone and playing on a PC. */
+.dsync__inviteurl { font-size: .8125rem; color: var(--faint); word-break: break-all; }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    WAGER RACE
@@ -386,7 +370,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dsync__fill { transition: none; }
 }
 @media (max-width: 560px) {
   .daily__claim { flex-direction: column; align-items: stretch; }
