@@ -79,36 +79,45 @@ esac
 install -d -m 0700 "$secrets_dir"
 printf '%s' "$bot_token" >"$token_file"
 
-# The key the bot signs profile lookups with and the gateway verifies them against. Generated
-# here rather than asked for, because it is shared between two processes on this same host and
-# nobody ever needs to read it.
-hmac_key="$(openssl rand -hex 32)"
-printf '%s' "$hmac_key" >"$hmac_file"
+# ── THE KEY IS REUSED IF IT IS ALREADY THERE ───────────────────────────────
+# deploy.sh writes this file on every deploy, because the API mounts it whether or not the bot is
+# running and a compose secret with no file stops the container being created. Generating a fresh
+# one here would leave the running API holding the old key until it restarted -- a window in which
+# every profile lookup fails its signature check for no visible reason.
+if [[ -s "$hmac_file" ]]; then
+  say "Reusing the existing $hmac_file"
+else
+  printf '%s' "$(openssl rand -hex 32)" >"$hmac_file"
+  say "Generated $hmac_file"
+fi
 
 # ── IT MUST NOT MATCH THE CONTROL PLANE'S KEY ──────────────────────────────
 # That key turns a Discord snowflake into a platform ADMINISTRATOR. This process runs in a server
 # anybody can join. The API refuses to boot if the two are equal; checking here turns that into a
 # sentence rather than a container that will not start.
 if [[ -f "$control_hmac_file" ]] && cmp -s "$hmac_file" "$control_hmac_file"; then
-  die "the generated key matched the control-plane key. Re-run this script."
+  die "$hmac_file holds the same value as the control-plane key. Delete it and re-run."
 fi
 
-# Owned by the container's user: community.Dockerfile ends in `USER node`, which is uid 1000, and
-# compose passes a file secret through with the host's own ownership. Written as root at 0600 the
-# bot cannot read its own token and dies on EACCES before doing anything.
+# 0444 owned by root, matching every other secret in this directory. The directory is 0700 root,
+# which is what actually keeps these private; the files inside are readable so that any container
+# user can mount them -- the API runs as `node` and so does the bot.
+chown 0:0 "$token_file" "$hmac_file"
+chmod 0444 "$token_file" "$hmac_file"
+
+# Proven, not assumed. One command, and it turns a container that crash-loops on a stack trace
+# into a message naming the file and the reason.
 bot_uid=1000
-chown "$bot_uid:$bot_uid" "$token_file" "$hmac_file"
-chmod 0600 "$token_file" "$hmac_file"
-if ! su -s /bin/sh -c "test -r '$token_file'" "#$bot_uid" 2>/dev/null; then
-  die "uid $bot_uid cannot read $token_file. The container runs as that user and will not start."
-fi
-# One line each, which is the shape the loader actually enforces.
 for file in "$token_file" "$hmac_file"; do
+  if ! su -s /bin/sh -c "test -r '$file'" "#$bot_uid" 2>/dev/null; then
+    die "uid $bot_uid cannot read $file. The containers run as that user and will not start."
+  fi
+  # One line each, which is the shape the loader actually enforces.
   if [[ "$(wc -l <"$file")" -gt 0 ]]; then
     die "$file ended up with a trailing newline. This is a bug in this script."
   fi
 done
-say "Wrote $token_file and $hmac_file, owned by uid $bot_uid"
+say "Wrote $token_file and $hmac_file (root, 0444, inside a 0700 directory)"
 
 # ── 3. the environment ─────────────────────────────────────────────────────
 cp -a "$env_file" "$env_file.bak.$(date +%Y%m%d%H%M%S)"

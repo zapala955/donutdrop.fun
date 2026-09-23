@@ -21,6 +21,33 @@ if grep -q '^VAULT_BOT_ID=' "$env_file"; then
   compose+=(--profile vault)
   echo "Vault bot configured; deploying it too."
 fi
+# Same reasoning for the community bot: without its profile, `--remove-orphans` below would treat
+# a running community bot as a leftover and delete it on the next ordinary deploy.
+if grep -q '^COMMUNITY_APPLICATION_ID=.\+' "$env_file"; then
+  compose+=(--profile community)
+  echo "Community bot configured; deploying it too."
+fi
+
+# ── the API mounts the community key whether or not the bot is running ─────────────────────────
+# A compose secret is a bind mount, and a bind mount whose source is missing stops the container
+# being created -- so an api service that LISTS this secret cannot start until the file exists,
+# even with COMMUNITY_BOT_ENABLED=false. Compose has no way to attach a secret conditionally, so
+# the file is made unconditionally instead.
+#
+# A random value is the right placeholder: the gateway treats "enabled with no key" and "wrong
+# key" identically, and a fixed placeholder shared across deployments would be a key an attacker
+# could simply look up here. add-community-bot.sh reuses whatever this wrote.
+community_hmac_file="${COMMUNITY_BOT_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/community-bot-hmac-key}"
+if [[ ! -s "$community_hmac_file" ]]; then
+  install -d -m 0700 "$(dirname "$community_hmac_file")"
+  # printf, not echo: the loader rejects a secret file carrying anything but one line.
+  printf '%s' "$(openssl rand -hex 32)" >"$community_hmac_file"
+  # 0444 owned by root, matching every other secret here. The 0700 directory is what keeps them
+  # private; the files inside are readable so any container user can mount them.
+  chown 0:0 "$community_hmac_file"
+  chmod 0444 "$community_hmac_file"
+  echo "Generated $community_hmac_file (the API mounts it whether or not the bot runs)."
+fi
 
 "${compose[@]}" config --quiet
 
