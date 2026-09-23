@@ -1,9 +1,13 @@
-/* info.js — support details and the public terms document. */
-import { state, bus } from './store.js';
+/* info.js — where to get help, and the public terms document. */
+import { bus } from './store.js';
 import { $, el } from './util.js';
-import { toast } from './ui.js';
 
 // ─────────── /support ───────────
+
+/* The same server as the Discord tab. Duplicated as a constant rather than imported from
+ * discord.js, which exists to mount a view and would drag a DOM module into this one for a
+ * string; if a third page ever needs it, that is the point at which it earns its own home. */
+const SUPPORT_INVITE_URL = 'https://discord.gg/aHfRsUaGgx';
 
 let supportRoot = null;
 
@@ -16,84 +20,40 @@ export function mountSupport(view) {
 function paintSupport() {
   if (!supportRoot?.isConnected) return;
   const root = ensureShell(supportRoot, 'Support', 'supportRoot');
-  root.innerHTML = '';
+  root.replaceChildren();
 
-  /* Service state first. "Is it me or is it them" is the question behind most support contacts,
-   * and it is one the page can answer without anybody being contacted at all. */
-  const status = panel('Service');
-  status.appendChild(
-    facts([
-      ['API', state.online ? 'reachable' : 'unreachable', state.online ? 'up' : 'down'],
-      ['Session', state.authenticated ? 'signed in' : 'signed out', state.authenticated ? 'up' : null],
-      ['Chat', state.chat?.slowModeSeconds ? `slow mode ${state.chat.slowModeSeconds}s` : 'normal', null],
-    ]),
-  );
-  root.appendChild(status);
+  /* One instruction, and nothing else.
+   *
+   * This page used to be a service dashboard: API reachability, session state, chat slow mode, a
+   * copyable report bundle and five self-serve links. All of it was in service of a contact
+   * channel the build never had -- the last panel read "not configured in this build" -- so the
+   * page spent four sections preparing somebody for a conversation it could not start.
+   *
+   * Support happens in the Discord server now, so the page says that and gets out of the way. */
+  const card = el('section', 'dsync__invite');
 
-  /* What a human needs pasted into a report. Without these, the first reply to every report is a
-   * request for them. The account id is copyable rather than selectable-by-hand because it is a
-   * uuid and nobody transcribes one correctly. */
-  const identity = panel('Include this in a report');
-  if (state.authenticated) {
-    const rows = [
-      ['Username', state.user?.minecraftUsername ?? '—'],
-      ['Account id', state.user?.id ?? '—'],
-    ];
-    if (state.fairness?.serverSeedHash) {
-      rows.push(['Active commitment', state.fairness.serverSeedHash.slice(0, 24) + '…']);
-    }
-    identity.appendChild(facts(rows));
+  const heading = el('h2', 'dsync__invitetitle');
+  heading.textContent = 'Need help?';
 
-    const copy = el('button', 'btn');
-    copy.type = 'button';
-    copy.textContent = 'COPY REPORT DETAILS';
-    copy.addEventListener('click', () => copyReport());
-    identity.appendChild(copy);
-  } else {
-    identity.appendChild(facts([['Account', 'signed out']]));
-  }
-  root.appendChild(identity);
+  const copy = el('p', 'dsync__invitecopy');
+  copy.textContent =
+    'Open a ticket in our Discord server and a member of staff will get back to you. Include your ' +
+    'in-game name and what happened, and we will pick it up from there.';
 
-  /* The self-serve answers, as links rather than as an FAQ. Every one of these routes already
-   * answers a question support would otherwise be asked by hand. */
-  const help = panel('Answer it yourself');
-  const links = el('div', 'info__links');
-  for (const [label, href] of [
-    ['Verify a roll', '/fairness'],
-    ['Wallet ledger', '/wallet'],
-    ['Match history', '/history'],
-    ['Your account', '/settings'],
-    ['Terms', '/terms'],
-  ]) {
-    const link = el('a', 'info__link');
-    link.href = href;
-    link.textContent = label;
-    links.appendChild(link);
-  }
-  help.appendChild(links);
-  root.appendChild(help);
+  /* The same anchor treatment the Discord tab uses: a real link, so middle-click, copy-address and
+   * open-in-new-tab all behave, and rel="noopener" so the opened tab cannot navigate this one. */
+  const go = el('a', 'btn btn--go dsync__go');
+  go.href = SUPPORT_INVITE_URL;
+  go.target = '_blank';
+  go.rel = 'noopener noreferrer';
+  go.textContent = 'OPEN A TICKET';
+  go.setAttribute('aria-label', `Open a support ticket in the Donut Drop Discord at ${SUPPORT_INVITE_URL}`);
 
-  /* No contact channel is configured in this build. Saying so is the honest option; printing an
-   * address that nobody reads would be worse than printing nothing. */
-  const contact = panel('Contact');
-  contact.appendChild(facts([['Channel', 'not configured in this build']]));
-  root.appendChild(contact);
-}
+  const address = el('p', 'dsync__inviteurl mono');
+  address.textContent = SUPPORT_INVITE_URL.replace(/^https:\/\//, '');
 
-async function copyReport() {
-  const lines = [
-    `username: ${state.user?.minecraftUsername ?? '-'}`,
-    `account: ${state.user?.id ?? '-'}`,
-    `commitment: ${state.fairness?.serverSeedHash ?? '-'}`,
-    `nonce: ${state.fairness?.nonce ?? '-'}`,
-    `when: ${new Date().toISOString()}`,
-  ].join('\n');
-  try {
-    await navigator.clipboard.writeText(lines);
-    toast({ kind: 'win', title: 'Copied' });
-  } catch {
-    toast({ kind: 'lose', title: 'Clipboard blocked', body: 'Copy the fields above by hand.' });
-  }
+  card.append(heading, copy, go, address);
+  root.appendChild(card);
 }
 
 // ─────────── /terms ───────────
@@ -216,29 +176,6 @@ function paintTerms() {
 }
 
 // ─────────── shared ───────────
-
-function panel(title) {
-  const card = el('section', 'acct__panel');
-  const label = el('span', 'acct__label');
-  label.textContent = title;
-  card.appendChild(label);
-  return card;
-}
-
-function facts(rows) {
-  const list = el('dl', 'acct__facts mono');
-  for (const [term, value, tone] of rows) {
-    const group = el('div');
-    if (tone) group.dataset.tone = tone;
-    const dt = el('dt');
-    dt.textContent = term;
-    const dd = el('dd');
-    dd.textContent = value;
-    group.append(dt, dd);
-    list.appendChild(group);
-  }
-  return list;
-}
 
 function ensureShell(view, title, rootId) {
   let root = $('#' + rootId, view);

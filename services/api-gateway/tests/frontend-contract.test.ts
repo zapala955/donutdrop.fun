@@ -82,9 +82,17 @@ describe('frontend/backend contract', () => {
     // The platform runs on cash: there is no inventory to route to any more.
     assert.doesNotMatch(html, /data-route="inventory"/);
     assert.doesNotMatch(html, /data-view="inventory"/);
-    for (const route of ['crates', 'upgrader', 'quests', 'war', 'fairness']) {
+    // Linked from the menu AND reachable.
+    for (const route of ['crates', 'upgrader', 'fairness']) {
       assert.match(html, new RegExp(`data-route="${route}"`));
       assert.match(html, new RegExp(`data-view="${route}"`));
+    }
+    /* Reachable, but no longer on the menu. Skill Duels, Quests & Streak and Faction War were
+     * taken off the board together; their views stay so an existing link or bookmark still
+     * resolves, and so restoring the menu block is all it takes to put a mode back. */
+    for (const view of ['quests', 'war', 'skill-duel']) {
+      assert.match(html, new RegExp(`data-view="${view}"`));
+      assert.doesNotMatch(html, new RegExp(`data-route="${view}"`));
     }
   });
 

@@ -209,23 +209,12 @@
         <span>Discord</span>
       </a>
 
-        <div class="menu__sep" role="separator"></div>
-        <div class="menu__label">Play</div>
-        <!-- Skill Duels moved here when the header entry became the arena. It is a live route with
-             its own money in it; a mode is retired by being taken off the board, not by being left
-             running behind a URL nobody links to. -->
-        <a class="menu__row" href="/skill-duel" data-route="skill-duel" role="menuitem">
-          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l7 7M20 4l-7 7"/><circle cx="12" cy="15" r="4"/></svg>
-          <span>Skill Duels</span>
-        </a>
-        <a class="menu__row" href="/quests" data-route="quests" role="menuitem">
-          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16l-7-4-7 4z"/><path d="M9 10l2 2 4-4"/></svg>
-          <span>Quests &amp; Streak</span>
-        </a>
-        <a class="menu__row" href="/war" data-route="war" role="menuitem">
-          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l7 7M20 4l-7 7"/><path d="M12 11l5 9M12 11l-5 9"/></svg>
-          <span>Faction War</span>
-        </a>
+        <!-- Skill Duels, Quests & Streak and Faction War were listed here under "Play".
+             All three came off the board together: none had anything live in it at the time --
+             no open duel lobby, no faction, no unclaimed quest reward -- so nothing was stranded
+             by unlisting them. The routes and their views still exist; a mode taken off the menu
+             can be put back by restoring this block, which is why it is described rather than
+             deleted without trace. -->
 
         <div class="menu__sep" role="separator"></div>
         <div class="menu__label">Activity</div>
