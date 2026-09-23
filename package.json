@@ -7,7 +7,8 @@
     "packages/provably-fair",
     "services/api-gateway",
     "services/minecraft-bot",
-    "services/discord-bot"
+    "services/discord-bot",
+    "services/community-bot"
   ],
   "engines": {
     "node": ">=22.0.0"
@@ -26,6 +27,8 @@
     "admin:bootstrap": "npm run admin:bootstrap --workspace @donut/api --",
     "db:dev-seed": "npm run db:dev-seed --workspace @donut/api",
     "discord:start": "npm run start --workspace @donut/discord-bot",
+    "community:start": "npm run start --workspace @donut/community-bot",
+    "community:commands": "npm run commands:register --workspace @donut/community-bot",
     "discord:dev": "npm run dev --workspace @donut/discord-bot",
     "discord:commands": "npm run commands:register --workspace @donut/discord-bot"
   },

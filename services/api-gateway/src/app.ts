@@ -29,6 +29,7 @@ import { registerCashDepositRoutes } from './routes/cash-deposits.js';
 import { registerCashWithdrawalRoutes } from './routes/cash-withdrawals.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerDevRoutes } from './routes/dev.js';
+import { registerCommunityBotRoutes } from './routes/community-bot.js';
 import { registerDiscordControlRoutes } from './routes/discord-control.js';
 import { registerEngagementRoutes } from './routes/engagement.js';
 import { registerCaseRoutes } from './routes/cases.js';
@@ -243,6 +244,9 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
    * Sits next to the admin routes because that is what it is: a second, narrower door into the
    * same privileges, and the two belong where a reader finds them together. */
   await registerDiscordControlRoutes(app, db, config);
+  /* The public server's bot, and a separate registration on purpose: it is a different process
+   * with a different key, and the only thing it may ask is a public profile lookup. */
+  await registerCommunityBotRoutes(app, db, config);
   await registerMinecraftInternalRoutes(app, db, config);
 
   app.setNotFoundHandler(async (_request, reply) =>

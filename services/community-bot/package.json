@@ -1,0 +1,24 @@
+{
+  "name": "@donut/community-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/src/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node --enable-source-maps dist/src/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "commands:register": "tsx scripts/register-commands.ts"
+  },
+  "dependencies": {
+    "discord.js": "14.27.0",
+    "pg": "8.23.0",
+    "pino": "9.14.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "tsx": "4.23.13"
+  }
+}

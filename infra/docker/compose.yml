@@ -189,6 +189,8 @@ services:
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       DISCORD_CONTROL_HMAC_KEY_FILE: /run/secrets/discord_control_hmac_key
       DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
+      COMMUNITY_BOT_ENABLED: '${COMMUNITY_BOT_ENABLED:-false}'
+      COMMUNITY_BOT_HMAC_KEY_FILE: /run/secrets/community_bot_hmac_key
       TURNSTILE_ENABLED: '${TURNSTILE_ENABLED:-false}'
       TURNSTILE_SITE_KEY: '${TURNSTILE_SITE_KEY:-}'
       TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key
@@ -209,6 +211,7 @@ services:
       - discord_bot_token
       - discord_control_hmac_key
       - discord_operators_json
+      - community_bot_hmac_key
       - turnstile_secret_key
     depends_on:
       migrate:
@@ -424,6 +427,54 @@ services:
     pids_limit: 128
     logging: *json-logging
 
+  community-bot:
+    # Opt in with `--profile community`, the same way the operator bot does. A server that has no
+    # community application must not carry a container crash-looping on a missing token.
+    profiles: ['community']
+    build:
+      context: ../..
+      dockerfile: infra/docker/community.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Its own database handle rather than going through the API for everything. Tickets,
+      # giveaways and suggestions are this bot's own state; routing them through a signed HTTP
+      # call would be a second API surface to secure for no gain. The ONE thing it cannot read
+      # itself -- a player's profile -- goes over the signed call below.
+      #
+      # This DEFAULTS to the API's own role, which can read every table including balances. To
+      # narrow it to the nine tables the bot owns, run infra/postgres/community-bot-role.sql once
+      # and point COMMUNITY_DATABASE_URL_FILE at the connection string it describes. Creating a
+      # role on a live cluster is a superuser action, so it is opt-in rather than automatic.
+      DATABASE_URL_FILE: /run/secrets/community_database_url
+      DATABASE_SSL: '${DATABASE_SSL:-false}'
+      COMMUNITY_APPLICATION_ID: '${COMMUNITY_APPLICATION_ID:-}'
+      COMMUNITY_GUILD_ID: '${COMMUNITY_GUILD_ID:-}'
+      COMMUNITY_BOT_TOKEN_FILE: /run/secrets/community_bot_token
+      # Origin only; the client resolves an absolute /internal/v1/community/... path against it.
+      API_INTERNAL_URL: http://api:3001
+      COMMUNITY_API_SECRET_FILE: /run/secrets/community_bot_hmac_key
+      LOG_LEVEL: '${COMMUNITY_LOG_LEVEL:-info}'
+    secrets:
+      - community_database_url
+      - community_bot_token
+      - community_bot_hmac_key
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # Not on `discord-egress`: this process talks to Discord from a public server and the operator
+    # bot talks to Discord from a private one. One reached process should not inherit the other's
+    # route out, which is the same reasoning that gave the operator bot its own.
+    networks: [database, bot-control, community-egress]
+    mem_limit: 384m
+    cpus: 1
+    pids_limit: 128
+    logging: *json-logging
+
   nginx:
     image: nginx:1.30.4-alpine@sha256:dc5069ad14f19660b141b21236140b91656bf89bbc3e2417c70ae650cd66104c
     restart: unless-stopped
@@ -502,6 +553,16 @@ secrets:
     file: ${DISCORD_CONTROL_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/discord-control-hmac-key}
   discord_operators_json:
     file: ${DISCORD_OPERATORS_JSON_FILE:-/opt/donutdrop/shared/secrets/discord-operators.json}
+  # Defaults to the API's connection string so the bot runs with no extra setup. See the note on
+  # the service, and infra/postgres/community-bot-role.sql, for narrowing it.
+  community_database_url:
+    file: ${COMMUNITY_DATABASE_URL_FILE:-${API_DATABASE_URL_FILE:?Set API_DATABASE_URL_FILE}}
+  community_bot_token:
+    file: ${COMMUNITY_BOT_TOKEN_FILE:-/opt/donutdrop/shared/secrets/community-bot-token}
+  # A DIFFERENT file from discord-control-hmac-key, and the API refuses to boot if the two hold
+  # the same value: that key mints admin sessions and this process runs in a public server.
+  community_bot_hmac_key:
+    file: ${COMMUNITY_BOT_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/community-bot-hmac-key}
   # Defaulted, not required: compose resolves every variable before it does anything else, so a
   # `:?` here would make a stack that has never heard of Turnstile refuse to start.
   turnstile_secret_key:
@@ -550,3 +611,7 @@ networks:
     ipam:
       config:
         - subnet: ${DISCORD_EGRESS_NETWORK_CIDR:-172.37.0.0/24}
+  community-egress:
+    ipam:
+      config:
+        - subnet: ${COMMUNITY_EGRESS_NETWORK_CIDR:-172.38.0.0/24}

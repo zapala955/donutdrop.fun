@@ -31,6 +31,10 @@ const FILE_BACKED_SETTINGS = [
    * sense, but it is the allowlist that decides who can mint an admin session, so it is read the
    * same careful way as one rather than being passed on a command line. */
   'DISCORD_OPERATORS_JSON',
+  /* The community bot's own key. Separate from DISCORD_CONTROL_HMAC_KEY on purpose: that one
+   * mints admin sessions, this one reads a public profile, and the process holding this one runs
+   * in a server anybody can join. See lib/community-bot-auth.ts. */
+  'COMMUNITY_BOT_HMAC_KEY',
   /* The half of the Turnstile pair that proves a challenge was really solved. The site key beside
    * it is public by design and printed into the page; this one is what stops somebody minting
    * their own "passed" answer, so it is read the same careful way as every other secret here. */
@@ -611,6 +615,11 @@ const environmentSchema = z
       .default(''),
     DISCORD_CONTROL_HMAC_KEY: z.string().default(''),
     DISCORD_OPERATORS_JSON: z.string().default('{}'),
+    /* The public server's bot. Off by default and independent of DISCORD_CONTROL_ENABLED: running
+     * a community bot must not require the control plane, and enabling the control plane must not
+     * quietly open a second door. */
+    COMMUNITY_BOT_ENABLED: booleanString,
+    COMMUNITY_BOT_HMAC_KEY: z.string().default(''),
     /* Where operational alerts are posted. Outbound only; the bot never reads it. */
     DISCORD_ALERT_CHANNEL_ID: z
       .string()
@@ -881,6 +890,30 @@ const environmentSchema = z
         });
       }
     }
+
+    if (env.COMMUNITY_BOT_ENABLED) {
+      if (env.COMMUNITY_BOT_HMAC_KEY.length < 32) {
+        context.addIssue({
+          code: 'custom',
+          path: ['COMMUNITY_BOT_HMAC_KEY'],
+          message: 'must be at least 32 characters when COMMUNITY_BOT_ENABLED is on',
+        });
+      }
+      /* Reusing the control key would hand the public server's bot the credential that mints
+       * admin sessions — and that is a configuration somebody arrives at by copying a line, not
+       * by deciding to. Refused at boot rather than left available. */
+      if (
+        env.COMMUNITY_BOT_HMAC_KEY.length > 0 &&
+        env.COMMUNITY_BOT_HMAC_KEY === env.DISCORD_CONTROL_HMAC_KEY
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['COMMUNITY_BOT_HMAC_KEY'],
+          message:
+            'must not equal DISCORD_CONTROL_HMAC_KEY: the community bot must not hold the control-plane credential',
+        });
+      }
+    }
     /* Half-configured is refused rather than quietly ignored. A deployment that believes it is
      * challenging sign-ups and is not is worse off than one that knows it is not. */
     if (env.TURNSTILE_ENABLED) {
@@ -1101,6 +1134,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordBotToken: env.DISCORD_BOT_TOKEN,
     discordGuildId: env.DISCORD_GUILD_ID,
     discordControlHmacKey: env.DISCORD_CONTROL_HMAC_KEY,
+    communityBotEnabled: env.COMMUNITY_BOT_ENABLED,
+    communityBotHmacKey: env.COMMUNITY_BOT_HMAC_KEY,
     discordOperators,
     discordAlertChannelId: env.DISCORD_ALERT_CHANNEL_ID,
     discordAdminLinkTtlSeconds: env.DISCORD_ADMIN_LINK_TTL_SECONDS,
