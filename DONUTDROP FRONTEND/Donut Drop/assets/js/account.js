@@ -187,7 +187,21 @@ function paintProfile() {
     ]),
   );
 
+  root.appendChild(moneyActions());
+}
+
+/**
+ * Deposit and Withdraw, as they appear on both the profile and the wallet.
+ *
+ * The click is forwarded to the header's own buttons rather than calling the modals directly.
+ * Those two live in app.js together with every piece of state they depend on -- the bot's
+ * availability, the withdrawal cooldown, the pending payout, the Turnstile widget -- and this
+ * module has none of it. Proxying the click means there is one deposit flow and one withdrawal
+ * flow on this site, not one per page that happens to offer the button.
+ */
+function moneyActions() {
   const actions = el('div', 'acct__actions');
+
   const deposit = el('button', 'btn btn--go');
   deposit.type = 'button';
   deposit.textContent = 'Deposit';
@@ -199,7 +213,7 @@ function paintProfile() {
   withdraw.addEventListener('click', () => $('#withdrawBtn')?.click());
 
   actions.append(deposit, withdraw);
-  root.appendChild(actions);
+  return actions;
 }
 
 // ─────────── /wallet ───────────
@@ -259,6 +273,10 @@ function paintWallet() {
       ['Withdrawn', withdrawn, 'down'],
     ]),
   );
+
+  /* Directly under the figures, above the history. This is the page somebody opens to move money
+   * rather than to read about it, and the two actions were previously only on the profile. */
+  root.appendChild(moneyActions());
 
   const ledger = panel('Recent transactions');
   ledger.appendChild(ledgerTable(rows));

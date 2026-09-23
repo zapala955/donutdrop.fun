@@ -95,6 +95,27 @@ describe('the wallet page', () => {
     assert.match(mount.slice(0, 900), /Promise\.allSettled\(/);
   });
 
+  /* The page somebody opens to MOVE money, not only to read about it. Both actions previously
+   * lived on the profile and in the header, and neither is where anybody looks for them. */
+  it('offers deposit and withdraw on the page itself', async () => {
+    const code = await page();
+    const wallet = code.slice(code.indexOf('function paintWallet'));
+    assert.match(wallet.slice(0, wallet.indexOf('// ─')), /root\.appendChild\(moneyActions\(\)\)/);
+  });
+
+  /* One deposit flow and one withdrawal flow on this site, not one per page that offers the
+   * button. The state those modals need -- bot availability, the cooldown, the pending payout,
+   * Turnstile -- lives in app.js and none of it is reachable from here. */
+  it('drives the one real flow rather than a second copy of it', async () => {
+    const code = await page();
+    const actions = code.slice(code.indexOf('function moneyActions'));
+    const body = actions.slice(0, actions.indexOf('\n}'));
+    assert.match(body, /\$\('#depositBtn'\)\?\.click\(\)/);
+    assert.match(body, /\$\('#withdrawBtn'\)\?\.click\(\)/);
+    // And the profile uses the same helper, so the two cannot drift apart.
+    assert.equal(code.split('moneyActions()').length - 1, 3);
+  });
+
   it('forgets the totals on sign-out', async () => {
     const store = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/store.js');
     const logout = store.slice(store.indexOf('export async function logout'));
