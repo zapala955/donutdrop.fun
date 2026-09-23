@@ -13,6 +13,7 @@ import {
   refreshAccount,
   refreshTransactions,
   refreshBalance,
+  refreshWalletSummary,
   upgradeHistory,
 } from './store.js';
 import { $, el, money, pct } from './util.js';
@@ -209,7 +210,14 @@ export function mountWallet(view) {
   walletRoot = view;
   bindOnce(view, 'wallet', () => paintWallet());
   if (state.authenticated) {
-    Promise.all([refreshBalance(false), refreshTransactions(25, false)])
+    /* allSettled, not all: the summary is two tiles and the ledger is the page. If the summary
+     * request fails the rest still renders, and the tiles say so rather than the whole page
+     * staying on its loading state because one of three calls did not come back. */
+    Promise.allSettled([
+      refreshBalance(false),
+      refreshTransactions(25, false),
+      refreshWalletSummary(false),
+    ])
       .then(paintWallet)
       .catch(() => undefined);
   }
@@ -227,20 +235,32 @@ function paintWallet() {
   }
 
   const rows = state.transactions;
-  /* In and out over the loaded window, not over all time. Labelled as such below, because a
-   * figure that says "in" while covering only the last 25 rows is a lie by omission otherwise. */
-  const credited = rows.reduce((sum, r) => (Number(r.amount_minor) > 0 ? sum + Number(r.amount_minor) : sum), 0);
-  const debited = rows.reduce((sum, r) => (Number(r.amount_minor) < 0 ? sum - Number(r.amount_minor) : sum), 0);
+
+  /* Deposits and withdrawals over ALL time, from the server.
+   *
+   * These tiles used to sum the loaded rows and were labelled "in (last 25)" and "out (last 25)"
+   * for exactly that reason -- an arbitrary window is not a total, and the honest label made the
+   * figures useless rather than wrong. Real money in and real money out is the question somebody
+   * opens this page to answer.
+   *
+   * Withdrawals are net of refunds: a payout that was refunded never left, and counting it would
+   * tell somebody they had taken out twice what they really did.
+   *
+   * An em dash while the figure is unknown, never a zero. "$0 deposited" is a claim about
+   * somebody's money, and a request that has not come back yet is not entitled to make it. */
+  const summary = state.walletSummary;
+  const deposited = summary ? money(Number(summary.depositedMinor)) : '—';
+  const withdrawn = summary ? money(Number(summary.withdrawnMinor)) : '—';
 
   root.appendChild(
     statGrid([
       ['Balance', money(state.balance), 'gold'],
-      ['In (last 25)', money(credited), 'up'],
-      ['Out (last 25)', money(debited), 'down'],
+      ['Deposited', deposited, 'up'],
+      ['Withdrawn', withdrawn, 'down'],
     ]),
   );
 
-  const ledger = panel('Recent ledger');
+  const ledger = panel('Recent transactions');
   ledger.appendChild(ledgerTable(rows));
   root.appendChild(ledger);
 }
@@ -441,7 +461,7 @@ function bindOnce(view, key, paint) {
   view.dataset.bound = key;
   bus.addEventListener('change', (event) => {
     if (!view.isConnected) return;
-    if (['login', 'logout', 'ready', 'private', 'account', 'transactions', 'sync'].includes(event.detail)) {
+    if (['login', 'logout', 'ready', 'private', 'account', 'transactions', 'wallet', 'sync'].includes(event.detail)) {
       paint();
     }
   });

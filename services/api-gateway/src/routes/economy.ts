@@ -86,6 +86,38 @@ export async function registerEconomyRoutes(
     };
   });
 
+  /**
+   * What this player has put in and taken out, over all time.
+   *
+   * Its own endpoint rather than a field on /v1/balance, which is re-fetched on every settlement:
+   * this is a filtered sum over the player's whole ledger, and paying for it on the hot path to
+   * answer a question only the wallet page asks would be a scan per round.
+   *
+   * The query is the one the admin player view already runs, verbatim, so the figure a player
+   * sees and the figure support sees cannot drift apart. Withdrawals are NET -- a refunded
+   * payout never left, and counting it as money taken out would tell somebody they had withdrawn
+   * twice what they really did.
+   */
+  app.get('/v1/balance/summary', { preHandler: guards.authenticate }, async (request) => {
+    const result = await db.query<{ deposited_minor: string; withdrawn_minor: string }>(
+      `SELECT coalesce(sum(amount_minor) FILTER (
+                WHERE kind IN ('pay_login_deposit', 'cash_deposit')), 0)::text AS deposited_minor,
+              coalesce(-sum(amount_minor) FILTER (
+                WHERE kind IN ('cash_withdrawal', 'cash_withdrawal_refund')), 0)::text
+                AS withdrawn_minor
+         FROM wallet_transactions
+        WHERE user_id = $1
+          AND kind IN ('pay_login_deposit', 'cash_deposit',
+                       'cash_withdrawal', 'cash_withdrawal_refund')`,
+      [request.authUser?.id],
+    );
+    const row = result.rows[0];
+    return {
+      depositedMinor: row?.deposited_minor ?? '0',
+      withdrawnMinor: row?.withdrawn_minor ?? '0',
+    };
+  });
+
   app.get(
     '/v1/balance/transactions',
     { preHandler: guards.authenticate },

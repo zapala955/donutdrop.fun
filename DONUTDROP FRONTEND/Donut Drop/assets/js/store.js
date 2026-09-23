@@ -36,6 +36,7 @@ export const state = {
   statistics: null,
   account: null,
   transactions: [],
+  walletSummary: null,
   vip: null,
   lastError: null,
 
@@ -394,6 +395,8 @@ export async function logout() {
   state.inventory = [];
   state.catalog = [];
   state.fairness = null;
+  /* Somebody else's deposit total must not survive into the next session on a shared machine. */
+  state.walletSummary = null;
   emit('logout');
 }
 
@@ -952,6 +955,23 @@ export async function refreshTransactions(limit = 50, notify = true) {
   state.transactions = result.transactions || [];
   if (notify) emit('transactions');
   return state.transactions;
+}
+
+/* Lifetime deposited and withdrawn, for the wallet page's own tiles.
+ *
+ * A separate request from the ledger because it answers a different question: the ledger is the
+ * most recent rows, this is every row that ever moved real money. Fetched when the wallet page is
+ * opened rather than on the balance refresh, so a figure only that page shows is not summed on
+ * every settlement. */
+export async function refreshWalletSummary(notify = true) {
+  if (!state.authenticated) {
+    state.walletSummary = null;
+    return null;
+  }
+  const result = await api.get('/v1/balance/summary');
+  state.walletSummary = result;
+  if (notify) emit('wallet');
+  return result;
 }
 
 export const canAfford = (amount) => state.authenticated && state.balance >= amount;
