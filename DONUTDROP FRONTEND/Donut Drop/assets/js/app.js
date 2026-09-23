@@ -7,6 +7,7 @@ import {
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
+  refreshRouletteConfig,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
@@ -60,6 +61,27 @@ function maxStakeLabel() {
   return Number.isFinite(published) && published > 0 ? money(published) : '—';
 }
 
+/** The roulette table's published ceiling on a single chip. */
+function rouletteMaxBetLabel() {
+  const published = Number(state.rouletteConfig?.maxStakeMinor ?? 0);
+  return Number.isFinite(published) && published > 0 ? money(published) : '—';
+}
+
+/* The straight-up return, which is the biggest number the wheel pays.
+ *
+ * Read from the server's own payout table rather than written as 36x here. The multiplier is
+ * derived from the configured house edge, so a hard-coded figure would be a promise this site
+ * stopped keeping the first time somebody edited a setting -- and it would be quoting odds, which
+ * is the one kind of copy that must never drift. */
+function rouletteTopPayoutLabel() {
+  const bps = Number(state.rouletteConfig?.payoutBps?.straight ?? 0);
+  if (!Number.isFinite(bps) || bps <= 10_000) return '—';
+  const times = bps / 10_000;
+  // Whole numbers at this magnitude -- "35×" is what a player would say. The decimal branch is
+  // for a table configured down into single digits, where a tenth genuinely changes the offer.
+  return `${times >= 10 ? Math.round(times) : times.toFixed(1).replace(/\.0$/, '')}×`;
+}
+
 /** A countable thing's size, or an em dash while it is still unknown. */
 function count(collection) {
   const size = Array.isArray(collection)
@@ -80,7 +102,7 @@ function mountHome(view) {
   const art = $('.hero__art', view);
   if (art) mountHero3d(art).catch(() => { delete art.dataset.mode; });
 
-  /* Four routes, two figures each.
+  /* Three routes, two figures each.
    *
    * The strip stays, because a player scanning a lobby is comparing games and a sentence is the
    * slowest way to answer "how much, how long". What changed is what the figures say. Half of them
@@ -93,14 +115,16 @@ function mountHome(view) {
    * Every figure is read from something that knows the answer rather than typed here. The crate
    * count was hard-coded as 50 and nothing on the page had ever checked; it now counts the
    * catalogue the server actually sent, and reads "—" until that arrives instead of asserting a
-   * number before it could possibly be known. */
+   * number before it could possibly be known. Roulette's two figures follow the same rule: the
+   * table limit and the straight-up return both come off the server's own config, because a
+   * payout quoted from memory is the one number on this page nobody may ever get wrong. */
   const promos = () => [
-    { ac: '#ffaa00', h: 'Crates',      art: 'chest.png',       href: '/crates',
-      stats: [[count(state.cases), 'CRATES'], [count(RARITY), 'RARITIES']] },
-    { ac: '#ffd700', h: 'Upgrader',    art: 'ender_chest.png', href: '/upgrader',
+    { ac: '#ffd700', h: 'Upgrader', art: 'ender_chest.png', href: '/upgrader',
       stats: [[maxStakeLabel(), 'MAX STAKE'], [topMultiplierLabel(), 'TOP PAYOUT']] },
-    { ac: '#ffaa00', h: 'Faction War', art: 'nether_star.png', href: '/war',
-      stats: [[count(state.war?.factions), 'SIDES'], ['ONE', 'PRIZE POT']] },
+    { ac: '#ffaa00', h: 'Roulette', art: 'nether_star.png', href: '/roulette',
+      stats: [[rouletteMaxBetLabel(), 'MAX BET'], [rouletteTopPayoutLabel(), 'TOP PAYOUT']] },
+    { ac: '#ffaa00', h: 'Cases',    art: 'chest.png',       href: '/crates',
+      stats: [[count(state.cases), 'CASES'], [count(RARITY), 'RARITIES']] },
   ];
 
   const paintPromos = () => {
@@ -116,6 +140,11 @@ function mountHome(view) {
     </a>`).join('');
   };
   paintPromos();
+
+  /* Fetched once per visit to the lobby, not subscribed to. The card quotes the table's limits,
+   * which change when somebody edits a setting -- not every round -- so a second live feed would
+   * buy nothing. It repaints through the `change` listener at the bottom of this view. */
+  void refreshRouletteConfig();
 
   /* The game grid that used to be built here is gone, and so is its markup. It rendered the same
    * four products the promo row above it already renders, which made the homepage read as padded.

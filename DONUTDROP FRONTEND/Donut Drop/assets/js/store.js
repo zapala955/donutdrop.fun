@@ -20,6 +20,7 @@ export const state = {
   activities: [],
   fairness: null,
   upgradeConfig: null,
+  rouletteConfig: null,
   chat: {
     messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0',
     resetId: null, clearedAt: null, loaded: false,
@@ -266,6 +267,27 @@ export async function refreshCases(notify = true) {
   state.online = true;
   if (notify) emit('cases');
   return state.cases;
+}
+
+/* The roulette table's published limits, for the lobby card that quotes them.
+ *
+ * Only `config` is kept. The same endpoint also returns the live round, the pot, twelve results
+ * and every visible bet -- none of which a promo tile has any use for, and all of which would go
+ * stale in `state` the moment the round turned over. Holding the figures that change once a
+ * settings edit, and dropping the ones that change every thirty seconds, is what keeps this a
+ * single call on mount rather than a second subscription.
+ *
+ * Failure is silent and leaves the card reading "--". A lobby tile is not worth a visible error,
+ * and the roulette page itself reports the table being unreachable properly. */
+export async function refreshRouletteConfig(notify = true) {
+  try {
+    const snapshot = await api.get('/v1/roulette');
+    state.rouletteConfig = snapshot?.config ?? null;
+  } catch {
+    state.rouletteConfig = null;
+  }
+  if (notify) emit('roulette-config');
+  return state.rouletteConfig;
 }
 
 export async function refreshActivity(notify = true) {
