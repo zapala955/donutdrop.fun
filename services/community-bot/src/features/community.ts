@@ -10,7 +10,7 @@ import {
   type TextChannel,
 } from 'discord.js';
 import { guildSettings, setGuildSetting, type Database } from '../db.js';
-import { COLOR, bad, clip, embed, ok } from '../ui.js';
+import { COLOR, bad, clip, embed, ok, relative, warn } from '../ui.js';
 
 /**
  * community.ts — joining, leaving, self-serve roles and the suggestion board.
@@ -29,13 +29,32 @@ import { COLOR, bad, clip, embed, ok } from '../ui.js';
  * Both halves are independent: a welcome message that fails must not cost somebody their role,
  * and a role that cannot be assigned must not cost the greeting. They are caught separately for
  * that reason rather than sharing a try.
+ *
+ * `origin` is what invite tracking worked out, and it is only shown to staff in the mod log --
+ * never in the welcome message. "Invited by X" under somebody's arrival turns every join into a
+ * scoreboard update, and the people it names did not ask to be announced.
  */
-export async function onMemberJoin(db: Database, member: GuildMember): Promise<void> {
+export async function onMemberJoin(
+  db: Database,
+  member: GuildMember,
+  origin?: { source: string; inviterId: string | null },
+): Promise<void> {
   const settings = await guildSettings(db, member.guild.id);
 
-  if (settings.autorole_id) {
-    await member.roles.add(settings.autorole_id, 'Autorole on join').catch(() => undefined);
+  /* Bots are skipped. They arrive through OAuth with the roles whoever added them chose, and a
+   * "Member" role landing on a webhook relay is a permissions surprise nobody asked for. */
+  if (settings.autorole_id && !member.user.bot) {
+    try {
+      await member.roles.add(settings.autorole_id, 'Autorole on join');
+    } catch (error) {
+      /* NOT swallowed, which it used to be. A role above the bot's own cannot be assigned, and
+       * silently doing nothing makes that indistinguishable from a bot that is offline -- the
+       * report is always "autorole just doesn't work" with nothing to go on. */
+      await reportAutoroleFailure(db, member, settings.autorole_id, error);
+    }
   }
+
+  await announceArrival(db, member, settings.modlog_channel_id, origin);
 
   if (!settings.welcome_channel_id) return;
   const channel = member.guild.channels.cache.get(settings.welcome_channel_id);
@@ -58,6 +77,80 @@ export async function onMemberJoin(db: Database, member: GuildMember): Promise<v
       ],
     })
     .catch(() => undefined);
+}
+
+/**
+ * Tells staff an autorole failed, once per role rather than once per member.
+ *
+ * A broken autorole fails for EVERY join, so an unthrottled report would bury the mod log the
+ * first time somebody drags a role above the bot's. One message naming the cause is enough to
+ * act on; the rest are the same sentence again.
+ */
+const reportedAutoroleFailures = new Set<string>();
+
+async function reportAutoroleFailure(
+  db: Database,
+  member: GuildMember,
+  roleId: string,
+  error: unknown,
+): Promise<void> {
+  console.error(`[autorole] could not give ${roleId} to ${member.id}`, error);
+
+  const key = `${member.guild.id}:${roleId}`;
+  if (reportedAutoroleFailures.has(key)) return;
+  reportedAutoroleFailures.add(key);
+
+  const settings = await guildSettings(db, member.guild.id);
+  if (!settings.modlog_channel_id) return;
+  const channel = member.guild.channels.cache.get(settings.modlog_channel_id);
+  if (!channel?.isTextBased()) return;
+
+  const botMember = member.guild.members.me;
+  const role = member.guild.roles.cache.get(roleId);
+  const reason =
+    role && botMember && role.position >= botMember.roles.highest.position
+      ? `<@&${roleId}> sits at or above my highest role, so I cannot assign it. Move my role above it in Server Settings > Roles.`
+      : `I could not assign <@&${roleId}>. Check that it still exists and that I have Manage Roles.`;
+
+  await (channel as TextChannel)
+    .send({ embeds: [warn('Autorole is not working', reason)] })
+    .catch(() => undefined);
+}
+
+/**
+ * The staff-side record of a join: when, how old the account is, and where they came from.
+ *
+ * The account age is here because it is the one fact that makes a raid obvious — twenty members
+ * whose accounts were all made this week is a pattern; twenty names is not.
+ */
+async function announceArrival(
+  db: Database,
+  member: GuildMember,
+  modlogChannelId: string | null,
+  origin?: { source: string; inviterId: string | null },
+): Promise<void> {
+  if (!modlogChannelId) return;
+  const channel = member.guild.channels.cache.get(modlogChannelId);
+  if (!channel?.isTextBased()) return;
+
+  const where =
+    origin?.source === 'invite' && origin.inviterId
+      ? `<@${origin.inviterId}>`
+      : origin?.source === 'vanity'
+        ? 'Vanity URL'
+        : origin?.source === 'bot'
+          ? 'Added as a bot'
+          : 'Unknown';
+
+  const card = embed('Member joined', `<@${member.id}> — ${clip(member.user.tag, 64)}`, COLOR.quiet)
+    .addFields(
+      { name: 'Invited by', value: where, inline: true },
+      { name: 'Account created', value: relative(member.user.createdAt), inline: true },
+      { name: 'Members', value: String(member.guild.memberCount), inline: true },
+    )
+    .setThumbnail(member.user.displayAvatarURL());
+
+  await (channel as TextChannel).send({ embeds: [card] }).catch(() => undefined);
 }
 
 export async function onMemberLeave(
@@ -424,6 +517,36 @@ export async function configure(db: Database, interaction: ChatInputCommandInter
     ['suggestions', 'suggestion_channel_id', 'channel'],
     ['autorole', 'autorole_id', 'role'],
   ];
+
+  const autorole = interaction.options.getRole('autorole');
+  if (autorole) {
+    /* Refused here rather than discovered on the next join. An autorole the bot cannot assign
+     * fails for every single member, and from the outside that looks exactly like a bot that is
+     * down -- so the one moment somebody can act on it is while they are setting it. */
+    const botMember = interaction.guild?.members.me;
+    if (botMember && autorole.position >= botMember.roles.highest.position) {
+      await interaction.reply({
+        embeds: [
+          bad(
+            'I cannot assign that role',
+            `<@&${autorole.id}> sits at or above my highest role, so Discord would refuse it every time somebody joined.
+
+In **Server Settings > Roles**, drag my role above it, then run this again.`,
+          ),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (autorole.id === guildId) {
+      // @everyone has the guild's own id, and it is already on everyone.
+      await interaction.reply({
+        embeds: [bad('Not that one', '`@everyone` is already on every member.')],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
 
   for (const [option, column, kind] of pairs) {
     const value =

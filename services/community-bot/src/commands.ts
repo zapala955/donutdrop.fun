@@ -392,6 +392,40 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
       ) as SlashCommandBuilder,
   );
 
+  // ── invite tracking ──────────────────────────────────────────────────────
+
+  add(
+    new SlashCommandBuilder()
+      .setName('invites')
+      .setDescription('How many people someone has brought to the server')
+      .addUserOption((option) =>
+        option.setName('member').setDescription('Whose invites — defaults to yours'),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('invite-leaderboard')
+      .setDescription('Who has invited the most members that stayed'),
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('invite-check')
+      .setDescription('Show which invite a member came through')
+      .setDefaultMemberPermissions(MOD)
+      .addUserOption((option) =>
+        option.setName('member').setDescription('Who to look up').setRequired(true),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('invite-sync')
+      .setDescription('Re-read the invite counters now')
+      .setDefaultMemberPermissions(MANAGE_GUILD),
+  );
+
   // ── the site ─────────────────────────────────────────────────────────────
 
   add(

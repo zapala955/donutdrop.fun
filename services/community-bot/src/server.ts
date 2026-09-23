@@ -51,6 +51,17 @@ import {
   startGiveawaySweeper,
 } from './features/giveaways.js';
 import { configureAutomod, onMessage, startAutomodSweeper } from './features/automod.js';
+import {
+  attributeJoin,
+  inviteLeaderboard,
+  noteInviteCreated,
+  noteInviteDeleted,
+  recordLeave,
+  refreshSnapshot,
+  showInvites,
+  syncInvites,
+  whoInvited,
+} from './features/invites.js';
 import { showLink, showProfile } from './features/link.js';
 import {
   avatar,
@@ -102,6 +113,9 @@ async function main(): Promise<void> {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      // Invite tracking: inviteCreate/inviteDelete keep the counter snapshot current between
+      // joins. Not a privileged intent -- it needs the Manage Server PERMISSION instead.
+      GatewayIntentBits.GuildInvites,
     ],
     // Without this a departing member arrives uncached and the goodbye never fires.
     partials: [Partials.GuildMember],
@@ -111,6 +125,20 @@ async function main(): Promise<void> {
 
   client.once(Events.ClientReady, (ready) => {
     log.info({ tag: ready.user.tag, guilds: ready.guilds.cache.size }, 'connected');
+
+    /* Primed before anybody can join. Without a baseline the first arrival after every restart
+     * has nothing to diff against and is recorded as unknown. */
+    const home = ready.guilds.cache.get(config.guildId);
+    if (home) {
+      void refreshSnapshot(db, home).then(
+        (readable) => {
+          if (!readable) {
+            log.warn('Cannot read invites: the bot needs the Manage Server permission');
+          }
+        },
+        (error: unknown) => log.error({ error }, 'invite snapshot failed'),
+      );
+    }
     for (const guild of ready.guilds.cache.values()) {
       if (guild.id === config.guildId) continue;
       log.warn({ guildId: guild.id, name: guild.name }, 'leaving an unrecognised guild');
@@ -126,11 +154,24 @@ async function main(): Promise<void> {
 
   client.on(Events.GuildMemberAdd, (member) => {
     if (wrongGuild(member.guild.id)) return;
-    void onMemberJoin(db, member).catch((error) => log.error({ error }, 'member join failed'));
+    /* Attribution runs FIRST and the greeting waits on it: the counter diff has to happen before
+     * another join moves the numbers, while a welcome message can be a moment late without
+     * anybody noticing. A failure to attribute must not cost the member their role, so it falls
+     * back to an unknown origin rather than throwing. */
+    void attributeJoin(db, member)
+      .catch((error) => {
+        log.error({ error }, 'invite attribution failed');
+        return { source: 'unknown' as const, code: null, inviterId: null };
+      })
+      .then((origin) => onMemberJoin(db, member, origin))
+      .catch((error) => log.error({ error }, 'member join failed'));
   });
 
   client.on(Events.GuildMemberRemove, (member) => {
     if (wrongGuild(member.guild.id)) return;
+    void recordLeave(db, member.guild.id, member.id).catch((error) =>
+      log.error({ error }, 'recording a departure failed'),
+    );
     void onMemberLeave(
       db,
       member.guild.id,
@@ -138,6 +179,24 @@ async function main(): Promise<void> {
       member.guild.name,
       member.guild.channels.cache,
     ).catch((error) => log.error({ error }, 'member leave failed'));
+  });
+
+  client.on(Events.InviteCreate, (invite) => {
+    if (!invite.guild || wrongGuild(invite.guild.id)) return;
+    void noteInviteCreated(
+      db,
+      invite.guild.id,
+      invite.code,
+      invite.inviter?.id ?? null,
+      invite.uses ?? 0,
+    ).catch((error) => log.error({ error }, 'recording a new invite failed'));
+  });
+
+  client.on(Events.InviteDelete, (invite) => {
+    if (!invite.guild || wrongGuild(invite.guild.id)) return;
+    void noteInviteDeleted(db, invite.guild.id, invite.code).catch((error) =>
+      log.error({ error }, 'forgetting a deleted invite failed'),
+    );
   });
 
   client.on(Events.MessageCreate, (message) => {
@@ -215,6 +274,15 @@ async function main(): Promise<void> {
         return endGiveawayCommand(db, interaction);
       case 'giveaway-reroll':
         return rerollGiveaway(db, interaction);
+
+      case 'invites':
+        return showInvites(db, interaction);
+      case 'invite-leaderboard':
+        return inviteLeaderboard(db, interaction);
+      case 'invite-check':
+        return whoInvited(db, interaction);
+      case 'invite-sync':
+        return syncInvites(db, interaction);
 
       case 'link':
         return showLink(api, interaction);
@@ -342,6 +410,7 @@ async function showHelp(interaction: ChatInputCommandInteraction): Promise<void>
           '**Tickets** — press a button on the ticket panel for support or a media application.',
           '**/suggest** — put an idea on the board; everyone votes.',
           '**/profile** — show a linked Donut Drop profile. **/link** explains how to connect one.',
+          '**/invites** — how many people you have brought in. **/invite-leaderboard** ranks everyone.',
           '**/userinfo · /serverinfo · /avatar · /poll** — the usual.',
           '',
           'Staff also have moderation, giveaways, role menus, automod and `/config`.',

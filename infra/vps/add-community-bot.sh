@@ -155,10 +155,15 @@ docker compose --env-file "$env_file" -f "$compose_file" --profile community \
   --enable-source-maps services/community-bot/dist/scripts/register-commands.js
 
 # ── 6. what is left for you ────────────────────────────────────────────────
-# 1099780189270 = manage roles 268435456 + moderate members 1099511627776 + manage channels 16
-#   + kick 2 + ban 4 + manage messages 8192 + view 1024 + send 2048 + embed 16384
-#   + attach 32768 + read history 65536 + add reactions 64
-invite="https://discord.com/api/oauth2/authorize?client_id=$application_id&scope=bot%20applications.commands&permissions=1099780189270"
+# 1099780189302 = manage roles 268435456 + moderate members 1099511627776 + manage server 32
+#   + manage channels 16 + kick 2 + ban 4 + manage messages 8192 + view 1024 + send 2048
+#   + embed 16384 + attach 32768 + read history 65536 + add reactions 64
+#
+# Manage Server is what lets the bot READ THE INVITE LIST. Discord will not say which invite a
+# member used, so the only way to know is to hold every invite's use count and see which one
+# moved -- and without this permission that list cannot be fetched at all, which makes every
+# join "unknown" with nothing in the logs to explain why.
+invite="https://discord.com/api/oauth2/authorize?client_id=$application_id&scope=bot%20applications.commands&permissions=1099780189302"
 cat <<DONE
 
 $(printf '\033[1;32mDone.\033[0m') The bot is running. Two things left:
@@ -167,15 +172,18 @@ $(printf '\033[1;32mDone.\033[0m') The bot is running. Two things left:
 
      $invite
 
-     That asks for: manage roles, manage channels, kick, ban, moderate members,
-     manage messages, read and send messages, embed links, attach files and read
-     history. It is what the ticket, moderation and role-menu commands need.
+     That asks for: manage roles, manage server, manage channels, kick, ban,
+     moderate members, manage messages, read and send messages, embed links,
+     attach files and read history. Manage Server is specifically what makes
+     invite tracking possible; the rest are for tickets, moderation and roles.
 
   2. In Discord, run these once:
 
        /ticket-setup category:<your tickets category> staff_role:<your staff role>
        /ticket-panel                     (in the channel members should use)
        /config modlog:#mod-log welcome:#welcome suggestions:#suggestions
+       /config autorole:@Member       (given to everyone who joins)
+       /invite-sync                   (starts invite tracking)
        /automod invites:true spam:true   (start here; add links/caps if you want)
 
 Everything else is optional and has a default. Run /help to see the lot.

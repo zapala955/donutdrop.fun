@@ -60,13 +60,14 @@ DO $grant$ BEGIN
 END $grant$;
 GRANT USAGE ON SCHEMA public TO donut_community_runtime;
 
--- Exactly the nine tables the bot owns. Listed one by one rather than granted on the schema: a
+-- Exactly the eleven tables the bot owns. Listed one by one rather than granted on the schema: a
 -- wildcard here would silently pick up every table a future migration adds, which is the opposite
 -- of the point.
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   discord_guild_settings, discord_tickets, discord_mod_actions, discord_giveaways,
   discord_giveaway_entries, discord_suggestions, discord_suggestion_votes,
-  discord_role_menus, discord_role_menu_options
+  discord_role_menus, discord_role_menu_options,
+  discord_invite_snapshots, discord_invited_members
   TO donut_community_runtime;
 
 /* `users` is NOT granted, not even SELECT.
