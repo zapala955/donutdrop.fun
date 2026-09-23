@@ -76,7 +76,9 @@ esac
 # printf, not echo: the bot rejects a secret file containing anything but one line, and a stray
 # trailing newline is the difference between "starts" and "crash-loops on a config error". This
 # exact mistake took the site down once already; see add-vault-bot.sh.
-install -d -m 0700 "$secrets_dir"
+# Created if missing, mode left alone if not: this directory already holds every other secret,
+# and forcing a mode onto it is a side effect this script has no business having.
+[[ -d "$secrets_dir" ]] || install -d -m 0700 "$secrets_dir"
 printf '%s' "$bot_token" >"$token_file"
 
 # ── THE KEY IS REUSED IF IT IS ALREADY THERE ───────────────────────────────
@@ -105,13 +107,21 @@ fi
 chown 0:0 "$token_file" "$hmac_file"
 chmod 0444 "$token_file" "$hmac_file"
 
-# Proven, not assumed. One command, and it turns a container that crash-loops on a stack trace
-# into a message naming the file and the reason.
-bot_uid=1000
+# ── CHECKED ON THE FILE, NOT THROUGH THE HOST DIRECTORY ───────────────────
+# The obvious test -- su to uid 1000 and try to read the path -- is wrong here, and it failed on
+# a pair of files that were perfectly good. The secrets directory is 0700 root, so no other user
+# can TRAVERSE it on the host; that says nothing about the container, because Docker reads the
+# file as root and bind-mounts it straight in. The container never walks the host directory.
+#
+# What actually decides whether the process can read its secret is the file's own mode once
+# mounted, so that is what is asserted: readable by others, and owned by root like every other
+# secret here.
 for file in "$token_file" "$hmac_file"; do
-  if ! su -s /bin/sh -c "test -r '$file'" "#$bot_uid" 2>/dev/null; then
-    die "uid $bot_uid cannot read $file. The containers run as that user and will not start."
-  fi
+  mode="$(stat -c '%a' "$file")"
+  owner="$(stat -c '%u' "$file")"
+  [[ "$owner" == "0" ]] || die "$file is not owned by root. Every other secret here is."
+  # The last digit is the "other" class, and bit 4 is read. The container's user is in that class.
+  (( ${mode: -1} & 4 )) || die "$file is mode $mode, so the container's user cannot read it."
   # One line each, which is the shape the loader actually enforces.
   if [[ "$(wc -l <"$file")" -gt 0 ]]; then
     die "$file ended up with a trailing newline. This is a bug in this script."

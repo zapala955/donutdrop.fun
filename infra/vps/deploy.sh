@@ -39,7 +39,9 @@ fi
 # could simply look up here. add-community-bot.sh reuses whatever this wrote.
 community_hmac_file="${COMMUNITY_BOT_HMAC_KEY_FILE:-/opt/donutdrop/shared/secrets/community-bot-hmac-key}"
 if [[ ! -s "$community_hmac_file" ]]; then
-  install -d -m 0700 "$(dirname "$community_hmac_file")"
+  secrets_dir="$(dirname "$community_hmac_file")"
+  # Created if missing, mode left alone if not: it already holds every other secret.
+  [[ -d "$secrets_dir" ]] || install -d -m 0700 "$secrets_dir"
   # printf, not echo: the loader rejects a secret file carrying anything but one line.
   printf '%s' "$(openssl rand -hex 32)" >"$community_hmac_file"
   # 0444 owned by root, matching every other secret here. The 0700 directory is what keeps them
