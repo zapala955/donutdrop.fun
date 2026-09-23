@@ -37,7 +37,7 @@ describe('audited runtime settings', () => {
     assert.match(migration, /CREATE TABLE runtime_settings/);
     assert.match(migration, /jsonb_typeof\(value\) IN \('boolean', 'number', 'string'\)/);
     assert.match(migration, /CREATE FUNCTION donut_schema_ready_v41\(\)/);
-    assert.match(health, /donut_schema_ready_v44\(\)/);
+    assert.match(health, /donut_schema_ready_v45\(\)/);
     assert.match(route, /'\/v1\/admin\/runtime-settings'/);
     assert.match(route, /guards\.requireAdmin/);
     assert.match(route, /runtime_settings\.update/);

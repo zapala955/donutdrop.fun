@@ -159,7 +159,13 @@ export async function registerReferralRoutes(
               count(*) FILTER (WHERE u.discord_verified_at IS NOT NULL)::text AS verified,
               count(*) FILTER (WHERE r.bonus_unlocked_at IS NOT NULL)::text AS unlocked,
               coalesce(sum(r.revshare_paid_minor), 0)::text AS revshare_paid_minor,
-              coalesce(sum(r.revshare_claimable_minor), 0)::text AS revshare_claimable_minor,
+              /* Voided referrals are excluded from the CLAIMABLE total only. A figure the claim
+                 endpoint will refuse to pay is not a balance, and showing one produces a button
+                 that fails. The paid totals keep counting them, because that money really was
+                 paid and erasing it would make the player's own history disagree with the
+                 ledger. */
+              coalesce(sum(r.revshare_claimable_minor)
+                       FILTER (WHERE r.voided_at IS NULL), 0)::text AS revshare_claimable_minor,
               coalesce(sum(r.bonus_paid_minor), 0)::text AS bonus_paid_minor
          FROM referrals r JOIN users u ON u.id = r.referee_id
         WHERE r.referrer_id = $1`,

@@ -74,6 +74,9 @@
           <button class="tab" type="button" data-panel="moderation" aria-selected="false">
             Moderation
           </button>
+          <button class="tab" type="button" data-panel="referrals" aria-selected="false">
+            Referrals
+          </button>
           <button class="tab" type="button" data-panel="programs" aria-selected="false">
             Programs
           </button>
@@ -289,6 +292,38 @@
             <button class="btn" type="button" data-refresh="audit">Refresh</button>
           </div>
           <div class="tablewrap"><table class="grid" id="auditTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="referrals" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Referrals</h2>
+              <span class="hint" id="referralNote"></span>
+            </div>
+            <button class="btn" type="button" data-refresh="referrals">Refresh</button>
+          </div>
+          <div class="stats" id="referralStats"></div>
+          <p class="hint">
+            Voiding stops a referral earning and makes its unclaimed revenue share unclaimable. It
+            does not claw back anything already paid — that is a wallet adjustment with its own
+            audit entry.
+          </p>
+          <div class="settingbar">
+            <form class="search" id="referralSearch" role="search" onsubmit="return false">
+              <label class="search__label" for="referralQuery">Search referrals</label>
+              <input
+                class="search__input"
+                id="referralQuery"
+                type="search"
+                placeholder="Player or code..."
+                maxlength="32"
+                autocomplete="off"
+              />
+            </form>
+            <div class="chips" id="referralFilter" role="group" aria-label="Filter referrals"></div>
+            <p class="hint settingbar__count" id="referralCount" role="status" aria-live="polite"></p>
+          </div>
+          <div class="tablewrap"><table class="grid" id="referralTable"></table></div>
         </section>
 
         <section class="panel" data-panel="system" hidden>

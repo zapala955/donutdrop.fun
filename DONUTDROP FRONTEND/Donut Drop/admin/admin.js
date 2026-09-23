@@ -2423,6 +2423,178 @@ function renderSettingRows() {
   );
 }
 
+/* The referral view's own filters, held between renders so paging or switching tabs does not
+ * silently reset what an operator was looking at. */
+const referralState = { search: '', state: 'all', bound: false };
+
+const REFERRAL_FILTERS = [
+  ['All', 'all'],
+  ['Earning', 'live'],
+  ['Voided', 'voided'],
+  ['Bonus paid', 'unlocked'],
+  ['Bonus pending', 'pending'],
+];
+
+async function loadReferrals() {
+  const params = new URLSearchParams({ state: referralState.state, limit: '100' });
+  if (referralState.search.trim()) params.set('search', referralState.search.trim());
+  const data = await api.get(`/v1/admin/referrals?${params.toString()}`);
+  const rows = data.referrals ?? [];
+  const totals = data.totals ?? {};
+  const programme = data.programme ?? {};
+
+  const note = $('referralNote');
+  if (note) {
+    note.textContent = programme.enabled
+      ? `Paying ${(Number(programme.revshareBps ?? 0) / 100).toFixed(2)}% of margin, plus ` +
+        `${compactAmount(programme.bonusMinor ?? '0')} once a referee wagers ` +
+        `${compactAmount(programme.bonusWagerMinor ?? '0')}.`
+      : 'The referral programme is switched off. Nothing is accruing.';
+  }
+
+  /* Totals over the whole programme rather than the page, so they do not move when somebody
+   * searches. Claimable excludes voided referrals, because that is money nobody can collect. */
+  renderStats($('referralStats'), [
+    ['Referrals', totals.referrals ?? '0'],
+    ['Referrers', totals.referrers ?? '0'],
+    ['Voided', totals.voided ?? '0', Number(totals.voided ?? 0) > 0],
+    ['Wagered by referees', compactAmount(totals.wagered_minor ?? '0')],
+    ['Revenue share paid', compactAmount(totals.revshare_paid_minor ?? '0')],
+    ['Waiting to be claimed', compactAmount(totals.revshare_claimable_minor ?? '0')],
+    ['Bonuses paid', compactAmount(totals.bonus_paid_minor ?? '0')],
+  ]);
+
+  const filter = $('referralFilter');
+  if (filter) {
+    filter.replaceChildren();
+    for (const [label, value] of REFERRAL_FILTERS) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.setAttribute('aria-pressed', String(referralState.state === value));
+      chip.textContent = label;
+      chip.addEventListener('click', () => {
+        referralState.state = value;
+        void loadReferrals();
+      });
+      filter.append(chip);
+    }
+  }
+
+  const query = $('referralQuery');
+  if (query && !referralState.bound) {
+    referralState.bound = true;
+    query.value = referralState.search;
+    /* Debounced, unlike the settings filter: this one goes to the server, and a request per
+     * keystroke would be a query per character against a table that grows with the platform. */
+    let timer = 0;
+    query.addEventListener('input', () => {
+      referralState.search = query.value;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void loadReferrals(), 250);
+    });
+  }
+
+  const count = $('referralCount');
+  if (count) {
+    count.textContent = rows.length
+      ? `${rows.length} shown of ${totals.referrals ?? rows.length}`
+      : 'No referrals match';
+  }
+
+  table(
+    $('referralTable'),
+    ['Referee', 'Referrer', 'Code', 'Wagered', 'Claimable', 'Paid', 'Bonus', 'State', 'Actions'],
+    rows,
+    (row) => {
+      const tr = document.createElement('tr');
+      const bonus = document.createElement('td');
+      bonus.append(
+        row.bonus_unlocked_at
+          ? pill(compactAmount(row.bonus_paid_minor ?? '0'), 'ok')
+          : pill('pending', null),
+      );
+      const state = document.createElement('td');
+      state.append(row.voided_at ? pill('VOIDED', 'bad') : pill('earning', 'ok'));
+      if (row.voided_at) {
+        /* The reason travels with the badge. A voided relationship that cannot say why is a
+         * decision nobody can review, and this is the record somebody will read months later. */
+        state.title = `${row.void_reason || 'no reason recorded'}${
+          row.voided_by_username ? ` — ${row.voided_by_username}` : ''
+        }`;
+      }
+      tr.append(
+        cell(row.referee_username),
+        cell(row.referrer_username),
+        cell(row.code, { mono: true }),
+        cell(compactAmount(row.wagered_minor), { mono: true }),
+        cell(compactAmount(row.revshare_claimable_minor), { mono: true }),
+        cell(compactAmount(row.revshare_paid_minor), { mono: true }),
+        bonus,
+        state,
+        actions(
+          button(row.voided_at ? 'Restore' : 'Void', () => voidReferral(row), {
+            danger: !row.voided_at,
+          }),
+          button('Code', () => renameReferralCode(row)),
+        ),
+      );
+      return tr;
+    },
+  );
+}
+
+/**
+ * Stops a referral earning, or starts it again.
+ *
+ * The confirmation names the figure being forfeited, because that is the part an operator cannot
+ * work out from the row they are looking at: voiding does not only stop future accrual, it makes
+ * whatever has already banked unclaimable.
+ */
+async function voidReferral(row) {
+  const voiding = !row.voided_at;
+  const claimable = compactAmount(row.revshare_claimable_minor ?? '0');
+  const reason = await confirmAction(
+    voiding
+      ? `Void ${row.referee_username}'s referral by ${row.referrer_username}? It stops earning ` +
+          `and ${claimable} of unclaimed revenue share becomes unclaimable. Nothing already ` +
+          'paid out is reversed.'
+      : `Restore ${row.referee_username}'s referral by ${row.referrer_username}? It starts ` +
+          `earning again and ${claimable} becomes claimable once more.`,
+  );
+  if (!reason) return;
+  await api.patch(`/v1/admin/referrals/${row.referee_id}/void`, { voided: voiding, reason });
+  toast(voiding ? 'Referral voided.' : 'Referral restored.');
+  await loadReferrals();
+}
+
+/**
+ * Changes a referrer's invite code.
+ *
+ * For the ones that turn out to be slurs, impersonations or somebody else's brand. Every
+ * relationship already formed under the old code follows it, because the foreign key cascades.
+ */
+async function renameReferralCode(row) {
+  const values = await editRecord({
+    title: `Code for ${row.referrer_username}`,
+    description:
+      `Currently ${row.code}. Six to sixteen letters and digits. Referrals already formed under ` +
+      'the old code follow it automatically.',
+    fields: [
+      { name: 'code', label: 'New code', value: row.code },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Change the code',
+  });
+  if (!values) return;
+  const result = await api.patch(`/v1/admin/referral-codes/${row.referrer_id}`, {
+    code: values.code,
+    reason: values.reason,
+  });
+  toast(result.changed ? `Code is now ${result.code}.` : 'That was already the code.');
+  await loadReferrals();
+}
+
 async function loadSystem() {
   const data = await api.get('/v1/admin/system-config');
   $('systemNote').textContent = data.note;
@@ -2511,6 +2683,7 @@ const LOADERS = {
   jobs: loadJobs,
   moderation: loadModeration,
   programs: loadPrograms,
+  referrals: loadReferrals,
   audit: loadAudit,
   system: loadSystem,
 };

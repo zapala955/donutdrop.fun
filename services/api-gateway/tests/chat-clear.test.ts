@@ -16,7 +16,7 @@ describe('global chat clear', () => {
     assert.match(migration, /GRANT SELECT, INSERT ON TABLE chat_clear_events/);
     assert.doesNotMatch(migration, /GRANT (?:UPDATE|DELETE|TRUNCATE).*chat_clear_events/);
     assert.match(migration, /CREATE FUNCTION donut_schema_ready_v40\(\)/);
-    assert.match(health, /donut_schema_ready_v44\(\)/);
+    assert.match(health, /donut_schema_ready_v45\(\)/);
   });
 
   it('soft-deletes visible messages behind the admin guard and audits the clear', async () => {

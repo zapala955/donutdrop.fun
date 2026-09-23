@@ -130,6 +130,31 @@ const questUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'reason'));
+const referralQuerySchema = z
+  .object({
+    /* A username or a code. One box rather than two: an operator chasing a ring has one of the
+     * two in front of them and should not have to know which field it belongs in. */
+    search: z.string().max(32).optional(),
+    state: z.enum(['all', 'live', 'voided', 'unlocked', 'pending']).default('all'),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  })
+  .strict();
+const referralVoidSchema = z
+  .object({ voided: z.boolean(), reason: safeText(3, 256) })
+  .strict();
+const referralCodeSchema = z
+  .object({
+    // The same shape referral_codes enforces, so a rejection happens here rather than in Postgres.
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{6,16}$/, 'A code is 6 to 16 letters and digits'),
+    reason: safeText(3, 256),
+  })
+  .strict();
+
 const runtimeSettingsUpdateSchema = z
   .object({
     settings: z.record(z.string(), z.union([z.boolean(), z.number(), z.string()])),
@@ -726,6 +751,179 @@ export async function registerAdminOperationRoutes(
    * what deliberately cannot be: the trust boundary, the custody switches and the identities. The
    * economy dials that used to be listed below are runtime-managed now, and printing them in both
    * places would tell an operator two different stories about who owns the value. */
+  /**
+   * Every referral relationship, with what it has earned and whether it still can.
+   *
+   * A referral programme pays for signups, so it attracts the people who are best at
+   * manufacturing them. This is the view that makes a ring visible: one referrer, a row of
+   * referees who all signed up together, and a wagered column that never moves.
+   */
+  app.get('/v1/admin/referrals', { preHandler: requireAdminRead }, async (request) => {
+    const query = parseWith(referralQuerySchema, request.query);
+    const search = query.search?.trim() ? `%${query.search.trim()}%` : null;
+    const result = await db.query(
+      `SELECT r.referee_id, r.referrer_id, r.code, r.wagered_minor,
+              r.revshare_paid_minor, r.revshare_claimable_minor,
+              r.bonus_unlocked_at, r.bonus_paid_minor, r.created_at,
+              r.voided_at, r.void_reason,
+              referee.minecraft_username AS referee_username,
+              referrer.minecraft_username AS referrer_username,
+              voider.minecraft_username AS voided_by_username
+         FROM referrals r
+         JOIN users referee ON referee.id = r.referee_id
+         JOIN users referrer ON referrer.id = r.referrer_id
+         LEFT JOIN users voider ON voider.id = r.voided_by
+        WHERE ($1::text IS NULL
+               OR referee.minecraft_username ILIKE $1
+               OR referrer.minecraft_username ILIKE $1
+               OR r.code ILIKE $1)
+          AND CASE $2::text
+                WHEN 'live' THEN r.voided_at IS NULL
+                WHEN 'voided' THEN r.voided_at IS NOT NULL
+                WHEN 'unlocked' THEN r.bonus_unlocked_at IS NOT NULL
+                WHEN 'pending' THEN r.bonus_unlocked_at IS NULL AND r.voided_at IS NULL
+                ELSE true
+              END
+        ORDER BY r.created_at DESC
+        LIMIT $3 OFFSET $4`,
+      [search, query.state, query.limit, query.offset],
+    );
+
+    /* Totals over the WHOLE programme, not over the page being shown. A figure that changed when
+     * somebody paged or searched would be a statistic about the filter rather than the business. */
+    const totals = await db.query<Record<string, string>>(
+      `SELECT count(*)::text AS referrals,
+              count(*) FILTER (WHERE voided_at IS NOT NULL)::text AS voided,
+              count(*) FILTER (WHERE bonus_unlocked_at IS NOT NULL)::text AS unlocked,
+              count(DISTINCT referrer_id)::text AS referrers,
+              coalesce(sum(wagered_minor), 0)::text AS wagered_minor,
+              coalesce(sum(revshare_paid_minor), 0)::text AS revshare_paid_minor,
+              coalesce(sum(revshare_claimable_minor)
+                       FILTER (WHERE voided_at IS NULL), 0)::text AS revshare_claimable_minor,
+              coalesce(sum(bonus_paid_minor), 0)::text AS bonus_paid_minor
+         FROM referrals`,
+    );
+
+    return {
+      referrals: result.rows,
+      totals: totals.rows[0] ?? {},
+      limit: query.limit,
+      offset: query.offset,
+      // What the programme is paying right now, so the console does not have to look it up.
+      programme: {
+        enabled: config.referralsEnabled,
+        revshareBps: config.referralRevshareBps,
+        bonusMinor: config.referralBonusMinor.toString(),
+        bonusWagerMinor: config.referralBonusWagerMinor.toString(),
+      },
+    };
+  });
+
+  /**
+   * Stops a referral earning, without destroying the case for having stopped it.
+   *
+   * The row, its counters and its history all stay. What changes is that the accrual on every
+   * settled wager skips it, the milestone can no longer unlock, and whatever revenue share it had
+   * banked but not yet paid out becomes unclaimable.
+   *
+   * It does NOT claw anything back. `referral_earnings` and `referral_claims` are append-only
+   * records of money that really was paid, and reversing that is a deliberate wallet adjustment
+   * with its own audit entry -- not a side effect of flipping a flag.
+   */
+  app.patch(
+    '/v1/admin/referrals/:id/void',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(referralVoidSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        const current = await client.query<{
+          voided_at: Date | null;
+          revshare_claimable_minor: string;
+        }>(
+          `SELECT voided_at, revshare_claimable_minor FROM referrals
+            WHERE referee_id = $1 FOR UPDATE`,
+          [params.id],
+        );
+        const referral = current.rows[0];
+        if (!referral) throw new AppError(404, 'REFERRAL_NOT_FOUND', 'Referral was not found');
+
+        const updated = await client.query<EntityRow>(
+          `UPDATE referrals
+              SET voided_at = CASE WHEN $2::boolean THEN now() ELSE NULL END,
+                  voided_by = CASE WHEN $2::boolean THEN $3::uuid ELSE NULL END,
+                  void_reason = CASE WHEN $2::boolean THEN $4::varchar(256) ELSE NULL END,
+                  updated_at = now()
+            WHERE referee_id = $1
+            RETURNING referee_id, referrer_id, voided_at, revshare_claimable_minor`,
+          [params.id, body.voided, actor, body.reason],
+        );
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: body.voided ? 'referral.void' : 'referral.restore',
+          targetType: 'referral',
+          targetId: params.id,
+          details: {
+            reason: body.reason,
+            wasVoided: referral.voided_at !== null,
+            // The figure being forfeited or restored, recorded at the moment it changed hands.
+            claimableMinor: referral.revshare_claimable_minor,
+          },
+        });
+        return { referral: updated.rows[0] };
+      });
+    },
+  );
+
+  /**
+   * Changes somebody's invite code.
+   *
+   * A code is a public handle a player chose, so this exists for the ones that turn out to be
+   * slurs, impersonations or somebody else's brand. `referrals.code` cascades on update, so every
+   * relationship already formed under the old code follows it and none of them break.
+   */
+  app.patch(
+    '/v1/admin/referral-codes/:id',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(referralCodeSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        const current = await client.query<{ code: string }>(
+          'SELECT code FROM referral_codes WHERE user_id = $1 FOR UPDATE',
+          [params.id],
+        );
+        const existing = current.rows[0];
+        if (!existing) throw new AppError(404, 'REFERRAL_CODE_NOT_FOUND', 'That player has no code');
+        if (existing.code === body.code) {
+          return { code: existing.code, changed: false };
+        }
+        try {
+          await client.query('UPDATE referral_codes SET code = $2 WHERE user_id = $1', [
+            params.id,
+            body.code,
+          ]);
+        } catch (error) {
+          // The unique index on `code`. A taken code is a conflict, not a 500.
+          if ((error as { code?: string }).code === '23505') {
+            conflict('REFERRAL_CODE_TAKEN', 'Another player already uses that code');
+          }
+          throw error;
+        }
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: 'referral_code.rename',
+          targetType: 'referral_code',
+          targetId: params.id,
+          details: { from: existing.code, to: body.code, reason: body.reason },
+        });
+        return { code: body.code, changed: true };
+      });
+    },
+  );
+
   app.get('/v1/admin/system-config', { preHandler: requireAdminRead }, async () => ({
     restartRequired: false,
     note:

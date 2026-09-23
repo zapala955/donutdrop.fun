@@ -81,7 +81,7 @@ export async function accrueReferralWager(
                WHERE a.user_id = r.referrer_id AND a.status = 'approved'
                ORDER BY a.reviewed_at DESC LIMIT 1
             ), $2)::integer AS revshare_bps
-       FROM referrals r WHERE r.referee_id = $1 FOR UPDATE`,
+       FROM referrals r WHERE r.referee_id = $1 AND r.voided_at IS NULL FOR UPDATE`,
     [refereeId, config.referralRevshareBps],
   );
   const referral = existing.rows[0];
@@ -133,9 +133,13 @@ export async function claimReferralRewards(
   referrerId: string,
 ): Promise<{ claimedMinor: string; balanceMinor: string }> {
   const locked = await client.query<ClaimableReferralRow>(
+    /* Voided referrals are excluded HERE as well as at the accrual, and that is the half that
+     * actually matters: stopping future earnings while still paying out everything a fraudulent
+     * relationship had already banked would make voiding it a formality. The frozen figure stays
+     * on the row rather than being zeroed, so what was forfeited is still legible afterwards. */
     `SELECT referee_id, revshare_claimable_minor
        FROM referrals
-      WHERE referrer_id = $1 AND revshare_claimable_minor > 0
+      WHERE referrer_id = $1 AND revshare_claimable_minor > 0 AND voided_at IS NULL
       ORDER BY referee_id
       FOR UPDATE`,
     [referrerId],
@@ -159,7 +163,7 @@ export async function claimReferralRewards(
         SET revshare_paid_minor = revshare_paid_minor + revshare_claimable_minor,
             revshare_claimable_minor = 0,
             updated_at = now()
-      WHERE referrer_id = $1 AND revshare_claimable_minor > 0`,
+      WHERE referrer_id = $1 AND revshare_claimable_minor > 0 AND voided_at IS NULL`,
     [referrerId],
   );
   await client.query(
@@ -199,9 +203,12 @@ export async function tryUnlockMilestone(
   /* The join to `users` went with the Discord condition. This reads one row from one table now,
      which is the whole of what the gate depends on. */
   const locked = await client.query<ReferralRow>(
+    /* `voided_at IS NULL` is the whole of the fraud control on this path. A voided referral keeps
+     * its row and its counters -- the evidence outlives the decision -- and simply stops earning,
+     * so a manufactured signup cannot reach its milestone after somebody has ruled on it. */
     `SELECT referrer_id, wagered_minor, bonus_unlocked_at
        FROM referrals
-      WHERE referee_id = $1
+      WHERE referee_id = $1 AND voided_at IS NULL
       FOR UPDATE`,
     [refereeId],
   );
