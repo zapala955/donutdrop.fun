@@ -2370,6 +2370,41 @@ html, body { overflow-x: clip; }
   50%      { box-shadow: 0 0 13px rgba(255, 170, 0, .22); }
 }
 
+/* ── the Discord pill ──
+   Shaped exactly like the invite pill beside it -- same radius, padding, gap and type -- so the
+   two read as a matched pair. Everything that differs, differs on purpose:
+
+   * Blue, not gold. The invite pill is the one the referral programme pays for, and it should
+     stay the loudest thing in the bar. Colour is also what makes this one recognisable at a
+     glance as Discord rather than as another site button.
+   * No pulse. `refpulse` earns its keep on one element; on two it is just a bar that twitches.
+
+   Scoped to `.tabs` for the same reason `.navref` is: `.tabs a` sets padding, radius, colour and
+   a hover background, and an unscoped `.navdc` would lose to it on specificity. */
+.tabs .navdc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  background-color: var(--discord);
+  box-shadow: 0 0 9px rgba(88, 101, 242, .22);
+  transition: background-color .14s, box-shadow .14s;
+}
+.tabs .navdc:hover {
+  color: #fff;
+  background-color: var(--discord-hi);
+  box-shadow: 0 0 13px rgba(88, 101, 242, .3);
+}
+/* `.tabs a:active` already scales every nav item; it applies here too, so there is no second
+   active rule to keep in step with it. */
+.tabs .navdc__ico { width: 16px; height: 16px; flex: none; fill: #fff; }
+.tabs .navdc__txt { font-size: .75rem; font-weight: 800; letter-spacing: .01em; }
+
 /* ════════════════════ the balance widget ════════════════════
    Obsidian glass, a gold hairline, a drawn coin and the one number a player reads most often. */
 .cashpill {
@@ -2426,6 +2461,10 @@ html, body { overflow-x: clip; }
 
 @media (max-width: 860px) {
   .navref__txt b { display: none; }
+  /* Icon only, beside the invite pill doing the same thing. The glyph still says Discord and the
+     aria-label still says where it goes. */
+  .navdc__txt { display: none; }
+  .tabs .navdc { padding: 7px 10px; }
   .cashpill { width: 104px; padding: 6px 10px; }
   .tabdrop__menu { min-width: 220px; }
 }

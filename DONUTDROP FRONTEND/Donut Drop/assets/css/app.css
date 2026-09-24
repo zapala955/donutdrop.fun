@@ -39,6 +39,16 @@
   --rose-deep: var(--gold-deep);
   --rose-ink:  var(--gold-ink);
 
+  /* The one non-gold hue on the site, and it is borrowed rather than chosen: Discord's own
+     brand blue, used only on the button that opens Discord. Recognising it is the point --
+     a gold Discord button would blend into the bar and stop reading as "that thing over there".
+
+     Hue 235deg, which is blue and sits clear of the 250-335 violet wedge purged above. White
+     on it measures 4.61:1 and on the hover shade 6.42:1, so the label passes AA at the 12px
+     bold it ships at. Do not reach for these anywhere else. */
+  --discord:    #5865f2;
+  --discord-hi: #4752c4;
+
   /* ── supporting ores ──
      Secondary by rule. Each still means exactly one thing, and none of them may
      take over a surface — they light details on rose-and-gunmetal panels. */
