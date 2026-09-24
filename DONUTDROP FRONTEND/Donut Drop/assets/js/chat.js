@@ -285,7 +285,9 @@ async function onSubmit(event) {
           ? 'Slow down'
           : error?.code === 'CHAT_TIMED_OUT'
             ? 'Timed out'
-            : 'Not sent',
+            : error?.code === 'CHAT_LINK_BLOCKED'
+              ? 'No links'
+              : 'Not sent',
       body: error?.message || 'The server rejected the message.',
     });
   } finally {

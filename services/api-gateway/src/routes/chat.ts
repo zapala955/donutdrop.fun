@@ -7,6 +7,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { liveEvents } from '../lib/live-events.js';
+import { detectLink, isOwnDomainOnly } from '../lib/link-filter.js';
 import { safePublicText, safeText } from '../lib/sanitize.js';
 import { levelFor } from '../lib/vip.js';
 import { parseWith } from '../lib/validation.js';
@@ -152,6 +153,27 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
       const userId = requireUserId(request.authUser?.id);
       if (!config.chatEnabled) {
         throw new AppError(409, 'CHAT_DISABLED', 'Chat is closed right now');
+      }
+
+      /* No links, and no writing one in a way that gets past a filter looking for dots.
+       *
+       * Refused before the insert rather than hidden at render time: a message that is only
+       * masked on the way out is still in the table, still in the API response, and still fanned
+       * out over the live feed to anyone reading it directly.
+       *
+       * Admins are exempt. They are the people who post the server's own announcements, and a
+       * filter that locks the operator out of their own chat is one they turn off. This site's
+       * own address is allowed for everyone, since pointing somebody at a page here is the
+       * opposite of the problem being solved. */
+      if (request.authUser?.role !== 'admin') {
+        const link = detectLink(body.body);
+        if (link && !isOwnDomainOnly(body.body, new URL(config.appOrigin).host)) {
+          throw new AppError(
+            400,
+            'CHAT_LINK_BLOCKED',
+            'Links are not allowed in chat. Share it in the Discord server instead.',
+          );
+        }
       }
 
       const sent = await db.transaction(async (client) => {
