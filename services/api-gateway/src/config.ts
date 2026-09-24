@@ -579,8 +579,8 @@ const environmentSchema = z
     CREATOR_MAX_REVSHARE_BPS: z.coerce.number().int().min(0).max(10_000).default(2_000),
     REFERRALS_ENABLED: booleanString,
     REFERRAL_REVSHARE_BPS: z.coerce.number().int().min(0).max(10_000).default(500),
-    REFERRAL_BONUS_MINOR: positiveBigintString.default('10000000'),
-    REFERRAL_BONUS_WAGER_MINOR: positiveBigintString.default('100000000'),
+    REFERRAL_BONUS_MINOR: positiveBigintString.default('20000000'),
+    REFERRAL_BONUS_WAGER_MINOR: positiveBigintString.default('50000000'),
     /* Discord OAuth. The client secret is file-backed like every other credential, and the
      * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect
      * is how an authorization code leaves for somebody else's server. */

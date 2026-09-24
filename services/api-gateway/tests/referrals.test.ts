@@ -337,15 +337,20 @@ describe('referral configuration', () => {
      * programme pays, so changing the terms has to change it and be read in review. Everything
      * else derives from the config.
      *
-     * $10M for $100M wagered is a 10% cost of acquisition against a margin thinner than that on
-     * every mode, so it is the WAGER GATE that makes it solvent rather than the bonus being small.
-     * It is not a signup bonus and it must not be retuned into one. */
+     * $20M for $50M wagered, set by the operator on 2026-09-24 (it was $10M for $100M, which broke
+     * even at unlock). At a 10% edge the $50M gate earns the house $5M, so each invite is roughly
+     * $15M down when it pays and a second account run by the same person clears about $15M. That
+     * is a chosen acquisition cost, not an accident — the arithmetic is in .env.example — and the
+     * admin panel can move either figure without a deployment.
+     *
+     * What stays non-negotiable is the floor config.ts and the panel both enforce: the bonus can
+     * never exceed the wager that unlocks it. */
     const settings = config();
-    assert.equal(settings.referralBonusMinor, 10_000_000n);
-    assert.equal(settings.referralBonusWagerMinor, 100_000_000n);
+    assert.equal(settings.referralBonusMinor, 20_000_000n);
+    assert.equal(settings.referralBonusWagerMinor, 50_000_000n);
     assert.ok(
-      settings.referralBonusWagerMinor >= settings.referralBonusMinor * 10n,
-      'the gate must stay at least ten times the bonus, or acquisition costs more than 10%',
+      settings.referralBonusWagerMinor >= settings.referralBonusMinor,
+      'the bonus must never exceed the wager that unlocks it',
     );
   });
 });

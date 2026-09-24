@@ -164,6 +164,23 @@ describe('audited runtime settings', () => {
     );
   });
 
+  /* The panel must not be able to save what config.ts refuses at boot: an invite reward larger than
+   * the wager that unlocks it pays out more than the referee could ever have lost. */
+  it('refuses a referral reward above the wager that unlocks it', () => {
+    const settings = new RuntimeSettings(config);
+    assert.throws(
+      () => settings.validate({ referralBonusMinor: '60000000' }),
+      /Referral invite reward cannot exceed the wager that unlocks it/,
+    );
+    assert.throws(
+      () => settings.validate({ referralBonusWagerMinor: '10000000' }),
+      /Referral invite reward cannot exceed the wager that unlocks it/,
+    );
+    assert.doesNotThrow(() =>
+      settings.validate({ referralBonusMinor: '30000000', referralBonusWagerMinor: '30000000' }),
+    );
+  });
+
   /* A reset is a write too. Putting one half of a pair back to its deployment default while the
    * other half stays overridden is the same crossing, approached from the opposite direction. */
   it('validates a reset before it is written, not after', () => {

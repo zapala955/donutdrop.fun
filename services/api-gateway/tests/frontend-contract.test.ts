@@ -113,7 +113,10 @@ describe('frontend/backend contract', () => {
     const app = await source('assets/js/app.js');
     const store = await source('assets/js/store.js');
     const rewards = await source('assets/js/rakeback.js');
-    assert.match(html, /id="menuInvites">\$10M<\/b> Invites/);
+    /* No figure in the markup. The reward is an admin setting now, so a number typed here would be
+     * wrong the first time somebody changed it; the server's terms fill it in, as for the nav pill. */
+    assert.match(html, /id="menuInvites"><\/b> Invites/);
+    assert.match(app, /state\.referrals\?\.terms\?\.bonusMinor/);
     assert.match(html, /href="\/rewards" data-route="rewards"/);
     assert.match(html, /data-view="rewards"/);
     assert.doesNotMatch(html, />Rakeback<\/span>/);

@@ -517,6 +517,14 @@ function assertInvariants(view: AppConfig): void {
     ['Duel minimum stake', view.skillDuelMinStakeMinor, 'the maximum', view.skillDuelMaxStakeMinor],
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
+    /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
+     * what the environment would refuse: an invite paying more than the wager that unlocks it. */
+    [
+      'Referral invite reward',
+      view.referralBonusMinor,
+      'the wager that unlocks it',
+      view.referralBonusWagerMinor,
+    ],
   ];
   for (const [lowLabel, low, highLabel, high] of ordered) {
     if (low > high) {
