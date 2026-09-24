@@ -184,6 +184,38 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(terms, /House edge|Return to player|not published yet|acct__facts/);
   });
 
+  it('quotes the signup bonus and the invite offer from the server, never from the markup', async () => {
+    /* Both figures are admin settings. A number typed into the page is wrong the first time
+     * somebody changes one, so every place that shows an offer reads /v1/promotions and hides
+     * itself until it has. */
+    const html = await source('index.html');
+    const app = await source('assets/js/app.js');
+    const store = await source('assets/js/store.js');
+    assert.match(store, /api\.get\('\/v1\/promotions'\)/);
+
+    const bar = /<a class="invitebar" id="inviteBar" href="\/referrals" hidden>[\s\S]*?<\/a>/.exec(html)?.[0];
+    assert.ok(bar, 'the lobby invite strip is missing or not hidden by default');
+    assert.doesNotMatch(bar, /\$\d/);
+    assert.match(app, /state\.promotions\?\.referral/);
+    // Signed out, the strip opens the signup form rather than the referrals page's dead end.
+    assert.match(app, /if \(state\.authenticated\) return;\s*event\.preventDefault\(\);\s*openLoginModal\(\);/);
+
+    assert.match(app, /<div class="auth__bonus" id="linkBonus" hidden>/);
+    assert.match(app, /state\.promotions\?\.signupBonus/);
+    // The lock is stated beside the amount, not discovered at the withdraw button.
+    assert.match(app, /it can be withdrawn once you have wagered \$\{money\(wager\)\}/);
+  });
+
+  it('shows what is still owed instead of a withdraw form that cannot succeed', async () => {
+    const app = await source('assets/js/app.js');
+    const start = app.indexOf('async function openWithdrawModal()');
+    const flow = app.slice(start, app.indexOf('function paintWithdrawCooldown(', start));
+    const owed = flow.indexOf('info.wagerRequirementRemainingMinor');
+    const form = flow.indexOf('<form id="wdForm"');
+    assert.ok(owed > 0 && form > owed, 'the withdraw form is drawn before the requirement is checked');
+    assert.match(flow, /paintWithdrawLocked\(host, owed\)/);
+  });
+
   it('sends the Discord menu row straight to the same invite as the nav pill', async () => {
     const html = await source('index.html');
     const discordRows = [...html.matchAll(/<a class="menu__row"[^>]*>[\s\S]*?<\/a>/g)]

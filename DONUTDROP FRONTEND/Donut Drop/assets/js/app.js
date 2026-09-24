@@ -7,7 +7,7 @@ import {
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
-  refreshRouletteConfig, refreshUpgradeConfig,
+  refreshRouletteConfig, refreshUpgradeConfig, refreshPromotions,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
@@ -141,6 +141,32 @@ function mountHome(view) {
   };
   paintPromos();
 
+  /* The invite offer. Both figures are the server's; with the programme off, or before the
+   * promotions arrive, the row stays hidden rather than quoting a number it cannot back.
+   *
+   * Signed out, the referrals page is a dead end (it can only say "sign in"), so the row opens the
+   * signup form instead and says so on its button. */
+  const inviteBar = $('#inviteBar', view);
+  const paintInviteBar = () => {
+    if (!inviteBar) return;
+    const referral = state.promotions?.referral;
+    const bonus = Number(referral?.bonusMinor ?? 0);
+    inviteBar.hidden = !(bonus > 0);
+    if (inviteBar.hidden) return;
+    $('#inviteBarAmt', inviteBar).textContent = money(bonus);
+    const gate = Number(referral.bonusWagerMinor ?? 0);
+    $('#inviteBarFine', inviteBar).textContent = gate > 0
+      ? `Paid once they have wagered ${money(gate)}.`
+      : 'Paid after their first bet.';
+    $('#inviteBarGo', inviteBar).textContent = state.authenticated ? 'Get your link' : 'Sign up to invite';
+  };
+  inviteBar?.addEventListener('click', (event) => {
+    if (state.authenticated) return;
+    event.preventDefault();
+    openLoginModal();
+  });
+  paintInviteBar();
+
   /* Fetched once per visit to the lobby, not subscribed to. The cards quote the games' limits,
    * which change when somebody edits a setting -- not every round -- so a second live feed would
    * buy nothing. They repaint through the `change` listener at the bottom of this view.
@@ -266,6 +292,7 @@ function mountHome(view) {
   bus.addEventListener('change', () => {
     if (!view.isConnected) return;
     paintPromos();
+    paintInviteBar();
     paintActivity();
   });
 }
@@ -320,6 +347,10 @@ function openLoginModal() {
     body.innerHTML = `<h3 class="auth__title" aria-hidden="true">Sign In or Sign Up</h3>
       <p class="auth__lede">Log in with your Minecraft username, then verify your account by
         paying the bot an exact amount in game. The payment lands in your balance.</p>
+      <div class="auth__bonus" id="linkBonus" hidden>
+        <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> free for new players</p>
+        <p class="auth__bonusfine" id="linkBonusFine"></p>
+      </div>
       <hr class="auth__rule">
       <form id="linkForm" novalidate>
         <label class="auth__label" for="linkUsername">Minecraft username</label>
@@ -372,6 +403,26 @@ function openLoginModal() {
     const go = $('#linkGo', body);
     const slot = $('#linkChallenge', body);
     const inlineError = $('#linkError', body);
+
+    /* The signup offer, from the server's own settings. Hidden until they answer and hidden if the
+     * bonus is switched off: a figure this screen cannot confirm is not one it should promise. The
+     * lock is stated beside the amount, because finding it out at the withdraw button would read
+     * as a bait and switch. */
+    const paintBonus = () => {
+      const box = $('#linkBonus', body);
+      if (!box?.isConnected) return;
+      const offer = state.promotions?.signupBonus;
+      const amount = Number(offer?.amountMinor ?? 0);
+      box.hidden = !(amount > 0);
+      if (box.hidden) return;
+      $('#linkBonusAmt', box).textContent = money(amount);
+      const wager = Number(offer.wagerMinor ?? 0);
+      $('#linkBonusFine', box).textContent = wager > 0
+        ? `Added when your account is created. Play with it straight away; it can be withdrawn once you have wagered ${money(wager)}.`
+        : 'Added when your account is created.';
+    };
+    paintBonus();
+    if (!state.promotions) void refreshPromotions(false).then(paintBonus);
 
     /* An invite link fills the field and opens the disclosure it lives in.
      *
@@ -612,6 +663,7 @@ async function openDepositModal() {
     <p class="auth__note">Round amounts only &mdash; 1M, 250M, 1B. DonutSMP shortens large figures
       in chat, so a payment of 1,234,567,890 arrives as &ldquo;1.2B&rdquo; and is credited as
       1,200,000,000. The bot can only credit what the receipt shows.</p>
+    ${depositWagerNote()}
     <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
 
   $('#depositCopy', host).addEventListener('click', async (event) => {
@@ -634,6 +686,48 @@ async function openDepositModal() {
       button.dataset.state = '';
     }, 1800);
   });
+}
+
+/** "once", "2×": how a wager multiplier reads in a sentence. */
+function timesWord(multiplier) {
+  return multiplier === 1 ? 'once' : `${multiplier}×`;
+}
+
+/* Said on the deposit screen rather than discovered at the withdraw button. Empty when the rule is
+ * switched off in the admin panel, or before the promotions have loaded. */
+function depositWagerNote() {
+  const multiple = Number(state.promotions?.depositWagerMultiplier ?? 0);
+  if (!(multiple > 0)) return '';
+  return `<p class="auth__note">Deposits are wagered ${timesWord(multiple)} before they can be
+      withdrawn. Every bet you place counts.</p>`;
+}
+
+/**
+ * What still has to be wagered before money can leave the account.
+ *
+ * A screen of its own, like the cooldown below, rather than a form whose Continue never enables:
+ * the amount field would invite typing a figure the server is certain to refuse. The number is the
+ * server's, and so is the reason: deposits and the signup bonus, at whatever the admin panel says.
+ */
+function paintWithdrawLocked(host, owedMinor) {
+  const deposit = Number(state.promotions?.depositWagerMultiplier ?? 0);
+  const bonus = Number(state.promotions?.signupBonus?.wagerMultiplier ?? 0);
+  let why = 'Every bet you place counts towards it.';
+  if (deposit > 0 && bonus > 0) {
+    why = `Deposits are wagered ${timesWord(deposit)} and the signup bonus ${timesWord(bonus)} before they can be withdrawn. ${why}`;
+  } else if (deposit > 0) {
+    why = `Deposits are wagered ${timesWord(deposit)} before they can be withdrawn. ${why}`;
+  } else if (bonus > 0) {
+    why = `The signup bonus is wagered ${timesWord(bonus)} before it can be withdrawn. ${why}`;
+  }
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
+    <p class="auth__lede">Wager <b class="mono" id="wdLockAmt"></b> more to unlock withdrawals.</p>
+    <p class="auth__note" id="wdLockWhy"></p>
+    <hr class="auth__rule">
+    <button class="btn btn--go auth__go" type="button" id="wdLockClose">Keep playing</button>`;
+  $('#wdLockAmt', host).textContent = money(Number(owedMinor));
+  $('#wdLockWhy', host).textContent = why;
+  $('#wdLockClose', host).addEventListener('click', () => closeModal());
 }
 
 /**
@@ -673,6 +767,12 @@ async function openWithdrawModal() {
   const cooldownRemaining = Number(info.cooldownRemainingSeconds ?? 0);
   if (cooldownRemaining > 0) {
     paintWithdrawCooldown(host, cooldownRemaining);
+    return;
+  }
+
+  const owed = Number(info.wagerRequirementRemainingMinor ?? 0);
+  if (owed > 0) {
+    paintWithdrawLocked(host, owed);
     return;
   }
 
@@ -1272,7 +1372,11 @@ $('#burger').addEventListener('click', () => {
 
     const paintInvites = () => {
       const n = $('#menuInvites');
-      const bonus = Number(state.referrals?.terms?.bonusMinor ?? 0);
+      /* The signed-in terms first, then the public promotions, so a visitor who has not signed in
+       * sees the real figure on the pill too rather than the figure-free fallback. */
+      const bonus = Number(
+        state.referrals?.terms?.bonusMinor ?? state.promotions?.referral?.bonusMinor ?? 0,
+      );
       if (n && bonus > 0) n.textContent = money(bonus);
 
       /* The nav pill's figure, from the server's terms rather than from the markup.

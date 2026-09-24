@@ -21,6 +21,8 @@ export const state = {
   fairness: null,
   upgradeConfig: null,
   rouletteConfig: null,
+  /* GET /v1/promotions: the signup bonus and the invite terms, readable before signing in. */
+  promotions: null,
   chat: {
     messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0',
     resetId: null, clearedAt: null, loaded: false,
@@ -231,8 +233,13 @@ function normalizeActivity(raw) {
 
 export async function bootstrap() {
   state.lastError = null;
-  const publicLoads = await Promise.allSettled([refreshCases(false), refreshActivity(false)]);
-  if (publicLoads.every((entry) => entry.status === 'rejected')) state.online = false;
+  const publicLoads = await Promise.allSettled([
+    refreshCases(false),
+    refreshActivity(false),
+    refreshPromotions(false),
+  ]);
+  // Promotions never reject (see below), so only the first two can say the API is unreachable.
+  if (publicLoads.slice(0, 2).every((entry) => entry.status === 'rejected')) state.online = false;
   try {
     state.user = await api.get('/v1/auth/me');
     state.authenticated = true;
@@ -307,6 +314,21 @@ export async function refreshUpgradeConfig(notify = true) {
   }
   if (notify) emit('upgrade-config');
   return state.upgradeConfig;
+}
+
+/* The offers quoted on the signup screen and in the lobby. Every figure comes from the admin
+ * panel's settings, so nothing on the page types an amount of its own.
+ *
+ * Failure is silent and keeps what is held: an offer that cannot be confirmed is left unsaid
+ * rather than quoted from memory, and every place that shows one hides itself when it is null. */
+export async function refreshPromotions(notify = true) {
+  try {
+    state.promotions = await api.get('/v1/promotions');
+  } catch {
+    // Keep whatever is held.
+  }
+  if (notify) emit('promotions');
+  return state.promotions;
 }
 
 export async function refreshActivity(notify = true) {

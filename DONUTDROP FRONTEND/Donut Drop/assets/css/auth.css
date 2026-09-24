@@ -496,3 +496,41 @@
 .auth__challenge[hidden] {
   display: none;
 }
+
+/* ─────────── the signup offer ─────────── */
+/* Hallmark · component: callout · genre: atmospheric (inherits the site's obsidian + gold) · theme: site tokens
+ * states: hidden until the server confirms the offer · shown. Not interactive, so no hover/focus states.
+ *
+ * A gold hairline rather than a filled banner. It is a fact about this form, not an advert laid over
+ * it, and Continue has to stay the loudest thing in the modal. The condition sits directly under the
+ * amount, in the same box, so nobody meets the wager lock for the first time at the withdraw button. */
+.auth__bonus {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--r);
+  background: linear-gradient(140deg, var(--panel2), var(--panel));
+}
+.auth__bonus[hidden] {
+  display: none;
+}
+.auth__bonushead {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.auth__bonusamt {
+  font-family: var(--pixel);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  margin-right: 2px;
+}
+.auth__bonusfine {
+  margin: 6px 0 0;
+  color: var(--faint);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}

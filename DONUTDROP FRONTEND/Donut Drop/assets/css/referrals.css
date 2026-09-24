@@ -475,3 +475,119 @@
     transition: none;
   }
 }
+
+/* ══════════════════════════ the lobby invite strip ══════════════════════════ */
+/* Hallmark · component: promo strip (link) · genre: atmospheric (inherits the site's obsidian + gold) · theme: site tokens
+ * states: default · hover · focus · active · loading (hidden until /v1/promotions answers) ·
+ *         error (stays hidden: an offer that cannot be confirmed is not quoted) · disabled/success: n/a for a link
+ *
+ * One row under the game cards, in the same card language (panel gradient, gold hairline, the same
+ * lift) so it reads as part of the lobby rather than an ad slotted into it. The whole row is the
+ * link: on a phone that is a full-width target, not a small button inside a card. */
+.invitebar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  min-height: 64px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--r);
+  background: linear-gradient(140deg, var(--panel2), var(--panel));
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    transform .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease),
+    border-color .18s var(--ob-ease);
+}
+.invitebar[hidden] {
+  display: none;
+}
+.invitebar:hover {
+  transform: var(--ob-lift);
+  border-color: var(--ob-line-hi);
+  box-shadow: var(--ob-glow);
+}
+/* Instant, outside the box, same as every card on this page. */
+.invitebar:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+.invitebar:active {
+  transform: translateY(-1px) scale(.995);
+  transition-duration: .06s;
+}
+.invitebar__ico {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--gold-bright);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.invitebar__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.invitebar__head {
+  font-size: .9375rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.invitebar__amt {
+  font-family: var(--pixel);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  margin-right: 2px;
+}
+.invitebar__fine {
+  font-size: .75rem;
+  color: var(--muted);
+}
+/* The site's primary button, drawn from the same tokens, so the strip's one action looks like every
+   other one. A span, because the whole row is already the link. */
+.invitebar__go {
+  flex: none;
+  white-space: nowrap;
+  padding: 9px 14px;
+  border-radius: var(--r-s);
+  background-image: linear-gradient(135deg, var(--gold-body) 0%, var(--gold-bright) 100%);
+  color: var(--bg);
+  font-size: .8125rem;
+  font-weight: 800;
+}
+.invitebar:hover .invitebar__go {
+  filter: brightness(1.06);
+}
+
+/* At phone widths the button drops to its own full-width line rather than squeezing the copy into a
+   column one word wide, and the icon goes: the amount already says what this is. */
+@media (max-width: 520px) {
+  .invitebar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .invitebar__ico {
+    display: none;
+  }
+  .invitebar__go {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .invitebar,
+  .invitebar:hover,
+  .invitebar:active {
+    transform: none;
+    transition: border-color .15s linear;
+  }
+}

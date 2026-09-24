@@ -46,6 +46,7 @@ const KIND_LABEL = {
   creator_royalty: 'Creator royalty',
   referral_revshare: 'Referral share',
   referral_bonus: 'Referral bonus',
+  signup_bonus: 'Signup bonus',
   rakeback_claim: 'Rakeback',
   race_payout: 'Race prize',
 };

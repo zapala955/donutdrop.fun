@@ -337,6 +337,19 @@
 
       <div class="promos" id="promos"></div>
 
+      <!-- The invite offer, one row under the game cards. Its figures come from GET /v1/promotions,
+           which is to say from the admin panel, so the markup carries none: hidden until the server
+           answers, and it stays hidden with the programme switched off. The whole row is the link,
+           so a phone gets a full-width target rather than a small button inside a card. -->
+      <a class="invitebar" id="inviteBar" href="/referrals" hidden>
+        <svg class="invitebar__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h3.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
+        <span class="invitebar__copy">
+          <span class="invitebar__head"><b class="invitebar__amt" id="inviteBarAmt"></b> for every friend you invite</span>
+          <span class="invitebar__fine" id="inviteBarFine"></span>
+        </span>
+        <span class="invitebar__go" id="inviteBarGo">Get your link</span>
+      </a>
+
       <!-- The account track stood here: a full-width "LIVE" bar over three slots reading server
            balance, locked funds and account status. Every one of those figures was already on
            screen — the balance sits in the header on every page, and the account page owns the
