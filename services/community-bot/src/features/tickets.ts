@@ -162,7 +162,7 @@ export async function createTicket(
           interaction.guild!.id,
           // Filled in a moment. A placeholder rather than null because the column is NOT NULL and
           // the row must exist before the channel, so the unique index can refuse a second one.
-          `pending:${id}`,
+          pendingChannelId(id),
           number,
           category,
           interaction.user.id,
@@ -230,6 +230,21 @@ export async function createTicket(
   await interaction.editReply({
     embeds: [ok('Ticket opened', `Head to <#${channel.id}>.`)],
   });
+}
+
+/**
+ * The channel_id a ticket row holds between its INSERT and its channel existing.
+ *
+ * The column is varchar(32), sized for a Discord snowflake. `pending:` plus a whole uuid is 44
+ * characters, so the first version of this failed every ticket with "value too long" before a
+ * channel was ever made -- and only against a real database, which is why no test saw it.
+ *
+ * Twenty-four hex characters of the uuid keep it unique among the handful of rows ever pending at
+ * once (the advisory lock above serialises them per guild anyway), and the prefix means it can
+ * never be read as a real channel id, which is all digits.
+ */
+export function pendingChannelId(ticketId: string): string {
+  return `pending:${ticketId.replaceAll('-', '').slice(0, 24)}`;
 }
 
 function warnAlreadyOpen(label: string) {
