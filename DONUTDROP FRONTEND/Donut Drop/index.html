@@ -225,7 +225,11 @@
         <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 11l6-3v8l-6-3z"/></svg>
         <span>Media Programme</span>
       </a>
-      <a class="menu__row" href="/discord" data-route="discord" role="menuitem">
+      <!-- Straight to the invite, the same as the nav pill. The in-app /discord page is nothing but
+           that invite card now, so routing through it was a detour ending in a second click. The
+           label names the new tab because nothing else in this menu leaves the site. -->
+      <a class="menu__row" href="https://discord.gg/aHfRsUaGgx" target="_blank" rel="noopener noreferrer"
+         role="menuitem" aria-label="Discord (opens in a new tab)">
         <svg class="menu__ico menu__ico--brand" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg>
         <span>Discord</span>
       </a>

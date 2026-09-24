@@ -181,17 +181,20 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(terms, /House edge|Return to player|not published yet|acct__facts/);
   });
 
-  it('uses a balanced filled brand mark for the Discord menu route', async () => {
+  it('sends the Discord menu row straight to the same invite as the nav pill', async () => {
     const html = await source('index.html');
     const discordRows = [...html.matchAll(/<a class="menu__row"[^>]*>[\s\S]*?<\/a>/g)]
       .filter((match) => match[0].includes('<span>Discord</span>'));
 
     assert.equal(discordRows.length, 1);
-    assert.match(discordRows[0]?.[0] ?? '', /href="\/discord"/);
-    assert.match(
-      html,
-      /href="\/discord"[^>]*>[\s\S]*?<svg class="menu__ico menu__ico--brand"/,
-    );
+    const row = discordRows[0]?.[0] ?? '';
+    // Two links to one server must not drift onto two invites when somebody rotates one of them.
+    const invite = html.match(/<a class="navdc" href="([^"]+)"/)?.[1];
+    assert.ok(invite, 'the nav Discord pill is missing');
+    assert.ok(row.includes(`href="${invite}"`), 'the menu row and the nav pill use different invites');
+    assert.match(row, /target="_blank" rel="noopener noreferrer"/);
+    assert.match(row, /aria-label="Discord \(opens in a new tab\)"/);
+    assert.match(row, /<svg class="menu__ico menu__ico--brand"/);
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {
