@@ -547,10 +547,6 @@
   color: var(--gold-bright);
   margin-right: 2px;
 }
-.invitebar__fine {
-  font-size: .75rem;
-  color: var(--muted);
-}
 /* The site's primary button, drawn from the same tokens, so the strip's one action looks like every
    other one. A span, because the whole row is already the link. */
 .invitebar__go {

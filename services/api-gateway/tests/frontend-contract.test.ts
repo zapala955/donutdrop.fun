@@ -202,8 +202,6 @@ describe('frontend/backend contract', () => {
 
     assert.match(app, /<div class="auth__bonus" id="linkBonus" hidden>/);
     assert.match(app, /state\.promotions\?\.signupBonus/);
-    // The lock is stated beside the amount, not discovered at the withdraw button.
-    assert.match(app, /it can be withdrawn once you have wagered \$\{money\(wager\)\}/);
   });
 
   it('shows what is still owed instead of a withdraw form that cannot succeed', async () => {

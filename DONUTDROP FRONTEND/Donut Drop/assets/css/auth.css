@@ -502,8 +502,7 @@
  * states: hidden until the server confirms the offer · shown. Not interactive, so no hover/focus states.
  *
  * A gold hairline rather than a filled banner. It is a fact about this form, not an advert laid over
- * it, and Continue has to stay the loudest thing in the modal. The condition sits directly under the
- * amount, in the same box, so nobody meets the wager lock for the first time at the withdraw button. */
+ * it, and Continue has to stay the loudest thing in the modal. */
 .auth__bonus {
   margin: 16px 0 0;
   padding: 12px 14px;

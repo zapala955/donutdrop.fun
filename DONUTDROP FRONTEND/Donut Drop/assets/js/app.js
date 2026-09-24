@@ -153,11 +153,8 @@ function mountHome(view) {
     const bonus = Number(referral?.bonusMinor ?? 0);
     inviteBar.hidden = !(bonus > 0);
     if (inviteBar.hidden) return;
+    // The wager condition is left to the referrals page, which states it as "Unlocks at".
     $('#inviteBarAmt', inviteBar).textContent = money(bonus);
-    const gate = Number(referral.bonusWagerMinor ?? 0);
-    $('#inviteBarFine', inviteBar).textContent = gate > 0
-      ? `Paid once they have wagered ${money(gate)}.`
-      : 'Paid after their first bet.';
     $('#inviteBarGo', inviteBar).textContent = state.authenticated ? 'Get your link' : 'Sign up to invite';
   };
   inviteBar?.addEventListener('click', (event) => {
@@ -406,8 +403,8 @@ function openLoginModal() {
 
     /* The signup offer, from the server's own settings. Hidden until they answer and hidden if the
      * bonus is switched off: a figure this screen cannot confirm is not one it should promise. The
-     * lock is stated beside the amount, because finding it out at the withdraw button would read
-     * as a bait and switch. */
+     * wager lock is deliberately not repeated here (operator's call, 2026-09-24); the withdraw
+     * screen states it, with the amount still owed, whenever it applies. */
     const paintBonus = () => {
       const box = $('#linkBonus', body);
       if (!box?.isConnected) return;
@@ -416,10 +413,8 @@ function openLoginModal() {
       box.hidden = !(amount > 0);
       if (box.hidden) return;
       $('#linkBonusAmt', box).textContent = money(amount);
-      const wager = Number(offer.wagerMinor ?? 0);
-      $('#linkBonusFine', box).textContent = wager > 0
-        ? `Added when your account is created. Play with it straight away; it can be withdrawn once you have wagered ${money(wager)}.`
-        : 'Added when your account is created.';
+      $('#linkBonusFine', box).textContent =
+        'Added when your account is created. Play with it straight away.';
     };
     paintBonus();
     if (!state.promotions) void refreshPromotions(false).then(paintBonus);
