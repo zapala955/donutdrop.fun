@@ -413,17 +413,39 @@ export async function registerAdminOperationRoutes(
       /* Payment and item-transfer jobs may have taken effect before their acknowledgement was
        * lost. Blind retry can duplicate a payment or delivery, so only idempotent control work is
        * eligible here. Value-bearing dead letters have explicit human-resolution endpoints. */
-      const retried = await client.query<{ kind: string }>(
+      /* Control jobs move nothing. A vault release is the one money job that is safe to send
+       * again by hand: it pays our own teller, not a player, so a repeat cannot put money outside
+       * the platform. It is only offered while the withdrawal behind it is still unpaid --
+       * waiting on the release, or parked because the release looked lost. */
+      const retried = await client.query<{ kind: string; reference_id: string }>(
         `UPDATE bot_jobs SET status = 'queued', attempts = 0, available_at = now(),
                 lease_token_hash = NULL, lease_expires_at = NULL, last_error_code = NULL,
                 updated_at = now()
-          WHERE id = $1 AND status = 'dead_letter' AND kind IN ('inventory_resync', 'reconnect')
-          RETURNING kind`,
+          WHERE id = $1 AND status = 'dead_letter'
+            AND (kind IN ('inventory_resync', 'reconnect')
+                 OR (kind = 'vault_release' AND EXISTS (
+                   SELECT 1 FROM cash_withdrawals w
+                    WHERE w.id = bot_jobs.reference_id
+                      AND (w.status = 'awaiting_vault'
+                           OR (w.status = 'manual_review'
+                               AND w.error_code IN ('PAYOUT_UNCONFIRMED', 'PAYOUT_FAILED',
+                                                    'PAYOUT_NOT_SENT', 'LEASE_EXPIRED'))))))
+          RETURNING kind, reference_id`,
         [params.id],
       );
       const job = retried.rows[0];
       if (!job)
-        conflict('JOB_NOT_RETRYABLE', 'Only dead-lettered control jobs can be safely retried');
+        conflict(
+          'JOB_NOT_RETRYABLE',
+          'Only dead-lettered control jobs, and vault releases for an unpaid withdrawal, can be retried',
+        );
+      if (job.kind === 'vault_release') {
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'awaiting_vault', error_code = NULL, updated_at = now()
+            WHERE id = $1 AND status = 'manual_review'`,
+          [job.reference_id],
+        );
+      }
       await appendAudit(client, config, {
         actorUserId: actor,
         action: 'bot_job.retry',

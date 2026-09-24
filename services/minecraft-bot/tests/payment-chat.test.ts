@@ -1,6 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parsePaymentMessage, parsePaymentNotice } from '../src/payment-chat.js';
+import {
+  describeSystemChat,
+  parsePaymentMessage,
+  parsePaymentNotice,
+} from '../src/payment-chat.js';
+
+/* The log written after a payout has to show whatever the server said back. It used to drop
+ * one-part messages and the action bar, so an unconfirmed payout logged nothing at all. */
+test('describes every shape of server message after a payout', () => {
+  const receipt = describeSystemChat({
+    content: {
+      text: '',
+      extra: [
+        { text: 'You paid wymiar ', color: 'white' },
+        { text: '$ ', color: '#00ff00' },
+        { text: '5M', color: 'white' },
+      ],
+    },
+  });
+  assert.equal(receipt, 'white:"You paid wymiar " | #00ff00:"$ " | white:"5M"');
+
+  const onePart = describeSystemChat({ content: { text: 'You do not have enough money!', color: 'red' } });
+  assert.equal(onePart, 'red:"You do not have enough money!"');
+
+  const actionBar = describeSystemChat({ content: { text: 'Player not found' }, isActionBar: true });
+  assert.equal(actionBar, 'actionbar none:"Player not found"');
+
+  assert.equal(describeSystemChat({ content: 'plain words' }), '"plain words"');
+  assert.equal(describeSystemChat({ content: { text: '' } }), undefined);
+});
 
 /**
  * Every fixture below is a real DonutSMP system_chat packet, captured from the live server by

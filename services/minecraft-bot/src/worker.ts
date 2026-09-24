@@ -820,6 +820,14 @@ export class MinecraftWorker {
         retryable: false,
         errorCode: 'PAYOUT_UNCONFIRMED',
       });
+      /* Silence after a /pay is almost always this connection, not the payment: the vault went
+       * hours at a time hearing nothing from the server -- no receipts for money it was sent, no
+       * answer to its own /pay -- while its socket stayed open and every heartbeat looked fine,
+       * until an operator reconnected it by hand. A fresh login is what put it back, so do it
+       * here, once the result is reported and nothing is in flight. The gateway retries a vault
+       * release after a delay long enough for this to finish. */
+      this.log.warn({ jobId: job.id }, 'reconnecting after an unconfirmed payout');
+      this.cycleConnection('payout unconfirmed');
       return;
     }
     if (!coversRequestedAmount(receipt.displayedAmount, amountMinor)) {

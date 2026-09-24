@@ -175,16 +175,25 @@ function fieldText(segment: unknown, field: string): string | undefined {
  * match the component structure — which is what this prints, colour by colour, so the real wording
  * can be captured from a live server instead of guessed at.
  */
+/* Every shape a server message can take, for the log written after a payout.
+ *
+ * This used to describe only multi-part messages on the chat line, so a one-part reply ("You do not
+ * have enough money") or anything on the action bar was dropped -- and an unconfirmed payout logged
+ * nothing at all about what the server actually said. It is a diagnostic, so it errs towards
+ * showing too much: the root's own text, every `extra` part, and which line it arrived on. */
 export function describeSystemChat(packet: unknown): string | undefined {
   if (packet === null || typeof packet !== 'object') return undefined;
   const record = packet as Record<string, unknown>;
-  if (unwrap(record['isActionBar']) === true) return undefined;
-  const segments = componentSegments(record['content'] ?? record['message']);
-  if (!segments || segments.length === 0) return undefined;
-  return segments
-    .map((segment) => `${colorOf(segment) ?? 'none'}:${JSON.stringify(textOf(segment) ?? '')}`)
-    .join(' | ')
-    .slice(0, 500);
+  const line = unwrap(record['isActionBar']) === true ? 'actionbar ' : '';
+  const content = unwrap(record['content'] ?? record['message']);
+  if (typeof content === 'string') {
+    return content.trim() ? `${line}${JSON.stringify(content)}`.slice(0, 500) : undefined;
+  }
+  const parts = [content, ...(componentSegments(content) ?? [])]
+    .filter((part) => (textOf(part) ?? '') !== '')
+    .map((part) => `${colorOf(part) ?? 'none'}:${JSON.stringify(textOf(part) ?? '')}`);
+  if (parts.length === 0) return undefined;
+  return `${line}${parts.join(' | ')}`.slice(0, 500);
 }
 
 function textOf(segment: unknown): string | undefined {

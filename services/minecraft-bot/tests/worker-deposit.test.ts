@@ -556,6 +556,29 @@ describe('cash payout worker', () => {
     assert.notEqual(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
   });
 
+  it('reconnects after a payout the server never answered, and only then', async () => {
+    /* The vault went hours hearing nothing from the server while its socket stayed open, until an
+     * operator reconnected it by hand. Silence after a /pay is the signal to do that ourselves. */
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async () => undefined,
+    } as unknown as ApiClient;
+
+    const silent = payoutHarness(api);
+    const silentQuits: string[] = [];
+    (silent.harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) =>
+      silentQuits.push(reason);
+    await runPayout(silent.harness, null);
+    assert.deepEqual(silentQuits, ['payout unconfirmed']);
+
+    const answered = payoutHarness(api);
+    const answeredQuits: string[] = [];
+    (answered.harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) =>
+      answeredQuits.push(reason);
+    await runPayout(answered.harness, '100K');
+    assert.deepEqual(answeredQuits, []);
+  });
+
   it('refuses a confirmation that is smaller than what was asked for', async () => {
     /* A bot with part of the money pays part of it. The abbreviation "50K" stands for
      * [50000, 51000), which cannot contain the 100000 that was requested. */

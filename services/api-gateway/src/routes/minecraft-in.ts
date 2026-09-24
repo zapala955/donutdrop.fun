@@ -475,10 +475,10 @@ export async function registerMinecraftInternalRoutes(
           : { job: null, duplicate: true };
       }
 
-      const expired = await client.query<{ reference_id: string }>(
+      const expired = await client.query<ReleaseJob & { kind: string }>(
         `UPDATE bot_jobs SET status = 'dead_letter', last_error_code = 'LEASE_EXPIRED', updated_at = now()
           WHERE bot_id = $1 AND status = 'leased' AND lease_expires_at < now()
-          RETURNING reference_id`,
+          RETURNING id, kind, reference_id, attempts, created_at, payload`,
         [body.botId],
       );
       if (expired.rows.length) {
@@ -487,6 +487,18 @@ export async function registerMinecraftInternalRoutes(
             WHERE id = ANY($1::uuid[]) AND status = 'processing'`,
           [expired.rows.map((row) => row.reference_id)],
         );
+        /* A cash payout whose lease ran out may or may not have paid, so it goes to a human -- but
+         * it has to GO somewhere. Left alone, the withdrawal stayed `queued` or `processing` behind
+         * a dead job, and nothing would ever touch it again. */
+        await client.query(
+          `UPDATE cash_withdrawals SET status = 'manual_review', error_code = 'LEASE_EXPIRED',
+                  updated_at = now()
+            WHERE id = ANY($1::uuid[]) AND status IN ('queued', 'processing')`,
+          [expired.rows.filter((row) => row.kind === 'cash_payout').map((row) => row.reference_id)],
+        );
+        for (const release of expired.rows.filter((row) => row.kind === 'vault_release')) {
+          await recoverRelease(client, config, release, body.botId, 'LEASE_EXPIRED');
+        }
       }
 
       /* Two different questions, asked separately.
@@ -926,6 +938,16 @@ async function processCashPaymentObserved(
         amount?.toString() ?? null,
       ],
     );
+    /* The teller seeing the vault's money land is proof a release happened, even one the vault
+     * never saw confirmed. */
+    await settleReleaseFromReceipt(
+      client,
+      config,
+      event.botId,
+      internalSender.rows[0].id,
+      event.displayedAmount,
+      event.eventId,
+    );
     return;
   }
 
@@ -1112,6 +1134,183 @@ async function bookInternalTransfer(
   });
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * A VAULT RELEASE WHOSE OUTCOME IS UNKNOWN
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * A release is the vault paying the teller so the teller can pay a player. When the vault's /pay
+ * goes unconfirmed, the job used to be dead-lettered and nothing else happened: the player's
+ * withdrawal sat in `awaiting_vault`, a state that looks like ordinary patience and appears on no
+ * attention list, and two players waited a day for money that was sitting in the vault.
+ *
+ * "Never retry an unknown outcome" is the right rule for money leaving the platform, and it does
+ * not apply here. Both ends of a release are our own accounts, so the worst a repeat can do is
+ * move float between them -- and even that is avoided below, because the receiving bot reports
+ * the money arriving: whichever side sees it land settles the job, and only a release that
+ * provably has not landed is sent again. After RELEASE_RETRY_ATTEMPTS it stops and puts the
+ * withdrawal in front of an operator, as `manual_review`, rather than leaving it to wait unseen.
+ */
+const RELEASE_RETRY_ATTEMPTS = 5;
+
+/** 30s, 2m, 4.5m, 8m: long enough for a bot that has dropped off the server to reconnect. */
+function releaseRetryDelaySeconds(attempts: number): number {
+  return Math.min(attempts * attempts * 30, 600);
+}
+
+/**
+ * Whether a receipt DonutSMP abbreviated ("86.9M") can be the payment of `amount`.
+ *
+ * The server truncates rather than rounds (86,999,159 arrives as "86.9M"), so the displayed figure
+ * is the floor of a band one display unit wide.
+ */
+export function displayedAmountCovers(displayed: string, amount: bigint): boolean {
+  const match = /^([1-9]\d*)(?:\.(\d+))?([KMBT])?$/.exec(displayed);
+  if (!match) return false;
+  const scales: Record<string, bigint> = {
+    '': 1n,
+    K: 1_000n,
+    M: 1_000_000n,
+    B: 1_000_000_000n,
+    T: 1_000_000_000_000n,
+  };
+  const scale = scales[match[3] ?? ''];
+  if (scale === undefined) return false;
+  const fraction = match[2] ?? '';
+  const denominator = 10n ** BigInt(fraction.length);
+  const numerator = BigInt(`${match[1]}${fraction}`) * scale;
+  if (numerator % denominator !== 0n) return false;
+  const low = numerator / denominator;
+  const step = scale / denominator >= 1n ? scale / denominator : 1n;
+  return amount >= low && amount < low + step;
+}
+
+export interface ReleaseJob {
+  id: string;
+  reference_id: string;
+  attempts: number;
+  created_at: Date;
+  payload: { amountMinor?: string; toBotId?: string };
+}
+
+/** The release is done: book both bots, and send the player their money. */
+async function completeRelease(
+  client: DbClient,
+  config: AppConfig,
+  job: ReleaseJob,
+  senderBotId: string,
+  settledByReceipt?: string,
+): Promise<void> {
+  await client.query(
+    `UPDATE bot_jobs SET status = 'completed', lease_token_hash = NULL, lease_expires_at = NULL,
+            last_error_code = NULL, updated_at = now(),
+            payload = CASE WHEN $2::text IS NULL THEN payload
+                           ELSE payload || jsonb_build_object('settledByReceipt', $2::text) END
+      WHERE id = $1`,
+    [job.id, settledByReceipt ?? null],
+  );
+  await bookInternalTransfer(client, job.id, senderBotId, 'vault_release', job.reference_id);
+  /* A withdrawal an operator was shown because this release looked lost is back on the normal
+   * path. Only those two codes: one refunded or resolved by hand in the meantime is left alone. */
+  await client.query(
+    `UPDATE cash_withdrawals SET status = 'awaiting_vault', error_code = NULL, updated_at = now()
+      WHERE id = $1 AND status = 'manual_review'
+        AND error_code IN ('PAYOUT_UNCONFIRMED', 'PAYOUT_FAILED', 'PAYOUT_NOT_SENT', 'LEASE_EXPIRED')`,
+    [job.reference_id],
+  );
+  await queueWithdrawalPayoutAfterRelease(client, config, job.reference_id);
+}
+
+/**
+ * A receipt at the receiving bot proving this release landed, if one exists and no other release
+ * has already been settled by it. Only receipts from after the job was created can be its money.
+ */
+async function landedReceiptFor(
+  client: DbClient,
+  job: ReleaseJob,
+  senderBotId: string,
+): Promise<string | undefined> {
+  const amount = job.payload.amountMinor ? BigInt(job.payload.amountMinor) : 0n;
+  if (amount <= 0n || !job.payload.toBotId) return undefined;
+  const receipts = await client.query<{ event_id: string; displayed_amount: string }>(
+    `SELECT r.event_id, r.displayed_amount
+       FROM cash_payment_receipts r
+       JOIN bot_accounts sender ON sender.id = $2 AND lower(sender.username) = lower(r.payer_username)
+      WHERE r.bot_id = $1 AND r.status = 'internal_transfer' AND r.created_at >= $3
+        AND NOT EXISTS (SELECT 1 FROM bot_jobs j WHERE j.payload->>'settledByReceipt' = r.event_id::text)
+      ORDER BY r.created_at`,
+    [job.payload.toBotId, senderBotId, job.created_at],
+  );
+  return receipts.rows.find((row) => displayedAmountCovers(row.displayed_amount, amount))?.event_id;
+}
+
+/**
+ * A release failed, or its lease ran out, without saying whether the money moved. Settle it if
+ * the teller saw the money arrive; otherwise send it again later; after the last attempt, stop
+ * and put the withdrawal in front of an operator.
+ */
+export async function recoverRelease(
+  client: DbClient,
+  config: AppConfig,
+  job: ReleaseJob,
+  senderBotId: string,
+  errorCode: string,
+): Promise<void> {
+  const receipt = await landedReceiptFor(client, job, senderBotId);
+  if (receipt) {
+    await completeRelease(client, config, job, senderBotId, receipt);
+    return;
+  }
+  if (job.attempts < RELEASE_RETRY_ATTEMPTS) {
+    await client.query(
+      `UPDATE bot_jobs SET status = 'queued',
+              available_at = now() + ($2::integer * interval '1 second'),
+              lease_token_hash = NULL, lease_expires_at = NULL, last_error_code = $3,
+              updated_at = now()
+        WHERE id = $1`,
+      [job.id, releaseRetryDelaySeconds(job.attempts), errorCode],
+    );
+    return;
+  }
+  await client.query(
+    `UPDATE bot_jobs SET status = 'dead_letter', lease_token_hash = NULL, lease_expires_at = NULL,
+            last_error_code = $2, updated_at = now()
+      WHERE id = $1`,
+    [job.id, errorCode],
+  );
+  await client.query(
+    `UPDATE cash_withdrawals SET status = 'manual_review', error_code = $2, updated_at = now()
+      WHERE id = $1 AND status = 'awaiting_vault'`,
+    [job.reference_id, errorCode],
+  );
+}
+
+/**
+ * The teller saw money arrive from the vault. If a release is waiting to be retried, or was given
+ * up on, and this is its money, it landed after all: settle it instead of sending it twice.
+ */
+async function settleReleaseFromReceipt(
+  client: DbClient,
+  config: AppConfig,
+  receivingBotId: string,
+  senderBotId: string,
+  displayed: string,
+  receiptEventId: string,
+): Promise<void> {
+  const candidates = await client.query<ReleaseJob>(
+    `SELECT id, reference_id, attempts, created_at, payload
+       FROM bot_jobs
+      WHERE kind = 'vault_release' AND bot_id = $1 AND payload->>'toBotId' = $2
+        AND (status = 'queued' AND last_error_code IS NOT NULL OR status = 'dead_letter')
+        AND created_at > now() - interval '2 days'
+      ORDER BY created_at
+      FOR UPDATE`,
+    [senderBotId, receivingBotId],
+  );
+  const job = candidates.rows.find((row) =>
+    row.payload.amountMinor ? displayedAmountCovers(displayed, BigInt(row.payload.amountMinor)) : false,
+  );
+  if (job) await completeRelease(client, config, job, senderBotId, receiptEventId);
+}
+
 async function processSnapshot(
   client: DbClient,
   event: z.infer<typeof snapshotEvent>,
@@ -1241,8 +1440,11 @@ async function processJobResult(
     status: string;
     lease_token_hash: Buffer | null;
     lease_expires_at: Date | null;
+    created_at: Date;
+    payload: ReleaseJob['payload'];
   }>(
-    `SELECT id, kind, reference_id, attempts, status, lease_token_hash, lease_expires_at
+    `SELECT id, kind, reference_id, attempts, status, lease_token_hash, lease_expires_at,
+            created_at, payload
        FROM bot_jobs WHERE id = $1 AND bot_id = $2 FOR UPDATE`,
     [event.jobId, event.botId],
   );
@@ -1396,6 +1598,13 @@ async function processJobResult(
     }
     /* A reconnect settles by completing and nothing else. It references no row, moves no money,
      * and the proof it worked is the heartbeat that follows. */
+    return;
+  }
+  /* Every failure of a release, whatever the bot calls it: the money stays between our own two
+   * accounts, so an unknown outcome is settled from the teller's receipt or sent again. See
+   * recoverRelease. */
+  if (job.kind === 'vault_release') {
+    await recoverRelease(client, config, job, event.botId, event.errorCode ?? 'BOT_JOB_FAILED');
     return;
   }
   const terminal = !event.retryable || job.attempts >= 5;

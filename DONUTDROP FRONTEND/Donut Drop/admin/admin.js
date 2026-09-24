@@ -1168,15 +1168,21 @@ async function loadJobs() {
         cell(job.last_error_code),
         cell(job.updated_at),
       );
+      /* A vault release pays our own teller, never a player, so sending it again cannot put money
+       * outside the platform. The server still refuses unless the withdrawal behind it is unpaid. */
       const safeRetry =
         job.status === 'dead_letter' &&
-        (job.kind === 'inventory_resync' || job.kind === 'reconnect');
+        (job.kind === 'inventory_resync' || job.kind === 'reconnect' || job.kind === 'vault_release');
       tr.append(
         actions(
           ...(safeRetry
             ? [
                 button('Retry', async (node) => {
-                  const reason = await confirmAction(`Retry this ${job.kind} control job?`);
+                  const reason = await confirmAction(
+                    job.kind === 'vault_release'
+                      ? 'Send this vault release to the teller again? The player is paid once it lands.'
+                      : `Retry this ${job.kind} control job?`,
+                  );
                   if (!reason) return;
                   node.disabled = true;
                   await api.post(`/v1/admin/jobs/${job.id}/retry`, { reason });
