@@ -443,7 +443,7 @@ services:
       # itself -- a player's profile -- goes over the signed call below.
       #
       # This DEFAULTS to the API's own role, which can read every table including balances. To
-      # narrow it to the nine tables the bot owns, run infra/postgres/community-bot-role.sql once
+      # narrow it to the eleven tables the bot owns, run infra/postgres/community-bot-role.sql once
       # and point COMMUNITY_DATABASE_URL_FILE at the connection string it describes. Creating a
       # role on a live cluster is a superuser action, so it is opt-in rather than automatic.
       DATABASE_URL_FILE: /run/secrets/community_database_url
