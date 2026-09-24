@@ -150,8 +150,14 @@
     <!-- The key counter is gone. It counted a resource this platform does not have: the cash-only
          economy removed crate keys entirely, so the box sat at a permanent zero next to the one
          number players actually read. -->
-    <div class="cashpill" title="Balance — in-game DonutSMP dollars">
+    <!-- role="status" + aria-atomic: the balance changes on its own, after a win or a deposit, and
+         announced it nothing. Atomic so the whole thing is read as "Balance $4.21K" rather than as
+         a bare number arriving out of context, and `status` rather than `alert` so it waits its
+         turn instead of interrupting. The label is a sibling of #wCash because ui.js sets that
+         element's textContent, which would erase a child. -->
+    <div class="cashpill" role="status" aria-atomic="true" title="Balance — in-game DonutSMP dollars">
       <i class="cashpill__coin" aria-hidden="true"></i>
+      <span class="cashpill__lbl">Balance </span>
       <b class="cashpill__n mono" id="wCash">$0</b>
     </div>
     <button class="mute" id="muteBtn" data-muted="0" aria-pressed="false" aria-label="Mute sound">

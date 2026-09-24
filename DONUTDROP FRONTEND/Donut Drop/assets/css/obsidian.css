@@ -418,7 +418,10 @@ html {
 .cashpill {
   container-type: inline-size;
   overflow: hidden;
-  border-color: var(--ob-line-hi);
+  /* At rest, not lit. `--ob-line-hi` is the hover state of every control in this bar, and wearing
+     it permanently made the balance the loudest outline in the row -- brighter than the level pill
+     it sits against, for a readout nobody can press. */
+  border-color: var(--ob-line);
 }
 .cashpill__n { font-size: clamp(.72rem, 11cqw, .92rem); }
 @supports not (width: 1cqw) {
