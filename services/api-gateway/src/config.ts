@@ -581,6 +581,11 @@ const environmentSchema = z
     REFERRAL_REVSHARE_BPS: z.coerce.number().int().min(0).max(10_000).default(500),
     REFERRAL_BONUS_MINOR: positiveBigintString.default('20000000'),
     REFERRAL_BONUS_WAGER_MINOR: positiveBigintString.default('50000000'),
+    /* The signup bonus, and what must be wagered before money can leave an account. 0 switches the
+     * bonus off; a multiplier of 0 lifts that requirement. See lib/wager-requirements.ts. */
+    SIGNUP_BONUS_MINOR: nonNegativeBigintString.default('2000000'),
+    SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(5),
+    DEPOSIT_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     /* Discord OAuth. The client secret is file-backed like every other credential, and the
      * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect
      * is how an authorization code leaves for somebody else's server. */
@@ -1127,6 +1132,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     referralRevshareBps: env.REFERRAL_REVSHARE_BPS,
     referralBonusMinor: BigInt(env.REFERRAL_BONUS_MINOR),
     referralBonusWagerMinor: BigInt(env.REFERRAL_BONUS_WAGER_MINOR),
+    signupBonusMinor: BigInt(env.SIGNUP_BONUS_MINOR),
+    signupBonusWagerMultiplier: env.SIGNUP_BONUS_WAGER_MULTIPLIER,
+    depositWagerMultiplier: env.DEPOSIT_WAGER_MULTIPLIER,
     discordClientId: env.DISCORD_CLIENT_ID,
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,

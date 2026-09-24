@@ -11,6 +11,7 @@ import { readJackpot } from '../lib/jackpot.js';
 import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
+import { assertWagerRequirementMet } from '../lib/wager-requirements.js';
 
 /**
  * The social suite: the vault jackpot readout, lava rain, and player-to-player tips.
@@ -433,6 +434,10 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
         if (recipient.id === fromUserId) {
           throw new AppError(400, 'TIP_TO_SELF', 'You cannot tip yourself');
         }
+        /* A tip is money leaving this account, exactly like a withdrawal. Without this, a bonus or a
+         * deposit that may not be withdrawn yet could be tipped to a second account that owes
+         * nothing and withdrawn from there. */
+        await assertWagerRequirementMet(client, fromUserId, 'tipping');
 
         /* Debit and balance check in ONE statement, as everywhere else on this platform. A
          * read-then-write here is how a player tips money they no longer have. */

@@ -60,7 +60,11 @@ export type WalletKind =
   // Rakeback claimed from one of the four tiers, and a wagering race paying a placing. Both are
   // carved from the house margin, like everything else that pays a player for playing.
   | 'rakeback_claim'
-  | 'race_payout';
+  | 'race_payout'
+  /* Paid once to a new account, referenced by the user's own id so the ledger's unique index is
+   * what makes a second one impossible. It is playable at once and withdrawable only after the
+   * wager requirement it adds is met; see lib/wager-requirements.ts. */
+  | 'signup_bonus';
 
 /**
  * Credits the wallet and writes the matching ledger row.

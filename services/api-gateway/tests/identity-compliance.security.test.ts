@@ -280,6 +280,10 @@ describe('identity and compliance hardening', () => {
                 },
               ]);
             }
+            // A new identity is a new account, so it is paid the signup bonus.
+            if (sql.includes('UPDATE user_wallets SET balance_minor = balance_minor +')) {
+              return result([{ balance_minor: '2000000' }]);
+            }
             return result([]);
           },
         } as unknown as DbClient),
@@ -309,6 +313,20 @@ describe('identity and compliance hardening', () => {
           sql.includes('UPDATE sessions SET revoked_at = now()') && values?.[0] === 'old-user-id',
       ),
     );
+
+    /* The signup bonus: paid once, referenced by the new account's own id so the ledger's unique
+     * index refuses a second, and locked behind 5x its amount in wagers. */
+    const bonus = statements.find(
+      ({ sql, values }) => sql.includes('INSERT INTO wallet_transactions') && values?.[4] === 'signup_bonus',
+    );
+    assert.ok(bonus, 'a new account was not paid the signup bonus');
+    assert.equal(bonus.values?.[1], newUserId);
+    assert.equal(bonus.values?.[2], '2000000');
+    assert.equal(bonus.values?.[5], newUserId);
+    const requirement = statements.find(({ sql }) =>
+      sql.includes('INSERT INTO user_wager_requirements'),
+    );
+    assert.deepEqual(requirement?.values, [newUserId, '10000000']);
   });
 
   it('completes and credits every confirmed payment after its timer expires', async () => {

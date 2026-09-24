@@ -8,6 +8,10 @@ import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import {
+  assertWagerRequirementMet,
+  wagerRequirementRemaining,
+} from '../lib/wager-requirements.js';
 
 /**
  * Cash withdrawals — the bot pays a player with DonutSMP's own `/pay`.
@@ -288,7 +292,10 @@ export async function registerCashWithdrawalRoutes(
       const pending = live.rows.find((row) =>
         ['pending_approval', 'queued', 'processing'].includes(row.status),
       );
+      // Stated up front, so the form can say "wager $X more" before anybody fills it in.
+      const wagerRemaining = userId ? await wagerRequirementRemaining(db, userId) : 0n;
       return {
+        wagerRequirementRemainingMinor: wagerRemaining.toString(),
         payeeUsername: request.authUser?.minecraftUsername ?? null,
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
         approvalThresholdMinor: APPROVAL_THRESHOLD_MINOR.toString(),
@@ -376,6 +383,9 @@ export async function registerCashWithdrawalRoutes(
             { retryAfterSeconds },
           );
         }
+
+        // Before the bot check: "wager $X more" is the answer the player can act on.
+        await assertWagerRequirementMet(client, userId, 'withdrawing');
 
         const bot = await onlineBot(client);
         if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');

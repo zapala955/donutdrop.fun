@@ -7,6 +7,7 @@ import { accrueAndDrawJackpot, type JackpotOutcome } from './jackpot.js';
 import { accrueRakeback, houseMarginMinor, recordRaceWager } from './rewards.js';
 import { recordVipWager } from './vip.js';
 import { publishLiveSoon } from './live-events.js';
+import { reduceWagerRequirement } from './wager-requirements.js';
 
 /* The cash credit itself lives in wallet.ts and is re-exported here, because every game route
  * already reaches for it through this module and the referral engine below needs it too. */
@@ -149,6 +150,8 @@ export async function recordWager(
   for (const metric of metrics) {
     await recordQuestProgress(client, userId, metric, metric.endsWith('_minor') ? amountMinor : 1n);
   }
+  // The full stake, like the referral milestone: what a player owes is wagered volume, not margin.
+  await reduceWagerRequirement(client, userId, amountMinor);
   await recordFactionContribution(client, userId, amountMinor, source, referenceId);
   await accrueReferralWager(client, config, userId, amountMinor, source, referenceId, marginMinor);
   await accrueRakeback(client, config, userId, amountMinor, marginMinor);

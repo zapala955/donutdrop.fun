@@ -16,6 +16,11 @@ import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
 import { creditWallet } from '../lib/wallet.js';
+import {
+  addDepositRequirement,
+  addWagerRequirement,
+  requirementFor,
+} from '../lib/wager-requirements.js';
 
 const startSchema = z
   .object({
@@ -362,6 +367,18 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
             );
           }
         }
+        /* The signup bonus, decided by the same `!existing.rows[0]` as the invite above: the only
+         * moment this codebase knows for certain that an account is new. Referenced by the account's
+         * own id, so the ledger's unique (kind, reference_id) index is what makes a second one
+         * impossible. Playable at once; withdrawable once its requirement has been wagered. */
+        if (!existing.rows[0] && config.signupBonusMinor > 0n) {
+          await creditWallet(client, row.id, config.signupBonusMinor, 'signup_bonus', row.id);
+          await addWagerRequirement(
+            client,
+            row.id,
+            requirementFor(config.signupBonusMinor, config.signupBonusWagerMultiplier),
+          );
+        }
         if (acceptedTotpCounter !== null) {
           await client.query('UPDATE users SET admin_totp_last_counter = $2 WHERE id = $1', [
             row.id,
@@ -410,6 +427,8 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
               'pay_login_deposit',
               payment.id,
             );
+            // Money in from Minecraft like any deposit, so it carries the same requirement.
+            await addDepositRequirement(client, config, row.id, BigInt(payment.pay_amount!));
           }
           await client.query(
             `UPDATE auth_link_challenges SET completed_at = now()

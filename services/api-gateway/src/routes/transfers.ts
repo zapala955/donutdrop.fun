@@ -8,6 +8,7 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { assertWagerRequirementMet } from '../lib/wager-requirements.js';
 
 const withdrawalSchema = z
   .object({
@@ -183,6 +184,9 @@ export async function registerTransferRoutes(
           replay: true,
         };
       }
+      /* Items bought with a bonus or an unwagered deposit are that money in another form. Only
+       * checked for a new request: a replay above returns what was already granted. */
+      await assertWagerRequirementMet(client, userId, 'withdrawing');
       const lots = await client.query<{
         id: string;
         bot_id: string;

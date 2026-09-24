@@ -192,6 +192,27 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: BIGINT_MAX,
   },
+  signupBonusMinor: {
+    kind: 'bigint',
+    group: 'rewards',
+    label: 'Signup bonus (0 turns it off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  signupBonusWagerMultiplier: {
+    kind: 'integer',
+    group: 'rewards',
+    label: 'Signup bonus wager before withdrawing (x bonus)',
+    min: 0n,
+    max: 100n,
+  },
+  depositWagerMultiplier: {
+    kind: 'integer',
+    group: 'limits',
+    label: 'Deposit wager before withdrawing (x deposit)',
+    min: 0n,
+    max: 100n,
+  },
   referralRevshareBps: {
     kind: 'integer',
     group: 'rewards',

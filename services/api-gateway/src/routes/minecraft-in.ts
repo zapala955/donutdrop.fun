@@ -18,6 +18,7 @@ import { MINECRAFT_USERNAME_PATTERN, platformIdentityFor } from '../lib/minecraf
 import { queueWithdrawalPayoutAfterRelease, refundWithdrawal } from './cash-withdrawals.js';
 import { parseWith } from '../lib/validation.js';
 import { creditWallet } from '../lib/wallet.js';
+import { addDepositRequirement } from '../lib/wager-requirements.js';
 
 const normalizedUuid = z.uuid().transform((value) => value.toLowerCase());
 const DATABASE_BIGINT_MAX = 9_223_372_036_854_775_807n;
@@ -971,6 +972,9 @@ async function processCashPaymentObserved(
           'cash_deposit',
           event.eventId,
         );
+        /* Same transaction as the credit, which is what lets a withdrawal's wallet lock order the
+         * two: see assertWagerRequirementMet. */
+        await addDepositRequirement(client, config, userId, amount);
         status = 'credited';
       } else {
         status = 'unlinked';
