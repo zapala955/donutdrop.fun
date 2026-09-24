@@ -127,6 +127,31 @@ void describe('browser cookie hardening', () => {
   });
 });
 
+describe('the upgrader config is public', () => {
+  it('answers a visitor with no session, and says nothing about any player', async () => {
+    const database = {
+      query: async () => ({ rows: [], rowCount: 0 }),
+      close: async () => undefined,
+    } as unknown as Database;
+    const app = await buildApp(config, database);
+
+    try {
+      const response = await app.inject({ method: 'GET', url: '/v1/upgrades/config' });
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+      assert.equal(body.maxMultiplierBps, config.maxMultiplierBps);
+      assert.equal(body.maxStakeMinor, config.upgradeMaxStakeMinor.toString());
+      // The house's terms only. Anything keyed to a person belongs behind /v1/fairness/current.
+      assert.deepEqual(Object.keys(body).sort(), [
+        'algorithm', 'balanceStakesEnabled', 'currency', 'houseEdgeBps', 'itemValuesAreFixed',
+        'maxMultiplierBps', 'maxStakeMinor', 'maxWinChancePpm', 'minMultiplierBps',
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe('authenticated bot failure responses', () => {
   const botId = '10000000-0000-4000-8000-000000000001';
   const botSecret = Buffer.alloc(32, 2);

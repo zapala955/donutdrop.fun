@@ -124,7 +124,11 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
   const guards = createAuthGuards(db, config);
   const provisionedBotIds = [...config.botCredentials.keys()];
 
-  app.get('/v1/upgrades/config', { preHandler: guards.authenticate }, async () => ({
+  /* Public, like /v1/roulette. Nothing here depends on who is asking -- it is the house's published
+   * terms -- and the lobby's Upgrader card quotes the top multiplier and the stake ceiling from it
+   * to visitors who have not signed in yet. Behind a session, that card showed two em dashes to
+   * exactly the people it was meant to persuade. */
+  app.get('/v1/upgrades/config', async () => ({
     algorithm: 'HMAC-SHA256-v1',
     houseEdgeBps: config.houseEdgeBps,
     minMultiplierBps: config.minMultiplierBps,

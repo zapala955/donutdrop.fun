@@ -7,7 +7,7 @@ import {
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
-  refreshRouletteConfig,
+  refreshRouletteConfig, refreshUpgradeConfig,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
@@ -141,10 +141,14 @@ function mountHome(view) {
   };
   paintPromos();
 
-  /* Fetched once per visit to the lobby, not subscribed to. The card quotes the table's limits,
+  /* Fetched once per visit to the lobby, not subscribed to. The cards quote the games' limits,
    * which change when somebody edits a setting -- not every round -- so a second live feed would
-   * buy nothing. It repaints through the `change` listener at the bottom of this view. */
+   * buy nothing. They repaint through the `change` listener at the bottom of this view.
+   *
+   * The upgrader's figures used to arrive only with a session, so a signed-out visitor saw two
+   * em dashes on the first card in the row. Its config is public now; ask for it here too. */
   void refreshRouletteConfig();
+  void refreshUpgradeConfig();
 
   /* The game grid that used to be built here is gone, and so is its markup. It rendered the same
    * four products the promo row above it already renders, which made the homepage read as padded.

@@ -290,6 +290,25 @@ export async function refreshRouletteConfig(notify = true) {
   return state.rouletteConfig;
 }
 
+/* The upgrader's published terms, for the lobby card and for visitors with no session.
+ *
+ * /v1/upgrades/config is public so the Upgrader card can quote its stake ceiling and top payout to
+ * the people it is there to persuade. refreshPrivate() still reloads it with everything else once
+ * somebody signs in.
+ *
+ * Unlike the roulette figures, a failure keeps what is already held rather than clearing it: the
+ * upgrader computes its odds from this object, and a lobby tile's refetch failing is no reason to
+ * pull those figures out from under a player who is on that page. */
+export async function refreshUpgradeConfig(notify = true) {
+  try {
+    state.upgradeConfig = await api.get('/v1/upgrades/config');
+  } catch {
+    // Keep whatever is held. With nothing held yet, the card reads "—".
+  }
+  if (notify) emit('upgrade-config');
+  return state.upgradeConfig;
+}
+
 export async function refreshActivity(notify = true) {
   /* Held for the same reason as the balance: the feed carries the player's own rounds, and one
    * arriving mid-spin announces the result the wheel has not reached. Other players' wins pausing
