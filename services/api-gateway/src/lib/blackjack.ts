@@ -8,28 +8,35 @@ import { createHmac } from 'node:crypto';
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * THE RULES, AND WHERE THE EDGE COMES FROM
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * Ordinary blackjack gives the house about half a percent. This table is priced at the site's
- * ten per cent, and gets there with one rule players can read on the felt rather than with hidden
- * odds: THE DEALER WINS TIES. A tie is about one hand in twelve, and handing those to the house is
- * worth roughly nine points on its own.
+ * Ordinary blackjack gives the house about one per cent. This table is priced at the site's ten,
+ * and gets there through the one number every player reads before they play: WHAT A WIN PAYS.
+ * A won hand returns 1.8x what was on it -- the stake back and 80% on top -- where a standard
+ * table returns 2x. Everything else is the familiar game, ties included.
  *
- *   dealer wins ties ............ except blackjack against blackjack, which pushes
- *   blackjack pays .............. 3:2
+ *   a win pays .................. 1.8x the amount on the table (stake back + 80%)
+ *   blackjack pays .............. 2.5x the stake (3:2)
+ *   a tie ....................... pushes: the whole amount on the table comes back
  *   dealer ...................... hits soft 17, peeks for blackjack
  *   double ...................... on any first two cards, one more card
  *   split, insurance, surrender . not offered
  *   deck ........................ infinite: every card is its own draw from all 52 faces
  *
- * Under those rules the house edge against PERFECT play is 9.89% (exact infinite-deck
+ * Under those rules the house edge against PERFECT play is 9.87% (exact infinite-deck
  * calculation, reproduced in tests/blackjack.test.ts). Anything short of perfect play costs the
- * player more, as it does at every blackjack table.
+ * player more, as it does at every blackjack table. (Until 2026-09-25 the edge came from the
+ * dealer winning ties at even-money payouts; the operator asked for ties to push instead.)
  */
-export const BLACKJACK_HOUSE_EDGE_BPS = 989;
+export const BLACKJACK_HOUSE_EDGE_BPS = 987;
+
+/** Total returned per unit on the table, in basis points: 18,000 is 1.8x. */
+export const WIN_RETURN_BPS = 18_000n;
+/** Total returned per unit staked on a natural: 25,000 is 2.5x, which is 3:2. */
+export const BLACKJACK_RETURN_BPS = 25_000n;
 
 export const BLACKJACK_RULES = Object.freeze({
-  tiesGoToDealer: true,
-  blackjackPushesBlackjack: true,
-  blackjackPays: '3:2',
+  tiesPush: true,
+  winPays: '1.8x',
+  blackjackPays: '2.5x',
   dealerHitsSoft17: true,
   doubleOnAnyTwo: true,
   split: false,
@@ -38,10 +45,9 @@ export const BLACKJACK_RULES = Object.freeze({
 });
 
 export type BlackjackOutcome =
-  | 'blackjack' // natural 21 against no dealer blackjack: stake back plus 3:2
-  | 'win' // beat the dealer, or the dealer busted: stake back plus even money
-  | 'push' // blackjack against blackjack: stake back
-  | 'tie' // any other equal total: the dealer's
+  | 'blackjack' // natural 21 against no dealer blackjack: 2.5x the stake
+  | 'win' // beat the dealer, or the dealer busted: 1.8x what was on the table
+  | 'push' // equal totals, blackjack against blackjack included: the table comes back
   | 'lose' // the dealer's total was higher
   | 'bust' // the player went over 21
   | 'dealer_blackjack'; // the dealer's natural, found on the peek
@@ -126,27 +132,26 @@ export function dealerPeeks(upCard: number): boolean {
 export function compareHands(
   playerFaces: readonly number[],
   dealerFaces: readonly number[],
-): 'win' | 'tie' | 'lose' {
+): 'win' | 'push' | 'lose' {
   const player = handTotal(playerFaces).total;
   const dealer = handTotal(dealerFaces).total;
   if (dealer > 21 || player > dealer) return 'win';
-  return player === dealer ? 'tie' : 'lose';
+  return player === dealer ? 'push' : 'lose';
 }
 
 /**
  * What is paid back for a finished hand, stake included. `stakeMinor` is the ORIGINAL stake; a
- * doubled hand has twice that on the table. 3:2 is rounded down to the whole dollar.
+ * doubled hand has twice that on the table. Fractions are rounded down to the whole dollar.
  */
 export function payoutFor(outcome: BlackjackOutcome, stakeMinor: bigint, doubled: boolean): bigint {
   const onTable = doubled ? stakeMinor * 2n : stakeMinor;
   switch (outcome) {
     case 'blackjack':
-      return stakeMinor + (stakeMinor * 3n) / 2n;
+      return (stakeMinor * BLACKJACK_RETURN_BPS) / 10_000n;
     case 'win':
-      return onTable * 2n;
+      return (onTable * WIN_RETURN_BPS) / 10_000n;
     case 'push':
       return onTable;
-    case 'tie':
     case 'lose':
     case 'bust':
     case 'dealer_blackjack':

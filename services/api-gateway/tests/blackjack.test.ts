@@ -8,7 +8,9 @@ import { loadConfig } from '../src/config.js';
 import type { Database } from '../src/lib/db.js';
 import {
   BLACKJACK_HOUSE_EDGE_BPS,
+  BLACKJACK_RETURN_BPS,
   BLACKJACK_RULES,
+  WIN_RETURN_BPS,
   cardValue,
   compareHands,
   dealerShouldHit,
@@ -52,20 +54,22 @@ describe('blackjack hands', () => {
     assert.ok(!dealerShouldHit([A, SEVEN]));
   });
 
-  it('gives ties to the dealer and a bust dealer to the player', () => {
+  it('pushes ties and gives a bust dealer to the player', () => {
     assert.equal(compareHands([TEN, NINE], [TEN, SEVEN + 1]), 'win');
-    assert.equal(compareHands([TEN, SEVEN], [TEN, SEVEN]), 'tie');
+    assert.equal(compareHands([TEN, SEVEN], [TEN, SEVEN]), 'push');
     assert.equal(compareHands([TEN, SIX], [TEN, SEVEN]), 'lose');
     assert.equal(compareHands([TEN, TWO], [TEN, SIX, KING]), 'win');
   });
 
-  it('pays 3:2 on a natural, even money on a win, the stake on a push, nothing on a tie', () => {
+  it('pays 2.5x on a natural, 1.8x on a win, and the whole table back on a push', () => {
     assert.equal(payoutFor('blackjack', 1_000_000n, false), 2_500_000n);
-    assert.equal(payoutFor('blackjack', 3n, false), 7n); // 3:2 rounds down to the whole dollar
-    assert.equal(payoutFor('win', 1_000_000n, false), 2_000_000n);
-    assert.equal(payoutFor('win', 1_000_000n, true), 4_000_000n);
+    assert.equal(payoutFor('blackjack', 3n, false), 7n); // rounds down to the whole dollar
+    assert.equal(payoutFor('win', 1_000_000n, false), 1_800_000n);
+    assert.equal(payoutFor('win', 1_000_000n, true), 3_600_000n); // a double wins on both stakes
+    assert.equal(payoutFor('win', 7n, false), 12n); // 12.6, rounded down
     assert.equal(payoutFor('push', 1_000_000n, false), 1_000_000n);
-    for (const outcome of ['tie', 'lose', 'bust', 'dealer_blackjack'] as const) {
+    assert.equal(payoutFor('push', 1_000_000n, true), 2_000_000n); // a doubled tie returns both
+    for (const outcome of ['lose', 'bust', 'dealer_blackjack'] as const) {
       assert.equal(payoutFor(outcome, 1_000_000n, true), 0n);
     }
   });
@@ -89,11 +93,13 @@ describe('blackjack hands', () => {
 
 /**
  * The house edge, recomputed exactly: infinite deck, optimal hit / stand / double on the first two
- * cards, dealer peeks and hits soft 17, ties to the dealer except blackjack against blackjack,
- * 3:2 naturals. If the engine's published figure or its rules drift from this, the table is not
- * charging what it says it charges.
+ * cards, dealer peeks and hits soft 17, ties push, and the payouts read from the engine itself --
+ * a win returns WIN_RETURN_BPS, a natural BLACKJACK_RETURN_BPS. If the engine's published figure,
+ * its rules or its payouts drift from this, the table is not charging what it says it charges.
  */
 describe('the house edge', () => {
+  const winProfit = Number(WIN_RETURN_BPS) / 10_000 - 1;
+  const naturalProfit = Number(BLACKJACK_RETURN_BPS) / 10_000 - 1;
   const P = [0, 0, ...Array(8).fill(1 / 13), 4 / 13, 1 / 13];
   const CARDS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const add = (t: number, s: number, c: number): [number, number] => {
@@ -125,8 +131,8 @@ describe('the house edge', () => {
       const stand = (t: number) => {
         let e = 0;
         for (const [k, p] of dist) {
-          if (k === 'bust' || t > k) e += p;
-          else if (t < k || BLACKJACK_RULES.tiesGoToDealer) e -= p;
+          if (k === 'bust' || t > k) e += p * winProfit;
+          else if (t < k || !BLACKJACK_RULES.tiesPush) e -= p;
         }
         return e;
       };
@@ -150,8 +156,8 @@ describe('the house edge', () => {
         let double = 0;
         for (const c of CARDS) { const [nt] = add(t, s, c); double += P[c]! * (nt > 21 ? -1 : stand(nt)); }
         const played = Math.max(best(t, s), 2 * double);
-        const onDealerNatural = natural && BLACKJACK_RULES.blackjackPushesBlackjack ? 0 : -1;
-        const noDealerNatural = natural ? 1.5 : played;
+        const onDealerNatural = natural && BLACKJACK_RULES.tiesPush ? 0 : -1;
+        const noDealerNatural = natural ? naturalProfit : played;
         upEv += P[a]! * P[b]! * (pNatural * onDealerNatural + (1 - pNatural) * noDealerNatural);
       }
       ev += P[up]! * upEv;
@@ -159,7 +165,7 @@ describe('the house edge', () => {
     return -ev;
   }
 
-  it('is the 9.89% the table publishes, under perfect play', () => {
+  it('is the 9.87% the table publishes, under perfect play', () => {
     const exact = edge();
     assert.ok(Math.abs(exact * 10_000 - BLACKJACK_HOUSE_EDGE_BPS) < 1, `computed ${exact}`);
     // "About ten per cent" is the brief; the site's margin engines assume HOUSE_EDGE_BPS = 1000.
@@ -169,7 +175,17 @@ describe('the house edge', () => {
   it('does not offer the rules the edge was computed without', () => {
     assert.equal(BLACKJACK_RULES.split, false);
     assert.equal(BLACKJACK_RULES.insurance, false);
-    assert.equal(BLACKJACK_RULES.blackjackPays, '3:2');
+    assert.equal(BLACKJACK_RULES.blackjackPays, '2.5x');
+    assert.equal(BLACKJACK_RULES.winPays, '1.8x');
+    assert.equal(BLACKJACK_RULES.tiesPush, true);
+  });
+
+  /* What the edge is made of: at a standard 2x on a win, this same table would give the house
+   * about one per cent (1.30%, same calculation). The difference is the published win payout, so
+   * these two figures are the ones the felt prints and the ones the edge above was computed from. */
+  it('pays exactly the multipliers the felt prints', () => {
+    assert.equal(WIN_RETURN_BPS, 18_000n);
+    assert.equal(BLACKJACK_RETURN_BPS, 25_000n);
   });
 });
 
@@ -258,8 +274,9 @@ describe('the blackjack routes', () => {
       const response = await app.inject({ method: 'GET', url: '/v1/blackjack/config' });
       assert.equal(response.statusCode, 200);
       const body = response.json();
-      assert.equal(body.houseEdgeBps, 989);
-      assert.equal(body.rules.tiesGoToDealer, true);
+      assert.equal(body.houseEdgeBps, 987);
+      assert.equal(body.rules.tiesPush, true);
+      assert.equal(body.rules.winPays, '1.8x');
       assert.equal(body.minStakeMinor, '100000');
       assert.equal(body.enabled, true);
     } finally {

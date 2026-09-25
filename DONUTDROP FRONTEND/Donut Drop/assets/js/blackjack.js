@@ -36,7 +36,6 @@ const RESULT = {
   blackjack: { title: 'Blackjack', tone: 'win' },
   win: { title: 'You win', tone: 'win' },
   push: { title: 'Push', tone: 'push' },
-  tie: { title: 'Tie · dealer wins ties', tone: 'lose' },
   lose: { title: 'Dealer wins', tone: 'lose' },
   bust: { title: 'Bust', tone: 'lose' },
   dealer_blackjack: { title: 'Dealer blackjack', tone: 'lose' },
@@ -454,9 +453,9 @@ function build() {
       </section>
       <svg class="bj__felt" viewBox="0 0 640 96" aria-hidden="true" focusable="false">
         <path id="bjArc" d="M 40 24 Q 320 104 600 24" fill="none" />
-        <text><textPath href="#bjArc" startOffset="50%" text-anchor="middle">BLACKJACK PAYS 3 TO 2 · DEALER WINS TIES</textPath></text>
+        <text><textPath href="#bjArc" startOffset="50%" text-anchor="middle">WINS PAY 1.8× · BLACKJACK PAYS 2.5×</textPath></text>
       </svg>
-      <p class="bj__rules"><span class="bj__rules-tie">Dealer wins ties · </span>Dealer hits soft 17 · Blackjack against blackjack pushes · Double on any first two cards</p>
+      <p class="bj__rules"><span class="bj__rules-tie">Wins pay 1.8× · </span>Ties push · Dealer hits soft 17 · Double on any first two cards</p>
       <section class="bj__seat bj__seat--player" aria-label="Your hand">
         <div class="bj__cards" id="bjPlayerCards"></div>
         <div class="bj__label"><span>You</span><output class="bj__total" id="bjPlayerTotal" hidden></output><span class="bj__bet" id="bjBet" hidden></span></div>

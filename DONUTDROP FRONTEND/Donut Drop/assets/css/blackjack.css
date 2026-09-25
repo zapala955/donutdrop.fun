@@ -3,8 +3,8 @@
  * states: deal / hit / stand / double buttons use the site's .btn (default, hover, :focus-visible,
  *         :active, [disabled]) plus aria-busy for the one waiting on the server; the stake field has
  *         default, focus, and an invalid hint; results carry win / push / lose tones.
- * signature: the table's rules printed on the felt in an arc, as a real table prints them -- the
- *            one rule that makes the edge (dealer wins ties) is on the felt, not in small print.
+ * signature: the table's payouts printed on the felt in an arc, as a real table prints them -- the
+ *            number that makes the edge (wins pay 1.8x) is on the felt, not in small print.
  * motion: a card flies from the shoe (340ms), the hole card turns (380ms), one pulse on a win.
  *         Reduced motion: short fades, nothing moves across the table.
  */
