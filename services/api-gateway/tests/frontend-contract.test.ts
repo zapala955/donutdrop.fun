@@ -237,6 +237,41 @@ describe('frontend/backend contract', () => {
     assert.match(app, /event\.key === 'ArrowDown'/);
   });
 
+  it('lays the phone out with the chat closed, a five-slot tab bar and no sideways scroll', async () => {
+    const html = await source('index.html');
+    const app = await source('assets/js/app.js');
+    const social = await source('assets/css/social.css');
+    const mobile = await source('assets/css/mobile.css');
+    const roulette = await source('assets/css/roulette.css');
+
+    // The phone layer loads after every other sheet, so it has the last word.
+    const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(sheets.at(-1), 'mobile.css');
+
+    // The drawer opens from the chat button only. The desktop collapse flag defaults to "open",
+    // and letting it drive the drawer covered every phone's first page with chat.
+    assert.doesNotMatch(social, /data-chat-collapsed="0"\]\s*\.chat\s*\{\s*transform/);
+    assert.match(social, /body\.chat-open \.chat \{ transform: translateX\(0\); \}/);
+    assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);
+    assert.match(app, /function setChatOpen\(open\)/);
+    assert.match(app, /\$\('#chatScrim'\)\?\.addEventListener\('click', \(\) => setChatOpen\(false\)\)/);
+    // It ends at the tab bar, where its message box was hidden before.
+    assert.match(mobile, /\.chat \{\s*bottom: var\(--tabbar-reach\);\s*height: auto;/);
+
+    // Five fixed slots with an icon each, never a strip wider than the phone.
+    assert.match(mobile, /grid-template-columns: repeat\(5, minmax\(max-content, 1fr\)\)/);
+    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf('</nav>'));
+    assert.equal(nav.split('class="tabs__ico"').length - 1, 4);
+    assert.match(nav, /class="navdc__ico"/);
+
+    // A visitor is offered Log in, not a $0 balance and a withdraw button.
+    assert.match(app, /document\.body\.dataset\.auth = !state\.ready \? 'pending' : state\.authenticated \? 'in' : 'out';/);
+    assert.match(mobile, /body\[data-auth="out"\] \.top #loginBtn \{/);
+
+    // The roulette table collapses to a track that can shrink below its widest child.
+    assert.match(roulette, /\.roulette \{\s*grid-template-columns: minmax\(0, 1fr\);/);
+  });
+
   it('puts a hand in play back on the table after a refresh', async () => {
     const app = await source('assets/js/app.js');
     const table = await source('assets/js/blackjack.js');

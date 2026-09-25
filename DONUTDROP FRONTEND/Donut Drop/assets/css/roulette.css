@@ -646,8 +646,14 @@
 }
 
 @media (max-width: 1050px) {
+  /* minmax(0, 1fr), never bare 1fr: a bare 1fr track cannot shrink below its widest child, and on
+     a phone that child set the whole table 470px wide inside a 375px screen — wheel, board and
+     chips all cut off at the right edge. */
   .roulette {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .roulette > * {
+    min-width: 0;
   }
   .roulette__wheelwrap {
     width: min(360px, 80vw);
@@ -682,17 +688,17 @@
     grid-column: auto;
   }
   .roulette__slip {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
+  /* Five across, two rows. Three across made every chip about 110px wide on a phone, three rows
+     deep, with the third column clipped by the board's edge. */
   .roulette__chips {
-    grid-template-columns: repeat(5, minmax(48px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     max-width: 430px;
   }
-}
-
-@media (max-width: 430px) {
-  .roulette__chips {
-    grid-template-columns: repeat(3, minmax(52px, 1fr));
+  .roulette__chips button {
+    border-width: 2px;
+    font-size: 9px;
   }
 }
 

@@ -1250,8 +1250,7 @@ function route() {
   }
   mount($(`.view[data-view="${name}"]`));
 
-  document.body.classList.remove('chat-open');
-  $('#burger').setAttribute('aria-expanded', 'false');
+  setChatOpen(false);
   window.scrollTo({ top: 0 });
 }
 
@@ -1311,6 +1310,9 @@ const paintAuthChrome = () => {
   const head = $('#loginHead');
   if (label) label.textContent = state.authenticated ? state.user.minecraftUsername : 'Log in';
   button.dataset.authenticated = state.authenticated ? '1' : '0';
+  // The phone header swaps the money controls for Log in once the session is known -- not
+  // before, or every signed-in player would watch it flash "Log in" on each load.
+  document.body.dataset.auth = !state.ready ? 'pending' : state.authenticated ? 'in' : 'out';
   if (!head) return;
   if (state.authenticated && state.user?.id) {
     const next = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40`;
@@ -1401,9 +1403,21 @@ setInterval(async () => {
 
 /* the animation test bench — hidden until Ctrl+Alt+D or ?dev=1 */
 initDevMenu(document.getElementById('devRoot'));
+/* The chat drawer below 1080px. Closed on arrival: it used to open over the page on a phone's
+ * first visit and the header button could not close it. Every way out goes through here so the
+ * button's state never disagrees with the drawer. */
+function setChatOpen(open) {
+  document.body.classList.toggle('chat-open', open);
+  const button = $('#burger');
+  button.setAttribute('aria-expanded', String(open));
+  button.setAttribute('aria-label', open ? 'Close chat' : 'Open chat');
+}
 $('#burger').addEventListener('click', () => {
-  const open = document.body.classList.toggle('chat-open');
-  $('#burger').setAttribute('aria-expanded', String(open));
+  setChatOpen(!document.body.classList.contains('chat-open'));
+});
+$('#chatScrim')?.addEventListener('click', () => setChatOpen(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.body.classList.contains('chat-open')) setChatOpen(false);
 });
 
 /* ═════════ account menu ═════════ */
@@ -1447,6 +1461,8 @@ $('#burger').addEventListener('click', () => {
           document.createTextNode(money(bonus) + ' '),
           Object.assign(document.createElement('b'), { textContent: 'PER INVITE' }),
         );
+        const short = $('.navref__short');
+        if (short) short.textContent = money(bonus);
       }
     };
     paintInvites();

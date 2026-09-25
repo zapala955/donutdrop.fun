@@ -1,0 +1,294 @@
+/* Hallmark · redesign (mobile layer) · genre: atmospheric · theme: existing obsidian + gold tokens
+ * pre-emit critique: P4 H5 E4 S4 R5 V4
+ * scope: header, bottom tab bar, chat drawer and the fixed furniture around them, at ≤1080px
+ *
+ * mobile.css — the phone layer, loaded last.
+ *
+ * Every sheet before this one grew its own answer to "what happens on a phone", and they disagreed:
+ * social.css slid the chat open on first visit, app.css scrolled the tab bar sideways under a
+ * fixed bar, and three different sheets each trimmed the header by a few pixels. This sheet owns
+ * those three pieces below the drawer breakpoint so there is one answer, and it spends only tokens
+ * the earlier sheets define — no new colour, no new face.
+ *
+ * Desktop (>1080px) is untouched except for one rule: the tab icons, which exist only for the bar
+ * at the foot of a phone, are hidden there.
+ */
+
+:root {
+  --tabbar-h: 62px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --tabbar-reach: calc(var(--tabbar-h) + var(--safe-b));
+}
+
+/* The icons and the short invite label belong to the phone bar only. */
+.tabs__ico,
+.navref__short,
+.chatscrim { display: none; }
+
+@media (max-width: 1080px) {
+
+  /* ═════════════════════════ the chat drawer ═════════════════════════
+     Closed until asked for. It opens from the chat button in the header, closes from the same
+     button, the scrim, Escape, or any navigation — and it ends at the tab bar rather than behind
+     it, which is where its message box used to be. */
+  .chat {
+    bottom: var(--tabbar-reach);
+    height: auto;          /* app.css sizes the desktop rail to the viewport, which beat `bottom` */
+    width: min(340px, 88vw);
+    border-right: 1px solid var(--ob-line);
+    overscroll-behavior: contain;
+  }
+  .chat__dock { display: none; }
+
+  .chatscrim {
+    display: block;
+    position: fixed;
+    inset: var(--top-h) 0 var(--tabbar-reach) 0;
+    z-index: calc(var(--z-chat) - 1);
+    background: rgba(4, 4, 6, .62);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s var(--ob-ease), visibility 0s linear .2s;
+    touch-action: none;
+  }
+  body.chat-open .chatscrim {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .2s var(--ob-ease), visibility 0s;
+  }
+
+  /* ═════════════════════════ the header ═════════════════════════
+     Opaque. The desktop header is translucent over a blur, and the blur has to go at this width
+     (it would trap the fixed tab bar inside the header) — which left page text scrolling visibly
+     through the logo. */
+  .top {
+    gap: 10px; padding: 0 14px;
+    background: linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  .wallet { margin-left: auto; gap: 6px; }
+
+  /* The chat button. It used to be three bars — a menu icon that opened a chat — so it said the
+     wrong thing about the one panel it controls. */
+  .top__burger {
+    width: 40px; height: 40px; padding: 0;
+    display: grid; place-items: center; flex: none;
+    color: var(--text);
+    background: var(--panel2);
+    border: 1px solid var(--line2);
+    border-radius: var(--r-s);
+    transition: color var(--ob-quick), border-color var(--ob-quick), background var(--ob-quick);
+  }
+  .top__burger svg {
+    width: 20px; height: 20px;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .top__burger[aria-expanded="true"] {
+    color: var(--gold-bright);
+    border-color: var(--gold-edge-hi);
+    background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
+  }
+  .top__burger:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+  /* One height for every control in the strip, so the row reads as a row. */
+  .top .lvl,
+  .top .cashpill,
+  .top .mute,
+  .top #depositBtn,
+  .top #withdrawBtn,
+  .top #loginBtn,
+  .top .acct__btn { height: 40px; }
+  .top .mute,
+  .top .acct__btn { width: 40px; }
+
+  /* ── signed out ──
+     A visitor has no balance to read and nothing to withdraw, and the $0 strip was standing where
+     the only thing they can actually do — sign in — should be. */
+  body[data-auth="out"] .top .cashpill,
+  body[data-auth="out"] .top #depositBtn,
+  body[data-auth="out"] .top #withdrawBtn { display: none; }
+  body[data-auth="out"] .top #loginBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 16px;
+    color: var(--bg);
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+    border: 1px solid var(--gold-body);
+  }
+  body[data-auth="out"] .top #loginBtn span { display: inline; }
+  body[data-auth="out"] .top #loginBtn .btn__ico { stroke: var(--bg); }
+  body[data-auth="in"] .top #loginBtn { display: none; }
+
+  /* ═════════════════════════ the tab bar ═════════════════════════
+     Five fixed slots, icon over label, nothing scrolling sideways. It used to be a strip of text
+     wider than the phone, so the Discord button sat half off the edge and the invite pill was cut
+     in two at 320px. */
+  .top .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: grid;
+    /* Each slot is at least as wide as its label, then they share what is left — equal on most
+       phones, and nothing truncated to "UPGRAD…" at 320px. */
+    grid-template-columns: repeat(5, minmax(max-content, 1fr));
+    gap: 2px;
+    margin: 0;
+    padding: 5px 6px calc(5px + var(--safe-b));
+    min-height: var(--tabbar-reach);
+    overflow: visible;
+    background: linear-gradient(180deg, rgba(16, 16, 20, .97), rgba(8, 8, 10, .995));
+    border-top: 1px solid var(--ob-line);
+    box-shadow: 0 -14px 30px -18px rgba(0, 0, 0, .9);
+  }
+  .top .tabs > * { min-width: 0; margin: 0; }
+  .top .tabs .tabdrop { display: flex; }
+
+  .top .tabs > a,
+  .top .tabs .tabdrop__btn {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 52px;
+    padding: 6px 2px 5px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    box-shadow: none;
+    color: var(--muted);
+    font-family: var(--disp);
+    font-size: .65625rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+    filter: none;
+    animation: none;
+    transition: color var(--ob-quick), background var(--ob-quick);
+  }
+  .top .tabs > a > span,
+  .top .tabs .tabdrop__btn > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .top .tabs > a:hover,
+  .top .tabs .tabdrop__btn:hover { transform: none; color: var(--text); background: var(--panel2); box-shadow: none; }
+  .top .tabs > a:focus-visible,
+  .top .tabs .tabdrop__btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+  .top .tabs .tabdrop__chev { display: none; }
+
+  .tabs__ico {
+    display: block;
+    width: 22px; height: 22px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tabs__ico .tabs__fill { fill: currentColor; stroke: none; }
+
+  /* The live slot: gold, and a rule along the bar's top edge so it does not rely on colour. */
+  .top .tabs > a[aria-current="page"],
+  .top .tabs .tabdrop__btn[data-on="1"] {
+    color: var(--gold-bright);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--gold-body) 14%, transparent), transparent);
+    box-shadow: none;
+  }
+  .top .tabs > a[aria-current="page"]::before,
+  .top .tabs .tabdrop__btn[data-on="1"]::before {
+    content: "";
+    position: absolute; top: -6px; left: 50%;
+    width: 26px; height: 2px;
+    margin-left: -13px;
+    border-radius: 0 0 2px 2px;
+    background: var(--gold-bright);
+    box-shadow: 0 0 10px rgba(255, 170, 0, .6);
+  }
+  .top .tabs .tabdrop__btn[aria-expanded="true"] { color: var(--text); background: var(--panel2); }
+
+  /* The invite slot keeps the gold it is paid for, without the pill that no longer fit. */
+  .top .tabs .navref {
+    color: var(--gold-bright);
+    border: 0;
+  }
+  .top .tabs .navref::after { display: none; }
+  .top .tabs .navref__ico { display: none; }
+  .top .tabs .navref .tabs__ico { filter: drop-shadow(0 0 6px rgba(255, 170, 0, .45)); }
+  /* The long label stays for screen readers; the bar shows the short one. */
+  .top .tabs .navref__txt {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .top .tabs .navref__txt b { display: inline; }
+  .top .tabs .navref__short { display: block; }
+
+  .top .tabs .navdc { color: var(--muted); background: none; box-shadow: none; }
+  .top .tabs .navdc:hover { color: var(--text); background: var(--panel2); }
+  .top .tabs .navdc__ico { width: 22px; height: 22px; fill: var(--discord); }
+  .top .tabs .navdc__txt { display: block; font-size: inherit; font-weight: inherit; letter-spacing: inherit; }
+
+  /* ── what the bar sits on top of ── */
+  .main { padding-bottom: calc(var(--tabbar-reach) + 20px); }
+  .toasts {
+    left: 12px; right: 12px;
+    bottom: calc(var(--tabbar-reach) + 10px);
+    max-width: none;
+    align-items: center;
+  }
+  .toasts .toast { width: min(100%, 360px); }
+  .drawer { bottom: var(--tabbar-reach); }
+  .devfab { bottom: calc(var(--tabbar-reach) + 12px); }
+  .devpanel { bottom: calc(var(--tabbar-reach) + 60px); }
+}
+
+@media (max-width: 560px) {
+  .top { gap: 8px; padding: 0 12px; }
+  .top .cashpill { width: 104px; }
+  .top #depositBtn,
+  .top #withdrawBtn { width: 40px; padding: 0; justify-content: center; }
+
+  /* Balance and Deposit are one object here: the number, and the way to make it bigger. Only at
+     this width, where the mute toggle and Deposit's label have both left the strip -- above it the
+     toggle sits between the two and the join would land on top of it. */
+  .top .cashpill {
+    display: inline-flex; align-items: center;
+    border-radius: var(--r-s) 0 0 var(--r-s);
+    border-right: 0;
+  }
+  .top #depositBtn {
+    margin-left: -6px;
+    border-radius: 0 var(--r-s) var(--r-s) 0;
+    color: var(--bg);
+    background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+    border-color: var(--gold-body);
+  }
+  .top #depositBtn .btn__ico { stroke: var(--bg); }
+  .top #depositBtn:hover { transform: none; filter: brightness(1.06); }
+}
+
+/* A visitor's header has one button on the right, so the name fits beside the mark again. */
+@media (min-width: 380px) and (max-width: 560px) {
+  body[data-auth="out"] .brand__txt { display: inline; font-size: 1.0625rem; }
+}
+
+/* The narrowest phones still in use. Everything above measured 292px of controls in a 296px row. */
+@media (max-width: 360px) {
+  .top { gap: 6px; padding: 0 10px; }
+  .wallet { gap: 5px; }
+  .top__burger,
+  .top #depositBtn,
+  .top #withdrawBtn,
+  .top .acct__btn { width: 36px; height: 36px; }
+  .top .cashpill,
+  .top #loginBtn { height: 36px; }
+  .top .cashpill { width: 94px; padding-inline: 7px; }
+  .top #depositBtn { margin-left: -5px; }
+  .brand__mark { width: 26px; height: 26px; }
+  body[data-auth="out"] .top #loginBtn { padding: 0 12px; }
+  .top .tabs { padding-inline: 4px; gap: 0; }
+  .top .tabs > a,
+  .top .tabs .tabdrop__btn { padding-inline: 3px; font-size: .625rem; letter-spacing: .02em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatscrim,
+  .top__burger,
+  .top .tabs > a,
+  .top .tabs .tabdrop__btn { transition: none; }
+}
