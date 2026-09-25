@@ -64,7 +64,9 @@ export type WalletKind =
   /* Paid once to a new account, referenced by the user's own id so the ledger's unique index is
    * what makes a second one impossible. It is playable at once and withdrawable only after the
    * wager requirement it adds is met; see lib/wager-requirements.ts. */
-  | 'signup_bonus';
+  | 'signup_bonus'
+  // A finished blackjack hand paying out, stake included. Referenced by the hand's id.
+  | 'blackjack_payout';
 
 /**
  * Credits the wallet and writes the matching ledger row.

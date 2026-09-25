@@ -45,7 +45,8 @@ export type ContributionSource =
   | 'upgrader'
   | 'case'
   | 'skill_duel'
-  | 'roulette';
+  | 'roulette'
+  | 'blackjack';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

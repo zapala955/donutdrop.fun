@@ -506,6 +506,14 @@ const environmentSchema = z
      * is a $166B liability at the configured edge. The admin table prints the per-pocket liability
      * for exactly that reason, and this figure should be read with it rather than instead of it. */
     ROULETTE_MAX_ROUND_STAKE_MINOR: positiveBigintString.default('5000000000'),
+    /* Blackjack. The edge is fixed by the table's rules (lib/blackjack.ts), not by a setting, so
+     * only whether it is open and how much one hand may stake are configurable. */
+    BLACKJACK_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    BLACKJACK_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    BLACKJACK_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -1167,6 +1175,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     rouletteMinStakeMinor: BigInt(env.ROULETTE_MIN_STAKE_MINOR),
     rouletteMaxStakeMinor: BigInt(env.ROULETTE_MAX_STAKE_MINOR),
     rouletteMaxRoundStakeMinor: BigInt(env.ROULETTE_MAX_ROUND_STAKE_MINOR),
+    blackjackEnabled: env.BLACKJACK_ENABLED,
+    blackjackMinStakeMinor: BigInt(env.BLACKJACK_MIN_STAKE_MINOR),
+    blackjackMaxStakeMinor: BigInt(env.BLACKJACK_MAX_STAKE_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

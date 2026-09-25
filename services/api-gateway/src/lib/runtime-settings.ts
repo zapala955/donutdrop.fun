@@ -12,6 +12,7 @@ type SettingGroup =
   | 'rewards'
   | 'rakeback'
   | 'roulette'
+  | 'blackjack'
   | 'duels'
   | 'jackpot'
   | 'rain'
@@ -292,6 +293,27 @@ export const runtimeSettingDefinitions = {
     label: 'Pause after current round',
   },
 
+  /* ── blackjack ── The edge is the table's rules, not a dial; see lib/blackjack.ts. */
+  blackjackEnabled: {
+    kind: 'boolean',
+    group: 'blackjack',
+    label: 'Blackjack open (hands in play can always finish)',
+  },
+  blackjackMinStakeMinor: {
+    kind: 'bigint',
+    group: 'blackjack',
+    label: 'Blackjack minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  blackjackMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'blackjack',
+    label: 'Blackjack maximum stake (a double puts twice this on the table)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
   /* ── 1v1 skill duels ── */
   skillDuelRakeBps: {
     kind: 'integer',
@@ -538,6 +560,7 @@ function assertInvariants(view: AppConfig): void {
     ['Duel minimum stake', view.skillDuelMinStakeMinor, 'the maximum', view.skillDuelMaxStakeMinor],
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
+    ['Blackjack minimum stake', view.blackjackMinStakeMinor, 'the maximum', view.blackjackMaxStakeMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [
