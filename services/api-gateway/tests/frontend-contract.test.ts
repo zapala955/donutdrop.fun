@@ -216,8 +216,9 @@ describe('frontend/backend contract', () => {
     assert.match(menu, /<a class="tabdrop__row" href="\/roulette" data-route="roulette" role="menuitem">/);
     assert.equal(nav.split('href="/roulette"').length - 1, 1);
 
-    // The rest are announced, readable and never links.
-    for (const game of ['Blackjack', 'Crash']) {
+    // Blackjack is live; the rest are announced, readable and never links.
+    assert.match(menu, /<a class="tabdrop__row" href="\/blackjack" data-route="blackjack" role="menuitem">/);
+    for (const game of ['Crash', 'Mines', 'Plinko']) {
       const row = new RegExp(
         `<div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">[\\s\\S]*?<b>${game}</b>[\\s\\S]*?COMING SOON`,
       );
@@ -226,7 +227,12 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(menu, /<a [^>]*tabdrop__row--soon/);
 
     assert.match(app, /initTabDrop\('casinoDrop', 'casinoBtn', 'casinoMenu'\)/);
-    assert.match(app, /\['casinoBtn', \['roulette'\]\]/);
+    assert.match(app, /\['casinoBtn', \['roulette', 'blackjack'\]\]/);
+    // The page exists, is routed, and is served for a direct visit.
+    assert.match(html, /data-view="blackjack"/);
+    assert.match(app, /blackjack: mountBlackjack/);
+    const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
+    assert.match(nginx, /\|blackjack\|/);
     // Keyboard users can reach the rows of a menu portalled to the end of <body>.
     assert.match(app, /event\.key === 'ArrowDown'/);
   });

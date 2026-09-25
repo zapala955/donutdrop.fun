@@ -61,6 +61,7 @@
 <!-- the invite page, which borrows the sign-in card's vocabulary and so loads beside it -->
 <link rel="stylesheet" href="assets/css/referrals.css" />
 <link rel="stylesheet" href="assets/css/roulette.css" />
+<link rel="stylesheet" href="assets/css/blackjack.css" />
 <link rel="icon" href="assets/img/items/ender_chest.png" />
 </head>
 <body>
@@ -99,11 +100,10 @@
           <img src="assets/img/items/nether_star.png" alt="" />
           <span><b>Roulette</b><i>One shared wheel, every player on it</i></span>
         </a>
-        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+        <a class="tabdrop__row" href="/blackjack" data-route="blackjack" role="menuitem">
           <img src="assets/img/items/enchanted_book.png" alt="" />
           <span><b>Blackjack</b><i>Beat the dealer to 21</i></span>
-          <em class="tabsoon__pill">COMING SOON</em>
-        </div>
+        </a>
         <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
           <img src="assets/img/items/elytra.png" alt="" />
           <span><b>Crash</b><i>Cash out before it crashes</i></span>
@@ -463,6 +463,16 @@
           data-tip="One server-owned European wheel is shared by every player. Bets lock every ten seconds."></button></h1>
       </header>
       <div class="roulette" id="rouletteRoot"></div>
+    </section>
+
+    <!-- ─────── BLACKJACK ─────── -->
+    <section class="view" data-view="blackjack" hidden>
+      <header class="phead">
+        <h1>Blackjack <button class="ihint" type="button"
+          aria-label="Dealer wins ties, blackjack pays 3 to 2, dealer hits soft 17. The house edge is 9.89% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."
+          data-tip="Dealer wins ties, blackjack pays 3 to 2, dealer hits soft 17. The house edge is 9.89% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."></button></h1>
+      </header>
+      <div class="bj" id="blackjackRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

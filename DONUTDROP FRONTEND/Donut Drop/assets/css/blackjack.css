@@ -1,0 +1,358 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4
+ * Hallmark · component: blackjack table · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
+ * states: deal / hit / stand / double buttons use the site's .btn (default, hover, :focus-visible,
+ *         :active, [disabled]) plus aria-busy for the one waiting on the server; the stake field has
+ *         default, focus, and an invalid hint; results carry win / push / lose tones.
+ * signature: the table's rules printed on the felt in an arc, as a real table prints them -- the
+ *            one rule that makes the edge (dealer wins ties) is on the felt, not in small print.
+ * motion: a card flies from the shoe (340ms), the hole card turns (380ms), one pulse on a win.
+ *         Reduced motion: short fades, nothing moves across the table.
+ */
+
+.bj {
+  /* The table's own palette, lifted here so nothing below writes a colour inline. Felt is a deep
+     emerald that sits under the site's gold without turning the page into a different site. */
+  --bj-felt: #0c2a21;
+  --bj-felt-hi: #134133;
+  --bj-felt-lo: #06140f;
+  --bj-print: rgba(255, 215, 0, .62);
+  --bj-print-dim: rgba(236, 237, 240, .52);
+  --bj-card: #f6f1e6;
+  --bj-ink: #16161a;
+  --bj-red: #b3202a;
+  --bj-back-a: #1a1206;
+  --bj-back-b: #2a1c02;
+  --bj-shadow: 0 6px 16px -6px rgba(0, 0, 0, .75);
+  --bj-card-w: clamp(52px, 14vw, 86px);
+  --bj-card-h: calc(var(--bj-card-w) * 1.4);
+  --bj-ease: cubic-bezier(.22, 1, .36, 1);
+
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ─────────── the table ─────────── */
+.bj__table {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: calc(var(--bj-card-h) * 2 + 220px);
+  padding: 22px 16px 24px;
+  border-radius: 22px;
+  border: 1px solid var(--ob-line-hi);
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, var(--bj-felt-hi), var(--bj-felt) 58%, var(--bj-felt-lo));
+  box-shadow:
+    inset 0 0 0 5px rgba(0, 0, 0, .28),
+    inset 0 0 70px rgba(0, 0, 0, .55),
+    0 24px 50px -30px rgba(0, 0, 0, .9);
+  overflow: hidden;
+}
+
+/* Where every card comes from: a short stack of backs in the corner. */
+.bj__shoe {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: calc(var(--bj-card-w) * .62);
+  height: calc(var(--bj-card-h) * .62);
+}
+.bj__shoe::before,
+.bj__shoe::after,
+.bj__shoe span {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: repeating-linear-gradient(45deg, var(--bj-back-a) 0 5px, var(--bj-back-b) 5px 10px);
+  box-shadow: inset 0 0 0 2px var(--gold-deep), var(--bj-shadow);
+}
+.bj__shoe::before { transform: translate(-6px, 5px) rotate(-6deg); opacity: .7; }
+.bj__shoe::after { transform: translate(-3px, 2px) rotate(-3deg); opacity: .85; }
+
+.bj__seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.bj__cards {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: var(--bj-card-h);
+  padding: 0 calc(var(--bj-card-w) * .3);
+}
+/* A fanned hand: each card tucked under the one after it, so eight cards still fit a phone. */
+.bjslot + .bjslot { margin-left: calc(var(--bj-card-w) * -.46); }
+
+.bj__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  font-size: .8125rem;
+  font-weight: 700;
+  color: var(--bj-print-dim);
+}
+.bj__total {
+  min-width: 34px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .5);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--text);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.bj__total[hidden] { display: none; }
+.bj__total[data-state="twentyone"] { color: var(--gold-bright); border-color: var(--ob-line-hi); }
+.bj__total[data-state="bust"] { color: var(--bj-card); background: var(--bj-red); }
+.bj__bet {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  background: rgba(255, 170, 0, .12);
+  border: 1px solid rgba(255, 170, 0, .3);
+  font-variant-numeric: tabular-nums;
+}
+.bj__bet[hidden] { display: none; }
+
+/* The felt print. */
+.bj__felt {
+  width: min(560px, 100%);
+  height: auto;
+  margin: 2px 0 -8px;
+  overflow: visible;
+}
+.bj__felt text {
+  fill: var(--bj-print);
+  font-family: var(--pixel);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.bj__rules {
+  margin: 0;
+  max-width: 48ch;
+  text-align: center;
+  font-size: .6875rem;
+  line-height: 1.45;
+  color: var(--bj-print-dim);
+}
+/* The result sits where the print is. While it shows, the print steps back so neither is read
+   through the other. */
+.bj__rules-tie { display: none; color: var(--gold-bright); font-weight: 800; }
+.bj__felt,
+.bj__rules { transition: opacity 240ms var(--bj-ease); }
+.bj__table[data-result] .bj__felt,
+.bj__table[data-result] .bj__rules { opacity: .16; }
+
+/* ─────────── cards ─────────── */
+.bjslot { flex: none; }
+.bjcard {
+  position: relative;
+  width: var(--bj-card-w);
+  height: var(--bj-card-h);
+  perspective: 700px;
+}
+/* A doubled hand's third card lies across the others, as a dealer places it. */
+.bjcard[data-sideways] {
+  transform: rotate(90deg);
+  margin: 0 calc(var(--bj-card-w) * .22);
+}
+.bjcard__inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.bjcard[data-down] .bjcard__inner { transform: rotateY(180deg); }
+.bjcard__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: var(--bj-shadow);
+}
+.bjcard__front {
+  display: grid;
+  background: var(--bj-card);
+  color: var(--bj-ink);
+  border: 1px solid rgba(0, 0, 0, .18);
+  font-family: var(--body);
+}
+.bjcard[data-suit="heart"] .bjcard__front,
+.bjcard[data-suit="diamond"] .bjcard__front { color: var(--bj-red); }
+.bjcard__corner {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.bjcard__corner b { font-size: calc(var(--bj-card-w) * .25); font-weight: 800; letter-spacing: -.02em; }
+.bjcard__corner i { font-style: normal; font-size: calc(var(--bj-card-w) * .2); }
+.bjcard__pip { place-self: center; font-size: calc(var(--bj-card-w) * .5); line-height: 1; }
+.bjcard__back {
+  transform: rotateY(180deg);
+  background: repeating-linear-gradient(45deg, var(--bj-back-a) 0 6px, var(--bj-back-b) 6px 12px);
+  box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 5px var(--bj-back-a), var(--bj-shadow);
+}
+
+/* One pulse on a winning hand; a losing hand steps back. Neither loops. */
+.bj__seat--player[data-result="win"] .bjcard__front {
+  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 18px rgba(255, 215, 0, .45);
+  animation: bj-win 700ms var(--bj-ease) 1;
+}
+.bj__seat--player[data-result="lose"] .bjslot { opacity: .58; transition: opacity 300ms var(--bj-ease); }
+@keyframes bj-win {
+  0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+  45% { box-shadow: 0 0 0 3px var(--gold-bright), 0 0 30px rgba(255, 215, 0, .7); }
+  100% { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 18px rgba(255, 215, 0, .45); }
+}
+
+/* ─────────── the result ─────────── */
+.bj__result {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 190px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  background: rgba(6, 8, 10, .86);
+  border: 1px solid var(--ob-line-hi);
+  box-shadow: 0 20px 40px -18px rgba(0, 0, 0, .95);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  text-align: center;
+}
+.bj__result[hidden] { display: none; }
+.bj__result b { font-family: var(--pixel); font-size: 1.25rem; font-weight: 800; color: var(--text); }
+.bj__result span { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.bj__result[data-tone="win"] { border-color: var(--gold-bright); box-shadow: 0 0 28px rgba(255, 170, 0, .3); }
+.bj__result[data-tone="win"] b,
+.bj__result[data-tone="win"] span { color: var(--gold-bright); }
+
+/* ─────────── controls ─────────── */
+.bj__controls { display: flex; justify-content: center; }
+.bj__betting {
+  display: grid;
+  grid-template-columns: auto minmax(0, 280px) auto;
+  align-items: center;
+  gap: 10px;
+  width: min(620px, 100%);
+}
+.bj__betting[hidden],
+.bj__actions[hidden] { display: none; }
+.bj__stakelabel { font-size: .8125rem; font-weight: 700; color: var(--muted); }
+.bj__stake {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  transition: border-color 150ms var(--bj-ease), box-shadow 150ms var(--bj-ease);
+}
+.bj__stake:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
+.bj__stake span { color: var(--gold-bright); font-weight: 800; }
+.bj__stake input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.bj__stake input:focus { outline: none; }
+.bj__adj {
+  min-width: 36px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 150ms var(--bj-ease), background 150ms var(--bj-ease);
+}
+.bj__adj:hover { color: var(--text); background: var(--panel3); }
+.bj__adj:active { transform: translateY(1px); }
+.bj__deal { min-width: 150px; height: 46px; white-space: nowrap; }
+.bj__hint {
+  grid-column: 1 / -1;
+  min-height: 1.1em;
+  margin: 0;
+  text-align: center;
+  font-size: .75rem;
+  color: var(--faint);
+}
+
+.bj__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: min(520px, 100%);
+}
+.bj__actions .btn { flex: 1; height: 50px; white-space: nowrap; }
+.bj__actions kbd {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: .6875rem;
+  opacity: .6;
+}
+/* Keyboard hints mean nothing on a phone. */
+@media (hover: none) { .bj__actions kbd { display: none; } }
+.bj .btn[aria-busy="true"] { cursor: progress; }
+
+.bj__fair {
+  margin: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: .6875rem;
+  line-height: 1.5;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+/* ─────────── phones ─────────── */
+@media (max-width: 560px) {
+  .bj__table { padding: 18px 10px 20px; border-radius: 18px; }
+  /* The arc keeps its size -- larger would run off the end of its path -- so on a phone the one
+     rule that sets the edge is repeated at reading size in the line below it. */
+  .bj__rules-tie { display: inline; }
+  .bj__betting { grid-template-columns: minmax(0, 1fr); }
+  .bj__stakelabel { display: none; }
+  .bj__deal { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bj__seat--player[data-result="win"] .bjcard__front { animation: none; }
+  .bj__seat--player[data-result="lose"] .bjslot,
+  .bj__stake,
+  .bj__adj { transition: none; }
+}

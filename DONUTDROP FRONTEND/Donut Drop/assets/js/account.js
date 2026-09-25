@@ -47,6 +47,9 @@ const KIND_LABEL = {
   referral_revshare: 'Referral share',
   referral_bonus: 'Referral bonus',
   signup_bonus: 'Signup bonus',
+  blackjack_stake: 'Blackjack stake',
+  blackjack_double: 'Blackjack double',
+  blackjack_payout: 'Blackjack payout',
   rakeback_claim: 'Rakeback',
   race_payout: 'Race prize',
 };
