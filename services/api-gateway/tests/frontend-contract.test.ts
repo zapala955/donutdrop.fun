@@ -237,6 +237,18 @@ describe('frontend/backend contract', () => {
     assert.match(app, /event\.key === 'ArrowDown'/);
   });
 
+  it('puts a hand in play back on the table after a refresh', async () => {
+    const app = await source('assets/js/app.js');
+    const table = await source('assets/js/blackjack.js');
+    // The view mounts before the session is known, so the first load sees a signed-out player.
+    assert.match(app, /bootstrap\(\)\.catch\(showApiError\);/);
+    // It loads again once the session is in, which fetches the active hand.
+    assert.match(table, /\['ready', 'login'\]\.includes\(event\.detail\)\) \{\s*if \(!busy\) void load\(\);/);
+    assert.match(table, /api\.get\('\/v1\/blackjack\/hands\/active'\)/);
+    // A deal the server refuses for a hand still in play brings that hand back.
+    assert.match(table, /error\?\.code === 'HAND_IN_PLAY'\) \{\s*await reload\(\);/);
+  });
+
   it('shows what is still owed instead of a withdraw form that cannot succeed', async () => {
     const app = await source('assets/js/app.js');
     const start = app.indexOf('async function openWithdrawModal()');

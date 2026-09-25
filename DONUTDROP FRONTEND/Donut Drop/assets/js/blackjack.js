@@ -376,7 +376,15 @@ async function deal() {
   } catch (error) {
     // A commitment rotated elsewhere (another tab played the upgrader): pick up the new one.
     if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
-    problemToast(error);
+    /* The server knows of a hand this table is not showing (another tab, or a page that loaded
+     * before the session did). Put it on the table so it can be finished, rather than only
+     * repeating the refusal. */
+    if (error?.code === 'HAND_IN_PLAY') {
+      await reload();
+      toast({ kind: 'gold', title: 'Blackjack', body: 'Your hand in play is back on the table.' });
+    } else {
+      problemToast(error);
+    }
   } finally {
     release();
     busy = false;
@@ -510,8 +518,23 @@ function build() {
     else if (key === 'd' && !$('#bjDouble', root).disabled) { event.preventDefault(); void act('double', 'bjDouble'); }
   });
 
-  // Signing in or out, and every balance change, can change what the controls allow.
-  bus.addEventListener('change', () => {
+  /* A refresh mounts this page before the session check has answered, so the first load() sees a
+   * signed-out visitor and fetches no hand. `ready` (the check finished) and `login` are the
+   * moments a hand in play can first be asked for -- without this the table sat empty while the
+   * server refused every deal with "finish the hand you are playing first". */
+  bus.addEventListener('change', (event) => {
+    if (['ready', 'login'].includes(event.detail)) {
+      if (!busy) void load();
+      return;
+    }
+    if (event.detail === 'logout') {
+      hand = null;
+      seedHash = null;
+      clearTable();
+      paintBet();
+      paintFairness(null);
+    }
+    // Every balance change can change what the controls allow.
     if (!busy) paintControls();
   });
 }
