@@ -84,7 +84,43 @@
        account menu under "Play" rather than being stranded behind a URL nobody can find. -->
   <nav class="tabs" id="tabs" aria-label="Primary">
     <a href="/upgrader" data-route="upgrader">Upgrader</a>
-    <a href="/roulette" data-route="roulette">Roulette</a>
+    <!-- Casino: the table games, one disclosure like Cases beside it. Roulette is live; the rest
+         are announced rather than hidden. They are menu items with aria-disabled, not links, so
+         they can be reached and read ("Blackjack, coming soon") but never navigate anywhere. When
+         one ships it becomes an <a> with a data-route, exactly like the Roulette row. -->
+    <div class="tabdrop" id="casinoDrop">
+      <button class="tabdrop__btn" id="casinoBtn" type="button"
+              aria-haspopup="true" aria-expanded="false" aria-controls="casinoMenu">
+        <span>Casino</span>
+        <svg class="tabdrop__chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="tabdrop__menu" id="casinoMenu" role="menu" hidden>
+        <a class="tabdrop__row" href="/roulette" data-route="roulette" role="menuitem">
+          <img src="assets/img/items/nether_star.png" alt="" />
+          <span><b>Roulette</b><i>One shared wheel, every player on it</i></span>
+        </a>
+        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+          <img src="assets/img/items/enchanted_book.png" alt="" />
+          <span><b>Blackjack</b><i>Beat the dealer to 21</i></span>
+          <em class="tabsoon__pill">COMING SOON</em>
+        </div>
+        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+          <img src="assets/img/items/elytra.png" alt="" />
+          <span><b>Crash</b><i>Cash out before it crashes</i></span>
+          <em class="tabsoon__pill">COMING SOON</em>
+        </div>
+        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+          <img src="assets/img/items/tnt.png" alt="" />
+          <span><b>Mines</b><i>Dodge the TNT, grow the multiplier</i></span>
+          <em class="tabsoon__pill">COMING SOON</em>
+        </div>
+        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+          <img src="assets/img/items/slime_ball.png" alt="" />
+          <span><b>Plinko</b><i>Drop a ball down the pegs</i></span>
+          <em class="tabsoon__pill">COMING SOON</em>
+        </div>
+      </div>
+    </div>
 
     <!-- Cases is a disclosure, not a link: it owns three routes and picking between them is the
          decision, so the parent never navigates on its own. -->

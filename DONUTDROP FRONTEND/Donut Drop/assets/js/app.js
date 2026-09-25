@@ -1084,10 +1084,14 @@ const VIEWS = {
  * carries `backdrop-filter`, which WOULD have become the containing block had the menu stayed
  * inside it — another reason to hang it off the body rather than the bar.
  */
-function initCasesMenu() {
-  const wrap = $('#casesDrop');
-  const button = $('#casesBtn');
-  const menu = $('#casesMenu');
+/* Every open nav menu's close(), so opening one shuts the other. Two menus open at once would each
+ * be anchored to their own button and overlap in the middle of the bar. */
+const openTabDrops = new Set();
+
+function initTabDrop(wrapId, buttonId, menuId) {
+  const wrap = $(`#${wrapId}`);
+  const button = $(`#${buttonId}`);
+  const menu = $(`#${menuId}`);
   if (!wrap || !button || !menu) return;
 
   // Out of the clipping context, once, at boot.
@@ -1120,13 +1124,27 @@ function initCasesMenu() {
     menu.dataset.flipped = fitsBelow ? '0' : '1';
   };
 
+  /* Keyboard reach. Portalled to the end of <body>, the menu sits after everything else in tab
+   * order, so Tab from the button never arrives in it. The menu pattern's answer: the button's
+   * arrows and Enter move focus in, arrows move between rows, Escape or Tab hands it back.
+   * Coming-soon rows are included on purpose -- they are aria-disabled, which keeps them readable
+   * ("Blackjack, coming soon") while nothing can activate them. */
+  const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+  items().forEach((item) => item.setAttribute('tabindex', '-1'));
+  const focusItem = (index) => {
+    const list = items();
+    if (list.length) list[(index + list.length) % list.length].focus();
+  };
+
   const close = () => {
     menu.hidden = true;
     button.setAttribute('aria-expanded', 'false');
     window.removeEventListener('resize', place);
     window.removeEventListener('scroll', place, true);
+    openTabDrops.delete(close);
   };
   const open = () => {
+    for (const other of [...openTabDrops]) other();
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     place();
@@ -1134,11 +1152,38 @@ function initCasesMenu() {
      * the nav bar itself scrolling sideways on a phone. */
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
+    openTabDrops.add(close);
   };
 
   button.addEventListener('click', (event) => {
     event.stopPropagation();
-    if (menu.hidden) open(); else close();
+    if (!menu.hidden) {
+      close();
+      return;
+    }
+    open();
+    // detail is 0 for a click synthesised by Enter or Space: a keyboard user lands on the first row.
+    if (event.detail === 0) focusItem(0);
+  });
+  button.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    if (menu.hidden) open();
+    focusItem(event.key === 'ArrowDown' ? 0 : -1);
+  });
+  menu.addEventListener('keydown', (event) => {
+    const list = items();
+    const at = list.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); focusItem(at + 1); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); focusItem(at - 1); }
+    else if (event.key === 'Home') { event.preventDefault(); focusItem(0); }
+    else if (event.key === 'End') { event.preventDefault(); focusItem(-1); }
+    else if (event.key === 'Tab') { event.preventDefault(); close(); button.focus(); }
+    else if ((event.key === 'Enter' || event.key === ' ')
+      && document.activeElement?.getAttribute('aria-disabled') === 'true') {
+      // A game that is not live yet does nothing, and says so by doing nothing.
+      event.preventDefault();
+    }
   });
   menu.addEventListener('click', (event) => {
     if (event.target.closest('a')) close();
@@ -1170,18 +1215,30 @@ function route() {
   const name = seg;
 
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
-  const CASES_ROUTES = ['crates', 'battles', 'studio'];
-  const casesBtn = $('#casesBtn');
-  if (casesBtn) {
-    // The parent reads as current whenever any route it owns is the live one.
-    casesBtn.dataset.on = CASES_ROUTES.includes(name) ? '1' : '0';
+  /* Each disclosure reads as current whenever any route it owns is the live one. Casino owns only
+   * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
+  const DROP_ROUTES = [
+    ['casesBtn', ['crates', 'battles', 'studio']],
+    ['casinoBtn', ['roulette']],
+  ];
+  for (const [id, routes] of DROP_ROUTES) {
+    const btn = $(`#${id}`);
+    if (!btn) continue;
+    const on = routes.includes(name);
+    btn.dataset.on = on ? '1' : '0';
+    // the bar scrolls on phones, so keep the live tab in view
+    if (on) btn.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
 
   $$('.tabs a').forEach((a) => {
     const on = a.dataset.route === name;
     a.setAttribute('aria-current', on ? 'page' : 'false');
-    // the bar scrolls on phones, so keep the live tab in view
     if (on) a.scrollIntoView({ block: 'nearest', inline: 'center' });
+  });
+  /* The menus are portalled out of .tabs to <body>, so their rows need marking separately -- and
+   * never scrolled to, since a closed menu is laid out but invisible. */
+  $$('.tabdrop__menu a[data-route]').forEach((a) => {
+    a.setAttribute('aria-current', a.dataset.route === name ? 'page' : 'false');
   });
 
   const mount = VIEWS[name];
@@ -1198,7 +1255,8 @@ function route() {
 
 /* ═════════ boot ═════════ */
 initModal();
-initCasesMenu();
+initTabDrop('casesDrop', 'casesBtn', 'casesMenu');
+initTabDrop('casinoDrop', 'casinoBtn', 'casinoMenu');
 initWallet();
 $('#skipToMain')?.addEventListener('click', () => {
   const main = $('#main');

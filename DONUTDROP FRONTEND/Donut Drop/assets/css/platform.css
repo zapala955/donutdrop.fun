@@ -2311,6 +2311,25 @@ html, body { overflow-x: clip; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tabdrop__row[aria-current="page"] b { color: var(--gold-bright); }
+/* Rows are reached with the arrow keys (see initTabDrop), so each one shows where focus is. Drawn
+   inside the row: the menu clips nothing, but a ring outside would touch the neighbouring row. */
+.tabdrop__row:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+
+/* Hallmark · component: menu row, coming-soon variant · genre: atmospheric (site obsidian + gold) · theme: site tokens
+ * states: default · focus (keyboard, shown) · hover/active/loading/error/success: none on purpose --
+ *         it is aria-disabled, and a row that lit up under the pointer would promise a click.
+ *
+ * A game that is announced but not live. Dimmed art and a muted title rather than a faded whole
+ * row, so the name stays legible, and the badge says why in words rather than leaving the dimming
+ * to explain itself. The badge is the old nav placeholder's pill, so "coming soon" looks the same
+ * everywhere it has ever appeared on this site. */
+.tabdrop__row--soon { cursor: default; }
+.tabdrop__row--soon:hover { background: none; }
+.tabdrop__row--soon img { filter: grayscale(.7); opacity: .55; }
+.tabdrop__row--soon b { color: var(--muted); }
+.tabdrop__row--soon .tabsoon__pill { margin-left: auto; white-space: nowrap; }
+/* Casino's rows carry that badge, so its menu is wider than Cases'. min() keeps it on a 320px phone. */
+#casinoMenu { min-width: min(320px, calc(100vw - 16px)); }
 
 /* ── the placeholder ── */
 .tabsoon {

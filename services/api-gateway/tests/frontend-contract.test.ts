@@ -204,6 +204,33 @@ describe('frontend/backend contract', () => {
     assert.match(app, /state\.promotions\?\.signupBonus/);
   });
 
+  it('puts Roulette in a Casino menu with the games still to come', async () => {
+    const html = await source('index.html');
+    const app = await source('assets/js/app.js');
+    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf('</nav>'));
+    const menu = /<div class="tabdrop__menu" id="casinoMenu" role="menu" hidden>[\s\S]*?\n      <\/div>/.exec(nav)?.[0];
+    assert.ok(menu, 'the Casino menu is missing from the nav');
+    assert.match(nav, /id="casinoBtn"[^>]*aria-controls="casinoMenu"/);
+
+    // Roulette is the live row, and the only way to it from the bar is through the menu.
+    assert.match(menu, /<a class="tabdrop__row" href="\/roulette" data-route="roulette" role="menuitem">/);
+    assert.equal(nav.split('href="/roulette"').length - 1, 1);
+
+    // The rest are announced, readable and never links.
+    for (const game of ['Blackjack', 'Crash']) {
+      const row = new RegExp(
+        `<div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">[\\s\\S]*?<b>${game}</b>[\\s\\S]*?COMING SOON`,
+      );
+      assert.match(menu, row, `${game} is not shown as coming soon`);
+    }
+    assert.doesNotMatch(menu, /<a [^>]*tabdrop__row--soon/);
+
+    assert.match(app, /initTabDrop\('casinoDrop', 'casinoBtn', 'casinoMenu'\)/);
+    assert.match(app, /\['casinoBtn', \['roulette'\]\]/);
+    // Keyboard users can reach the rows of a menu portalled to the end of <body>.
+    assert.match(app, /event\.key === 'ArrowDown'/);
+  });
+
   it('shows what is still owed instead of a withdraw form that cannot succeed', async () => {
     const app = await source('assets/js/app.js');
     const start = app.indexOf('async function openWithdrawModal()');
