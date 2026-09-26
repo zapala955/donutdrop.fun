@@ -82,14 +82,17 @@
 .crash__plot { position: relative; min-height: 0; }
 .crash__plot canvas { position: absolute; inset: 0; display: block; }
 
+/* Spans the stage rather than sitting at left: 50%, which would cap its width at half the stage
+   and break the status line in two on a phone. */
 .crash__readout {
   position: absolute;
-  left: 50%;
+  left: 12px;
+  right: 12px;
   top: 40%;
   display: grid;
   justify-items: center;
   gap: 6px;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
   text-align: center;
   pointer-events: none;
 }
