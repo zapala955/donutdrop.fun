@@ -41,6 +41,12 @@ export function initLiveEvents() {
     window.dispatchEvent(new CustomEvent('donut:roulette'));
     once('activity', () => refreshActivity());
   });
+  // Crash: any change to the round, and the bust itself, which the page acts on before refetching.
+  source.addEventListener('crash', () => window.dispatchEvent(new CustomEvent('donut:crash')));
+  source.addEventListener('crash_bust', () => {
+    window.dispatchEvent(new CustomEvent('donut:crash-bust'));
+    once('activity', () => refreshActivity());
+  });
   source.addEventListener('settings', () => {
     once('chat', () => refreshChat());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
@@ -53,5 +59,6 @@ export function initLiveEvents() {
     once('activity', () => refreshActivity());
     if (state.authenticated) once('balance', () => refreshBalance());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
+    window.dispatchEvent(new CustomEvent('donut:crash'));
   });
 }

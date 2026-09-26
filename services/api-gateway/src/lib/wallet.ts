@@ -66,7 +66,9 @@ export type WalletKind =
    * wager requirement it adds is met; see lib/wager-requirements.ts. */
   | 'signup_bonus'
   // A finished blackjack hand paying out, stake included. Referenced by the hand's id.
-  | 'blackjack_payout';
+  | 'blackjack_payout'
+  // A crash bet cashing out, stake included, by the player or at its target. Referenced by the bet.
+  | 'crash_payout';
 
 /**
  * Credits the wallet and writes the matching ledger row.

@@ -13,6 +13,7 @@ type SettingGroup =
   | 'rakeback'
   | 'roulette'
   | 'blackjack'
+  | 'crash'
   | 'duels'
   | 'jackpot'
   | 'rain'
@@ -314,6 +315,34 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── crash ── The edge is fixed in lib/crash.ts; these are the table's limits. */
+  crashEnabled: {
+    kind: 'boolean',
+    group: 'crash',
+    label: 'Crash open (a round already running always finishes and pays)',
+  },
+  crashMinStakeMinor: {
+    kind: 'bigint',
+    group: 'crash',
+    label: 'Crash minimum bet',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  crashMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'crash',
+    label: 'Crash maximum bet',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  crashMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'crash',
+    label: 'Crash maximum payout per bet (a bet cashes out automatically when it reaches this)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
   /* ── 1v1 skill duels ── */
   skillDuelRakeBps: {
     kind: 'integer',
@@ -561,6 +590,7 @@ function assertInvariants(view: AppConfig): void {
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
     ['Blackjack minimum stake', view.blackjackMinStakeMinor, 'the maximum', view.blackjackMaxStakeMinor],
+    ['Crash minimum bet', view.crashMinStakeMinor, 'the maximum', view.crashMaxStakeMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [
@@ -580,6 +610,14 @@ function assertInvariants(view: AppConfig): void {
       400,
       'SETTING_RANGE_INVALID',
       'Upgrader minimum multiplier must stay below the maximum',
+    );
+  }
+  // The same floor config.ts holds a deployment to: the largest bet must be able to win 1.01x.
+  if (view.crashMaxPayoutMinor * 100n < view.crashMaxStakeMinor * 101n) {
+    throw new AppError(
+      400,
+      'SETTING_RANGE_INVALID',
+      'Crash maximum payout must be at least 1.01x the maximum bet',
     );
   }
   /* The one invariant that is about money rather than ordering. The VIP ladder, the four tier

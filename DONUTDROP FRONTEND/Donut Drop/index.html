@@ -62,6 +62,7 @@
 <link rel="stylesheet" href="assets/css/referrals.css" />
 <link rel="stylesheet" href="assets/css/roulette.css" />
 <link rel="stylesheet" href="assets/css/blackjack.css" />
+<link rel="stylesheet" href="assets/css/crash.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -113,11 +114,10 @@
           <img src="assets/img/items/enchanted_book.png" alt="" />
           <span><b>Blackjack</b><i>Beat the dealer to 21</i></span>
         </a>
-        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+        <a class="tabdrop__row" href="/crash" data-route="crash" role="menuitem">
           <img src="assets/img/items/elytra.png" alt="" />
           <span><b>Crash</b><i>Cash out before it crashes</i></span>
-          <em class="tabsoon__pill">COMING SOON</em>
-        </div>
+        </a>
         <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
           <img src="assets/img/items/tnt.png" alt="" />
           <span><b>Mines</b><i>Dodge the TNT, grow the multiplier</i></span>
@@ -490,6 +490,16 @@
           data-tip="Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. The house edge is 9.87% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."></button></h1>
       </header>
       <div class="bj" id="blackjackRoot"></div>
+    </section>
+
+    <!-- ─────── CRASH ─────── -->
+    <section class="view" data-view="crash" hidden>
+      <header class="phead">
+        <h1>Crash <button class="ihint" type="button"
+          aria-label="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."
+          data-tip="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."></button></h1>
+      </header>
+      <div class="crash" id="crashRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

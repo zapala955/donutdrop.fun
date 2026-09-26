@@ -37,6 +37,12 @@ import { api, API_BASE_URL } from './api.js';
 const POLL_MS = 30_000;
 const RAIN_POLL_MS = 8000;
 const MAX_LINES = 60;
+/* The games that pay money rather than an item, and the name each one's big-win card carries. */
+const TABLE_GAMES = new Map([
+  ['roulette', 'Roulette'],
+  ['blackjack', 'Blackjack'],
+  ['crash', 'Crash'],
+]);
 const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
 /** Remembered across sessions so the rail opens the way the player left it. */
@@ -412,7 +418,7 @@ function drainBigHits() {
   for (const activity of state.activities ?? []) {
     if (new Date(activity.createdAt).getTime() <= clearedAt) continue;
     const item = activity.item;
-    if (!item && activity.kind !== 'roulette') continue;
+    if (!item && !TABLE_GAMES.has(activity.kind)) continue;
     // The payout is what actually landed in a wallet; the item's catalogue price is not the same
     // thing on a losing round, where nothing was paid at all.
     const value = Number(activity.payout ?? 0);
@@ -576,16 +582,17 @@ function buildMessage(message) {
  */
 function buildHit(activity, value) {
   const isRoulette = activity.kind === 'roulette';
-  const line = el('div', isRoulette ? 'msg msg--hit msg--roulette' : 'msg msg--hit');
+  const isTable = TABLE_GAMES.has(activity.kind);
+  const line = el('div', isTable ? 'msg msg--hit msg--roulette' : 'msg msg--hit');
 
   const top = el('div', 'msg__top');
   top.append(avatarFor(activity.playerId, activity.player || 'Steve'));
   const who = el('span', 'msg__who');
   who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);
-  if (isRoulette) {
+  if (isTable) {
     const game = el('i', 'msg__badge msg__badge--roulette');
-    game.textContent = 'ROULETTE';
+    game.textContent = TABLE_GAMES.get(activity.kind).toUpperCase();
     top.append(game);
   }
   if (activity.vip) {
@@ -623,6 +630,10 @@ function buildHit(activity, value) {
     const count = Math.max(1, Number(activity.betCount) || 1);
     const landed = Number.isInteger(result) ? ` · ${result} ${rouletteColor(result)}` : '';
     from.textContent = `Roulette · ${count} ${count === 1 ? 'chip' : 'chips'}${landed}`;
+  } else if (isTable) {
+    // Blackjack and crash: the multiple is what came back over what was risked.
+    const multiple = activity.wager > 0 ? activity.payout / activity.wager : 0;
+    from.textContent = `${TABLE_GAMES.get(activity.kind)} · ${multiple.toFixed(2)}×`;
   } else {
     from.textContent = activity.item?.displayName || activity.item?.name || 'a round';
   }

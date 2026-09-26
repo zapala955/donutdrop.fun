@@ -483,7 +483,10 @@ function announce(
   settled: Settlement | null,
   logger: { error: (context: unknown, message: string) => void },
 ): void {
-  if (!settled || !username) return;
+  if (!settled) return;
+  // A settled hand is a new row in the live feed.
+  publishLiveSoon('activity');
+  if (!username) return;
   const { row, payout } = settled;
   if (row.outcome === 'win' || row.outcome === 'blackjack') {
     const stake = BigInt(row.stake_minor) * (row.doubled ? 2n : 1n);

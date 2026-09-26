@@ -514,6 +514,17 @@ const environmentSchema = z
       .transform((value) => value === 'true'),
     BLACKJACK_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     BLACKJACK_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    /* Crash. The edge is fixed in lib/crash.ts, like blackjack's. The payout ceiling is what keeps
+     * a 1000x round from being a 1000x liability on the largest stake: a bet whose payout would
+     * pass it cashes out automatically where it meets it. */
+    CRASH_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    CRASH_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    CRASH_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    CRASH_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    CRASH_BETTING_SECONDS: z.coerce.number().int().min(4).max(60).default(10),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -794,6 +805,22 @@ const environmentSchema = z
         code: 'custom',
         path: ['SKILL_DUEL_MAX_STAKE_MINOR'],
         message: 'must be at least SKILL_DUEL_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.CRASH_MIN_STAKE_MINOR) > BigInt(env.CRASH_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CRASH_MAX_STAKE_MINOR'],
+        message: 'must be at least CRASH_MIN_STAKE_MINOR',
+      });
+    }
+    /* Every accepted stake has to be able to win something: a payout ceiling under 1.01x the
+     * largest stake would leave that stake a bet that can only lose. */
+    if (BigInt(env.CRASH_MAX_PAYOUT_MINOR) * 100n < BigInt(env.CRASH_MAX_STAKE_MINOR) * 101n) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CRASH_MAX_PAYOUT_MINOR'],
+        message: 'must be at least 1.01x CRASH_MAX_STAKE_MINOR',
       });
     }
     if (
@@ -1178,6 +1205,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     blackjackEnabled: env.BLACKJACK_ENABLED,
     blackjackMinStakeMinor: BigInt(env.BLACKJACK_MIN_STAKE_MINOR),
     blackjackMaxStakeMinor: BigInt(env.BLACKJACK_MAX_STAKE_MINOR),
+    crashEnabled: env.CRASH_ENABLED,
+    crashMinStakeMinor: BigInt(env.CRASH_MIN_STAKE_MINOR),
+    crashMaxStakeMinor: BigInt(env.CRASH_MAX_STAKE_MINOR),
+    crashMaxPayoutMinor: BigInt(env.CRASH_MAX_PAYOUT_MINOR),
+    crashBettingSeconds: env.CRASH_BETTING_SECONDS,
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

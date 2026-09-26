@@ -4,7 +4,17 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from './auth.js';
 import type { Database } from './db.js';
 
-export type LiveTopic = 'activity' | 'balance' | 'chat' | 'roulette' | 'settings';
+export type LiveTopic =
+  | 'activity'
+  | 'balance'
+  | 'chat'
+  | 'roulette'
+  | 'settings'
+  // A crash round changed: a bet, a cash-out, the curve starting, a new round opening.
+  | 'crash'
+  // The round busted. Sent the moment it happens so every screen stops the curve at once, instead
+  // of drawing past the crash point for as long as a refetch takes.
+  | 'crash_bust';
 
 interface Subscriber {
   readonly response: ServerResponse;

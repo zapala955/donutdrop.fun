@@ -1,0 +1,360 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: crash table · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
+ * states: the one button -- default (bet), hover, :focus-visible, :active, [disabled], aria-busy
+ *         (placing / cashing out), lost (busted) and won (cashed out); the fields have default,
+ *         focus and an invalid hint; history chips carry three bands in text as well as colour.
+ * signature: the multiplier is the page -- one large figure over the curve that makes it, gold in
+ *            the air, crimson when it busts, and the player's own cash-out marked on the curve.
+ * motion: the curve, and nothing else; one short shake on a bust. Reduced motion: the curve is
+ *         redrawn four times a second and nothing shakes.
+ */
+
+.crash {
+  /* The table's palette, lifted so the canvas and the page read the same tokens. */
+  --crash-line: var(--gold-bright);
+  --crash-fill-top: rgba(255, 170, 0, .3);
+  --crash-fill-bottom: rgba(255, 170, 0, 0);
+  --crash-bust: var(--red);
+  /* The live feed's profit green, so a cash-out reads the same here as in the feed. The site's own
+     --win token is gold in this theme, and a gold marker on a gold curve is no marker at all. */
+  --crash-win: #35d07f;
+  --crash-grid: rgba(255, 215, 0, .07);
+  --crash-label: rgba(236, 237, 240, .42);
+  --crash-head: #fff6cc;
+  --crash-ease: cubic-bezier(.22, 1, .36, 1);
+  --crash-stage-bg-a: #131317;
+  --crash-stage-bg-b: #08080a;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas:
+    "stage panel"
+    "players fair";
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ─────────── the stage ─────────── */
+.crash__stage {
+  grid-area: stage;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 440px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line-hi);
+  background:
+    radial-gradient(120% 90% at 18% 0%, rgba(255, 170, 0, .08), transparent 62%),
+    linear-gradient(160deg, var(--crash-stage-bg-a), var(--crash-stage-bg-b));
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, .5), 0 24px 50px -30px rgba(0, 0, 0, .9);
+  overflow: hidden;
+}
+.crash[data-phase="busted"] .crash__stage { border-color: color-mix(in srgb, var(--crash-bust) 45%, transparent); }
+
+.crash__history {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px 0;
+  list-style: none;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, #000 82%, transparent);
+}
+.crash__past {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font: 700 .75rem/1 var(--mono);
+  color: var(--muted);
+}
+.crash__past[data-band="low"] { color: color-mix(in srgb, var(--crash-bust) 75%, var(--text)); }
+.crash__past[data-band="mid"] { color: var(--gold-bright); border-color: rgba(255, 215, 0, .25); }
+.crash__past[data-band="high"] {
+  color: var(--bg);
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+}
+
+.crash__plot { position: relative; min-height: 0; }
+.crash__plot canvas { position: absolute; inset: 0; display: block; }
+
+.crash__readout {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.crash__big {
+  font-family: var(--pixel);
+  font-size: clamp(2.75rem, 7vw, 5.25rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 4px 30px rgba(0, 0, 0, .7);
+}
+.crash[data-phase="running"] .crash__big { color: var(--gold-bright); text-shadow: 0 0 34px rgba(255, 170, 0, .35); }
+.crash[data-phase="busted"] .crash__big { color: var(--crash-bust); }
+.crash__status { font-size: .8125rem; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.crash__bar {
+  width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .07);
+  overflow: hidden;
+}
+.crash__bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-body), var(--gold-bright));
+  transform-origin: left;
+}
+.crash__bar i[hidden] { display: none; }
+.crash:not([data-phase="betting"]) .crash__bar { visibility: hidden; }
+.crash[data-error="1"] .crash__status::after { content: " · reconnecting"; color: var(--crash-bust); }
+
+/* ─────────── the bet ─────────── */
+.crash__panel {
+  grid-area: panel;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line);
+  background: linear-gradient(180deg, var(--panel), var(--bg2));
+}
+.crash__form { display: grid; gap: 8px; }
+.crash__label {
+  margin-top: 4px;
+  font-size: .6875rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.crash__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  transition: border-color 150ms var(--crash-ease), box-shadow 150ms var(--crash-ease);
+}
+.crash__field:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
+.crash__field span { color: var(--gold-bright); font-weight: 800; padding-right: 6px; }
+.crash__field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.crash__field input:focus { outline: none; }
+.crash__field input::placeholder { color: var(--faint); font-weight: 600; }
+.crash__adj {
+  min-width: 36px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.crash__picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 6px; }
+.crash__pick {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  font: 700 .75rem/1 var(--mono);
+  cursor: pointer;
+  transition: color 150ms var(--crash-ease), border-color 150ms var(--crash-ease), background 150ms var(--crash-ease);
+}
+.crash__adj:hover:not(:disabled),
+.crash__pick:hover:not(:disabled) { color: var(--text); background: var(--panel3); }
+.crash__adj:active:not(:disabled),
+.crash__pick:active:not(:disabled) { transform: translateY(1px); }
+.crash__adj:focus-visible,
+.crash__pick:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.crash__pick[aria-pressed="true"] {
+  color: var(--gold-bright);
+  border-color: var(--gold-edge-hi);
+  background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
+}
+.crash__form :disabled { cursor: not-allowed; opacity: .5; }
+
+/* The one button. Its tone is its phase: bet, cash out, and the two ways a round ends for you. */
+.crash .crash__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 56px;
+  margin-top: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: filter 150ms var(--crash-ease), transform 90ms var(--crash-ease), box-shadow 150ms var(--crash-ease);
+}
+.crash .crash__go[data-tone="go"],
+.crash .crash__go[data-tone="cash"] {
+  color: var(--bg);
+  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+}
+.crash .crash__go[data-tone="cash"] { box-shadow: 0 0 0 3px rgba(255, 215, 0, .18), 0 10px 30px -10px rgba(255, 170, 0, .7); }
+.crash .crash__go[data-tone="idle"] { color: var(--muted); background: var(--panel2); border-color: var(--line2); }
+.crash .crash__go[data-tone="won"] { color: var(--crash-win); background: color-mix(in srgb, var(--crash-win) 10%, var(--panel)); border-color: color-mix(in srgb, var(--crash-win) 45%, transparent); }
+.crash .crash__go[data-tone="lost"] { color: var(--crash-bust); background: color-mix(in srgb, var(--crash-bust) 10%, var(--panel)); border-color: color-mix(in srgb, var(--crash-bust) 45%, transparent); }
+.crash .crash__go:hover:not(:disabled) { filter: brightness(1.07); }
+.crash .crash__go:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.crash .crash__go:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.crash .crash__go:disabled { cursor: default; opacity: 1; }
+.crash .crash__go[data-tone="go"]:disabled { filter: saturate(.4) brightness(.7); }
+.crash .crash__go[aria-busy="true"] { cursor: progress; }
+.crash__go kbd {
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: .625rem;
+  font-weight: 700;
+  opacity: .55;
+}
+@media (hover: none) { .crash__go kbd { display: none; } }
+
+.crash__hint { min-height: 1.1em; margin: 0; font-size: .75rem; text-align: center; color: var(--faint); }
+.crash__mine {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: .8125rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+}
+.crash__mine[hidden] { display: none; }
+.crash__mine[data-tone="won"] { color: var(--crash-win); border-color: color-mix(in srgb, var(--crash-win) 35%, transparent); }
+.crash__mine[data-tone="lost"] { color: var(--crash-bust); border-color: color-mix(in srgb, var(--crash-bust) 35%, transparent); }
+
+/* ─────────── the players ─────────── */
+.crash__players {
+  grid-area: players;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line);
+  background: var(--panel);
+  overflow: hidden;
+}
+.crash__players header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+}
+.crash__players header b { font-family: var(--disp); font-weight: 800; }
+.crash__players header span { font: 600 .75rem/1 var(--mono); color: var(--faint); }
+.crash__players ol { max-height: 360px; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
+.crash__player {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--line);
+  font-size: .8125rem;
+}
+.crash__player[data-viewer] { background: color-mix(in srgb, var(--gold-body) 7%, transparent); }
+.crash__who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crash__who .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crash__head {
+  display: grid;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--panel3);
+  overflow: hidden;
+}
+.crash__head img { width: 100%; height: 100%; image-rendering: pixelated; }
+.crash__head i { font-style: normal; font-size: .6875rem; font-weight: 800; color: var(--muted); }
+.crash__amt { color: var(--muted); }
+.crash__at { text-align: right; color: var(--faint); }
+.crash__profit { text-align: right; }
+.crash__player[data-state="won"] .crash__at,
+.crash__player[data-state="won"] .crash__profit { color: var(--crash-win); }
+.crash__player[data-state="lost"] .crash__at,
+.crash__player[data-state="lost"] .crash__profit { color: color-mix(in srgb, var(--crash-bust) 85%, var(--text)); }
+
+/* ─────────── fairness ─────────── */
+.crash__fair {
+  grid-area: fair;
+  padding: 12px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line);
+  background: var(--panel);
+  font-size: .75rem;
+  color: var(--muted);
+}
+.crash__fair summary { font-weight: 800; color: var(--text); cursor: pointer; }
+.crash__fair summary:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+.crash__fair dl { display: grid; gap: 4px; margin: 12px 0 0; }
+.crash__fair dt { margin-top: 6px; font-weight: 700; color: var(--faint); }
+.crash__fair dd { margin: 0; overflow-wrap: anywhere; color: var(--text); }
+.crash__fair p { margin: 12px 0 0; line-height: 1.55; }
+.crash__fair code { font-family: var(--mono); font-size: .6875rem; color: var(--gold-bright); }
+
+.crash__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1180px) {
+  .crash {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage" "panel" "players" "fair";
+  }
+  .crash__stage { min-height: 360px; }
+}
+@media (max-width: 560px) {
+  .crash { gap: 12px; }
+  .crash__stage { min-height: 300px; border-radius: 16px; }
+  .crash__readout { top: 42%; }
+  .crash__panel { padding: 14px; }
+  .crash__player { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 60px minmax(0, 1fr); padding: 9px 12px; font-size: .75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crash__field,
+  .crash__pick,
+  .crash .crash__go { transition: none; }
+}

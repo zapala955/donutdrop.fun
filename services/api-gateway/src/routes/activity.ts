@@ -9,12 +9,14 @@ import { parseWith } from '../lib/validation.js';
 /**
  * The live feed.
  *
- * Four kinds of event share one chronological stream:
+ * Six kinds of event share one chronological stream:
  *
- *   case     a crate was opened — what it cost, what it paid.
- *   upgrade  an upgrader round settled — stake in, payout out.
- *   roulette one row per player and spin — every chip aggregated into the real round total.
- *   faction  a wager was credited to a team in the running faction war.
+ *   case      a crate was opened — what it cost, what it paid.
+ *   upgrade   an upgrader round settled — stake in, payout out.
+ *   roulette  one row per player and spin — every chip aggregated into the real round total.
+ *   blackjack a hand settled — everything on the table, and what came back.
+ *   crash     a bet cashed out or busted.
+ *   faction   a wager was credited to a team in the running faction war.
  *
  * Every settled round appears, win or lose. An earlier version filtered upgrader losses out,
  * which made the feed a highlight reel: a wall of wins with the failures quietly removed. On a
@@ -107,6 +109,44 @@ export async function registerActivityRoutes(
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
           GROUP BY r.id, r.settled_at, r.result, u.id
+         UNION ALL
+         /* A settled blackjack hand. A double put twice the stake on the table, and the feed shows
+            what was actually risked, so the multiple reads true for a doubled hand too. */
+         SELECT h.id, 'blackjack'::text AS kind, h.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Blackjack'::text AS source_name,
+                NULL::char(7) AS accent,
+                (h.stake_minor * CASE WHEN h.doubled THEN 2 ELSE 1 END)::bigint AS wager_minor,
+                h.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM blackjack_hands h
+           JOIN users u ON u.id = h.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = h.user_id
+          WHERE h.status = 'settled'
+         UNION ALL
+         /* A crash bet, once it has cashed out or busted. Its moment is when it was decided, so a
+            cash-out appears mid-round and a loss when the round busts. */
+         SELECT b.id, 'crash'::text AS kind, b.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Crash'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM crash_bets b
+           JOIN users u ON u.id = b.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
+          WHERE b.status <> 'active'
          UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */

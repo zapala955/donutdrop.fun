@@ -192,7 +192,13 @@ function coin() {
  */
 function gameCell(play) {
   const kind = play.kind || '';
-  const glyph = kind === 'case' ? '\u{1F4E6}' : kind === 'upgrade' ? '\u26A1' : kind === 'roulette' ? '\u25C9' : '\u2694';
+  const glyph =
+    kind === 'case' ? '\u{1F4E6}'
+      : kind === 'upgrade' ? '\u26A1'
+        : kind === 'roulette' ? '\u25C9'
+          : kind === 'blackjack' ? '\u2660'
+            : kind === 'crash' ? '\u2197'
+              : '\u2694';
   const node = cell('feedrow__game', '');
   const chip = el('span', 'gamechip');
   chip.dataset.kind = kind || 'other';
@@ -260,6 +266,8 @@ function gameLabel(play) {
   if (kind === 'case') return 'Case-Opening';
   if (kind === 'upgrade') return 'Upgrader';
   if (kind === 'roulette') return 'Roulette';
+  if (kind === 'blackjack') return 'Blackjack';
+  if (kind === 'crash') return 'Crash';
   return play.sourceName || play.source_name || 'Round';
 }
 

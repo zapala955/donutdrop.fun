@@ -434,6 +434,8 @@
 .gamechip__ico { font-style: normal; font-size: .6875rem; line-height: 1; }
 .gamechip[data-kind="case"]    { border-color: rgba(255, 170, 0, .26); }
 .gamechip[data-kind="upgrade"] { border-color: rgba(255, 215, 0, .3); }
+.gamechip[data-kind="blackjack"] { border-color: rgba(52, 168, 110, .38); }
+.gamechip[data-kind="crash"]     { border-color: rgba(255, 123, 0, .38); }
 
 /* ── the player head ── */
 .feedrow__who { display: flex; align-items: center; gap: 7px; min-width: 0; }

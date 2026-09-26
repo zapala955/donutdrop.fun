@@ -190,7 +190,9 @@ describe('roulette persistence and client contract', () => {
     assert.match(ticker, /kind === 'roulette'/);
     assert.match(ticker, /return 'Roulette'/);
     assert.match(store, /rouletteResult: isRoulette/);
-    assert.match(store, /item:\s*isFaction \|\| isRoulette\s*\? null/);
+    // Roulette is one of the table games that pay money rather than an item.
+    assert.match(store, /const isTable = isRoulette \|\|/);
+    assert.match(store, /item:\s*isFaction \|\| isTable\s*\? null/);
     assert.match(chat, /msg__badge--roulette/);
     assert.match(chat, /flexwin__roulette/);
     assert.match(chat, /Roulette · \$\{count\}/);
