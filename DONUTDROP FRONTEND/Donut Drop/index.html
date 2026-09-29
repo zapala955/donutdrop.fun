@@ -63,6 +63,7 @@
 <link rel="stylesheet" href="assets/css/roulette.css" />
 <link rel="stylesheet" href="assets/css/blackjack.css" />
 <link rel="stylesheet" href="assets/css/crash.css" />
+<link rel="stylesheet" href="assets/css/mines.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -118,11 +119,10 @@
           <img src="assets/img/items/elytra.png" alt="" />
           <span><b>Crash</b><i>Cash out before it crashes</i></span>
         </a>
-        <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
+        <a class="tabdrop__row" href="/mines" data-route="mines" role="menuitem">
           <img src="assets/img/items/tnt.png" alt="" />
           <span><b>Mines</b><i>Dodge the TNT, grow the multiplier</i></span>
-          <em class="tabsoon__pill">COMING SOON</em>
-        </div>
+        </a>
         <div class="tabdrop__row tabdrop__row--soon" role="menuitem" aria-disabled="true">
           <img src="assets/img/items/slime_ball.png" alt="" />
           <span><b>Plinko</b><i>Drop a ball down the pegs</i></span>
@@ -500,6 +500,16 @@
           data-tip="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."></button></h1>
       </header>
       <div class="crash" id="crashRoot"></div>
+    </section>
+
+    <!-- ─────── MINES ─────── -->
+    <section class="view" data-view="mines" hidden>
+      <header class="phead">
+        <h1>Mines <button class="ihint" type="button"
+          aria-label="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."
+          data-tip="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
+      </header>
+      <div class="mines" id="minesRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

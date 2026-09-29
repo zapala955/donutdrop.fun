@@ -52,6 +52,8 @@ const KIND_LABEL = {
   blackjack_payout: 'Blackjack payout',
   crash_stake: 'Crash bet',
   crash_payout: 'Crash cash-out',
+  mines_stake: 'Mines stake',
+  mines_payout: 'Mines cash-out',
   rakeback_claim: 'Rakeback',
   race_payout: 'Race prize',
 };

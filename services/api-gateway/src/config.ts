@@ -525,6 +525,15 @@ const environmentSchema = z
     CRASH_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     CRASH_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     CRASH_BETTING_SECONDS: z.coerce.number().int().min(4).max(60).default(10),
+    /* Mines. The edge is fixed in lib/mines.ts. The payout ceiling does for a deep run on the
+     * field what it does for a high crash: a game whose payout reaches it cashes out there. */
+    MINES_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    MINES_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    MINES_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    MINES_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -805,6 +814,20 @@ const environmentSchema = z
         code: 'custom',
         path: ['SKILL_DUEL_MAX_STAKE_MINOR'],
         message: 'must be at least SKILL_DUEL_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.MINES_MIN_STAKE_MINOR) > BigInt(env.MINES_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MINES_MAX_STAKE_MINOR'],
+        message: 'must be at least MINES_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.MINES_MAX_PAYOUT_MINOR) < BigInt(env.MINES_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MINES_MAX_PAYOUT_MINOR'],
+        message: 'must be at least MINES_MAX_STAKE_MINOR',
       });
     }
     if (BigInt(env.CRASH_MIN_STAKE_MINOR) > BigInt(env.CRASH_MAX_STAKE_MINOR)) {
@@ -1210,6 +1233,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     crashMaxStakeMinor: BigInt(env.CRASH_MAX_STAKE_MINOR),
     crashMaxPayoutMinor: BigInt(env.CRASH_MAX_PAYOUT_MINOR),
     crashBettingSeconds: env.CRASH_BETTING_SECONDS,
+    minesEnabled: env.MINES_ENABLED,
+    minesMinStakeMinor: BigInt(env.MINES_MIN_STAKE_MINOR),
+    minesMaxStakeMinor: BigInt(env.MINES_MAX_STAKE_MINOR),
+    minesMaxPayoutMinor: BigInt(env.MINES_MAX_PAYOUT_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

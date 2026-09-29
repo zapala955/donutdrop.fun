@@ -202,7 +202,7 @@ function normalizeActivity(raw) {
   const isRoulette = raw.kind === 'roulette';
   // Table games pay money, not an item. Building one from their null columns would put a phantom
   // unnamed drop in every consumer that reads activity.item.
-  const isTable = isRoulette || raw.kind === 'blackjack' || raw.kind === 'crash';
+  const isTable = isRoulette || raw.kind === 'blackjack' || raw.kind === 'crash' || raw.kind === 'mines';
   const payoutRaw = raw.payout_minor ?? raw.payoutMinor;
   return {
     id: raw.id,

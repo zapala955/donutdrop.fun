@@ -1,0 +1,349 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: mines field · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
+ * states: tiles -- hidden (default), hover, :focus-visible, :active, aria-disabled, aria-busy
+ *         (waiting on the server), gem (success), boom (error), and the end-of-game reveal;
+ *         the one button -- start, cash out, busy, disabled; the stepper and picks share them.
+ * signature: the field is Minecraft's own -- raised blocks that sink when turned, a diamond or
+ *            the TNT inside -- and when a game ends every tile is shown, so the field the player
+ *            was dealt is always on the screen, not only the tile that ended it.
+ * motion: a diamond settling (260ms), the TNT going off (one shake). Reduced motion: none.
+ */
+
+.mines {
+  /* The field's palette, lifted so no rule below writes a colour inline. */
+  --mines-tile: #18181d;
+  --mines-tile-hi: #2a2a31;
+  --mines-sunk: #0c0e11;
+  --mines-grain: rgba(255, 255, 255, .028);
+  --mines-gem: #40d6e0;
+  --mines-tnt: var(--red);
+  /* The live feed's profit green, so a win reads the same here as in the feed. */
+  --mines-win: #35d07f;
+  --mines-ease: cubic-bezier(.22, 1, .36, 1);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas: "stage panel";
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ─────────── the field ─────────── */
+.mines__stage {
+  grid-area: stage;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line-hi);
+  background:
+    radial-gradient(120% 90% at 18% 0%, rgba(255, 170, 0, .07), transparent 62%),
+    linear-gradient(160deg, var(--panel), var(--bg2));
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, .45), 0 24px 50px -30px rgba(0, 0, 0, .9);
+  min-width: 0;
+}
+
+.mines__readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  width: min(100%, 520px);
+  margin: 0 auto;
+}
+.mines__readout b {
+  font-family: var(--pixel);
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.mines__readout span { font: 600 .75rem/1.3 var(--mono); color: var(--muted); }
+
+.mines__board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 520px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #0d0d10, #08080a);
+  box-shadow: inset 0 0 0 1px var(--ob-line), inset 0 6px 24px rgba(0, 0, 0, .6);
+}
+
+.mtile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  /* A faint 6px checker over the bevel: the grain of a stone block, not a flat square. */
+  background:
+    repeating-conic-gradient(var(--mines-grain) 0 25%, transparent 0 50%) 0 0 / 12px 12px,
+    linear-gradient(180deg, var(--mines-tile-hi), var(--mines-tile));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -4px 0 rgba(0, 0, 0, .45),
+    0 5px 10px -6px rgba(0, 0, 0, .85);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms var(--mines-ease), box-shadow 120ms var(--mines-ease), filter 150ms var(--mines-ease);
+}
+.mtile img {
+  width: 60%;
+  height: 60%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+}
+.mtile img[hidden] { display: none; }
+
+.mtile[data-kind="hidden"][aria-disabled="false"]:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .1),
+    inset 0 -4px 0 rgba(0, 0, 0, .45),
+    0 0 0 1px var(--gold-edge-hi),
+    0 8px 16px -8px rgba(255, 170, 0, .45);
+}
+.mtile[data-kind="hidden"][aria-disabled="false"]:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .45); }
+.mtile:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.mtile[aria-disabled="true"],
+.mtile:disabled { cursor: default; }
+.mtile[aria-busy="true"] { animation: mtile-wait 700ms ease-in-out infinite; }
+@keyframes mtile-wait { 50% { filter: brightness(1.35); } }
+
+/* A turned tile sinks into the board. */
+.mtile[data-kind="gem"],
+.mtile[data-kind="tnt"],
+.mtile[data-kind="dim-gem"],
+.mtile[data-kind="boom"] {
+  background: linear-gradient(180deg, var(--mines-sunk), #101318);
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, .7);
+}
+.mtile[data-kind="gem"] {
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, .7), 0 0 0 1px color-mix(in srgb, var(--mines-gem) 45%, transparent);
+}
+.mtile[data-kind="gem"] img { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--mines-gem) 70%, transparent)); }
+.mtile[data-kind="boom"] {
+  background: radial-gradient(circle, color-mix(in srgb, var(--mines-tnt) 55%, #1a0606), #140404 72%);
+  box-shadow: 0 0 0 2px var(--mines-tnt), 0 0 22px color-mix(in srgb, var(--mines-tnt) 60%, transparent);
+}
+/* The rest of the field, shown once the game is over. */
+.mtile[data-kind="tnt"] img { opacity: .55; }
+.mtile[data-kind="dim-gem"] img { opacity: .28; filter: grayscale(.4); }
+
+/* No game running: the field is there to look at, not to press. */
+.mines__board[data-state="idle"] .mtile { filter: saturate(.6) brightness(.8); }
+
+.mines__banner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 150px;
+  padding: 14px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--ob-line-hi);
+  background: rgba(8, 8, 10, .9);
+  box-shadow: 0 20px 40px -18px rgba(0, 0, 0, .95);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.mines__banner[hidden] { display: none; }
+.mines__banner b { font-family: var(--pixel); font-size: 1.75rem; font-weight: 900; line-height: 1.1; }
+.mines__banner span { font: 700 .875rem/1.2 var(--mono); }
+.mines__banner[data-tone="won"] { border-color: color-mix(in srgb, var(--mines-win) 50%, transparent); }
+.mines__banner[data-tone="won"] b,
+.mines__banner[data-tone="won"] span { color: var(--mines-win); }
+.mines__banner[data-tone="lost"] { border-color: color-mix(in srgb, var(--mines-tnt) 50%, transparent); }
+.mines__banner[data-tone="lost"] b,
+.mines__banner[data-tone="lost"] span { color: var(--mines-tnt); }
+
+.mines__fair {
+  margin: 0;
+  font: 400 .6875rem/1.5 var(--mono);
+  color: var(--faint);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* ─────────── the panel ─────────── */
+.mines__panel {
+  grid-area: panel;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line);
+  background: linear-gradient(180deg, var(--panel), var(--bg2));
+}
+.mines__form { display: grid; gap: 8px; }
+.mines__label {
+  margin-top: 4px;
+  font-size: .6875rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.mines__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  transition: border-color 150ms var(--mines-ease), box-shadow 150ms var(--mines-ease);
+}
+.mines__field:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
+.mines__field span { color: var(--gold-bright); font-weight: 800; }
+.mines__field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.mines__field input:focus { outline: none; }
+
+.mines__adj,
+.mines__step,
+.mines__pick {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 150ms var(--mines-ease), background 150ms var(--mines-ease), border-color 150ms var(--mines-ease);
+}
+.mines__adj { min-width: 36px; height: 32px; border-radius: 6px; }
+
+.mines__stepper {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
+  align-items: center;
+  height: 46px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  overflow: hidden;
+}
+.mines__step { height: 100%; border: 0; border-radius: 0; font-size: 1.25rem; }
+.mines__stepper output {
+  text-align: center;
+  font-family: var(--pixel);
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.mines__picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.mines__pick { height: 38px; border-radius: 8px; font-family: var(--mono); font-size: .8125rem; }
+
+.mines__adj:hover:not(:disabled),
+.mines__step:hover:not(:disabled),
+.mines__pick:hover:not(:disabled) { color: var(--text); background: var(--panel3); }
+.mines__adj:active:not(:disabled),
+.mines__pick:active:not(:disabled) { transform: translateY(1px); }
+.mines__adj:focus-visible,
+.mines__step:focus-visible,
+.mines__pick:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.mines__pick[aria-pressed="true"] {
+  color: var(--gold-bright);
+  border-color: var(--gold-edge-hi);
+  background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
+}
+.mines__form :disabled { cursor: not-allowed; opacity: .5; }
+
+/* The one button. Its tone is the game's phase. */
+.mines .mines__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  margin-top: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: filter 150ms var(--mines-ease), transform 90ms var(--mines-ease), box-shadow 150ms var(--mines-ease);
+}
+.mines .mines__go[data-tone="go"],
+.mines .mines__go[data-tone="cash"] {
+  color: var(--bg);
+  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+}
+.mines .mines__go[data-tone="cash"] { box-shadow: 0 0 0 3px rgba(255, 215, 0, .18), 0 10px 30px -10px rgba(255, 170, 0, .7); }
+.mines .mines__go[data-tone="idle"] { color: var(--muted); background: var(--panel2); border-color: var(--line2); }
+.mines .mines__go:hover:not(:disabled) { filter: brightness(1.07); }
+.mines .mines__go:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.mines .mines__go:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.mines .mines__go:disabled { cursor: default; opacity: 1; }
+.mines .mines__go[data-tone="go"]:disabled { filter: saturate(.4) brightness(.7); }
+.mines .mines__go[aria-busy="true"] { cursor: progress; }
+
+.mines__random {
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--panel2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mines__random[hidden] { display: none; }
+.mines__random:hover:not(:disabled) { background: var(--panel3); }
+.mines__random:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+.mines__hint { min-height: 1.1em; margin: 0; font-size: .75rem; text-align: center; color: var(--faint); }
+
+.mines__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1180px) {
+  .mines { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+}
+@media (max-width: 560px) {
+  .mines { gap: 12px; }
+  .mines__stage { padding: 10px; border-radius: 16px; }
+  .mines__board { gap: 7px; padding: 8px; border-radius: 14px; }
+  .mtile { border-radius: 8px; }
+  .mines__panel { padding: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mtile,
+  .mines__field,
+  .mines .mines__go { transition: none; }
+  .mtile[aria-busy="true"] { animation: none; }
+}

@@ -68,7 +68,9 @@ export type WalletKind =
   // A finished blackjack hand paying out, stake included. Referenced by the hand's id.
   | 'blackjack_payout'
   // A crash bet cashing out, stake included, by the player or at its target. Referenced by the bet.
-  | 'crash_payout';
+  | 'crash_payout'
+  // A mines game cashed out, stake included. Referenced by the game's id.
+  | 'mines_payout';
 
 /**
  * Credits the wallet and writes the matching ledger row.

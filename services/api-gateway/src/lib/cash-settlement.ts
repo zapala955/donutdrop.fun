@@ -47,7 +47,8 @@ export type ContributionSource =
   | 'skill_duel'
   | 'roulette'
   | 'blackjack'
-  | 'crash';
+  | 'crash'
+  | 'mines';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

@@ -2330,6 +2330,7 @@ const GROUP_LABELS = {
   roulette: 'Roulette',
   blackjack: 'Blackjack',
   crash: 'Crash',
+  mines: 'Mines',
   duels: 'Duels',
   jackpot: 'Jackpot',
   rain: 'Lava Rain',

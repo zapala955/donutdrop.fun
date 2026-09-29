@@ -14,6 +14,7 @@ type SettingGroup =
   | 'roulette'
   | 'blackjack'
   | 'crash'
+  | 'mines'
   | 'duels'
   | 'jackpot'
   | 'rain'
@@ -343,6 +344,34 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── mines ── The edge is fixed in lib/mines.ts; these are the table's limits. */
+  minesEnabled: {
+    kind: 'boolean',
+    group: 'mines',
+    label: 'Mines open (a game in play can always finish)',
+  },
+  minesMinStakeMinor: {
+    kind: 'bigint',
+    group: 'mines',
+    label: 'Mines minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  minesMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'mines',
+    label: 'Mines maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  minesMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'mines',
+    label: 'Mines maximum payout per game (a game cashes out automatically when it reaches this)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
   /* ── 1v1 skill duels ── */
   skillDuelRakeBps: {
     kind: 'integer',
@@ -591,6 +620,8 @@ function assertInvariants(view: AppConfig): void {
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
     ['Blackjack minimum stake', view.blackjackMinStakeMinor, 'the maximum', view.blackjackMaxStakeMinor],
     ['Crash minimum bet', view.crashMinStakeMinor, 'the maximum', view.crashMaxStakeMinor],
+    ['Mines minimum stake', view.minesMinStakeMinor, 'the maximum', view.minesMaxStakeMinor],
+    ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [

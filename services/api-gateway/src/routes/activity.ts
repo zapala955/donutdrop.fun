@@ -9,13 +9,14 @@ import { parseWith } from '../lib/validation.js';
 /**
  * The live feed.
  *
- * Six kinds of event share one chronological stream:
+ * Seven kinds of event share one chronological stream:
  *
  *   case      a crate was opened — what it cost, what it paid.
  *   upgrade   an upgrader round settled — stake in, payout out.
  *   roulette  one row per player and spin — every chip aggregated into the real round total.
  *   blackjack a hand settled — everything on the table, and what came back.
  *   crash     a bet cashed out or busted.
+ *   mines     a game cashed out or hit TNT.
  *   faction   a wager was credited to a team in the running faction war.
  *
  * Every settled round appears, win or lose. An earlier version filtered upgrader losses out,
@@ -147,6 +148,24 @@ export async function registerActivityRoutes(
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
           WHERE b.status <> 'active'
+         UNION ALL
+         /* A finished mines game: the stake, and what it cashed out for (nothing, on TNT). */
+         SELECT g.id, 'mines'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Mines'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM mines_games g
+           JOIN users u ON u.id = g.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
+          WHERE g.status = 'settled'
          UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */
