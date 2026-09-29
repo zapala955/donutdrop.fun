@@ -309,8 +309,9 @@ export async function registerBattleRoutes(
 
     const seats = await client.query<{
       seat: number; team: number; user_id: string | null; is_bot: boolean; client_seed: string;
+      staked_minor: string;
     }>(
-      `SELECT seat, team, user_id, is_bot, client_seed
+      `SELECT seat, team, user_id, is_bot, client_seed, staked_minor
          FROM battle_players WHERE battle_id = $1 ORDER BY seat`,
       [battleId],
     );
@@ -321,6 +322,29 @@ export async function registerBattleRoutes(
     );
     if (seats.rows.length === 0 || rounds.rows.length === 0) {
       throw new AppError(409, 'BATTLE_INCOMPLETE', 'This battle has no seats or no rounds');
+    }
+
+    /* The wager is counted here, when the battle actually runs -- never when a seat is taken.
+     *
+     * It used to be recorded in takeSeat, and a seat can be left before the battle starts with
+     * its stake refunded in full. The wager outlived the refund: hosting a lobby and leaving it,
+     * twenty times a minute, earned rakeback, VIP progress, referral milestones and wager-
+     * requirement credit on money that was always handed back. Only a stake that can no longer be
+     * refunded counts, which is exactly the stakes of a battle being settled.
+     *
+     * Battle stakes still count toward quests and the faction war exactly as a solo open does.
+     * A seat taken before this moved here already has its wager on record under the same
+     * reference; that row is what says so, and the wager is not counted a second time. */
+    for (const seat of seats.rows) {
+      const stake = BigInt(seat.staked_minor);
+      if (seat.is_bot || !seat.user_id || stake <= 0n) continue;
+      const reference = deterministicUuid('battle_wager', battleId, seat.seat);
+      const counted = await client.query(
+        `SELECT 1 FROM wager_events WHERE source = 'case' AND reference_id = $1`,
+        [reference],
+      );
+      if (counted.rows[0]) continue;
+      await recordWager(client, config, seat.user_id, stake, 'case', reference, ['cases_opened']);
     }
 
     // Seat order is the definition, so the seeds are combined in the order the query returned.
@@ -926,13 +950,9 @@ export async function registerBattleRoutes(
       ],
     );
 
-    /* Battle stakes count toward quests and the faction war exactly as a solo open does. A
-     * wager is a wager; routing it differently because it happened in a battle would quietly
-     * make the competitive mode the wrong way to chase a daily. */
-    await recordWager(
-      client, config, userId, stake, 'case',
-      deterministicUuid('battle_wager', battleId, seat), ['cases_opened'],
-    );
+    /* No wager is recorded here. A seat can still be left before the battle runs, and leaving
+     * refunds the stake in full; the wager is counted in settleBattle, once nothing can be
+     * given back. */
   }
 
   /** Publishes the start: the outcomes are already final, only the clock is new. */
