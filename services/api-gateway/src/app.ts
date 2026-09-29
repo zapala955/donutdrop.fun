@@ -47,6 +47,7 @@ import { registerRouletteRoutes } from './routes/roulette.js';
 import { registerBlackjackRoutes } from './routes/blackjack.js';
 import { registerCrashRoutes } from './routes/crash.js';
 import { registerMinesRoutes } from './routes/mines.js';
+import { registerPlinkoRoutes } from './routes/plinko.js';
 import { registerVipRoutes } from './routes/vip.js';
 import { startTellerSweeper } from './lib/teller-sweeper.js';
 import { assertVipSolvency } from './lib/vip.js';
@@ -241,6 +242,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerBlackjackRoutes(app, db, config);
   await registerCrashRoutes(app, db, config);
   await registerMinesRoutes(app, db, config);
+  await registerPlinkoRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   // Registers nothing unless DEV_LOGIN_ENABLED is on, and config refuses to boot with it on

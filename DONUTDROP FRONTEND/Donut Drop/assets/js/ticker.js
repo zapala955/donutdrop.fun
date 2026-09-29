@@ -199,7 +199,8 @@ function gameCell(play) {
           : kind === 'blackjack' ? '\u2660'
             : kind === 'crash' ? '\u2197'
               : kind === 'mines' ? '\u25C6'
-              : '\u2694';
+                : kind === 'plinko' ? '\u25CF'
+                : '\u2694';
   const node = cell('feedrow__game', '');
   const chip = el('span', 'gamechip');
   chip.dataset.kind = kind || 'other';
@@ -270,6 +271,7 @@ function gameLabel(play) {
   if (kind === 'blackjack') return 'Blackjack';
   if (kind === 'crash') return 'Crash';
   if (kind === 'mines') return 'Mines';
+  if (kind === 'plinko') return 'Plinko';
   return play.sourceName || play.source_name || 'Round';
 }
 

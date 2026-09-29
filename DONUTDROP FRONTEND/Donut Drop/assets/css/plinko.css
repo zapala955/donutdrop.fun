@@ -1,0 +1,313 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: plinko board · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
+ * states: the drop button -- default, hover, :focus-visible, :active, disabled, busy (a ball on its
+ *         way to the server), and the result it produces: a slot lit (success) or the hint (error);
+ *         the risk switch and the rows stepper -- default, hover, focus, pressed, locked while balls fall.
+ * signature: the payouts are the board's floor -- a row of slots running from gold at the centre to
+ *            crimson at the edges, so how much a slot pays is readable before a number is.
+ * motion: the ball's fall, a peg lighting as it is struck, a slot dipping as a ball lands.
+ *         Reduced motion: the ball lands the moment it is answered and the slot only lights.
+ */
+
+.plinko {
+  /* The board's palette, lifted so no rule below writes a colour inline. The canvas reads the
+   * first six through getComputedStyle. */
+  --plinko-peg: rgba(236, 237, 240, .62);
+  --plinko-peg-lit: var(--gold-bright);
+  --plinko-ball-hi: #fff6c8;
+  --plinko-ball: var(--gold-bright);
+  --plinko-ball-lo: var(--gold-deep);
+  --plinko-shadow: rgba(0, 0, 0, .55);
+  /* A slot's colour is its distance from the centre: gold in the middle, crimson at the edges. */
+  --plinko-cold: var(--gold-bright);
+  --plinko-hot: var(--crimson);
+  --plinko-slot-ink: var(--bg);
+  /* The live feed's profit green, so a win reads the same here as in the feed. */
+  --plinko-win: #35d07f;
+  --plinko-ease: cubic-bezier(.22, 1, .36, 1);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas: "stage panel";
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ─────────── the board ─────────── */
+.plinko__stage {
+  grid-area: stage;
+  display: grid;
+  /* Pinned, so a long readout clips its chips instead of widening the board past the screen. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line-hi);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 170, 0, .07), transparent 62%),
+    linear-gradient(160deg, var(--panel), var(--bg2));
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, .45), 0 24px 50px -30px rgba(0, 0, 0, .9);
+  min-width: 0;
+}
+
+.plinko__readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  width: min(100%, 640px);
+  min-height: 30px;
+  margin: 0 auto;
+}
+.plinko__readout b {
+  flex: none;
+  font-family: var(--pixel);
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.plinko__readout b[data-tone="won"] { color: var(--plinko-win); }
+.plinko__readout b[data-tone="lost"] { color: var(--muted); }
+
+.plinko__recent {
+  /* Right-aligned by its margin, not by justify-content, so when it runs out of room it is the
+   * oldest ball, at the far end, that is cut, never the newest. */
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.plinko__chip {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--plinko-hot) calc(var(--heat) * 100%), var(--plinko-cold));
+  color: var(--plinko-slot-ink);
+  font: 800 .6875rem/1.3 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+/* Older balls fade back so the newest reads first. */
+.plinko__chip:nth-child(n + 4) { opacity: .7; }
+.plinko__chip:nth-child(n + 6) { opacity: .45; }
+
+.plinko__board {
+  --gaps: 14;
+  --depth: 12.9;
+  display: grid;
+  width: min(100%, 640px);
+  margin: 0 auto;
+  padding: 8px 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #0d0d10, #08080a);
+  box-shadow: inset 0 0 0 1px var(--ob-line), inset 0 6px 24px rgba(0, 0, 0, .6);
+}
+.plinko__board canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--gaps) / var(--depth);
+}
+
+/* The slots sit under the gaps of the last row of pegs: half a gap in from either side. */
+.plinko__slots {
+  display: grid;
+  grid-template-columns: repeat(var(--slots, 13), minmax(0, 1fr));
+  gap: 3px;
+  margin: 0 calc(100% / (var(--gaps) * 2));
+  container-type: inline-size;
+}
+.plinko__slot {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 30px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--plinko-hot) calc(var(--heat) * 100%), var(--plinko-cold));
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28);
+  color: var(--plinko-slot-ink);
+  /* Sized to the slot, so seventeen of them still fit a phone without the numbers colliding. */
+  font: 900 clamp(.5rem, calc(100cqi / var(--slots, 13) * .3), .75rem)/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+}
+.plinko__slot.is-hit { animation: plinko-lit 520ms var(--plinko-ease); }
+/* Seventeen slots on a phone are narrower than any number is wide: the numbers stand on end,
+ * reading upwards, and the slots grow tall enough to hold them. */
+.plinko__slots[data-dense] .plinko__slot {
+  height: 36px;
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+  font-size: .5625rem;
+  letter-spacing: 0;
+}
+@keyframes plinko-lit {
+  0% { filter: brightness(1.45); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28), 0 0 14px color-mix(in oklab, var(--plinko-hot) calc(var(--heat) * 100%), var(--plinko-cold)); }
+  100% { filter: none; }
+}
+
+/* ─────────── the panel ─────────── */
+.plinko__panel {
+  grid-area: panel;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--ob-line);
+  background: linear-gradient(180deg, var(--panel), var(--bg2));
+}
+/* One pinned column: the stake input's natural width must not set the panel's. */
+.plinko__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.plinko__label {
+  margin-top: 4px;
+  font-size: .6875rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.plinko__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  transition: border-color 150ms var(--plinko-ease), box-shadow 150ms var(--plinko-ease);
+}
+.plinko__field:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
+.plinko__field span { color: var(--gold-bright); font-weight: 800; }
+.plinko__field input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.plinko__field input:focus { outline: none; }
+
+.plinko__adj,
+.plinko__step,
+.plinko__risk {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 150ms var(--plinko-ease), background 150ms var(--plinko-ease), border-color 150ms var(--plinko-ease);
+}
+.plinko__adj { min-width: 36px; height: 32px; border-radius: 6px; }
+
+.plinko__risks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.plinko__risk { height: 44px; border-radius: 8px; font-size: .875rem; }
+.plinko__risk[aria-pressed="true"] {
+  color: var(--gold-bright);
+  border-color: var(--gold-edge-hi);
+  background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
+}
+
+.plinko__stepper {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
+  align-items: center;
+  height: 46px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  overflow: hidden;
+}
+.plinko__step { height: 100%; border: 0; border-radius: 0; font-size: 1.25rem; }
+.plinko__stepper output {
+  text-align: center;
+  font-family: var(--pixel);
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.plinko__adj:hover:not(:disabled),
+.plinko__step:hover:not(:disabled),
+.plinko__risk:hover:not(:disabled) { color: var(--text); background: var(--panel3); }
+.plinko__risk[aria-pressed="true"]:hover:not(:disabled) { color: var(--gold-bright); }
+.plinko__adj:active:not(:disabled),
+.plinko__risk:active:not(:disabled) { transform: translateY(1px); }
+.plinko__adj:focus-visible,
+.plinko__step:focus-visible,
+.plinko__risk:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.plinko__form :disabled { cursor: not-allowed; opacity: .5; }
+
+/* The one button. It stays live while balls fall: dropping again is the game. */
+.plinko .plinko__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  margin-top: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--bg);
+  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+  font-size: 1rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: filter 150ms var(--plinko-ease), transform 90ms var(--plinko-ease);
+}
+.plinko .plinko__go:hover:not(:disabled) { filter: brightness(1.07); }
+.plinko .plinko__go:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.plinko .plinko__go:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.plinko .plinko__go:disabled { cursor: default; opacity: 1; filter: saturate(.4) brightness(.7); }
+.plinko .plinko__go[aria-busy="true"] { cursor: progress; }
+
+.plinko__hint,
+.plinko__falling { min-height: 1.1em; margin: 0; font-size: .75rem; text-align: center; color: var(--faint); }
+.plinko__falling { min-height: 0; font-family: var(--mono); }
+.plinko__falling:empty { display: none; }
+
+.plinko__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1180px) {
+  .plinko { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+}
+@media (max-width: 560px) {
+  .plinko { gap: 12px; }
+  .plinko__stage { gap: 10px; padding: 10px; border-radius: 16px; }
+  .plinko__board { padding: 6px 4px 8px; border-radius: 14px; }
+  .plinko__slots { gap: 2px; }
+  .plinko__slot { height: 26px; border-radius: 4px; }
+  .plinko__slots[data-dense] .plinko__slot { height: 34px; }
+  .plinko__readout b { font-size: 1.0625rem; }
+  .plinko__chip:nth-child(n + 5) { display: none; }
+  .plinko__panel { padding: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plinko__field,
+  .plinko .plinko__go { transition: none; }
+  .plinko__slot.is-hit { animation-duration: 150ms; }
+}

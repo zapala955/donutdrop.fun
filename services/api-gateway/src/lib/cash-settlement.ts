@@ -48,7 +48,8 @@ export type ContributionSource =
   | 'roulette'
   | 'blackjack'
   | 'crash'
-  | 'mines';
+  | 'mines'
+  | 'plinko';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

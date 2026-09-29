@@ -15,6 +15,7 @@ type SettingGroup =
   | 'blackjack'
   | 'crash'
   | 'mines'
+  | 'plinko'
   | 'duels'
   | 'jackpot'
   | 'rain'
@@ -372,6 +373,34 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── plinko ── The edge is fixed in lib/plinko.ts; these are the board's limits. */
+  plinkoEnabled: {
+    kind: 'boolean',
+    group: 'plinko',
+    label: 'Plinko open',
+  },
+  plinkoMinStakeMinor: {
+    kind: 'bigint',
+    group: 'plinko',
+    label: 'Plinko minimum stake per ball',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  plinkoMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'plinko',
+    label: 'Plinko maximum stake per ball',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  plinkoMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'plinko',
+    label: 'Plinko maximum payout per ball (a stake whose best slot would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
   /* ── 1v1 skill duels ── */
   skillDuelRakeBps: {
     kind: 'integer',
@@ -622,6 +651,8 @@ function assertInvariants(view: AppConfig): void {
     ['Crash minimum bet', view.crashMinStakeMinor, 'the maximum', view.crashMaxStakeMinor],
     ['Mines minimum stake', view.minesMinStakeMinor, 'the maximum', view.minesMaxStakeMinor],
     ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
+    ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
+    ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [

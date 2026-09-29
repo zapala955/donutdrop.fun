@@ -202,7 +202,8 @@ function normalizeActivity(raw) {
   const isRoulette = raw.kind === 'roulette';
   // Table games pay money, not an item. Building one from their null columns would put a phantom
   // unnamed drop in every consumer that reads activity.item.
-  const isTable = isRoulette || raw.kind === 'blackjack' || raw.kind === 'crash' || raw.kind === 'mines';
+  const isTable = isRoulette || raw.kind === 'blackjack' || raw.kind === 'crash' || raw.kind === 'mines'
+    || raw.kind === 'plinko';
   const payoutRaw = raw.payout_minor ?? raw.payoutMinor;
   return {
     id: raw.id,
@@ -678,6 +679,14 @@ export function holdLiveFigures() {
     released = true;
     liveHolds = Math.max(0, liveHolds - 1);
   };
+}
+
+/* A game with several results in the air at once (Plinko's falling balls) moves the pill itself,
+ * from figures the server has already confirmed, while it holds the polls still. */
+export function showBalance(balanceMinor) {
+  state.balanceMinor = String(balanceMinor);
+  state.balance = toSafeNumber(state.balanceMinor);
+  emit('balance');
 }
 
 export async function refreshBalance(notify = true) {

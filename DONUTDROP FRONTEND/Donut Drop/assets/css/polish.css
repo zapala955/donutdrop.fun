@@ -437,6 +437,7 @@
 .gamechip[data-kind="blackjack"] { border-color: rgba(52, 168, 110, .38); }
 .gamechip[data-kind="crash"]     { border-color: rgba(255, 123, 0, .38); }
 .gamechip[data-kind="mines"]     { border-color: rgba(64, 214, 224, .38); }
+.gamechip[data-kind="plinko"]    { border-color: rgba(255, 34, 34, .38); }
 
 /* ── the player head ── */
 .feedrow__who { display: flex; align-items: center; gap: 7px; min-width: 0; }

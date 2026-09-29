@@ -43,6 +43,7 @@ const TABLE_GAMES = new Map([
   ['blackjack', 'Blackjack'],
   ['crash', 'Crash'],
   ['mines', 'Mines'],
+  ['plinko', 'Plinko'],
 ]);
 const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 

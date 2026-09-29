@@ -54,6 +54,8 @@ const KIND_LABEL = {
   crash_payout: 'Crash cash-out',
   mines_stake: 'Mines stake',
   mines_payout: 'Mines cash-out',
+  plinko_stake: 'Plinko ball',
+  plinko_payout: 'Plinko payout',
   rakeback_claim: 'Rakeback',
   race_payout: 'Race prize',
 };

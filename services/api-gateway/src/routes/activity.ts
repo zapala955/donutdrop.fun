@@ -9,7 +9,7 @@ import { parseWith } from '../lib/validation.js';
 /**
  * The live feed.
  *
- * Seven kinds of event share one chronological stream:
+ * Eight kinds of event share one chronological stream:
  *
  *   case      a crate was opened — what it cost, what it paid.
  *   upgrade   an upgrader round settled — stake in, payout out.
@@ -17,6 +17,7 @@ import { parseWith } from '../lib/validation.js';
  *   blackjack a hand settled — everything on the table, and what came back.
  *   crash     a bet cashed out or busted.
  *   mines     a game cashed out or hit TNT.
+ *   plinko    a ball landed in a slot.
  *   faction   a wager was credited to a team in the running faction war.
  *
  * Every settled round appears, win or lose. An earlier version filtered upgrader losses out,
@@ -166,6 +167,25 @@ export async function registerActivityRoutes(
            JOIN users u ON u.id = g.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
           WHERE g.status = 'settled'
+         UNION ALL
+         /* A plinko ball: the stake, and what its slot paid. Every ball settles as it is placed.
+            Balls arrive several a second, so this branch reads only the newest $1 of them off
+            their index: the newest $1 of the whole feed cannot include an older ball. */
+         SELECT b.id, 'plinko'::text AS kind, b.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Plinko'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM (SELECT * FROM plinko_bets ORDER BY created_at DESC LIMIT $1) b
+           JOIN users u ON u.id = b.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
          UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */

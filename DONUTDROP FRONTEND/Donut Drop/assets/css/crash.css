@@ -134,7 +134,8 @@
   border: 1px solid var(--ob-line);
   background: linear-gradient(180deg, var(--panel), var(--bg2));
 }
-.crash__form { display: grid; gap: 8px; }
+/* One pinned column: the stake input's natural width must not set the panel's. */
+.crash__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .crash__label {
   margin-top: 4px;
   font-size: .6875rem;

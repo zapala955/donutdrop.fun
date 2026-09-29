@@ -2331,6 +2331,7 @@ const GROUP_LABELS = {
   blackjack: 'Blackjack',
   crash: 'Crash',
   mines: 'Mines',
+  plinko: 'Plinko',
   duels: 'Duels',
   jackpot: 'Jackpot',
   rain: 'Lava Rain',

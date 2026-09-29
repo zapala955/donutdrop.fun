@@ -534,6 +534,15 @@ const environmentSchema = z
     MINES_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     MINES_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     MINES_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Plinko. The edge is fixed in lib/plinko.ts. A ball whose best slot would pay more than the
+     * ceiling is refused, so the ceiling sets the largest stake on each rows-and-risk table. */
+    PLINKO_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    PLINKO_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    PLINKO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    PLINKO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -828,6 +837,20 @@ const environmentSchema = z
         code: 'custom',
         path: ['MINES_MAX_PAYOUT_MINOR'],
         message: 'must be at least MINES_MAX_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.PLINKO_MIN_STAKE_MINOR) > BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLINKO_MAX_STAKE_MINOR'],
+        message: 'must be at least PLINKO_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.PLINKO_MAX_PAYOUT_MINOR) < BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLINKO_MAX_PAYOUT_MINOR'],
+        message: 'must be at least PLINKO_MAX_STAKE_MINOR',
       });
     }
     if (BigInt(env.CRASH_MIN_STAKE_MINOR) > BigInt(env.CRASH_MAX_STAKE_MINOR)) {
@@ -1237,6 +1260,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     minesMinStakeMinor: BigInt(env.MINES_MIN_STAKE_MINOR),
     minesMaxStakeMinor: BigInt(env.MINES_MAX_STAKE_MINOR),
     minesMaxPayoutMinor: BigInt(env.MINES_MAX_PAYOUT_MINOR),
+    plinkoEnabled: env.PLINKO_ENABLED,
+    plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
+    plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),
+    plinkoMaxPayoutMinor: BigInt(env.PLINKO_MAX_PAYOUT_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,
