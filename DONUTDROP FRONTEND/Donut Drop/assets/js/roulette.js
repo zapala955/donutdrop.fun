@@ -132,15 +132,6 @@ function build() {
           </table>
         </div>
       </section>
-      <details class="roulette__fair">
-        <summary>Round fairness</summary>
-        <dl>
-          <div><dt>Round</dt><dd class="mono" id="rouletteRound">—</dd></div>
-          <div><dt>Commitment</dt><dd class="mono" id="rouletteCommit">—</dd></div>
-          <div><dt>Edge</dt><dd class="mono" id="rouletteEdge">—</dd></div>
-        </dl>
-        <p>The seed is committed before betting, then revealed with the result. Verify it with HMAC-SHA256 using the round ID and nonce 0.</p>
-      </details>
     </section>`;
 
   buildWheel();
@@ -464,9 +455,6 @@ async function refresh() {
 function paint() {
   root.dataset.error = '';
   const config = snapshot.config;
-  $('#rouletteRound', root).textContent = snapshot.round?.id || 'Paused';
-  $('#rouletteCommit', root).textContent = snapshot.round?.serverSeedHash || '—';
-  $('#rouletteEdge', root).textContent = `${(config.houseEdgeBps / 100).toFixed(2)}%`;
   $('#rouletteLimits', root).textContent =
     `${money(Number(config.minStakeMinor))} min · ${money(Number(config.maxStakeMinor))} max per chip`
     + (config.maxRoundStakeMinor

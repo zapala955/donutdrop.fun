@@ -136,7 +136,6 @@ function apply(next) {
   }
   paintHistory();
   paintPlayers();
-  paintFairness();
   paintControls();
 }
 
@@ -436,22 +435,6 @@ function paintPlayers() {
   }));
 }
 
-function paintFairness() {
-  const node = $('#crashFair', root);
-  if (!node || !snap) return;
-  const last = snap.history?.[0];
-  const current = snap.round;
-  $('#crashCommit', root).textContent = current?.serverSeedHash || '—';
-  $('#crashLastId', root).textContent = last?.id || '—';
-  $('#crashLastSeed', root).textContent = last?.serverSeed || '—';
-  $('#crashLastPoint', root).textContent = last ? x100(last.crashPointX100) : '—';
-  const edge = Number(snap.config?.houseEdgeBps ?? 1000) / 100;
-  $('#crashEdge', root).textContent = `${edge}%`;
-  $('#crashLimits', root).textContent =
-    `${money(Number(snap.config?.minStakeMinor || 0))} – ${money(Number(snap.config?.maxStakeMinor || 0))} per bet · ` +
-    `up to ${money(Number(snap.config?.maxPayoutMinor || 0))} paid per bet`;
-}
-
 /* ─────────── the stage ─────────── */
 
 function readPalette() {
@@ -698,21 +681,6 @@ function build() {
       <ol id="crashPlayers"></ol>
     </section>
 
-    <details class="crash__fair" id="crashFair">
-      <summary>Fairness and limits</summary>
-      <dl>
-        <dt>House edge</dt><dd id="crashEdge">10%</dd>
-        <dt>Limits</dt><dd id="crashLimits">—</dd>
-        <dt>This round's commitment (SHA-256 of its seed)</dt><dd class="mono" id="crashCommit">—</dd>
-        <dt>Last round</dt><dd class="mono" id="crashLastId">—</dd>
-        <dt>Its seed</dt><dd class="mono" id="crashLastSeed">—</dd>
-        <dt>Its crash point</dt><dd class="mono" id="crashLastPoint">—</dd>
-      </dl>
-      <p>Every round's seed is committed before the first bet and revealed when it busts. The crash
-        point is <code>floor(9000 · 2^52 / (100 · (2^52 − h))) / 100</code>, where <code>h</code> is the
-        first 13 hex digits of HMAC-SHA256(seed, "roundId:0") -- so any cash-out target returns 90%
-        of the stake on average, whatever it is.</p>
-    </details>
     <div class="crash__say" id="crashSay" role="status" aria-atomic="true"></div>`;
 
   const stake = $('#crashStake', root);

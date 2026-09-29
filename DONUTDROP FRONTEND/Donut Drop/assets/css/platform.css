@@ -1966,26 +1966,9 @@ html, body { overflow-x: clip; }
 }
 .seat__won { min-height: 1em; font-size: .75rem; font-weight: 800; color: var(--p-win, #ffd700); }
 
-.arena__fair {
-  display: flex; flex-direction: column; gap: 8px; min-width: 0;
-  padding: 14px 16px; border-radius: 14px;
-  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .05);
-}
-.arena__fairhead { margin: 0; font-size: .75rem; font-weight: 800; color: var(--text); }
-.arena__fairnote { margin: 0; font-size: .625rem; line-height: 1.55; color: var(--faint); overflow-wrap: anywhere; }
-.arena__fairlist {
-  display: grid; grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
-  gap: 4px 12px; margin: 4px 0 0; min-width: 0;
-}
-.arena__fairlist dt { font-size: .625rem; color: var(--faint); overflow-wrap: anywhere; }
-.arena__fairlist dd {
-  margin: 0; font-size: .625rem; color: var(--b-text); overflow-wrap: anywhere; word-break: break-all;
-}
-
 @media (max-width: 900px) {
   .btl { grid-template-columns: minmax(0, 1fr); }
   .btl__make { position: static; }
-  .arena__fairlist { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {

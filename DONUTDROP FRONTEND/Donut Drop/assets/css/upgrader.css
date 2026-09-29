@@ -122,7 +122,6 @@
   fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round;
 }
-.utool__seed { font-size: .625rem; letter-spacing: .1em; color: var(--faint); }
 .utool__stat {
   margin-left: auto;
   font-size: .625rem; font-weight: 800; letter-spacing: .24em; text-transform: uppercase;

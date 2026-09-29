@@ -329,16 +329,6 @@
 @media (hover: none) { .bj__actions kbd { display: none; } }
 .bj .btn[aria-busy="true"] { cursor: progress; }
 
-.bj__fair {
-  margin: 0;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: .6875rem;
-  line-height: 1.5;
-  color: var(--faint);
-  overflow-wrap: anywhere;
-}
-
 /* ─────────── phones ─────────── */
 @media (max-width: 560px) {
   .bj__table { padding: 18px 10px 20px; border-radius: 18px; }

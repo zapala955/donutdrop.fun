@@ -584,7 +584,6 @@ function paintArena() {
       </header>
       <div class="arena__strip" id="arenaStrip"></div>
       <div class="arena__board" id="arenaBoard"></div>
-      <div class="arena__fair" id="arenaFair"></div>
     </div>`;
 
   const arena = root.querySelector('.arena');
@@ -648,7 +647,6 @@ function paintArena() {
     board.appendChild(empty);
   }
 
-  paintFairness(battle, revealed);
   if (battle.status === 'lobby') paintWaiting(battle);
   startAnimation();
 }
@@ -731,45 +729,6 @@ function paintWaiting(battle) {
   });
   bar.appendChild(leave);
   board.parentElement?.insertBefore(bar, board);
-}
-
-/* The seed reveal is part of the result, so it waits for the result. The revealed seed is in the
- * payload either way — this is presentation, not secrecy — but printing it beside a reel that is
- * still turning tells the player the battle is already over. */
-function paintFairness(battle, revealed) {
-  const panel = $('#arenaFair', root);
-  if (!panel) return;
-
-  const rows = [
-    ['Server seed hash', battle.fairness.serverSeedHash],
-    ['Nonce', String(battle.fairness.nonce)],
-  ];
-  if (revealed) {
-    rows.push(['Server seed', battle.fairness.serverSeedReveal]);
-    rows.push(['Combined seed', battle.fairness.combinedSeedHash]);
-    for (const seat of battle.seats) rows.push([`Client seed · ${seat.name}`, seat.clientSeed]);
-  }
-
-  const head = el('h3', 'arena__fairhead');
-  head.textContent = revealed ? 'Verify this battle' : 'Committed before anyone joined';
-  panel.appendChild(head);
-
-  const note = el('p', 'arena__fairnote');
-  note.textContent = revealed
-    ? battle.fairness.formula
-    : 'The server seed hash is published now and the seed itself is revealed when the battle ends.';
-  panel.appendChild(note);
-
-  const list = el('dl', 'arena__fairlist');
-  for (const [label, value] of rows) {
-    if (!value) continue;
-    const term = el('dt');
-    term.textContent = label;
-    const detail = el('dd', 'mono');
-    detail.textContent = value;
-    list.append(term, detail);
-  }
-  panel.appendChild(list);
 }
 
 /* ─────────────────────────── the animation ───────────────────────────

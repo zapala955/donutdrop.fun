@@ -262,7 +262,6 @@ function paint() {
   paintBoard();
   paintReadout();
   paintControls();
-  paintFairness();
 }
 
 function paintBoard() {
@@ -373,20 +372,6 @@ function paintControls() {
   });
 }
 
-function paintFairness() {
-  const line = $('#minesFair', root);
-  const f = game?.fairness;
-  if (f?.serverSeed) {
-    line.textContent = `Server seed ${f.serverSeed} · SHA-256 ${f.serverSeedHash.slice(0, 16)}… · client seed ${f.clientSeed} · nonce ${f.nonce}`;
-  } else if (f) {
-    line.textContent = `Field placed from committed server seed ${f.serverSeedHash.slice(0, 16)}… · revealed when the game ends`;
-  } else {
-    line.textContent = seedHash
-      ? `Your next field comes from committed server seed ${seedHash.slice(0, 16)}…`
-      : '';
-  }
-}
-
 /* ─────────── building ─────────── */
 
 function build() {
@@ -403,7 +388,6 @@ function build() {
         ${tiles}
         <div class="mines__banner" id="minesBanner" hidden><b></b><span></span></div>
       </div>
-      <p class="mines__fair" id="minesFair"></p>
     </section>
 
     <aside class="mines__panel" aria-label="Your game">

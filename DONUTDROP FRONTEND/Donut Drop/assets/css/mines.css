@@ -173,14 +173,6 @@
 .mines__banner[data-tone="lost"] b,
 .mines__banner[data-tone="lost"] span { color: var(--mines-tnt); }
 
-.mines__fair {
-  margin: 0;
-  font: 400 .6875rem/1.5 var(--mono);
-  color: var(--faint);
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
 /* ─────────── the panel ─────────── */
 .mines__panel {
   grid-area: panel;

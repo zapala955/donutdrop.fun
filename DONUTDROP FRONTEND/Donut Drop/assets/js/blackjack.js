@@ -275,18 +275,6 @@ function paintResult(current, { animate }) {
   }
 }
 
-function paintFairness(current) {
-  const line = $('#bjFair', root);
-  if (!current) {
-    line.textContent = seedHash ? `Next hand commits to server seed ${seedHash.slice(0, 16)}…` : '';
-    return;
-  }
-  const f = current.fairness;
-  line.textContent = f.serverSeed
-    ? `Server seed ${f.serverSeed} · SHA-256 ${f.serverSeedHash.slice(0, 16)}… · client seed ${f.clientSeed} · nonce ${f.nonce}`
-    : `Dealt from committed server seed ${f.serverSeedHash.slice(0, 16)}… · revealed when the hand ends`;
-}
-
 /* ─────────── controls ─────────── */
 
 function stakeMinor() {
@@ -370,7 +358,6 @@ async function deal() {
       { idempotencyKey: idempotencyKey() },
     );
     hand = response.hand;
-    paintFairness(hand);
     await animateDeal(hand);
     if (hand.status === 'settled') await settleShown();
   } catch (error) {
@@ -396,7 +383,6 @@ async function deal() {
 
 async function settleShown() {
   await finish(hand);
-  paintFairness(hand);
   await refreshSeed();
 }
 
@@ -442,7 +428,6 @@ async function reload() {
     if (active) {
       hand = active;
       drawStatic(hand);
-      paintFairness(hand);
     }
   } catch {
     // The table stays as it was; the next action will say what is wrong.
@@ -488,8 +473,7 @@ function build() {
         <button class="btn" id="bjStand" type="button" aria-keyshortcuts="S">Stand <kbd>S</kbd></button>
         <button class="btn" id="bjDouble" type="button" aria-keyshortcuts="D"><span id="bjDoubleLabel">Double</span> <kbd>D</kbd></button>
       </div>
-    </div>
-    <p class="bj__fair" id="bjFair"></p>`;
+    </div>`;
 
   const input = $('#bjStake', root);
   input.value = stakeText;
@@ -532,7 +516,6 @@ function build() {
       seedHash = null;
       clearTable();
       paintBet();
-      paintFairness(null);
     }
     // Every balance change can change what the controls allow.
     if (!busy) paintControls();
@@ -549,7 +532,6 @@ async function load() {
     await refreshSeed();
     if (!busy) await reload();
   }
-  if (!hand) paintFairness(null);
   paintControls();
 }
 

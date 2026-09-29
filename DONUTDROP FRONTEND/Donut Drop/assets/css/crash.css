@@ -29,7 +29,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   grid-template-areas:
     "stage panel"
-    "players fair";
+    "players .";
   gap: 14px;
   align-items: start;
   min-width: 0;
@@ -312,24 +312,6 @@
 .crash__player[data-state="lost"] .crash__at,
 .crash__player[data-state="lost"] .crash__profit { color: color-mix(in srgb, var(--crash-bust) 85%, var(--text)); }
 
-/* ─────────── fairness ─────────── */
-.crash__fair {
-  grid-area: fair;
-  padding: 12px 16px;
-  border-radius: 18px;
-  border: 1px solid var(--ob-line);
-  background: var(--panel);
-  font-size: .75rem;
-  color: var(--muted);
-}
-.crash__fair summary { font-weight: 800; color: var(--text); cursor: pointer; }
-.crash__fair summary:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
-.crash__fair dl { display: grid; gap: 4px; margin: 12px 0 0; }
-.crash__fair dt { margin-top: 6px; font-weight: 700; color: var(--faint); }
-.crash__fair dd { margin: 0; overflow-wrap: anywhere; color: var(--text); }
-.crash__fair p { margin: 12px 0 0; line-height: 1.55; }
-.crash__fair code { font-family: var(--mono); font-size: .6875rem; color: var(--gold-bright); }
-
 .crash__say {
   position: absolute;
   width: 1px;
@@ -344,7 +326,7 @@
 @media (max-width: 1180px) {
   .crash {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "stage" "panel" "players" "fair";
+    grid-template-areas: "stage" "panel" "players";
   }
   .crash__stage { min-height: 360px; }
 }

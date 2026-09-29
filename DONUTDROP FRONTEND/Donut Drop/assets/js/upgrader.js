@@ -160,7 +160,6 @@ function build() {
                 aria-label="Provably fair">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>
         </button>
-        <span class="utool__seed mono" id="upgSeed">—</span>
         <span class="utool__stat mono" id="telStat" data-s="idle">STANDBY</span>
         <button class="ihint" type="button" id="upgHint"></button>
       </div>
@@ -480,10 +479,6 @@ function sync({ keepInput = false } = {}) {
     $('#wheelLbl', root).textContent = 'WIN CHANCE';
     $('#wheelMid', root).dataset.state = '';
   }
-
-  $('#upgSeed', root).textContent = state.fairness
-    ? `${state.fairness.serverSeedHash.slice(0, 8)}…·${state.fairness.nonce}`
-    : '—';
 
   const armed = hasStake() && !!target;
   const status = $('#telStat', root);
