@@ -60,6 +60,13 @@ let rainCountdown = 0;
  * redraw the same messages and the log would grow without bound. */
 const seenMessages = new Set();
 const seenHits = new Set();
+/* One win card per player per minute. A player on a run -- a crash streak, a battle's worth of
+ * big drops, Plinko balls several a second -- filled the chat with their own cards and pushed the
+ * conversation off the screen. Measured on each round's own time, not on when this page happened
+ * to hear about it, so every viewer holds back the same cards. A win inside a player's minute is
+ * still in the live feed; it just gets no chat card. */
+const HIT_COOLDOWN_MS = 60_000;
+const lastHitAt = new Map(); // player id -> the round time of their last card
 let appliedResetId;
 
 export function initChat() {
@@ -417,6 +424,7 @@ function drainBigHits() {
   const clearedAt = resetTimestamp();
   const threshold = Number(state.chat?.bigHitMinor ?? 0);
   if (threshold <= 0) return;
+  const fresh = [];
   for (const activity of state.activities ?? []) {
     if (new Date(activity.createdAt).getTime() <= clearedAt) continue;
     const item = activity.item;
@@ -425,8 +433,21 @@ function drainBigHits() {
     // thing on a losing round, where nothing was paid at all.
     const value = Number(activity.payout ?? 0);
     if (value < threshold) continue;
+    /* And it has to be a win: more back than went in. A $1B Plinko ball landing on 0.9x pays
+     * $900M, over any threshold, and is a loss; so is a $500M crate that drops a $300M item. */
+    if (BigInt(activity.payoutMinor ?? '0') <= BigInt(activity.wagerMinor ?? '0')) continue;
     if (seenHits.has(activity.id)) continue;
+    // Decided once: a win held back by the cooldown is not reconsidered on the next refresh.
     seenHits.add(activity.id);
+    fresh.push({ activity, value, at: new Date(activity.createdAt).getTime() });
+  }
+  /* Oldest first, so the cooldown is measured forwards in time from the card that was shown. */
+  fresh.sort((a, b) => a.at - b.at);
+  for (const { activity, value, at } of fresh) {
+    const who = activity.playerId ?? activity.player ?? '';
+    const last = lastHitAt.get(who);
+    if (last !== undefined && Math.abs(at - last) < HIT_COOLDOWN_MS) continue;
+    lastHitAt.set(who, at);
     appendLine(buildHit(activity, value), activity.createdAt);
   }
   trim();
@@ -447,6 +468,7 @@ function applyChatReset() {
   appliedResetId = resetId;
   seenMessages.clear();
   seenHits.clear();
+  lastHitAt.clear();
   log.replaceChildren();
 }
 

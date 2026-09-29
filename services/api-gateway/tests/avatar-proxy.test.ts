@@ -94,8 +94,9 @@ describe('chat renderer', () => {
 describe('activity avatars', () => {
   it('carries an opaque player id through every activity kind and normalizes it', async () => {
     const apiSource = await activity();
-    // case, upgrade, roulette, blackjack, crash, mines, plinko and faction.
-    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 8);
+    // case, upgrade, roulette, blackjack, crash, mines, plinko and faction in the feed, and the
+    // case and upgrade pulls in today's top list.
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 10);
     const storeSource = await store();
     assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
   });

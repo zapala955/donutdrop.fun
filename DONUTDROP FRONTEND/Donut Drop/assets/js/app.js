@@ -199,52 +199,16 @@ function mountHome(view) {
     if (!drops) return;
     drops.innerHTML = '';
 
-    /* Faction contributions carry no item, so they are not drops and do not belong in a drop
-     * list. They appear in the live feed as their own kind of row. */
-    const isRound = (entry) => entry.item && entry.kind !== 'faction';
-
-    /* Amounts are compared as BigInt, never as Number. These are minor units and the top of the
-     * ladder is ten figures; a payout is one of the few values on this page where the 2^53 cliff
-     * is reachable, and a sort that silently rounds would order the biggest pulls wrongly. */
-    const minor = (value) => {
-      try {
-        return BigInt(value ?? '0');
-      } catch {
-        return 0n;
-      }
-    };
-
-    /* This card is headed "Biggest pulls today" and used to show neither.
+    /* This card is headed "Biggest pulls today", and the server now answers exactly that: the
+     * day's winning crate and upgrader pulls, biggest payout first (/v1/activity/top-today).
      *
-     * It took the first seven entries of the activity feed in arrival order, which is a RECENT
-     * list, not a biggest one, and it kept every round â€” so a losing open sat in a list of wins
-     * with the crate's sticker price beside it, reading as a payout nobody received.
+     * It used to be filtered out of the live feed in this browser, and the feed is the last forty
+     * rounds -- minutes, on a busy evening. The day's best pulls scrolled out of that window and
+     * the card looked as though it had reset.
      *
      * A pull is a win: it returned more than it cost. Rounds that returned less are real, and they
-     * belong in the live feed at the foot of the page, which shows everything. They do not belong
-     * under this heading. */
-    const isWin = (entry) => minor(entry.payoutMinor) > minor(entry.wagerMinor);
-
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const today = startOfToday.getTime();
-    /* An unparseable timestamp is excluded rather than treated as now: "today" is the claim the
-     * heading makes, and a row that cannot prove it belongs should not be counted. */
-    const isToday = (entry) => {
-      const at = new Date(entry.createdAt ?? 0).getTime();
-      return Number.isFinite(at) && at >= today;
-    };
-
-    const rounds = state.activities
-      .filter((entry) => isRound(entry) && isWin(entry) && isToday(entry))
-      .sort((a, b) => {
-        const left = minor(a.payoutMinor);
-        const right = minor(b.payoutMinor);
-        // Compared, not subtracted: a BigInt difference cannot be returned to Array.sort, which
-        // expects a Number.
-        if (left === right) return 0;
-        return left > right ? -1 : 1;
-      });
+     * belong in the live feed at the foot of the page, which shows everything. */
+    const rounds = (state.topPulls ?? []).filter((entry) => entry.item);
 
     if (!rounds.length) {
       const empty = el('li', 'drops__empty');

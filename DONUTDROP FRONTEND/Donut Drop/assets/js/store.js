@@ -18,6 +18,8 @@ export const state = {
   catalog: [],
   cases: [],
   activities: [],
+  // The day's biggest winning pulls, from the server. Not derived from `activities`, which is minutes wide.
+  topPulls: [],
   fairness: null,
   upgradeConfig: null,
   rouletteConfig: null,
@@ -241,6 +243,7 @@ export async function bootstrap() {
     refreshCases(false),
     refreshActivity(false),
     refreshPromotions(false),
+    refreshTopPulls(false),
   ]);
   // Promotions never reject (see below), so only the first two can say the API is unreachable.
   if (publicLoads.slice(0, 2).every((entry) => entry.status === 'rejected')) state.online = false;
@@ -343,7 +346,35 @@ export async function refreshActivity(notify = true) {
   const result = await api.get('/v1/activity/recent?limit=40');
   state.activities = (result.activities || []).map(normalizeActivity);
   if (notify) emit('activity');
+  // A settled round is also the only thing that can change today's top pulls.
+  void refreshTopPulls().catch(() => undefined);
   return state.activities;
+}
+
+/* Today's biggest pulls, for the home page. Asked for after new rounds, but at most every fifteen
+ * seconds -- rounds land several a second on a busy evening -- with one trailing ask, so a big pull
+ * inside the gap still shows up. Held like the feed while a round animates. */
+const TOP_PULLS_EVERY_MS = 15_000;
+let topPullsAt = 0;
+let topPullsTimer = 0;
+
+export async function refreshTopPulls(notify = true) {
+  if (liveHolds > 0) return state.topPulls;
+  const wait = topPullsAt + TOP_PULLS_EVERY_MS - Date.now();
+  if (wait > 0) {
+    if (!topPullsTimer) {
+      topPullsTimer = setTimeout(() => {
+        topPullsTimer = 0;
+        void refreshTopPulls().catch(() => undefined);
+      }, wait);
+    }
+    return state.topPulls;
+  }
+  topPullsAt = Date.now();
+  const result = await api.get('/v1/activity/top-today?limit=7');
+  state.topPulls = (result.activities || []).map(normalizeActivity);
+  if (notify) emit('toppulls');
+  return state.topPulls;
 }
 
 /* The catalogue, whole.

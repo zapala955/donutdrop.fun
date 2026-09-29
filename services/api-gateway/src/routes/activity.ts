@@ -36,6 +36,15 @@ const activityQuery = z
   .object({ limit: z.coerce.number().int().min(1).max(100).default(30) })
   .strict();
 
+const topTodayQuery = z
+  .object({ limit: z.coerce.number().int().min(1).max(20).default(7) })
+  .strict();
+
+/* Every open home page asks for today's top pulls after every settled round, and the answer only
+ * changes when somebody pulls something big. A few seconds of reuse turns a query per viewer per
+ * round into one every few seconds. */
+const TOP_TODAY_TTL_MS = 10_000;
+
 /**
  * Usernames are masked to a first character and a run of asterisks.
  *
@@ -226,5 +235,68 @@ export async function registerActivityRoutes(
         return { ...rest, vip: { tier: level.tier, label: level.label } };
       }),
     };
+  });
+
+  /**
+   * The home page's "Biggest pulls today": the day's winning crate and upgrader pulls, biggest
+   * payout first.
+   *
+   * It used to be picked out of the live feed's last forty rows in the browser, and that window is
+   * minutes wide on a busy evening, so the day's best pulls fell out of it and the list looked as
+   * though it had reset. This reads the whole day. The day is the UTC day, the one quests and the
+   * daily reward already run on.
+   *
+   * A pull is a win: it paid more than it cost. Rows have the live feed's shape, so the page reads
+   * them the same way, without the wager total the feed turns into a VIP label.
+   */
+  let topToday: { at: number; limit: number; rows: unknown[] } | null = null;
+  app.get('/v1/activity/top-today', async (request) => {
+    const query = parseWith(topTodayQuery, request.query ?? {});
+    if (topToday && topToday.limit === query.limit && Date.now() - topToday.at < TOP_TODAY_TTL_MS) {
+      return { activities: topToday.rows };
+    }
+    const result = await db.query(
+      `SELECT pull.* FROM (
+         SELECT r.id, 'case'::text AS kind, r.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                cs.name AS source_name,
+                NULL::char(7) AS accent,
+                r.price_minor AS wager_minor,
+                r.payout_minor AS payout_minor,
+                c.id AS catalog_item_id, c.minecraft_name, c.display_name, c.image_url,
+                c.unit_value_minor, c.metadata,
+                r.awarded_quantity AS quantity,
+                ((r.awarded_weight::bigint * 1000000) / r.total_weight)::integer AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM case_rounds r
+           JOIN users u ON u.id = r.user_id
+           JOIN cases cs ON cs.id = r.case_id
+           JOIN catalog_items c ON c.id = r.awarded_catalog_item_id
+          WHERE r.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AND r.payout_minor > r.price_minor
+         UNION ALL
+         SELECT r.id, 'upgrade'::text AS kind, r.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Upgrader'::text AS source_name,
+                NULL::char(7) AS accent,
+                r.stake_value_minor AS wager_minor,
+                r.payout_minor AS payout_minor,
+                c.id AS catalog_item_id, c.minecraft_name, c.display_name, c.image_url,
+                c.unit_value_minor, c.metadata,
+                r.target_quantity AS quantity, r.chance_ppm,
+                NULL::smallint AS game_result
+           FROM upgrader_rounds r
+           JOIN users u ON u.id = r.user_id
+           JOIN catalog_items c ON c.id = r.target_catalog_item_id
+          WHERE r.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AND r.outcome = 'win'
+            AND r.payout_minor > r.stake_value_minor
+       ) pull
+       ORDER BY pull.payout_minor DESC, pull.created_at DESC
+       LIMIT $1`,
+      [query.limit],
+    );
+    topToday = { at: Date.now(), limit: query.limit, rows: result.rows };
+    return { activities: result.rows };
   });
 }
