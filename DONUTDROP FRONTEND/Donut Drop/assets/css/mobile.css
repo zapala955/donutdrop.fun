@@ -235,7 +235,10 @@
   .toasts .toast { width: min(100%, 360px); }
   .drawer { bottom: var(--tabbar-reach); }
   .devfab { bottom: calc(var(--tabbar-reach) + 12px); }
-  .devpanel { bottom: calc(var(--tabbar-reach) + 60px); }
+  .devpanel {
+    bottom: calc(var(--tabbar-reach) + 60px);
+    max-height: calc(100dvh - var(--tabbar-reach) - 78px);
+  }
 }
 
 @media (max-width: 560px) {

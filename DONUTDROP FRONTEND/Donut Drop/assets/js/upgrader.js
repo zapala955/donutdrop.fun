@@ -466,13 +466,7 @@ function sync({ keepInput = false } = {}) {
 
   const ppm = chancePpm();
   const chance = ppm / 1_000_000;
-  const arc = $('#wheelArc', root);
-  arc.setAttribute('stroke-dasharray', `${(chance * C).toFixed(2)} ${C.toFixed(2)}`);
-  // a zero-length arc still paints a cap, so hide it outright
-  arc.setAttribute('data-empty', chance > 0 ? '0' : '1');
-  const lit = Math.round(chance * TICKS);
-  [...$('#wheelTicks', root).children].forEach((tick, i) => tick.classList.toggle('on', i < lit));
-  if (dial) dial.setChance(chance);
+  paintChance(chance);
 
   if (!spinning) {
     $('#wheelPct', root).textContent = ppm ? pct(chance, 2) : '—';
@@ -506,6 +500,17 @@ function sync({ keepInput = false } = {}) {
     : `Stake ${money(Number(stakeMinor()))}`;
 
   paintCatalog();
+}
+
+/* The win band on the ring: the SVG arc, the lit ticks and the canvas dial. */
+function paintChance(chance) {
+  const arc = $('#wheelArc', root);
+  arc.setAttribute('stroke-dasharray', `${(chance * C).toFixed(2)} ${C.toFixed(2)}`);
+  // a zero-length arc still paints a cap, so hide it outright
+  arc.setAttribute('data-empty', chance > 0 ? '0' : '1');
+  const lit = Math.round(chance * TICKS);
+  [...$('#wheelTicks', root).children].forEach((tick, i) => tick.classList.toggle('on', i < lit));
+  if (dial) dial.setChance(chance);
 }
 
 function paintStake(keepInput) {
@@ -707,11 +712,109 @@ async function pull() {
   }
 
   const round = response.round;
-  const won = round.outcome === 'win';
-  const chance = Number(round.chance_ppm) / 1_000_000;
-  const landing = (Number(round.roll_ppm) / 1_000_000) * 360;
-  const payout = Number(round.payout_minor ?? 0);
 
+  await spinRound({
+    won: round.outcome === 'win',
+    chance: Number(round.chance_ppm) / 1_000_000,
+    landing: (Number(round.roll_ppm) / 1_000_000) * 360,
+    destination,
+    stake: Number(wagered),
+    payout: Number(round.payout_minor ?? 0),
+    label: 'VERIFIED ROLL',
+    announce: true,
+    /* The money moves HERE, on the frame the wheel stops, alongside the colour, the sound and the
+     * toast. Deliberately not awaited: settle applies the round's own closing balance before its
+     * first await, so the pill is already correct, and the refreshes behind it are reconciliation
+     * that nobody is waiting to read. Awaiting would stall the win behind a network round trip. */
+    onStop: () => { void response.settle(); },
+  });
+
+  /* The safety net. If the animation threw before onStop, the round is still settled and the
+   * player still gets their balance — a broken animation must never cost somebody a payout.
+   * Idempotent, so this is a no-op on the ordinary path. */
+  await response.settle();
+
+  spinning = false;
+  $('#wheel', root).classList.remove('is-win', 'is-lose');
+  /* The stake survives the round: the amount is still valid and re-staking it is the common next
+   * action. Only the target clears, because the window may have moved with the new balance. */
+  target = null;
+  sync();
+}
+
+/* ─────────── the test bench's spin ───────────
+ * The dial, the burst, the sounds and the reveal exactly as a real round plays them, with an
+ * outcome the animation test bench hands in instead of one off /v1/upgrades. Nothing is staked,
+ * nothing settles, and nothing is announced: no toast and no chat line, because both would report
+ * cash that never moved. The centre reads TEST SPIN rather than VERIFIED ROLL for the same reason.
+ *
+ * The bench's stake and item are swapped into the real fields for the length of the spin, so the
+ * cards, the band and the odds all come out of the same code a real round uses, and the player's
+ * own figures are put back afterwards. The roll comes from the caller: this module holds no source
+ * of chance, test path or not. */
+
+// bench items come from data.js, which prices in `value`; the upgrader reads unitValueMinor
+function asTarget(item) {
+  return { ...item, unitValueMinor: String(Math.trunc(item.value)) };
+}
+
+/** The live formula's chance for a made-up stake. 0 until the upgrader config has loaded. */
+export function quoteTestSpin({ item, stake }) {
+  const saved = [cashStake, stakeInputValid, target];
+  cashStake = stake;
+  stakeInputValid = true;
+  target = asTarget(item);
+  try {
+    return chancePpm() / 1_000_000;
+  } finally {
+    [cashStake, stakeInputValid, target] = saved;
+  }
+}
+
+/* `roll` is uniform in [0, 1). The band is [0, B) clockwise from the datum, so a hit lands inside it
+ * and a miss anywhere past it; near misses turn up on their own. */
+export async function playTestSpin({ won, roll, item, stake }) {
+  if (!root?.isConnected) throw new Error('the upgrader is not mounted');
+  if (spinning) throw new Error('the upgrader is mid-round');
+  const chance = quoteTestSpin({ item, stake });
+  if (!(chance > 0)) throw new Error('no win chance at that stake');
+  if (!won && chance >= 1) throw new Error('a 100% chance cannot miss');
+  const band = chance * 360;
+  const landing = won ? roll * band : band + roll * (360 - band);
+
+  const saved = [cashStake, stakeInputValid, target];
+  spinning = true;
+  cashStake = stake;
+  stakeInputValid = true;
+  target = asTarget(item);
+  sync();
+  // the made-up stake may be over the real balance; that is not something to warn about here
+  const hint = $('#stakeHint', root);
+  delete hint.dataset.bad;
+  hint.textContent = '';
+  $('#pullLabel', root).textContent = 'Test spin';
+  const status = $('#telStat', root);
+  status.dataset.s = 'fire';
+  status.textContent = 'TEST SPIN';
+  playSound('anvil');
+
+  try {
+    await spinRound({
+      won, chance, landing, destination: target, stake,
+      payout: won ? item.value : 0, label: 'TEST SPIN', announce: false,
+    });
+  } finally {
+    [cashStake, stakeInputValid, target] = saved;
+    spinning = false;
+    $('#wheel', root).classList.remove('is-win', 'is-lose');
+    sync();
+  }
+}
+
+/* The spin itself, from release to the end of the reveal. Shared by the real round and the test
+ * bench so the bench cannot drift from what ships. `landing` is in degrees clockwise from the
+ * datum; `onStop` fires on the frame the wheel stops. */
+async function spinRound({ won, chance, landing, destination, stake, payout, label, announce, onStop }) {
   const wheel = $('#wheel', root);
   const mid = $('#wheelMid', root);
   const needle = $('#needle', root);
@@ -719,7 +822,7 @@ async function pull() {
   wheel.classList.add('is-spinning');
   mid.dataset.state = 'spin';
   $('#wheelPct', root).textContent = pct(chance, 2);
-  $('#wheelLbl', root).textContent = 'VERIFIED ROLL';
+  $('#wheelLbl', root).textContent = label;
 
   /* How close this one came, in ticks. The band runs [0, B) clockwise from the datum, so its two
    * edges are at 0 and B and the landing can be near either — including by wrapping past 360 back
@@ -742,11 +845,7 @@ async function pull() {
     wheel.classList.remove('is-spinning');
     delete root.dataset.tense;
 
-    /* The money moves HERE, on the frame the wheel stops, alongside the colour, the sound and the
-     * toast. Deliberately not awaited: settle applies the round's own closing balance before its
-     * first await, so the pill is already correct, and the refreshes behind it are reconciliation
-     * that nobody is waiting to read. Awaiting would stall the win behind a network round trip. */
-    void response.settle();
+    onStop?.();
 
     if (won) {
       wheel.classList.add('is-win');
@@ -755,43 +854,35 @@ async function pull() {
       $('#wheelLbl', root).textContent = destination.name.toUpperCase();
       if (fx) fx.burst('#ffd700', { n: 70 });
       playSound(payout >= 50_000_000 ? 'jackpot' : 'win');
-      toast({
-        kind: 'win', img: destination.img, title: `Hit ${destination.name}`,
-        body: `+${money(payout)} cash`,
-      });
-      broadcast({
-        who: 'you', color: RARITY[destination.rarity].color, img: destination.img,
-        text: `turned ${money(Number(wagered))} into ${money(payout)} at ${pct(chance, 2)}`,
-      });
+      if (announce) {
+        toast({
+          kind: 'win', img: destination.img, title: `Hit ${destination.name}`,
+          body: `+${money(payout)} cash`,
+        });
+        broadcast({
+          who: 'you', color: RARITY[destination.rarity].color, img: destination.img,
+          text: `turned ${money(stake)} into ${money(payout)} at ${pct(chance, 2)}`,
+        });
+      }
     } else {
       wheel.classList.add('is-lose');
       mid.dataset.state = 'lose';
       $('#wheelPct', root).textContent = 'MISSED';
-      $('#wheelLbl', root).textContent = money(Number(wagered)) + ' GONE';
+      $('#wheelLbl', root).textContent = money(stake) + ' GONE';
       if (fx) fx.burst('#ff2222', { n: 40 });
       playSound('lose');
-      toast({
-        kind: 'lose', img: destination.img, title: `Missed ${destination.name}`,
-        body: `${pct(chance, 2)} was not enough.`,
-      });
+      if (announce) {
+        toast({
+          kind: 'lose', img: destination.img, title: `Missed ${destination.name}`,
+          body: `${pct(chance, 2)} was not enough.`,
+        });
+      }
     }
 
-    await playReveal({ won, item: destination, stake: Number(wagered), payout: destination.value });
+    await playReveal({ won, item: destination, stake, payout: destination.value });
   } catch (error) {
     console.error('upgrade animation failed', error);
   }
-
-  /* The safety net. If the animation threw before the line above, the round is still settled and
-   * the player still gets their balance — a broken animation must never cost somebody a payout.
-   * Idempotent, so this is a no-op on the ordinary path. */
-  await response.settle();
-
-  spinning = false;
-  wheel.classList.remove('is-win', 'is-lose');
-  /* The stake survives the round: the amount is still valid and re-staking it is the common next
-   * action. Only the target clears, because the window may have moved with the new balance. */
-  target = null;
-  sync();
 }
 
 /* The commitment is the server's, so there is nothing to show until one has been issued. Shaped

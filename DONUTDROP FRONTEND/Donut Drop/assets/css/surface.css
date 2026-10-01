@@ -616,6 +616,9 @@ body::after {
 
 .devpanel {
   position: fixed; right: 18px; bottom: 66px; width: min(392px, calc(100vw - 36px));
+  /* seven tests plus the login block outgrow a laptop screen, so the panel scrolls rather than
+     running off the top */
+  max-height: calc(100dvh - 84px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 12px;
   padding: 16px; border-radius: var(--r-lg);
   background-image: var(--grid), var(--mat-obsidian);
@@ -641,6 +644,13 @@ body::after {
 
 .devpanel__field { display: flex; flex-direction: column; gap: 4px; }
 .devpanel__label { font-size: .625rem; letter-spacing: .2em; color: var(--faint); }
+.devpanel__quote { font-size: .625rem; letter-spacing: .06em; color: var(--gold-bright); }
+.devpanel__quote[data-err] { color: #ff2222; }
+
+/* Staff gate: the tests and their inputs need an admin account, the test login does not.
+   devmenu.js sets data-staff from the signed-in role and refuses to run a test without it. */
+#devRoot:not([data-staff="1"]) [data-staff-only],
+#devRoot[data-staff="1"] [data-guest-only] { display: none; }
 
 /* ── the test login ──
    Fenced off inside the bench with its own rule and a warm tint, because it is
