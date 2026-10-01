@@ -65,6 +65,14 @@ jobs:
           printf '%s' '{"ci-audit-v1":"CiAuditHmac_f81Cq3Lm7Vp2Xs9Kd5Jn4Rt6"}' > .secrets/audit-verification-keys.json
           printf '%s' 'CiCheckpointKey_q92Vs5Lm8Xa3Kr7Jt4Wd6' > .secrets/audit-checkpoint-hmac-key
           printf '%s' 'Q0lfQm90S2V5Xzl2TG0zWHE3S3QyV3M4SnI1UGQ0WmE=' > .secrets/bot-webhook-secret
+          # The API mounts these five whether or not their feature is switched on, and a compose
+          # secret whose file is missing stops the container being created at all. Placeholders,
+          # like the ones infra/vps/prepare-secrets.sh writes: none of the features is enabled here.
+          printf '%s' 'disabled-no-discord-application' > .secrets/discord-bot-token
+          printf '%s' 'CiDiscordControl_k3Vq8Lm2Xs7Jd4Wn9Rt5' > .secrets/discord-control-hmac-key
+          printf '%s' '{}' > .secrets/discord-operators.json
+          printf '%s' 'CiCommunityBot_p6Hs2Nq9Vm4Kx7Lt3Wd8' > .secrets/community-bot-hmac-key
+          printf '%s' 'disabled-no-turnstile' > .secrets/turnstile-secret-key
           chmod -R go-rwx .secrets
       - name: Validate Compose configuration
         run: |
@@ -139,6 +147,15 @@ jobs:
           docker build --file infra/docker/api.Dockerfile .
           docker build --file infra/docker/bot.Dockerfile .
       - name: Smoke-test hardened Compose deployment
+        # Not in .env.example: these names are also the API's own file-backed settings, so a local
+        # .env copied from it would point `npm run dev` at files that do not exist. Without them
+        # Compose falls back to the production paths under /opt, which a runner does not have.
+        env:
+          DISCORD_BOT_TOKEN_FILE: ${{ github.workspace }}/.secrets/discord-bot-token
+          DISCORD_CONTROL_HMAC_KEY_FILE: ${{ github.workspace }}/.secrets/discord-control-hmac-key
+          DISCORD_OPERATORS_JSON_FILE: ${{ github.workspace }}/.secrets/discord-operators.json
+          COMMUNITY_BOT_HMAC_KEY_FILE: ${{ github.workspace }}/.secrets/community-bot-hmac-key
+          TURNSTILE_SECRET_KEY_FILE: ${{ github.workspace }}/.secrets/turnstile-secret-key
         run: |
           docker compose --env-file .env.example -f infra/docker/compose.yml up -d --build postgres redis api maintenance nginx
           for attempt in $(seq 1 30); do
