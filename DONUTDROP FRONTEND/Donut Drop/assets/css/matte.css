@@ -128,6 +128,55 @@
   transform: translateX(-8px) translateY(0);
 }
 
+/* Touch screens. The CSS bubble cannot open there (no hover, and a tap is not focus-visible), so a
+   tap opens .tipfloat from ui.js instead, and the pseudo bubble is switched off so iOS's sticky
+   hover cannot show a second, unclamped copy.
+
+   The circle stays 15px; the box around it grows to 29px, because a 15px target is a third of a
+   fingertip. The ring moves into a gradient so it can stay small inside the bigger box, and the
+   negative margins hand the extra 7px back so nothing in the heading moves. */
+@media (hover: none) {
+  .ihint {
+    --ring: var(--gold-deep);
+    width: 29px; height: 29px;
+    margin: -7px -7px -7px 0;
+  }
+  /* Restated for :hover because the rule above uses the `background` shorthand there, which would
+     wipe the ring the moment iOS applies its sticky hover after a tap. */
+  .ihint, .ihint:hover, .ihint:focus-visible {
+    border-color: transparent;
+    background: radial-gradient(circle, transparent 6.5px, var(--ring) 6.5px 7.5px, transparent 7.5px);
+  }
+  .ihint::after { display: none; }
+  .ihint[aria-expanded="true"] { --ring: var(--gold-bright); color: var(--gold-bright); }
+}
+
+.tipfloat {
+  position: fixed; z-index: var(--z-portal);
+  width: max-content; max-width: min(300px, calc(100vw - 24px));
+  padding: 9px 12px;
+  border: 1px solid var(--line2); border-radius: 6px;
+  background: var(--tip-bg); color: var(--tip-txt);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  font: 400 .8125rem/1.45 var(--body);
+  text-align: left;
+  pointer-events: none;
+  animation: tipfloat-in .14s ease-out;
+}
+/* The notch points at the icon, wherever the clamp left the bubble. */
+.tipfloat::before {
+  content: "";
+  position: absolute; left: var(--tip-arrow, 50%);
+  width: 8px; height: 8px; margin-left: -4px;
+  background: var(--tip-bg);
+  border: 1px solid var(--line2);
+  transform: rotate(45deg);
+}
+.tipfloat[data-side="below"]::before { top: -5px; border-right: 0; border-bottom: 0; }
+.tipfloat[data-side="above"]::before { bottom: -5px; border-left: 0; border-top: 0; }
+@keyframes tipfloat-in { from { opacity: 0; transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .tipfloat { animation: none; } }
+
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    QUICK-ACTION CHIPS
    ══════════════════════════════════════════════════════════════════════════════════════════════

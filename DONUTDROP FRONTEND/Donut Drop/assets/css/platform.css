@@ -357,6 +357,20 @@
   .feed__rows { max-height: 340px; }
 }
 
+@media (max-width: 560px) {
+  /* On a phone the four fixed tracks above add up to 328px, more than the ~318px a row has, so
+     the flexible player track was handed zero: a sliver of avatar under a header reading "P…".
+     The clock goes next — every row in a live feed is "just now" — and the figure tracks tighten
+     to what "-$1.75B" actually needs, which leaves the player about 90px. */
+  .feed__cols,
+  .feedrow {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 74px) minmax(0, 50px) minmax(0, 84px);
+    gap: 6px;
+  }
+  .feed__cols > span:nth-child(3),
+  .feedrow__t { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .feed__dot { animation: none; }
   .feedrow { transition: none; }

@@ -4,7 +4,7 @@
 import { $, el, money, safeImage } from './util.js';
 import { RARITY } from './data.js';
 import { state, bus } from './store.js';
-import { navigate } from './routing.js';
+import { navigate, onNavigate } from './routing.js';
 
 /* ─────────── toasts ─────────── */
 export function toast({ title, body = '', img = null, kind = 'win', ttl = 4200 }) {
@@ -72,6 +72,83 @@ export function initModal() {
   dlg.addEventListener('cancel', (e) => { e.preventDefault(); closeModal(); });
   // clicking the backdrop (the dialog element itself) dismisses
   dlg.addEventListener('click', (e) => { if (e.target === dlg) closeModal(); });
+}
+
+/* ─────────── ⓘ hints on touch screens ───────────
+ *
+ * matte.css opens a hint's bubble on :hover and :focus-visible. A phone gives it neither: there is
+ * no hover, iOS never focuses a tapped button, and Chrome does not count a tap as focus-visible.
+ * Every one-sentence explanation on the site was unreachable from a phone.
+ *
+ * So on a touch screen a tap opens a real element instead, placed against the viewport rather than
+ * the icon: a hint beside a heading at the right edge of a 320px screen would otherwise centre its
+ * bubble half off the glass. One is open at a time, and the next tap anywhere, a scroll, Escape or
+ * a route change closes it. Mouse and keyboard keep the CSS bubble untouched. */
+const TOUCH = window.matchMedia('(hover: none)');
+const HINT_GAP = 12;
+let openHint = null;
+
+function closeHint() {
+  if (!openHint) return;
+  openHint.bubble.remove();
+  openHint.button.setAttribute('aria-expanded', 'false');
+  openHint.button.removeAttribute('aria-describedby');
+  openHint = null;
+}
+
+function showHint(button) {
+  const text = button.dataset.tip || button.getAttribute('aria-label');
+  if (!text) return;
+  const bubble = el('div', 'tipfloat');
+  bubble.id = 'tipfloat';
+  bubble.setAttribute('role', 'tooltip');
+  bubble.textContent = text;
+  // Inside an open modal the bubble has to join the dialog's top layer or it renders beneath it.
+  (button.closest('dialog[open]') || document.body).appendChild(bubble);
+
+  const icon = button.getBoundingClientRect();
+  /* The phone tab bar is fixed over the foot of the viewport; a bubble below that line would sit
+   * under it. On wider layouts the same bar lives in the header, which is why it only counts when
+   * it is actually down there. */
+  const bar = $('.top .tabs')?.getBoundingClientRect();
+  const floor = bar && bar.top > innerHeight / 2 ? bar.top : innerHeight;
+  const { offsetWidth: width, offsetHeight: height } = bubble;
+  const centre = icon.left + icon.width / 2;
+  const left = Math.min(Math.max(centre - width / 2, HINT_GAP), innerWidth - HINT_GAP - width);
+  const below = icon.bottom + 8;
+  const fitsBelow = below + height <= floor - HINT_GAP;
+  bubble.dataset.side = fitsBelow ? 'below' : 'above';
+  bubble.style.left = `${left}px`;
+  bubble.style.top = `${fitsBelow ? below : icon.top - 8 - height}px`;
+  bubble.style.setProperty('--tip-arrow', `${centre - left}px`);
+
+  button.setAttribute('aria-expanded', 'true');
+  button.setAttribute('aria-describedby', bubble.id);
+  openHint = { button, bubble };
+}
+
+export function initHints() {
+  document.addEventListener('click', (event) => {
+    if (!TOUCH.matches) return;
+    const button = event.target instanceof Element ? event.target.closest('.ihint') : null;
+    const wasOpen = openHint?.button;
+    closeHint();
+    // A second tap on the same icon is the close, not a reopen.
+    if (button && button !== wasOpen) showHint(button);
+  });
+  /* Only a scroll that moves the icon closes it. Capture sees every scroller on the page, and the
+   * chat log or a live strip ticking over somewhere else is not a reason to snatch the bubble away
+   * mid-sentence. */
+  window.addEventListener('scroll', (event) => {
+    const moved = event.target;
+    if (!openHint) return;
+    if (moved === document || (moved instanceof Node && moved.contains(openHint.button))) closeHint();
+  }, { passive: true, capture: true });
+  window.addEventListener('resize', closeHint);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeHint();
+  });
+  onNavigate(closeHint);
 }
 
 /* ─────────── wallet readout ─────────── */

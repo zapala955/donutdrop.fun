@@ -1,6 +1,7 @@
 /* Hallmark · redesign (mobile layer) · genre: atmospheric · theme: existing obsidian + gold tokens
  * pre-emit critique: P4 H5 E4 S4 R5 V4
- * scope: header, bottom tab bar, chat drawer and the fixed furniture around them, at ≤1080px
+ * scope: header, bottom tab bar, chat drawer and the fixed furniture around them, at ≤1080px;
+ *        form controls and cursor-sized targets on touch screens
  *
  * mobile.css — the phone layer, loaded last.
  *
@@ -284,6 +285,32 @@
   .top .tabs { padding-inline: 4px; gap: 0; }
   .top .tabs > a,
   .top .tabs .tabdrop__btn { padding-inline: 3px; font-size: .625rem; letter-spacing: .02em; }
+}
+
+/* ═════════════════════════ touch input ═════════════════════════
+   Keyed to the finger, not the width: a tablet needs these as much as a phone, and a narrow
+   desktop window needs none of them. */
+@media (hover: none) and (pointer: coarse) {
+  /* iOS zooms the whole page into any field set under 16px the moment it is focused, and leaves it
+     zoomed after the keyboard goes. The chat box (14px), the sign-in name (15px), the crate search
+     and sort (12px) and the fairness seeds (12px) all did it. */
+  /* The :not([hidden]) on the last two is only weight: it lifts them to the same specificity as
+     the input selector, enough to beat component rules like `.market__sort select`. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"],
+    [type="button"], [type="submit"], [type="reset"]),
+  select:not([hidden]),
+  textarea:not([hidden]) { font-size: 16px; }
+
+  /* Targets drawn for a cursor: the upgrader's fairness button (26px square) and a lobby's Join
+     (26px tall) next to the open-battle list. */
+  .utool { width: 38px; height: 38px; }
+  .btlcard__join { min-height: 38px; }
+
+  /* The stake box is 45px tall but its field was 23px of it: a tap on the padding above or below
+     the number landed on the box and opened no keyboard. The field takes the whole height now and
+     the box keeps its size. */
+  .amountbox { padding-block: 0; }
+  .amountbox__in { align-self: stretch; min-height: 43px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

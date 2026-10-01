@@ -13,7 +13,7 @@ import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
 } from './util.js';
 import {
-  toast, initModal, initWallet, broadcast,
+  toast, initModal, initWallet, initHints, broadcast,
   openModal, closeModal,
 } from './ui.js';
 import { API_BASE_URL } from './api.js';
@@ -1226,6 +1226,7 @@ function route() {
 
 /* ═════════ boot ═════════ */
 initModal();
+initHints();
 initTabDrop('casesDrop', 'casesBtn', 'casesMenu');
 initTabDrop('casinoDrop', 'casinoBtn', 'casinoMenu');
 initWallet();

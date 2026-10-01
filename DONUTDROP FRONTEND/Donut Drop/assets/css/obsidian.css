@@ -400,6 +400,13 @@ html {
   white-space: nowrap;
 }
 
+/* Mono is also the face for strings that are not figures: a sentence of table limits, a
+   64-character hash, a player's name. Held to one line they ran straight out of their boxes on a
+   phone and were clipped mid-word, so these wrap; only figures keep the single line. */
+.roulette__limits,
+.fairhead__hash,
+.acct__grid .acct__v { white-space: normal; }
+
 /* A figure in a flex or grid cell needs `min-width: 0` before `text-overflow` can do anything:
    without it the cell's automatic minimum size is the full text and the box just grows instead of
    clipping, which is the overflow half of the same bug. */
