@@ -73,7 +73,14 @@ jobs:
           printf '%s' '{}' > .secrets/discord-operators.json
           printf '%s' 'CiCommunityBot_p6Hs2Nq9Vm4Kx7Lt3Wd8' > .secrets/community-bot-hmac-key
           printf '%s' 'disabled-no-turnstile' > .secrets/turnstile-secret-key
-          chmod -R go-rwx .secrets
+          # Compose mounts file secrets as bind mounts, so each file keeps its host mode inside the
+          # container, and every service runs as its own non-root user: the API image is `node`
+          # (uid 1000), the runner that wrote these is 1001. At 0600 nothing could read them, and
+          # `migrate` died first, taking everything that waits on it down too. This is the scheme
+          # infra/vps/prepare-secrets.sh uses: the files are readable, the directory around them
+          # is not.
+          find .secrets -maxdepth 1 -type f -exec chmod 0444 {} +
+          chmod 0700 .secrets
       - name: Validate Compose configuration
         run: |
           docker compose --env-file .env.example -f infra/docker/compose.yml config --quiet
