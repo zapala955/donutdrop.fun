@@ -10,7 +10,6 @@ import type { Database, DbClient } from '../lib/db.js';
 import { announceWin } from '../lib/discord-flex.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
-import { publishLiveSoon } from '../lib/live-events.js';
 import {
   PLINKO_HOUSE_EDGE_BPS,
   PLINKO_MAX_ROWS,
