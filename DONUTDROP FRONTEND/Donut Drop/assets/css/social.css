@@ -29,15 +29,23 @@
 .chat__dock:hover { border-color: var(--ob-line-hi); background: var(--panel2); }
 
 /* Collapsing is a shell-grid concern: hiding the panel without closing its column leaves a hole
-   exactly as wide as the chat used to be. */
-body[data-chat-collapsed="1"] .shell { grid-template-columns: 0 minmax(0, 1fr); }
-body[data-chat-collapsed="1"] .chat {
-  width: 0;
-  padding: 0;
-  border-right-width: 0;
-  overflow: visible;   /* the handle has to survive the collapse */
+   exactly as wide as the chat used to be.
+
+   Desktop only. Below the breakpoint the rail is a drawer with its own open state, and the flag
+   used to be undone there with `display: revert` — which reverts to the browser's stylesheet, not
+   to ours, so a phone that had ever collapsed the rail at desktop width got a drawer whose log,
+   header and composer had all lost their flex layout. Scoping the collapse means there is nothing
+   to undo. */
+@media (min-width: 1081px) {
+  body[data-chat-collapsed="1"] .shell { grid-template-columns: 0 minmax(0, 1fr); }
+  body[data-chat-collapsed="1"] .chat {
+    width: 0;
+    padding: 0;
+    border-right-width: 0;
+    overflow: visible;   /* the handle has to survive the collapse */
+  }
+  body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
 }
-body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
 
 /* ── mobile: a drawer, not a column ──
    Below the shell's breakpoint the rail leaves the grid entirely and slides in over the page.
@@ -48,8 +56,7 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
    breakpoint is app.css's 1080px, where the drawer begins; at 900 the two sheets disagreed about
    everything between. The dock handle is hidden at this width in mobile.css. */
 @media (max-width: 1080px) {
-  .shell,
-  body[data-chat-collapsed="1"] .shell { grid-template-columns: minmax(0, 1fr); }
+  .shell { grid-template-columns: minmax(0, 1fr); }
   .chat {
     position: fixed; top: var(--top-h); bottom: 0; left: 0;
     width: min(320px, 86vw);
@@ -58,8 +65,16 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
     box-shadow: 18px 0 44px -30px rgba(0, 0, 0, 1);
   }
   body.chat-open .chat { transform: translateX(0); }
-  body[data-chat-collapsed="1"] .chat { width: min(320px, 86vw); padding: initial; }
-  body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: revert; }
+
+  /* A drop is live and the drawer is shut: say so on the button that opens it. */
+  body[data-rain="1"]:not(.chat-open) .top__burger { position: relative; }
+  body[data-rain="1"]:not(.chat-open) .top__burger::after {
+    content: "";
+    position: absolute; top: 5px; right: 5px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--gold-bright);
+    box-shadow: 0 0 0 2px var(--panel2), 0 0 10px rgba(255, 170, 0, .8);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -74,12 +89,47 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
   font-size: .625rem; letter-spacing: .12em; color: var(--faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* A live pot is worth looking at; a closed one is not on screen at all. */
+/* A live pot is worth looking at; a closed one is not on screen at all.
+
+   The [hidden] rule is load-bearing. app.css gives the card `display: flex`, which beats the
+   browser's own `[hidden] { display: none }`, so without this the card never hid: between drops
+   the rail showed the static "$0 · RAIN POT · 12:00 · Join" placeholder, with a Join button wired
+   to nothing. */
+.chat__rain[hidden] { display: none; }
 .chat__rain:not([hidden]) {
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(255, 170, 0, .14), transparent 64%),
     var(--panel);
   border-bottom: 1px solid var(--ob-line);
+}
+.chat__rain .btn { flex: 0 0 auto; white-space: nowrap; }
+.chat__rain[data-closing="1"] .chat__timer { color: var(--gold-bright); }
+
+/* ═════════════════════════ the composer and the tail ═════════════════════════ */
+
+/* Shown when a line lands while the reader is scrolled up. Absolute against the rail (sticky on
+   desktop, fixed on phones -- both are containing blocks), floating just above the composer. */
+.chat__jump {
+  position: absolute; left: 50%; bottom: 62px;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ob-line-hi);
+  background: rgba(10, 10, 12, .94);
+  color: var(--gold-bright);
+  font-size: .6875rem; font-weight: 700; letter-spacing: .06em;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 1);
+  cursor: pointer;
+}
+.chat__jump[hidden] { display: none; }
+.chat__jump:hover { background: var(--panel2); }
+/* Slow mode: the send button counts down instead of saying Send. */
+.chat__send button[aria-disabled="true"] {
+  min-width: 46px;
+  opacity: .6;
+  cursor: default;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═════════════════════════ a chat line ═════════════════════════ */
@@ -147,6 +197,69 @@ body[data-chat-collapsed="1"] .chat > *:not(.chat__dock) { display: none; }
 }
 
 .msg--tip { background: linear-gradient(90deg, rgba(127, 216, 255, .07), transparent 62%); }
+
+/* ── your own lines ──
+   An edge, not a fill: polish.css's glass already owns the row's background, and a filled row in
+   your own colour is the loudest thing in the rail for the one reader who least needs it. */
+.msg.msg--me { box-shadow: inset 2px 0 0 var(--gold-body); }
+
+/* ── the media nametag ──
+   An approved creator's lines carry their code. The pill is a button: tapping it copies the code,
+   which is the only thing a viewer would want from it. One accent per platform, so a streamer's
+   chat can tell its own creator apart at a glance; the name takes the same accent unless the
+   high-roller glow already claimed it. */
+/* A line can carry a name, MEDIA, a tier and the time in a 292px rail. The name is always the
+   same nine masked characters and the time is five digits, so neither gives way; the code inside
+   the pill is what ellipsizes. Without this the time wrapped onto two lines. */
+.msg__top .msg__t { flex: none; white-space: nowrap; padding-left: 4px; }
+.msg[data-media="1"] .msg__who { flex: none; }
+.msg__badge--media {
+  --media: #e7e9ea;
+  flex: 0 1 auto; min-width: 0; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--media) 40%, transparent);
+  background: color-mix(in srgb, var(--media) 14%, transparent);
+  color: var(--media);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.3;
+}
+.msg__badge--media:hover,
+.msg__badge--media:focus-visible {
+  background: color-mix(in srgb, var(--media) 24%, transparent);
+  outline: none;
+}
+.msg__badge--media b {
+  font-weight: 800; letter-spacing: .04em;
+  font-family: var(--mono);
+  min-width: 0; max-width: 9ch; overflow: hidden; text-overflow: ellipsis;
+}
+.msg__badge--media[data-platform="youtube"] { --media: #ff5a52; }
+.msg__badge--media[data-platform="twitch"]  { --media: #b28cff; }
+.msg__badge--media[data-platform="tiktok"]  { --media: #4ff0ea; }
+.msg__badge--media[data-platform="kick"]    { --media: #6cff3a; }
+.msg__badge--media[data-platform="x"]       { --media: #e7e9ea; }
+.msg[data-media="1"]:not([data-whale="1"]) .msg__who { color: var(--media-name, #e7e9ea); }
+.msg[data-media="1"][data-platform="youtube"] { --media-name: #ff8a84; }
+.msg[data-media="1"][data-platform="twitch"]  { --media-name: #c9b0ff; }
+.msg[data-media="1"][data-platform="tiktok"]  { --media-name: #8af5f1; }
+.msg[data-media="1"][data-platform="kick"]    { --media-name: #9dff7c; }
+
+/* ── lava rain, in the conversation ──
+   A drop opening and a drop paying out are both server facts, so they get a line like a big hit
+   does — quieter than a win card, louder than a message. */
+.msg--rain {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 106, 0, .12), transparent 62%),
+    var(--glass);
+  border-color: rgba(255, 122, 0, .28);
+}
+.msg--rain .msg__av { cursor: default; background: transparent; }
+.msg--rain .msg__av img { image-rendering: pixelated; object-fit: contain; }
+.msg__badge--rain {
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, #ffb347, #ff6a00);
+}
 
 /* ═════════════════════════ moderation menu ═════════════════════════ */
 

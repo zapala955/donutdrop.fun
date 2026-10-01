@@ -1377,18 +1377,9 @@
   flex: none;
 }
 .msg[data-staff="1"] .msg__who { color: var(--gold-bright); }
-.msg[data-staff="1"] .msg__who::after {
-  content: "STAFF";
-  margin-left: 6px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: .625rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  color: #241a02;
-  background: linear-gradient(180deg, var(--gold-bright), #ffaa00);
-  vertical-align: middle;
-}
+/* A "STAFF" pill was drawn here with ::after. chat.js now appends a real ADMIN badge beside the
+   name, so staff lines wore both -- and the pseudo-element, living inside the name's ellipsis box,
+   was the first thing clipped on a long name. The badge is the one kept. */
 
 /* The composer. Disabled until there is a session to post under, so it never accepts typing it
    is going to refuse. */

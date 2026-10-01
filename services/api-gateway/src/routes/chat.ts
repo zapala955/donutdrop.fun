@@ -69,7 +69,34 @@ interface MessageRow {
   author_id: string;
   role: string;
   wagered_minor: string | null;
+  creator_code: string | null;
+  creator_platform: string | null;
 }
+
+/**
+ * One message with everything its line is decorated with, for both the read and the write.
+ *
+ * The creator join is LATERAL and LIMIT 1 because an approved creator may later file a second
+ * application; the approval that counts is the most recent one, and a later rejection or withdrawal
+ * of a *new* request does not take away a code that was already granted. The code itself is read
+ * from `referral_codes` rather than from `requested_code`, because an admin can approve under a
+ * different code and a player can rename theirs afterwards -- the tag shows the code that works.
+ */
+const MESSAGE_SELECT = `
+  SELECT m.id, m.body, m.created_at, u.minecraft_username AS author,
+         m.user_id AS author_id, u.role, t.wagered_minor,
+         creator.code AS creator_code, creator.platform AS creator_platform
+    FROM chat_messages m
+    JOIN users u ON u.id = m.user_id
+    LEFT JOIN user_wager_totals t ON t.user_id = m.user_id
+    LEFT JOIN LATERAL (
+      SELECT rc.code, ca.platform
+        FROM creator_applications ca
+        JOIN referral_codes rc ON rc.user_id = ca.user_id
+       WHERE ca.user_id = m.user_id AND ca.status = 'approved'
+       ORDER BY ca.reviewed_at DESC
+       LIMIT 1
+    ) creator ON true`;
 
 interface ChatClearRow {
   id: string;
@@ -97,6 +124,32 @@ function decorate(config: AppConfig, wageredMinor: string | null) {
   };
 }
 
+/**
+ * The media nametag: an approved creator's code, worn on every line they post.
+ *
+ * Only the code and the platform. The channel URL, audience size and revenue share on the
+ * application are between the creator and the operator; the code is the one part a creator wants
+ * repeated, and it is already public on every invite link they post. Nothing at all while the
+ * programme is switched off, so turning it off takes the tags down with it.
+ */
+function mediaTag(config: AppConfig, row: Pick<MessageRow, 'creator_code' | 'creator_platform'>) {
+  if (!config.creatorProgrammeEnabled || !row.creator_code) return {};
+  return { media: { code: row.creator_code, platform: row.creator_platform } };
+}
+
+function present(config: AppConfig, row: MessageRow) {
+  return {
+    id: row.id,
+    body: row.body,
+    author: row.author,
+    authorId: row.author_id,
+    isStaff: row.role === 'admin',
+    ...decorate(config, row.wagered_minor ?? null),
+    ...mediaTag(config, row),
+    createdAt: row.created_at,
+  };
+}
+
 export async function registerChatRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);
 
@@ -108,11 +161,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
     );
     const reset = clear.rows[0] ?? null;
     const result = await db.query<MessageRow>(
-      `SELECT m.id, m.body, m.created_at, u.minecraft_username AS author,
-              m.user_id AS author_id, u.role, t.wagered_minor
-         FROM chat_messages m
-         JOIN users u ON u.id = m.user_id
-         LEFT JOIN user_wager_totals t ON t.user_id = m.user_id
+      `${MESSAGE_SELECT}
         WHERE m.deleted_at IS NULL
           AND ($2::timestamptz IS NULL OR m.created_at > $2)
         ORDER BY m.created_at DESC, m.id DESC
@@ -121,15 +170,7 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
     );
     // Oldest first, so the client appends downward without reversing a list on every poll.
     return {
-      messages: result.rows.reverse().map((row) => ({
-        id: row.id,
-        body: row.body,
-        author: row.author,
-        authorId: row.author_id,
-        isStaff: row.role === 'admin',
-        ...decorate(config, row.wagered_minor),
-        createdAt: row.created_at,
-      })),
+      messages: result.rows.reverse().map((row) => present(config, row)),
       slowModeSeconds: config.chatSlowModeSeconds,
       maxLength: MESSAGE_MAX,
       /* What the client should promote into the conversation. Sent by the server so the threshold
@@ -219,34 +260,21 @@ export async function registerChatRoutes(app: FastifyInstance, db: Database, con
         }
 
         const id = randomUUID();
-        const inserted = await client.query<MessageRow>(
-          `INSERT INTO chat_messages (id, user_id, body)
-           VALUES ($1, $2, $3)
-           RETURNING id, body, created_at,
-                     (SELECT minecraft_username FROM users WHERE id = $2) AS author,
-                     user_id AS author_id,
-                     (SELECT role FROM users WHERE id = $2) AS role,
-                     (SELECT wagered_minor::text FROM user_wager_totals WHERE user_id = $2)
-                       AS wagered_minor`,
-          [id, userId, body.body],
-        );
+        await client.query(`INSERT INTO chat_messages (id, user_id, body) VALUES ($1, $2, $3)`, [
+          id,
+          userId,
+          body.body,
+        ]);
+        /* Read back through the same SELECT as the timeline, so the sender's own line wears
+         * exactly the badges everybody else will see on it. */
+        const inserted = await client.query<MessageRow>(`${MESSAGE_SELECT} WHERE m.id = $1`, [id]);
         const row = inserted.rows[0];
         if (!row) throw new Error('Chat insert returned no row');
         return row;
       });
       liveEvents.publish('chat');
 
-      return reply.code(201).send({
-        message: {
-          id: sent.id,
-          body: sent.body,
-          author: sent.author,
-          authorId: sent.author_id,
-          isStaff: sent.role === 'admin',
-          ...decorate(config, sent.wagered_minor ?? null),
-          createdAt: sent.created_at,
-        },
-      });
+      return reply.code(201).send({ message: present(config, sent) });
     },
   );
 

@@ -33,6 +33,8 @@ export function initLiveEvents() {
   source.addEventListener('hello', () => emitStatus(true));
   source.addEventListener('heartbeat', () => emitStatus(true));
   source.addEventListener('chat', () => once('chat', () => refreshChat()));
+  // Lava Rain opened, gained a claimant or settled. chat.js owns the card and throttles the refetch.
+  source.addEventListener('rain', () => window.dispatchEvent(new CustomEvent('donut:rain')));
   source.addEventListener('activity', () => once('activity', () => refreshActivity()));
   source.addEventListener('balance', () => {
     if (state.authenticated) once('balance', () => refreshBalance());
@@ -50,6 +52,8 @@ export function initLiveEvents() {
   source.addEventListener('settings', () => {
     once('chat', () => refreshChat());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
+    // The admin may just have switched Lava Rain or the creator programme on or off.
+    window.dispatchEvent(new CustomEvent('donut:rain'));
   });
   source.addEventListener('error', () => emitStatus(false));
 
@@ -60,5 +64,6 @@ export function initLiveEvents() {
     if (state.authenticated) once('balance', () => refreshBalance());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
     window.dispatchEvent(new CustomEvent('donut:crash'));
+    window.dispatchEvent(new CustomEvent('donut:rain'));
   });
 }
