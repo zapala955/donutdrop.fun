@@ -131,6 +131,34 @@ function pill(text, tone) {
   return span;
 }
 
+/* What a payout error code means, and what to do about it, in words. The code alone
+ * ("PAYOUT_UNCONFIRMED") left an operator with two buttons and no idea which was right. */
+const PAYOUT_ERRORS = {
+  PAYOUT_INSUFFICIENT_FUNDS:
+    'Bot did not have the money in game, so nothing was sent. Pay the bot in game; it retries by itself every 5 minutes.',
+  PAYOUT_UNCONFIRMED:
+    'The server never answered the /pay. Check the bot’s in-game payment history before choosing paid or not paid.',
+  PAYOUT_NOT_SENT: 'Never reached the server (the bot was offline). Nothing was sent.',
+  PAYOUT_AMOUNT_MISMATCH: 'The server confirmed a smaller amount than was asked for. Check in game.',
+  PAYOUT_FAILED: 'The bot hit an error while paying. Check the bot’s in-game payment history.',
+  LEASE_EXPIRED: 'The bot took the job and went quiet. Check the bot’s in-game payment history.',
+};
+
+/** A table cell for an error code: the code, and on hover and for screen readers, what it means. */
+function errorCell(code) {
+  const td = cell(code);
+  const meaning = code ? PAYOUT_ERRORS[code] : undefined;
+  if (meaning) {
+    td.title = meaning;
+    td.classList.add('wrap');
+    const note = document.createElement('div');
+    note.className = 'faint';
+    note.textContent = meaning;
+    td.append(note);
+  }
+  return td;
+}
+
 function table(node, columns, rows, renderRow) {
   node.replaceChildren();
   const head = document.createElement('thead');
@@ -439,7 +467,29 @@ function confirmAmount(message, { label = 'Amount', signed = false } = {}) {
 /* ═════════════════════════ panels ═════════════════════════ */
 
 async function loadOverview() {
-  const { metrics: m } = await api.get('/v1/admin/overview');
+  const { metrics: m, shortBots = [] } = await api.get('/v1/admin/overview');
+  const short = $('overviewShortBots');
+  short.replaceChildren(
+    ...shortBots.map((bot) => {
+      const card = document.createElement('div');
+      card.className = 'shortbot';
+      const head = document.createElement('b');
+      head.textContent = `${bot.username} (${bot.role}) is out of money in game`;
+      const body = document.createElement('p');
+      body.textContent =
+        `The server refused to let it pay ${amountText(bot.largest_minor ?? 0)}` +
+        ` (${bot.waiting} payout${bot.waiting === '1' ? '' : 's'} waiting since ` +
+        `${new Date(bot.since).toLocaleString()}). Nothing was sent. The site's books say it holds ` +
+        `${amountText(bot.tracked_balance_minor ?? 0)}, so its real balance is lower than that.`;
+      const action = document.createElement('p');
+      action.textContent =
+        `To fix: pay ${bot.username} in game. Waiting payouts retry by themselves every 5 minutes; ` +
+        'player payouts still short after 6 hours are refunded to their wallets.';
+      card.append(head, body, action);
+      return card;
+    }),
+  );
+  short.hidden = shortBots.length === 0;
   renderStats($('overviewStats'), [
     ['Players', m.users_total ?? 0],
     ['Active players', m.users_active ?? 0],
@@ -1089,9 +1139,11 @@ async function loadPayouts() {
       const status = document.createElement('td');
       status.append(
         pill(
-          payout.status === 'failed' && payout.error_code
-            ? `${payout.status} · ${payout.error_code}`
-            : payout.status,
+          payout.status === 'failed' && payout.error_code === 'PAYOUT_INSUFFICIENT_FUNDS'
+            ? 'failed · bot had no money, nothing sent'
+            : payout.status === 'failed' && payout.error_code
+              ? `${payout.status} · ${payout.error_code}`
+              : payout.status,
           payout.status === 'paid'
             ? 'ok'
             : payout.status === 'failed' || payout.status === 'manual_review'
@@ -1165,7 +1217,7 @@ async function loadJobs() {
       tr.append(
         status,
         cell(job.attempts, { mono: true }),
-        cell(job.last_error_code),
+        errorCell(job.last_error_code),
         cell(job.updated_at),
       );
       /* A vault release pays our own teller, never a player, so sending it again cannot put money
@@ -1249,7 +1301,7 @@ async function loadEconomy() {
       status.append(
         pill(withdrawal.status, withdrawal.status === 'manual_review' ? 'bad' : 'warn'),
       );
-      tr.append(status, cell(withdrawal.error_code));
+      tr.append(status, errorCell(withdrawal.error_code));
       const buttons = [];
       if (withdrawal.status === 'pending_approval') {
         buttons.push(

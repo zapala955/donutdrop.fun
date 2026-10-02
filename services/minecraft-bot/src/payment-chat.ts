@@ -99,6 +99,40 @@ export function parseOutgoingPayment(packet: unknown): OutgoingPayment | undefin
   return { payee, displayedAmount: amountText };
 }
 
+/* What DonutSMP answers, in red, when a /pay asks for more than the payer holds. Captured from the
+ * live server: every "unconfirmed" payout between 2026-09-28 and 2026-09-30 but one was this. */
+const INSUFFICIENT_FUNDS_TEXT = "you don't have enough funds to do this";
+
+export type PayoutRefusal = 'insufficient_funds';
+
+/**
+ * Recognizes the server refusing this bot's /pay. A refusal is a definite answer -- no money
+ * moved -- where silence is not, so it must not be mistaken for an unconfirmed payout.
+ *
+ * Matched strictly: the whole message, every visible part in the server's own red. Player chat
+ * arrives with the chat plugin's formatting and a name in front of it, so it cannot take this
+ * shape. Only consulted in the seconds after the bot's own /pay.
+ */
+export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
+  if (packet === null || typeof packet !== 'object') return undefined;
+  const record = packet as Record<string, unknown>;
+  const content = unwrap(record['content'] ?? record['message']);
+  if (content === null || typeof content !== 'object' || Array.isArray(content)) return undefined;
+  const parts = [content, ...(componentSegments(content) ?? [])].filter(
+    (part) => (textOf(part) ?? '') !== '',
+  );
+  if (parts.length === 0 || parts.some((part) => colorOf(part) !== 'red')) return undefined;
+  const text = parts
+    .map((part) => textOf(part) ?? '')
+    .join('')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/[.!]$/, '');
+  return text === INSUFFICIENT_FUNDS_TEXT ? 'insufficient_funds' : undefined;
+}
+
 /**
  * The interval of true values an abbreviated display can stand for: [low, low + step).
  *

@@ -239,7 +239,7 @@ export async function queueWithdrawalPayoutAfterRelease(
     amount_minor: string;
   }>(
     `UPDATE cash_withdrawals
-        SET status = 'queued', vault_released_at = now(), updated_at = now()
+        SET status = 'queued', vault_released_at = now(), error_code = NULL, updated_at = now()
       WHERE id = $1 AND status = 'awaiting_vault'
       RETURNING id, bot_id, payee_username, amount_minor`,
     [withdrawalId],

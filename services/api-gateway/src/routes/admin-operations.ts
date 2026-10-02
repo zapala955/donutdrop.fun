@@ -229,7 +229,11 @@ export async function registerAdminOperationRoutes(
          (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text
            AS jobs_dead_letter,
          (SELECT count(*) FROM cash_withdrawals
-           WHERE status IN ('pending_approval', 'manual_review'))::text AS withdrawals_attention,
+           WHERE status IN ('pending_approval', 'manual_review')
+              /* Waiting on the vault is ordinary for a minute and a problem after an hour: two
+               * withdrawals once sat here eight days without ever being counted. */
+              OR (status = 'awaiting_vault' AND updated_at < now() - interval '1 hour'))::text
+           AS withdrawals_attention,
          (SELECT count(*) FROM creator_applications WHERE status = 'pending')::text
            AS creator_applications_pending,
          (SELECT count(*) FROM chat_timeouts
@@ -241,7 +245,22 @@ export async function registerAdminOperationRoutes(
          (SELECT coalesce(sum(b.stake_minor), 0) FROM roulette_bets b
            WHERE b.created_at >= date_trunc('day', now()))::text AS roulette_wagered_today_minor`,
     );
-    return { metrics: result.rows[0] ?? {} };
+    /* Bots the server has refused a payment for lack of funds, and what is waiting on them. This
+     * is the whole of what an operator needs to act: which account to pay in game, and how much
+     * it was asked for. The tracked balance is shown beside it because a refusal means it is wrong. */
+    const short = await db.query<EntityRow>(
+      `SELECT b.username, b.role, b.tracked_balance_minor,
+              count(*)::text AS waiting,
+              max((j.payload->>'amountMinor')::numeric)::text AS largest_minor,
+              min(j.created_at) AS since
+         FROM bot_jobs j JOIN bot_accounts b ON b.id = j.bot_id
+        WHERE j.last_error_code = 'PAYOUT_INSUFFICIENT_FUNDS'
+          AND j.status IN ('queued', 'leased', 'dead_letter')
+          AND j.updated_at > now() - interval '1 day'
+        GROUP BY b.username, b.role, b.tracked_balance_minor
+        ORDER BY b.role`,
+    );
+    return { metrics: result.rows[0] ?? {}, shortBots: short.rows };
   });
 
   app.get('/v1/admin/economy', { preHandler: requireAdminRead }, async (request) => {
@@ -429,7 +448,8 @@ export async function registerAdminOperationRoutes(
                       AND (w.status = 'awaiting_vault'
                            OR (w.status = 'manual_review'
                                AND w.error_code IN ('PAYOUT_UNCONFIRMED', 'PAYOUT_FAILED',
-                                                    'PAYOUT_NOT_SENT', 'LEASE_EXPIRED'))))))
+                                                    'PAYOUT_NOT_SENT', 'LEASE_EXPIRED',
+                                                    'PAYOUT_INSUFFICIENT_FUNDS'))))))
           RETURNING kind, reference_id`,
         [params.id],
       );

@@ -1156,6 +1156,39 @@ function releaseRetryDelaySeconds(attempts: number): number {
   return Math.min(attempts * attempts * 30, 600);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * A PAYOUT THE SERVER REFUSED FOR FUNDS
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * "You don't have enough funds to do this" is what nearly every "unconfirmed" payout really was:
+ * the paying bot held less in game than it was asked to send. Unlike silence it is a definite
+ * answer -- nothing moved -- so it is safe to send again, and pointless to send again at once. A
+ * player's payout waits and retries every few minutes while the bot is topped up (a deposit, a
+ * sweep, or an operator paying it in game), and the overview says which bot is short and by how
+ * much. Only after FUNDS_RETRY_WINDOW_HOURS does it stop: a release goes in front of an operator,
+ * and a direct payout is refunded to the player's wallet, which is safe because nothing was sent. */
+export const PAYOUT_INSUFFICIENT_FUNDS = 'PAYOUT_INSUFFICIENT_FUNDS';
+const FUNDS_RETRY_DELAY_SECONDS = 300;
+const FUNDS_RETRY_WINDOW_HOURS = 6;
+
+/** Whether a job refused for funds is still inside the window in which it keeps retrying. */
+function withinFundsWindow(createdAt: Date): boolean {
+  return Date.now() - new Date(createdAt).getTime() < FUNDS_RETRY_WINDOW_HOURS * 3_600_000;
+}
+
+/* Requeued for funds without spending an attempt: the attempt budget is for unknown outcomes, and
+ * a refusal is a known one. Without this, a vault short for twenty minutes would use up the
+ * release's allowance for silence before anything had gone wrong with the connection. */
+async function requeueForFunds(client: DbClient, jobId: string): Promise<void> {
+  await client.query(
+    `UPDATE bot_jobs SET status = 'queued', attempts = GREATEST(attempts - 1, 0),
+            available_at = now() + ($2::integer * interval '1 second'),
+            lease_token_hash = NULL, lease_expires_at = NULL, last_error_code = $3,
+            updated_at = now()
+      WHERE id = $1`,
+    [jobId, FUNDS_RETRY_DELAY_SECONDS, PAYOUT_INSUFFICIENT_FUNDS],
+  );
+}
+
 /**
  * Whether a receipt DonutSMP abbreviated ("86.9M") can be the payment of `amount`.
  *
@@ -1213,7 +1246,8 @@ async function completeRelease(
   await client.query(
     `UPDATE cash_withdrawals SET status = 'awaiting_vault', error_code = NULL, updated_at = now()
       WHERE id = $1 AND status = 'manual_review'
-        AND error_code IN ('PAYOUT_UNCONFIRMED', 'PAYOUT_FAILED', 'PAYOUT_NOT_SENT', 'LEASE_EXPIRED')`,
+        AND error_code IN ('PAYOUT_UNCONFIRMED', 'PAYOUT_FAILED', 'PAYOUT_NOT_SENT', 'LEASE_EXPIRED',
+                           'PAYOUT_INSUFFICIENT_FUNDS')`,
     [job.reference_id],
   );
   await queueWithdrawalPayoutAfterRelease(client, config, job.reference_id);
@@ -1259,7 +1293,18 @@ export async function recoverRelease(
     await completeRelease(client, config, job, senderBotId, receipt);
     return;
   }
-  if (job.attempts < RELEASE_RETRY_ATTEMPTS) {
+  /* The vault said it does not have the money. The player's withdrawal keeps waiting, marked with
+   * why, and the release goes again in a few minutes. */
+  if (errorCode === PAYOUT_INSUFFICIENT_FUNDS && withinFundsWindow(job.created_at)) {
+    await requeueForFunds(client, job.id);
+    await client.query(
+      `UPDATE cash_withdrawals SET error_code = $2, updated_at = now()
+        WHERE id = $1 AND status = 'awaiting_vault'`,
+      [job.reference_id, PAYOUT_INSUFFICIENT_FUNDS],
+    );
+    return;
+  }
+  if (errorCode !== PAYOUT_INSUFFICIENT_FUNDS && job.attempts < RELEASE_RETRY_ATTEMPTS) {
     await client.query(
       `UPDATE bot_jobs SET status = 'queued',
               available_at = now() + ($2::integer * interval '1 second'),
@@ -1570,7 +1615,8 @@ async function processJobResult(
     if (job.kind === 'withdrawal') await completeWithdrawal(client, job.reference_id);
     if (job.kind === 'cash_payout') {
       await client.query(
-        `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), updated_at = now()
+        `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), error_code = NULL,
+                updated_at = now()
           WHERE id = $1 AND status IN ('queued', 'processing')`,
         [job.reference_id],
       );
@@ -1605,6 +1651,27 @@ async function processJobResult(
    * recoverRelease. */
   if (job.kind === 'vault_release') {
     await recoverRelease(client, config, job, event.botId, event.errorCode ?? 'BOT_JOB_FAILED');
+    return;
+  }
+  /* The teller refused for funds: the player was not paid, and is told why while it retries. After
+   * the window the payout is refunded, which the refusal makes safe -- the server said no. */
+  if (job.kind === 'cash_payout' && event.errorCode === PAYOUT_INSUFFICIENT_FUNDS) {
+    if (withinFundsWindow(job.created_at)) {
+      await requeueForFunds(client, job.id);
+      await client.query(
+        `UPDATE cash_withdrawals SET status = 'queued', error_code = $2, updated_at = now()
+          WHERE id = $1 AND status IN ('queued', 'processing')`,
+        [job.reference_id, PAYOUT_INSUFFICIENT_FUNDS],
+      );
+    } else {
+      await client.query(
+        `UPDATE bot_jobs SET status = 'dead_letter', lease_token_hash = NULL, lease_expires_at = NULL,
+                last_error_code = $2, updated_at = now()
+          WHERE id = $1`,
+        [job.id, PAYOUT_INSUFFICIENT_FUNDS],
+      );
+      await refundWithdrawal(client, job.reference_id, PAYOUT_INSUFFICIENT_FUNDS);
+    }
     return;
   }
   const terminal = !event.retryable || job.attempts >= 5;

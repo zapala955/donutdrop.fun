@@ -286,6 +286,33 @@ body {
   margin-top: 12px;
 }
 
+/* A bot the server refused a payment for lack of funds. First thing on the overview, because
+   players are waiting on it and the fix is one in-game payment. */
+.shortbots {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.shortbots[hidden] {
+  display: none;
+}
+.shortbot {
+  padding: 12px 14px;
+  border: 1px solid rgba(224, 86, 63, 0.5);
+  border-radius: var(--r);
+  background: rgba(224, 86, 63, 0.08);
+  color: var(--ink);
+  line-height: 1.5;
+}
+.shortbot b {
+  color: var(--danger);
+}
+.shortbot p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 /* ── tables ──
    Only the table scrolls sideways, never the page. */
 .tablewrap {
@@ -605,6 +632,13 @@ body {
   white-space: normal;
   min-width: 18ch;
   color: var(--muted);
+}
+/* What an error code means, under the code itself. */
+.grid td .faint {
+  margin-top: 3px;
+  min-width: 28ch;
+  font-size: 0.75rem;
+  color: var(--faint);
 }
 .grid td[data-sign='up'] {
   color: var(--ok);

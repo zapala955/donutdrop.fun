@@ -663,3 +663,35 @@ test('reads a deposit receipt in billions', () => {
   // Abbreviated, so there is no exact figure to take — the gateway expands the displayed one.
   assert.equal(parsePaymentMessage(billions), undefined);
 });
+
+/* The server refusing the bot's own /pay. Logged from the live server as
+ * red:"You don't have enough funds to do this" after every short payout of 2026-09-28..30. */
+test('recognises the server refusing a payout for funds, and nothing else', async () => {
+  const { parsePayoutRefusal } = await import('../src/payment-chat.js');
+  const tagged = (text: string, color: string) => ({
+    content: {
+      type: 'compound',
+      value: { text: { type: 'string', value: text }, color: { type: 'string', value: color } },
+    },
+  });
+
+  assert.equal(parsePayoutRefusal({ content: { text: "You don't have enough funds to do this", color: 'red' } }), 'insufficient_funds');
+  assert.equal(parsePayoutRefusal(tagged("You don't have enough funds to do this", 'red')), 'insufficient_funds');
+  // Root left empty with the words in one red part; a curly apostrophe; a trailing full stop.
+  assert.equal(
+    parsePayoutRefusal({ content: { text: '', extra: [{ text: 'You don\u2019t have enough funds to do this.', color: 'red' }] } }),
+    'insufficient_funds',
+  );
+
+  // Not red: not the server's error line.
+  assert.equal(parsePayoutRefusal({ content: { text: "You don't have enough funds to do this", color: 'white' } }), undefined);
+  // A player typing the words arrives with a name in front of them.
+  assert.equal(
+    parsePayoutRefusal({ content: { text: '', extra: [{ text: 'Steve: ', color: 'gray' }, { text: "You don't have enough funds to do this", color: 'red' }] } }),
+    undefined,
+  );
+  // Other red errors are not a refusal for funds.
+  assert.equal(parsePayoutRefusal({ content: { text: 'Player not found', color: 'red' } }), undefined);
+  assert.equal(parsePayoutRefusal({ content: "You don't have enough funds to do this" }), undefined);
+  assert.equal(parsePayoutRefusal(null), undefined);
+});

@@ -33,7 +33,11 @@ type WorkerHarness = {
   ): Promise<void>;
   pollJobs(): Promise<void>;
   pendingPayout:
-    | { payee: string; settle: (receipt: { payee: string; displayedAmount: string }) => void }
+    | {
+        payee: string;
+        settle: (receipt: { payee: string; displayedAmount: string }) => void;
+        refuse: (reason: 'insufficient_funds') => void;
+      }
     | undefined;
   payoutConfirmMs: number;
   snapshot(): Promise<void>;
@@ -401,7 +405,10 @@ const payoutJob = {
  * `displayed` is what DonutSMP echoes back — abbreviated, as it really is. Passing null answers
  * with silence, which is the case where the bot must refuse to call a payout done.
  */
-async function runPayout(harness: WorkerHarness, displayed: string | null): Promise<void> {
+async function runPayout(
+  harness: WorkerHarness,
+  displayed: string | null | 'refused',
+): Promise<void> {
   /* A REF'D timer for the duration, which is the whole point of this function.
    *
    * The worker's confirmation timeout is unref'd so a pending payout cannot hold the process open
@@ -421,7 +428,9 @@ async function runPayout(harness: WorkerHarness, displayed: string | null): Prom
     for (let tick = 0; tick < 500 && !harness.pendingPayout; tick += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }
-    if (displayed !== null) {
+    if (displayed === 'refused') {
+      harness.pendingPayout?.refuse('insufficient_funds');
+    } else if (displayed !== null) {
       harness.pendingPayout?.settle({ payee: 'q9w', displayedAmount: displayed });
     }
     await poll;
@@ -577,6 +586,31 @@ describe('cash payout worker', () => {
       answeredQuits.push(reason);
     await runPayout(answered.harness, '100K');
     assert.deepEqual(answeredQuits, []);
+  });
+
+  it('reports a refusal for funds as its own answer, at once, without reconnecting', async () => {
+    /* Every "unconfirmed" payout in the logs from 2026-09-28 to 09-30 but one was the server saying
+     * "You don't have enough funds to do this" within a tenth of a second. Treated as silence, it
+     * waited out the timeout, was reported as an unknown outcome, and cycled a healthy connection. */
+    let completed: { outcome: string; options: { errorCode?: string } | undefined } | undefined;
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness } = payoutHarness(api);
+    const quits: string[] = [];
+    (harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) => quits.push(reason);
+    harness.payoutConfirmMs = 60_000;
+    const started = Date.now();
+    await runPayout(harness, 'refused');
+
+    assert.equal(completed?.outcome, 'failed');
+    assert.equal(completed?.options?.errorCode, 'PAYOUT_INSUFFICIENT_FUNDS');
+    assert.ok(Date.now() - started < 5_000, 'it waited for the timeout instead of the answer');
+    assert.deepEqual(quits, []);
   });
 
   it('refuses a confirmation that is smaller than what was asked for', async () => {

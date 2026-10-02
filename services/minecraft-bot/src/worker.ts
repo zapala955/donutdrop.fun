@@ -17,7 +17,9 @@ import {
   parseOutgoingPayment,
   parsePaymentMessage,
   parsePaymentNotice,
+  parsePayoutRefusal,
   type OutgoingPayment,
+  type PayoutRefusal,
 } from './payment-chat.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
@@ -134,7 +136,13 @@ export class MinecraftWorker {
   /** While set, system chat is logged verbatim so a payout's server reply can be read back. */
   private payoutChatCaptureUntil = 0;
   /** The payout waiting on the server's confirmation, if one is in flight. */
-  private pendingPayout: { payee: string; settle: (receipt: OutgoingPayment) => void } | undefined;
+  private pendingPayout:
+    | {
+        payee: string;
+        settle: (receipt: OutgoingPayment) => void;
+        refuse: (reason: PayoutRefusal) => void;
+      }
+    | undefined;
   /* How long to wait for the server to confirm a payout, as a field rather than the bare constant.
    *
    * The timer behind it is unref'd, deliberately: a payout waiting on a confirmation must not hold
@@ -252,6 +260,16 @@ export class MinecraftWorker {
       if (Date.now() < this.payoutChatCaptureUntil) {
         const described = describeSystemChat(data);
         if (described) this.log.info({ chat: described }, 'system chat after payout');
+      }
+      /* The server refusing the payout this bot is waiting on: the money did not move. Read only
+       * while a /pay is in flight, which is the only time the message can be about ours. */
+      const awaitingAnswer = this.pendingPayout;
+      if (awaitingAnswer) {
+        const refusal = parsePayoutRefusal(data);
+        if (refusal) {
+          awaitingAnswer.refuse(refusal);
+          return;
+        }
       }
       /* The server confirming that this bot paid somebody. Matched before the incoming receipt
        * because the two have the same shape and only the leading text distinguishes them. */
@@ -785,7 +803,7 @@ export class MinecraftWorker {
     claimState: JobClaimState,
   ): Promise<void> {
     const { payee, amountMinor } = job.payload;
-    let receipt: OutgoingPayment | undefined;
+    let receipt: OutgoingPayment | PayoutRefusal | undefined;
     try {
       if (!this.isConnectionLive(claimState)) throw new Error('PAYOUT_NOT_SENT');
       // Re-checked immediately before the write: a disconnect between the guard above and this
@@ -805,6 +823,22 @@ export class MinecraftWorker {
           ? 'PAYOUT_NOT_SENT'
           : 'PAYOUT_FAILED';
       await this.api.completeJob(job, 'failed', { retryable: false, errorCode: code });
+      return;
+    }
+
+    /* The server said no: this bot does not hold the money. That is an answer, not silence -- the
+     * payment definitely did not happen -- so it gets its own code, which the gateway can act on
+     * (retry once the bot is topped up, tell the operator which bot is short). And no reconnect:
+     * the connection just answered within a tenth of a second. */
+    if (receipt === 'insufficient_funds') {
+      this.log.error(
+        { jobId: job.id, payee, amountMinor },
+        'cash payout refused: this bot does not have the funds in game',
+      );
+      await this.api.completeJob(job, 'failed', {
+        retryable: false,
+        errorCode: 'PAYOUT_INSUFFICIENT_FUNDS',
+      });
       return;
     }
 
@@ -855,22 +889,20 @@ export class MinecraftWorker {
     }
   }
 
-  /** Resolves with the server's confirmation for this payee, or undefined if none arrives. */
-  private awaitPayoutReceipt(payee: string): Promise<OutgoingPayment | undefined> {
+  /** Resolves with the server's confirmation for this payee, its refusal, or undefined if neither arrives. */
+  private awaitPayoutReceipt(payee: string): Promise<OutgoingPayment | PayoutRefusal | undefined> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pendingPayout = undefined;
         resolve(undefined);
       }, this.payoutConfirmMs);
       timer.unref();
-      this.pendingPayout = {
-        payee,
-        settle: (received) => {
-          clearTimeout(timer);
-          this.pendingPayout = undefined;
-          resolve(received);
-        },
+      const answer = (result: OutgoingPayment | PayoutRefusal) => {
+        clearTimeout(timer);
+        this.pendingPayout = undefined;
+        resolve(result);
       };
+      this.pendingPayout = { payee, settle: answer, refuse: answer };
     });
   }
 

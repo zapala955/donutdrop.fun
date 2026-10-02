@@ -583,12 +583,23 @@ function openLoginModal() {
 const CASH_STATE_TEXT = {
   pending_approval: 'waiting for an operator to approve it',
   queued: 'queued for the bot',
+  awaiting_vault: 'queued for the bot',
   processing: 'the bot is paying you now',
   paid: 'paid in game',
   rejected: 'rejected, your balance was returned',
   failed: 'could not be sent, your balance was returned',
   manual_review: 'held for review — contact support, do not retry',
 };
+
+/* The state in words, and why it is taking longer when the server has said why: the bot was asked
+ * to pay more than it held, nothing left it, and it tries again by itself every few minutes. */
+function cashStateText(withdrawal) {
+  if (withdrawal.errorCode === 'PAYOUT_INSUFFICIENT_FUNDS'
+    && ['queued', 'awaiting_vault', 'processing'].includes(withdrawal.status)) {
+    return 'delayed — the payout bot is being topped up, it retries by itself';
+  }
+  return CASH_STATE_TEXT[withdrawal.status] || withdrawal.status;
+}
 
 async function openDepositModal() {
   if (!state.authenticated) {
@@ -887,7 +898,7 @@ function paintWithdrawStatus(host, withdrawal) {
     <div class="auth__confirm">
       <div class="auth__crow"><span>Amount</span><b class="mono">${escapeText(money(Number(withdrawal.amountMinor)))}</b></div>
       <div class="auth__crow"><span>To</span><b class="mono">${escapeText(withdrawal.payeeUsername)}</b></div>
-      <div class="auth__crow"><span>Status</span><b id="wdState">${escapeText(CASH_STATE_TEXT[withdrawal.status] || withdrawal.status)}</b></div>
+      <div class="auth__crow"><span>Status</span><b id="wdState">${escapeText(cashStateText(withdrawal))}</b></div>
     </div>
     ${done ? '<button class="btn btn--go auth__go" type="button" id="wdDone">Close</button>' : ''}`;
   const close = $('#wdDone', host);
@@ -904,7 +915,7 @@ async function pollWithdrawal(id, host) {
     return;
   }
   const label = $('#wdState', host);
-  if (label) label.textContent = CASH_STATE_TEXT[withdrawal.status] || withdrawal.status;
+  if (label) label.textContent = cashStateText(withdrawal);
   if (['paid', 'rejected', 'failed', 'manual_review'].includes(withdrawal.status)) {
     paintWithdrawStatus(host, withdrawal);
     await refreshBalance().catch(() => undefined);
