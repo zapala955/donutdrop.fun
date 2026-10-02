@@ -553,12 +553,20 @@ export async function registerMinecraftInternalRoutes(
          *
          * The completion path in processJobResult already treats these two as cash-only. This is
          * the same judgement, on the side that hands the work out. */
+        /* The payout queue is first come, first served: while an older money job on this bot is
+         * waiting for funds, no newer one is handed out. See MONEY_JOB_KINDS. */
         `SELECT id, kind, reference_id, payload FROM bot_jobs
           WHERE bot_id = $1 AND attempts < 5 AND available_at <= now() AND status = 'queued'
             AND (kind IN ('cash_payout', 'admin_payout', 'reconnect', 'vault_sweep', 'vault_release')
                  OR $2::boolean)
+            AND NOT (bot_jobs.kind = ANY($3::text[]) AND EXISTS (
+              SELECT 1 FROM bot_jobs ahead
+               WHERE ahead.bot_id = bot_jobs.bot_id AND ahead.status = 'queued'
+                 AND ahead.kind = ANY($3::text[])
+                 AND ahead.last_error_code = $4
+                 AND (ahead.created_at, ahead.id) < (bot_jobs.created_at, bot_jobs.id)))
           ORDER BY available_at, created_at FOR UPDATE SKIP LOCKED LIMIT 1`,
-        [body.botId, capability.item_capable],
+        [body.botId, capability.item_capable, [...MONEY_JOB_KINDS], PAYOUT_INSUFFICIENT_FUNDS],
       );
       const job = selected.rows[0];
       if (!job) {
@@ -948,6 +956,8 @@ async function processCashPaymentObserved(
       event.displayedAmount,
       event.eventId,
     );
+    // Money landed on this bot: anything queued here waiting for funds goes now.
+    await wakeFundsQueue(client, event.botId);
     return;
   }
 
@@ -1003,6 +1013,9 @@ async function processCashPaymentObserved(
       }
     }
   }
+
+  // Money landed on this bot, whoever it is from: anything queued here waiting for funds goes now.
+  await wakeFundsQueue(client, event.botId);
 
   await client.query(
     `INSERT INTO cash_payment_receipts
@@ -1157,22 +1170,31 @@ function releaseRetryDelaySeconds(attempts: number): number {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────────────────────
- * A PAYOUT THE SERVER REFUSED FOR FUNDS
+ * THE PAYOUT QUEUE: A BOT WITHOUT THE MONEY
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * "You don't have enough funds to do this" is what nearly every "unconfirmed" payout really was:
  * the paying bot held less in game than it was asked to send. Unlike silence it is a definite
- * answer -- nothing moved -- so it is safe to send again, and pointless to send again at once. A
- * player's payout waits and retries every few minutes while the bot is topped up (a deposit, a
- * sweep, or an operator paying it in game), and the overview says which bot is short and by how
- * much. Only after FUNDS_RETRY_WINDOW_HOURS does it stop: a release goes in front of an operator,
- * and a direct payout is refunded to the player's wallet, which is safe because nothing was sent. */
+ * answer -- nothing moved -- so the payout simply waits in the queue: it is tried again every few
+ * minutes, and at once whenever money lands on that bot (a deposit, a sweep, a release, or an
+ * operator paying it in game). There is no deadline and no automatic refund; a player's withdrawal
+ * waits its turn until the bot can pay it.
+ *
+ * The queue is first come, first served per bot. While the oldest money job on a bot is waiting
+ * for funds, no newer one on that bot is handed out: a later, smaller withdrawal does not take the
+ * money the earlier one is waiting for, and neither does an admin payout or a sweep. */
 export const PAYOUT_INSUFFICIENT_FUNDS = 'PAYOUT_INSUFFICIENT_FUNDS';
 const FUNDS_RETRY_DELAY_SECONDS = 300;
-const FUNDS_RETRY_WINDOW_HOURS = 6;
 
-/** Whether a job refused for funds is still inside the window in which it keeps retrying. */
-function withinFundsWindow(createdAt: Date): boolean {
-  return Date.now() - new Date(createdAt).getTime() < FUNDS_RETRY_WINDOW_HOURS * 3_600_000;
+/** Every job that pays money out of a bot with the server's own /pay. */
+export const MONEY_JOB_KINDS = ['cash_payout', 'admin_payout', 'vault_sweep', 'vault_release'] as const;
+
+/** Money just landed on this bot: whatever is queued waiting for funds is tried now. */
+export async function wakeFundsQueue(client: DbClient, botId: string): Promise<void> {
+  await client.query(
+    `UPDATE bot_jobs SET available_at = now(), updated_at = now()
+      WHERE bot_id = $1 AND status = 'queued' AND last_error_code = $2 AND available_at > now()`,
+    [botId, PAYOUT_INSUFFICIENT_FUNDS],
+  );
 }
 
 /* Requeued for funds without spending an attempt: the attempt budget is for unknown outcomes, and
@@ -1288,14 +1310,13 @@ export async function recoverRelease(
   senderBotId: string,
   errorCode: string,
 ): Promise<void> {
-  const receipt = await landedReceiptFor(client, job, senderBotId);
-  if (receipt) {
-    await completeRelease(client, config, job, senderBotId, receipt);
-    return;
-  }
-  /* The vault said it does not have the money. The player's withdrawal keeps waiting, marked with
-   * why, and the release goes again in a few minutes. */
-  if (errorCode === PAYOUT_INSUFFICIENT_FUNDS && withinFundsWindow(job.created_at)) {
+  /* The vault said it does not have the money. The player's withdrawal keeps its place in the
+   * queue, marked with why, and the release goes again when the vault has been topped up.
+   *
+   * Checked BEFORE looking for a receipt, not after: the refusal says this attempt moved nothing,
+   * and the receipt search matches on amount alone, so it could otherwise claim another release's
+   * money of the same size and mark this one done while its money never left the vault. */
+  if (errorCode === PAYOUT_INSUFFICIENT_FUNDS) {
     await requeueForFunds(client, job.id);
     await client.query(
       `UPDATE cash_withdrawals SET error_code = $2, updated_at = now()
@@ -1304,7 +1325,12 @@ export async function recoverRelease(
     );
     return;
   }
-  if (errorCode !== PAYOUT_INSUFFICIENT_FUNDS && job.attempts < RELEASE_RETRY_ATTEMPTS) {
+  const receipt = await landedReceiptFor(client, job, senderBotId);
+  if (receipt) {
+    await completeRelease(client, config, job, senderBotId, receipt);
+    return;
+  }
+  if (job.attempts < RELEASE_RETRY_ATTEMPTS) {
     await client.query(
       `UPDATE bot_jobs SET status = 'queued',
               available_at = now() + ($2::integer * interval '1 second'),
@@ -1456,12 +1482,17 @@ async function quarantineBotAndJobs(
             transfer_capable = false, updated_at = now() WHERE id = $1`,
     [botId],
   );
+  /* Item work stops here. Money jobs do not: a quarantined bot cannot claim anything (claims need
+   * it `online`), so a queued payout simply waits its turn until the bot is released, and one
+   * already in flight is left to report or to expire. Killing them used to strand the player's
+   * withdrawal behind a dead job forever -- and a payout already sent, then reported, would land
+   * on a dead job and look unpaid to the operator deciding whether to refund it. */
   const jobs = await client.query<{ reference_id: string }>(
     `UPDATE bot_jobs SET status = 'dead_letter', last_error_code = $2,
             lease_token_hash = NULL, lease_expires_at = NULL, updated_at = now()
-      WHERE bot_id = $1 AND status IN ('queued', 'leased')
+      WHERE bot_id = $1 AND status IN ('queued', 'leased') AND NOT (kind = ANY($3::text[]))
       RETURNING reference_id`,
-    [botId, errorCode],
+    [botId, errorCode, [...MONEY_JOB_KINDS]],
   );
   if (jobs.rows.length) {
     await client.query(
@@ -1470,6 +1501,31 @@ async function quarantineBotAndJobs(
       [jobs.rows.map((row) => row.reference_id), errorCode],
     );
   }
+}
+
+/** Records a player payout the server confirmed: the job done, the withdrawal paid, the teller's
+ * balance moved. Idempotent: the booking is keyed on the job, and the withdrawal only moves from a
+ * state that still owes the player. */
+async function acceptConfirmedPayout(
+  client: DbClient,
+  job: { id: string; reference_id: string },
+  botId: string,
+): Promise<void> {
+  await client.query(
+    `UPDATE bot_jobs SET status = 'completed', lease_token_hash = NULL, lease_expires_at = NULL,
+            last_error_code = NULL, updated_at = now()
+      WHERE id = $1`,
+    [job.id],
+  );
+  await client.query(
+    `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), error_code = NULL,
+            updated_at = now()
+      WHERE id = $1
+        AND (status IN ('queued', 'processing')
+             OR (status = 'manual_review' AND error_code IN ('LEASE_EXPIRED', 'INVALID_JOB_LEASE')))`,
+    [job.reference_id],
+  );
+  await bookPayoutLeg(client, job.id, botId, job.reference_id);
 }
 
 async function processJobResult(
@@ -1486,21 +1542,43 @@ async function processJobResult(
     lease_token_hash: Buffer | null;
     lease_expires_at: Date | null;
     created_at: Date;
+    last_error_code: string | null;
     payload: ReleaseJob['payload'];
   }>(
     `SELECT id, kind, reference_id, attempts, status, lease_token_hash, lease_expires_at,
-            created_at, payload
+            created_at, last_error_code, payload
        FROM bot_jobs WHERE id = $1 AND bot_id = $2 FOR UPDATE`,
     [event.jobId, event.botId],
   );
   const job = result.rows[0];
   const suppliedTokenHash = sha256(event.leaseToken);
+  const tokenMatches =
+    job !== undefined &&
+    job.lease_token_hash !== null &&
+    safeEqualBuffer(job.lease_token_hash, suppliedTokenHash);
   const validLease =
     job?.status === 'leased' &&
-    job.lease_token_hash !== null &&
-    safeEqualBuffer(job.lease_token_hash, suppliedTokenHash) &&
+    tokenMatches &&
     job.lease_expires_at !== null &&
     job.lease_expires_at.getTime() >= Date.now();
+  /* A player payout the server CONFIRMED, reported after its lease ran out.
+   *
+   * The bot only reports `completed` after the server's own "You paid <player> $<n>" receipt, so
+   * this is proof the player has the money, arriving late -- a slow API, a deploy, a reconnect.
+   * Treated as an invalid lease it used to put the withdrawal in front of an operator, whose
+   * "Confirm not paid & refund" would then pay the player a second time. The token must be the
+   * one this lease was issued with, so this is the bot that held it, not a guess. */
+  if (
+    job &&
+    !validLease &&
+    tokenMatches &&
+    event.outcome === 'completed' &&
+    job.kind === 'cash_payout' &&
+    (job.status === 'leased' || (job.status === 'dead_letter' && job.last_error_code === 'LEASE_EXPIRED'))
+  ) {
+    await acceptConfirmedPayout(client, job, event.botId);
+    return;
+  }
   if (!job || !validLease) {
     // A result can follow a physical transfer. Keep the replay journal committed and fail
     // closed instead of throwing it away and inviting endless retries or automatic reuse.
@@ -1550,15 +1628,14 @@ async function processJobResult(
        * transfer is deliberately switched off, which is every site this runs on today. */
       job.kind === 'vault_sweep' ||
       job.kind === 'vault_release';
+    /* A cash job's completion is the server's own receipt for a /pay that has already happened,
+     * so the bot's health right now has no bearing on it. Refusing it used to dead-letter a
+     * payout the player HAD received -- a bot's first heartbeat after a reconnect reads
+     * `degraded` -- and park the withdrawal where "Confirm not paid & refund" paid it twice.
+     * Item custody is different: there the bot's state is the evidence, and it is still checked. */
     const safeBot =
       cashOnly
-        ? await client.query(
-            `SELECT 1 FROM bot_accounts
-              WHERE id = $1 AND status = 'online'
-                AND last_heartbeat_at > now() - interval '45 seconds'
-              FOR SHARE`,
-            [event.botId],
-          )
+        ? { rowCount: 1 }
         : await client.query(
             `SELECT 1 FROM bot_accounts
               WHERE id = $1 AND status = 'online' AND reconciliation_status = 'matched'
@@ -1653,25 +1730,15 @@ async function processJobResult(
     await recoverRelease(client, config, job, event.botId, event.errorCode ?? 'BOT_JOB_FAILED');
     return;
   }
-  /* The teller refused for funds: the player was not paid, and is told why while it retries. After
-   * the window the payout is refunded, which the refusal makes safe -- the server said no. */
+  /* The teller refused for funds: the player was not paid. The withdrawal keeps its place in the
+   * queue, marked with why, and goes again once the teller has the money. */
   if (job.kind === 'cash_payout' && event.errorCode === PAYOUT_INSUFFICIENT_FUNDS) {
-    if (withinFundsWindow(job.created_at)) {
-      await requeueForFunds(client, job.id);
-      await client.query(
-        `UPDATE cash_withdrawals SET status = 'queued', error_code = $2, updated_at = now()
-          WHERE id = $1 AND status IN ('queued', 'processing')`,
-        [job.reference_id, PAYOUT_INSUFFICIENT_FUNDS],
-      );
-    } else {
-      await client.query(
-        `UPDATE bot_jobs SET status = 'dead_letter', lease_token_hash = NULL, lease_expires_at = NULL,
-                last_error_code = $2, updated_at = now()
-          WHERE id = $1`,
-        [job.id, PAYOUT_INSUFFICIENT_FUNDS],
-      );
-      await refundWithdrawal(client, job.reference_id, PAYOUT_INSUFFICIENT_FUNDS);
-    }
+    await requeueForFunds(client, job.id);
+    await client.query(
+      `UPDATE cash_withdrawals SET status = 'queued', error_code = $2, updated_at = now()
+        WHERE id = $1 AND status IN ('queued', 'processing')`,
+      [job.reference_id, PAYOUT_INSUFFICIENT_FUNDS],
+    );
     return;
   }
   const terminal = !event.retryable || job.attempts >= 5;

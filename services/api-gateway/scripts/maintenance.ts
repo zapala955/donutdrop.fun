@@ -47,16 +47,30 @@ async function runMaintenance(pool: pg.Pool): Promise<MaintenanceResult> {
     const depositMaintenance = await maintainDepositIntents(client);
     const expiredLeases = await client.query<{ count: string }>(
       `WITH expired AS (
+         /* Not the bot-to-bot legs or admin payouts: their expired leases are settled by the
+          * bot-facing path, which knows what each needs (a vault release is sent again or settled
+          * from the teller's receipt). A player payout is handled here as it is there: the
+          * withdrawal goes in front of an operator, and the lease token is KEPT so a confirmation
+          * that arrives late still closes it as paid. Before, a payout expired here left its cash
+          * withdrawal waiting forever behind a dead job. */
          UPDATE bot_jobs
             SET status = 'dead_letter', last_error_code = 'LEASE_EXPIRED', updated_at = now()
           WHERE status = 'leased' AND lease_expires_at < now()
-          RETURNING reference_id
+            AND kind NOT IN ('admin_payout', 'vault_sweep', 'vault_release')
+          RETURNING reference_id, kind
        ), reviewed AS (
          UPDATE withdrawals AS withdrawal
             SET status = 'manual_review', error_code = 'LEASE_EXPIRED', updated_at = now()
            FROM expired
           WHERE withdrawal.id = expired.reference_id AND withdrawal.status = 'processing'
           RETURNING withdrawal.id
+       ), cash_reviewed AS (
+         UPDATE cash_withdrawals AS cash
+            SET status = 'manual_review', error_code = 'LEASE_EXPIRED', updated_at = now()
+           FROM expired
+          WHERE expired.kind = 'cash_payout' AND cash.id = expired.reference_id
+            AND cash.status IN ('queued', 'processing')
+          RETURNING cash.id
        )
        SELECT count(*)::text AS count FROM expired`,
     );

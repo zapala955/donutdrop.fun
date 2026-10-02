@@ -68,7 +68,7 @@ interface WithdrawalRow {
   cooldown_seconds?: number;
 }
 
-function view(row: WithdrawalRow) {
+function view(row: WithdrawalRow, queuePosition: number | null = null) {
   return {
     id: row.id,
     amountMinor: row.amount_minor,
@@ -77,7 +77,24 @@ function view(row: WithdrawalRow) {
     errorCode: row.error_code,
     createdAt: row.created_at,
     paidAt: row.paid_at,
+    queuePosition,
   };
+}
+
+/* Every stage that still owes the player. One per player (cash_withdrawals_one_live_idx). */
+const OPEN_STATUSES = ['pending_approval', 'queued', 'processing', 'awaiting_vault', 'manual_review'];
+/* The stages that are in the payout queue proper: approved, not yet paid, not with a human. */
+const QUEUED_STATUSES = ['queued', 'awaiting_vault', 'processing'];
+
+/** This withdrawal's place in the payout queue, first come first served; null when not in it. */
+async function queuePositionOf(db: Database, row: WithdrawalRow): Promise<number | null> {
+  if (!QUEUED_STATUSES.includes(row.status)) return null;
+  const ahead = await db.query<{ ahead: number }>(
+    `SELECT count(*)::int AS ahead FROM cash_withdrawals
+      WHERE status = ANY($1::text[]) AND (created_at, id) < ($2, $3)`,
+    [QUEUED_STATUSES, row.created_at, row.id],
+  );
+  return (ahead.rows[0]?.ahead ?? 0) + 1;
 }
 
 /**
@@ -289,9 +306,11 @@ export async function registerCashWithdrawalRoutes(
           ORDER BY created_at DESC LIMIT 5`,
         [userId, WITHDRAWAL_COOLDOWN_SECONDS],
       );
-      const pending = live.rows.find((row) =>
-        ['pending_approval', 'queued', 'processing'].includes(row.status),
-      );
+      /* Any stage that still owes the player, including waiting on the vault and being looked at
+       * by an operator: those used to fall out of this, so the page offered a fresh withdrawal
+       * form while one was still on its way. */
+      const pending = live.rows.find((row) => OPEN_STATUSES.includes(row.status));
+      const pendingPosition = pending ? await queuePositionOf(db, pending) : null;
       // Stated up front, so the form can say "wager $X more" before anybody fills it in.
       const wagerRemaining = userId ? await wagerRequirementRemaining(db, userId) : 0n;
       return {
@@ -301,7 +320,7 @@ export async function registerCashWithdrawalRoutes(
         approvalThresholdMinor: APPROVAL_THRESHOLD_MINOR.toString(),
         cooldownSeconds: WITHDRAWAL_COOLDOWN_SECONDS,
         cooldownRemainingSeconds: live.rows[0]?.cooldown_seconds ?? 0,
-        pending: pending ? view(pending) : null,
+        pending: pending ? view(pending, pendingPosition) : null,
         recent: live.rows.map(view),
       };
     },
@@ -426,7 +445,10 @@ export async function registerCashWithdrawalRoutes(
         } catch (error) {
           // cash_withdrawals_one_live_idx. The debit rolls back with the transaction.
           if ((error as { code?: string }).code === '23505') {
-            conflict('WITHDRAWAL_IN_FLIGHT', 'You already have a withdrawal being processed');
+            conflict(
+              'WITHDRAWAL_IN_FLIGHT',
+              'You already have a withdrawal on its way. It has to finish before you start another.',
+            );
           }
           throw error;
         }
@@ -466,7 +488,7 @@ export async function registerCashWithdrawalRoutes(
       );
       const row = result.rows[0];
       if (!row) throw new AppError(404, 'WITHDRAWAL_NOT_FOUND', 'No such withdrawal');
-      return { withdrawal: view(row) };
+      return { withdrawal: view(row, await queuePositionOf(db, row)) };
     },
   );
 }

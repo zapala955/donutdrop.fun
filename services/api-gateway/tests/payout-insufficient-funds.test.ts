@@ -72,15 +72,25 @@ describe('a payout the server refused for funds', () => {
     }
   });
 
-  it('puts a release in front of an operator once the vault has been short for six hours', async () => {
+  it('waits in the queue however long the vault is short, never parking or refunding', async () => {
+    // A day and a half short: still waiting its turn, not in front of an operator.
     const { client, statements } = recorder();
-    await recoverRelease(client, config, release(3, 7), 'vault-1', 'PAYOUT_INSUFFICIENT_FUNDS');
-    assert.ok(statements.some(({ sql }) => sql.includes("SET status = 'dead_letter'")));
-    const parked = statements.find(({ sql }) => sql.includes("status = 'manual_review'"));
-    assert.deepEqual(parked?.values, ['withdrawal-1', 'PAYOUT_INSUFFICIENT_FUNDS']);
+    await recoverRelease(client, config, release(3, 36), 'vault-1', 'PAYOUT_INSUFFICIENT_FUNDS');
+    assert.ok(statements.some(({ sql }) => sql.includes("SET status = 'queued'")));
+    assert.ok(
+      !statements.some(({ sql }) => sql.includes("'dead_letter'") || sql.includes("'manual_review'")),
+    );
   });
 
-  it('retries a player payout while the teller is short, and refunds it once the window closes', async () => {
+  it("never settles a refused release from another release's receipt", async () => {
+    /* The receipt search matches on amount alone. A refusal says this attempt moved nothing, so
+     * looking would only let a same-sized release's money mark this one done. */
+    const { client, statements } = recorder();
+    await recoverRelease(client, config, release(1, 1), 'vault-1', 'PAYOUT_INSUFFICIENT_FUNDS');
+    assert.ok(!statements.some(({ sql }) => sql.includes('FROM cash_payment_receipts')));
+  });
+
+  it('keeps a player payout in the queue while the teller is short, with no refund', async () => {
     const route = await read('services/api-gateway/src/routes/minecraft-in.ts');
     const result = route.slice(route.indexOf('async function processJobResult('));
     const branch = result.slice(
@@ -88,8 +98,9 @@ describe('a payout the server refused for funds', () => {
       result.indexOf('const terminal = !event.retryable'),
     );
     assert.ok(branch.length > 0, 'a payout refused for funds falls through to the generic dead-letter');
-    assert.match(branch, /if \(withinFundsWindow\(job\.created_at\)\) \{\s+await requeueForFunds\(client, job\.id\);/);
-    assert.match(branch, /refundWithdrawal\(client, job\.reference_id, PAYOUT_INSUFFICIENT_FUNDS\)/);
+    assert.match(branch, /await requeueForFunds\(client, job\.id\);/);
+    assert.match(branch, /SET status = 'queued', error_code = \$2/);
+    assert.doesNotMatch(branch, /refundWithdrawal|dead_letter|withinFundsWindow/);
     // A payout that lands later is marked paid without the stale reason.
     assert.match(route, /SET status = 'paid', paid_at = now\(\), error_code = NULL/);
     const withdrawals = await read('services/api-gateway/src/routes/cash-withdrawals.ts');
@@ -107,5 +118,32 @@ describe('a payout the server refused for funds', () => {
     const console = await read('DONUTDROP FRONTEND/Donut Drop/admin/admin.js');
     assert.match(console, /PAYOUT_INSUFFICIENT_FUNDS:\s+'Bot did not have the money in game/);
     assert.match(console, /is out of money in game/);
+    assert.doesNotMatch(console, /refunded to their wallets/);
+  });
+
+  it('serves the queue in arrival order, and wakes it the moment money lands', async () => {
+    const route = await read('services/api-gateway/src/routes/minecraft-in.ts');
+    const claim = route.slice(route.indexOf('SELECT id, kind, reference_id, payload FROM bot_jobs'));
+    const predicate = claim.slice(0, claim.indexOf('ORDER BY'));
+    // No newer money job on a bot while an older one there is waiting for funds.
+    assert.match(predicate, /NOT \(bot_jobs\.kind = ANY\(\$3::text\[\]\) AND EXISTS \(/);
+    assert.match(predicate, /ahead\.bot_id = bot_jobs\.bot_id AND ahead\.status = 'queued'/);
+    assert.match(predicate, /ahead\.last_error_code = \$4/);
+    assert.match(predicate, /\(ahead\.created_at, ahead\.id\) < \(bot_jobs\.created_at, bot_jobs\.id\)/);
+    assert.match(claim.slice(0, 2500), /\[\.\.\.MONEY_JOB_KINDS\], PAYOUT_INSUFFICIENT_FUNDS\]/);
+    assert.match(route, /MONEY_JOB_KINDS = \['cash_payout', 'admin_payout', 'vault_sweep', 'vault_release'\]/);
+    // Every receipt on a bot, ours or a player's, wakes what is waiting on it.
+    const receipts = route.slice(route.indexOf('async function processCashPaymentObserved('));
+    const body = receipts.slice(0, receipts.indexOf('\n}\n'));
+    assert.equal(body.split('await wakeFundsQueue(client, event.botId);').length - 1, 2);
+  });
+
+  it('shows each player their place in the queue', async () => {
+    const withdrawals = await read('services/api-gateway/src/routes/cash-withdrawals.ts');
+    assert.match(withdrawals, /async function queuePositionOf\(/);
+    assert.match(withdrawals, /\(created_at, id\) < \(\$2, \$3\)/);
+    assert.match(withdrawals, /return \{ withdrawal: view\(row, await queuePositionOf\(db, row\)\) \};/);
+    const page = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
+    assert.match(page, /in the queue/);
   });
 });

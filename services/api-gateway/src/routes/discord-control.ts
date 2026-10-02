@@ -221,10 +221,14 @@ export async function registerDiscordControlRoutes(
     );
     if (payload.quarantined) {
       const stopped = await client.query<{ reference_id: string }>(
+        /* Item work only. Payouts wait in the queue while the bot is quarantined -- it cannot claim
+         * them -- and one in flight is left to report or expire, so no withdrawal is stranded
+         * behind a dead job. See quarantineBotAndJobs in routes/minecraft-in.ts. */
         `UPDATE bot_jobs
             SET status = 'dead_letter', last_error_code = 'BOT_QUARANTINED',
                 lease_token_hash = NULL, lease_expires_at = NULL, updated_at = now()
           WHERE bot_id = $1 AND status IN ('queued', 'leased')
+            AND kind NOT IN ('cash_payout', 'admin_payout', 'vault_sweep', 'vault_release')
           RETURNING reference_id`,
         [payload.botId],
       );

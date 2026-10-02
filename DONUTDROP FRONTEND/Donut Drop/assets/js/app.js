@@ -594,9 +594,13 @@ const CASH_STATE_TEXT = {
 /* The state in words, and why it is taking longer when the server has said why: the bot was asked
  * to pay more than it held, nothing left it, and it tries again by itself every few minutes. */
 function cashStateText(withdrawal) {
+  const place = withdrawal.queuePosition ? ` — #${withdrawal.queuePosition} in the queue` : '';
   if (withdrawal.errorCode === 'PAYOUT_INSUFFICIENT_FUNDS'
     && ['queued', 'awaiting_vault', 'processing'].includes(withdrawal.status)) {
-    return 'delayed — the payout bot is being topped up, it retries by itself';
+    return `waiting in the payout queue${place}. The payout bot is being topped up; yours goes out by itself`;
+  }
+  if (['queued', 'awaiting_vault'].includes(withdrawal.status) && withdrawal.queuePosition > 1) {
+    return `in the payout queue${place}`;
   }
   return CASH_STATE_TEXT[withdrawal.status] || withdrawal.status;
 }

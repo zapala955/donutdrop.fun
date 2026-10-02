@@ -232,8 +232,18 @@ export async function registerAdminOperationRoutes(
            WHERE status IN ('pending_approval', 'manual_review')
               /* Waiting on the vault is ordinary for a minute and a problem after an hour: two
                * withdrawals once sat here eight days without ever being counted. */
-              OR (status = 'awaiting_vault' AND updated_at < now() - interval '1 hour'))::text
+              OR (status = 'awaiting_vault' AND updated_at < now() - interval '1 hour'
+                  AND error_code IS DISTINCT FROM 'PAYOUT_INSUFFICIENT_FUNDS')
+              /* A payout that has been "processing" for ten minutes has a bot that took it and
+               * went quiet: its lease is settled when that bot polls, so if it never does, this
+               * is the only place it shows. */
+              OR (status = 'processing' AND updated_at < now() - interval '10 minutes'))::text
            AS withdrawals_attention,
+         (SELECT count(*) FROM cash_withdrawals
+           WHERE status IN ('queued', 'awaiting_vault', 'processing'))::text AS withdrawals_queued,
+         (SELECT coalesce(sum(amount_minor), 0) FROM cash_withdrawals
+           WHERE status IN ('queued', 'awaiting_vault', 'processing'))::text
+           AS withdrawals_queued_minor,
          (SELECT count(*) FROM creator_applications WHERE status = 'pending')::text
            AS creator_applications_pending,
          (SELECT count(*) FROM chat_timeouts

@@ -135,7 +135,7 @@ function pill(text, tone) {
  * ("PAYOUT_UNCONFIRMED") left an operator with two buttons and no idea which was right. */
 const PAYOUT_ERRORS = {
   PAYOUT_INSUFFICIENT_FUNDS:
-    'Bot did not have the money in game, so nothing was sent. Pay the bot in game; it retries by itself every 5 minutes.',
+    'Bot did not have the money in game, so nothing was sent. It waits in the payout queue and goes out by itself once the bot has the money: pay the bot in game.',
   PAYOUT_UNCONFIRMED:
     'The server never answered the /pay. Check the bot’s in-game payment history before choosing paid or not paid.',
   PAYOUT_NOT_SENT: 'Never reached the server (the bot was offline). Nothing was sent.',
@@ -483,8 +483,8 @@ async function loadOverview() {
         `${amountText(bot.tracked_balance_minor ?? 0)}, so its real balance is lower than that.`;
       const action = document.createElement('p');
       action.textContent =
-        `To fix: pay ${bot.username} in game. Waiting payouts retry by themselves every 5 minutes; ` +
-        'player payouts still short after 6 hours are refunded to their wallets.';
+        `To fix: pay ${bot.username} in game. The payouts wait in the queue in order and go out ` +
+        'by themselves the moment it receives money (and every 5 minutes regardless).';
       card.append(head, body, action);
       return card;
     }),
@@ -508,6 +508,11 @@ async function loadOverview() {
       'Payouts needing attention',
       m.withdrawals_attention ?? 0,
       Number(m.withdrawals_attention) > 0,
+    ],
+    [
+      'Payout queue',
+      `${m.withdrawals_queued ?? 0} · ${amountText(m.withdrawals_queued_minor ?? 0)}`,
+      shortBots.length > 0,
     ],
     [
       'Creator applications',
@@ -1349,8 +1354,16 @@ async function loadEconomy() {
           button(
             'Confirm not paid & refund',
             async (node) => {
+              /* Whether a refund is safe depends entirely on whether the server said no. When it
+               * did, nothing left the bot; when it said nothing, the player may well have the money
+               * already, and a refund pays them twice. */
+              const known = ['PAYOUT_INSUFFICIENT_FUNDS', 'PAYOUT_NOT_SENT'].includes(withdrawal.error_code);
               const reason = await confirmAction(
-                'Only refund after proving the in-game payment did not land. This credits the wallet.',
+                known
+                  ? 'Safe to refund: the server refused this payment, so nothing was sent. This credits the wallet.'
+                  : 'STOP: this payout may already have reached the player. Check the bot’s in-game payment ' +
+                    `history for ${amountText(withdrawal.amount_minor)} to ${withdrawal.payee_username} first. ` +
+                    'Refunding a payment that landed pays them twice.',
               );
               if (!reason) return;
               node.disabled = true;
