@@ -2398,6 +2398,7 @@ const GROUP_LABELS = {
   mines: 'Mines',
   plinko: 'Plinko',
   duels: 'Duels',
+  coinflip: 'Coinflip',
   jackpot: 'Jackpot',
   rain: 'Lava Rain',
   social: 'Tips & side bets',

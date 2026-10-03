@@ -72,7 +72,12 @@ export type WalletKind =
   // A mines game cashed out, stake included. Referenced by the game's id.
   | 'mines_payout'
   // A plinko ball's slot paying out, stake included. Referenced by the bet's id.
-  | 'plinko_payout';
+  | 'plinko_payout'
+  /* Coinflip: the pot less the rake paid to the winner, and the host's stake handed back when a
+   * game is cancelled or nobody takes it in time. The stake itself is a debit, written by the
+   * route, like a duel's. */
+  | 'coinflip_win'
+  | 'coinflip_refund';
 
 /**
  * Credits the wallet and writes the matching ledger row.

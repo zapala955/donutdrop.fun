@@ -14,7 +14,9 @@ export type LiveTopic =
   | 'crash'
   // The round busted. Sent the moment it happens so every screen stops the curve at once, instead
   // of drawing past the crash point for as long as a refetch takes.
-  | 'crash_bust';
+  | 'crash_bust'
+  // A coinflip game opened, was taken or closed.
+  | 'coinflip';
 
 interface Subscriber {
   readonly response: ServerResponse;

@@ -33,6 +33,7 @@ import { registerCommunityBotRoutes } from './routes/community-bot.js';
 import { registerDiscordControlRoutes } from './routes/discord-control.js';
 import { registerEngagementRoutes } from './routes/engagement.js';
 import { registerCaseRoutes } from './routes/cases.js';
+import { registerCoinflipRoutes } from './routes/coinflip.js';
 import { registerDuelRoutes } from './routes/duels.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -227,6 +228,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerChatRoutes(app, db, config);
   await registerBattleRoutes(app, db, config);
   await registerDuelRoutes(app, db, config);
+  await registerCoinflipRoutes(app, db, config);
   await registerSocialRoutes(app, db, config);
   await registerSideBetRoutes(app, db, config);
   await registerCommunityRoutes(app, db, config);

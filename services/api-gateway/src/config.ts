@@ -548,6 +548,18 @@ const environmentSchema = z
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
      * and takes it off the board. */
     SKILL_DUEL_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+    /* ── coinflip ──
+     * Player against player, so the house charges no edge and is paid a rake on the pot instead —
+     * the same bounds and the same default as a skill duel, and the same database ceiling on
+     * coinflip_games.rake_bps. An open game nobody takes is refunded after the TTL. */
+    COINFLIP_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    COINFLIP_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    COINFLIP_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    COINFLIP_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
+    COINFLIP_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
     /* ── the vault jackpot ──
      * A share of platform volume set aside into one pot, drawn for on every wager and paid whole to
      * one player. The contribution is a share of the WAGER (the brief's "0.1% of all platform
@@ -825,6 +837,26 @@ const environmentSchema = z
         message: 'must be at least SKILL_DUEL_MIN_STAKE_MINOR',
       });
     }
+    /* Coinflip's rake is its whole margin, exactly like a duel's, so it faces the same two checks:
+     * it must clear the VIP rakeback ceiling, and its stake band must be in order. */
+    if (env.COINFLIP_ENABLED && env.VIP_ENABLED && env.COINFLIP_RAKE_BPS <= 200) {
+      context.addIssue({
+        code: 'custom',
+        path: ['COINFLIP_RAKE_BPS'],
+        message:
+          'must exceed the 200 bps VIP rakeback ceiling: a coinflip rake at or below it pays out more than the game collected',
+      });
+    }
+    if (
+      env.COINFLIP_ENABLED &&
+      BigInt(env.COINFLIP_MIN_STAKE_MINOR) > BigInt(env.COINFLIP_MAX_STAKE_MINOR)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['COINFLIP_MAX_STAKE_MINOR'],
+        message: 'must be at least COINFLIP_MIN_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.MINES_MIN_STAKE_MINOR) > BigInt(env.MINES_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -907,6 +939,18 @@ const environmentSchema = z
         path: ['SKILL_DUEL_MIN_STAKE_MINOR'],
         message:
           'is too small for SKILL_DUEL_RAKE_BPS to collect anything: the rake would truncate to zero on a minimum-stake duel',
+      });
+    }
+    if (
+      env.COINFLIP_ENABLED &&
+      env.COINFLIP_RAKE_BPS > 0 &&
+      (BigInt(env.COINFLIP_MIN_STAKE_MINOR) * 2n * BigInt(env.COINFLIP_RAKE_BPS)) / 10_000n === 0n
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['COINFLIP_MIN_STAKE_MINOR'],
+        message:
+          'is too small for COINFLIP_RAKE_BPS to collect anything: the rake would truncate to zero on a minimum-stake flip',
       });
     }
     /* The arena's cut is a house margin like any other, and rakeback, the VIP ladder and the
@@ -1185,6 +1229,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     skillDuelMinStakeMinor: BigInt(env.SKILL_DUEL_MIN_STAKE_MINOR),
     skillDuelMaxStakeMinor: BigInt(env.SKILL_DUEL_MAX_STAKE_MINOR),
     skillDuelLobbyTtlMinutes: env.SKILL_DUEL_LOBBY_TTL_MINUTES,
+    coinflipEnabled: env.COINFLIP_ENABLED,
+    coinflipRakeBps: env.COINFLIP_RAKE_BPS,
+    coinflipMinStakeMinor: BigInt(env.COINFLIP_MIN_STAKE_MINOR),
+    coinflipMaxStakeMinor: BigInt(env.COINFLIP_MAX_STAKE_MINOR),
+    coinflipLobbyTtlMinutes: env.COINFLIP_LOBBY_TTL_MINUTES,
     vaultJackpotEnabled: env.VAULT_JACKPOT_ENABLED,
     vaultJackpotContributionBps: env.VAULT_JACKPOT_CONTRIBUTION_BPS,
     vaultJackpotOddsDivisorMinor: BigInt(env.VAULT_JACKPOT_ODDS_DIVISOR_MINOR),

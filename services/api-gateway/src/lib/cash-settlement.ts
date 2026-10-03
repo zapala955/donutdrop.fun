@@ -49,7 +49,8 @@ export type ContributionSource =
   | 'blackjack'
   | 'crash'
   | 'mines'
-  | 'plinko';
+  | 'plinko'
+  | 'coinflip';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

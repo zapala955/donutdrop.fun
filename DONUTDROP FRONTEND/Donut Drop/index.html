@@ -65,6 +65,8 @@
 <link rel="stylesheet" href="assets/css/crash.css" />
 <link rel="stylesheet" href="assets/css/mines.css" />
 <link rel="stylesheet" href="assets/css/plinko.css" />
+<!-- after duel.css, whose lobby table the coinflip board reuses and narrows to five columns -->
+<link rel="stylesheet" href="assets/css/coinflip.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -127,6 +129,10 @@
         <a class="tabdrop__row" href="/plinko" data-route="plinko" role="menuitem">
           <img src="assets/img/items/slime_ball.png" alt="" />
           <span><b>Plinko</b><i>Drop a ball down the pegs</i></span>
+        </a>
+        <a class="tabdrop__row" href="/coinflip" data-route="coinflip" role="menuitem">
+          <img src="assets/img/items/gold_ingot.png" alt="" />
+          <span><b>Coinflip</b><i>1v1, heads or tails, winner takes the pot</i></span>
         </a>
       </div>
     </div>
@@ -520,6 +526,16 @@
           data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
       </header>
       <div class="plinko" id="plinkoRoot"></div>
+    </section>
+
+    <!-- ─────── COINFLIP ─────── -->
+    <section class="view" data-view="coinflip" hidden>
+      <header class="phead">
+        <h1>Coinflip <button class="ihint" type="button"
+          aria-label="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."
+          data-tip="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."></button></h1>
+      </header>
+      <div class="duelwrap" id="coinflipRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

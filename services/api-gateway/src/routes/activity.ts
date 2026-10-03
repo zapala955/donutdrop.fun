@@ -196,6 +196,25 @@ export async function registerActivityRoutes(
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
          UNION ALL
+         /* A landed coinflip, as one row for the winner: their stake against the pot they took.
+            The loser's half is the same game, and two rows for one flip would read as two. */
+         SELECT g.id, 'coinflip'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Coinflip'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM (SELECT * FROM coinflip_games WHERE status = 'settled'
+                  ORDER BY settled_at DESC LIMIT $1) g
+           JOIN users u ON u.id = g.winner_user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = g.winner_user_id
+         UNION ALL
          /* Team contributions. Not a round: there is no payout and no multiple, so those columns
             are null rather than zero. A zero would render as "0.00x" and read as a total loss. */
          SELECT fc.id, 'faction'::text AS kind, fc.created_at, u.id AS player_id,

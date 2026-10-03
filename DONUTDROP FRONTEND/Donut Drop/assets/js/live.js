@@ -47,6 +47,10 @@ export function initLiveEvents() {
     window.dispatchEvent(new CustomEvent('donut:crash-bust'));
     once('activity', () => refreshActivity());
   });
+  // Coinflip: a game opened, was taken or closed. The board refetches; the flip animates locally.
+  source.addEventListener('coinflip', () =>
+    window.dispatchEvent(new CustomEvent('donut:coinflip')),
+  );
   source.addEventListener('settings', () => {
     once('chat', () => refreshChat());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
@@ -60,5 +64,6 @@ export function initLiveEvents() {
     if (state.authenticated) once('balance', () => refreshBalance());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
     window.dispatchEvent(new CustomEvent('donut:crash'));
+    window.dispatchEvent(new CustomEvent('donut:coinflip'));
   });
 }

@@ -17,6 +17,7 @@ type SettingGroup =
   | 'mines'
   | 'plinko'
   | 'duels'
+  | 'coinflip'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -431,6 +432,42 @@ export const runtimeSettingDefinitions = {
     max: 1440n,
   },
 
+  /* ── coinflip ── The rake is snapshot onto each game as it opens, so a change only prices the
+   * next one. */
+  coinflipEnabled: {
+    kind: 'boolean',
+    group: 'coinflip',
+    label: 'Coinflip open',
+  },
+  coinflipRakeBps: {
+    kind: 'integer',
+    group: 'coinflip',
+    label: 'Coinflip rake (bps of pot)',
+    min: 0n,
+    max: 1_000n,
+  },
+  coinflipMinStakeMinor: {
+    kind: 'bigint',
+    group: 'coinflip',
+    label: 'Coinflip minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  coinflipMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'coinflip',
+    label: 'Coinflip maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  coinflipLobbyTtlMinutes: {
+    kind: 'integer',
+    group: 'coinflip',
+    label: 'Coinflip open game expiry (minutes)',
+    min: 1n,
+    max: 1440n,
+  },
+
   /* ── the vault jackpot ── */
   vaultJackpotContributionBps: {
     kind: 'integer',
@@ -645,6 +682,7 @@ function assertInvariants(view: AppConfig): void {
       view.rouletteMaxRoundStakeMinor,
     ],
     ['Duel minimum stake', view.skillDuelMinStakeMinor, 'the maximum', view.skillDuelMaxStakeMinor],
+    ['Coinflip minimum stake', view.coinflipMinStakeMinor, 'the maximum', view.coinflipMaxStakeMinor],
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
     ['Blackjack minimum stake', view.blackjackMinStakeMinor, 'the maximum', view.blackjackMaxStakeMinor],

@@ -222,10 +222,11 @@ describe('frontend/backend contract', () => {
     assert.match(menu, /<a class="tabdrop__row" href="\/crash" data-route="crash" role="menuitem">/);
     assert.match(menu, /<a class="tabdrop__row" href="\/mines" data-route="mines" role="menuitem">/);
     assert.match(menu, /<a class="tabdrop__row" href="\/plinko" data-route="plinko" role="menuitem">/);
+    assert.match(menu, /<a class="tabdrop__row" href="\/coinflip" data-route="coinflip" role="menuitem">/);
     assert.doesNotMatch(menu, /<a [^>]*tabdrop__row--soon/);
 
     assert.match(app, /initTabDrop\('casinoDrop', 'casinoBtn', 'casinoMenu'\)/);
-    assert.match(app, /\['casinoBtn', \['roulette', 'blackjack', 'crash', 'mines', 'plinko'\]\]/);
+    assert.match(app, /\['casinoBtn', \['roulette', 'blackjack', 'crash', 'mines', 'plinko', 'coinflip'\]\]/);
     // The page exists, is routed, and is served for a direct visit.
     assert.match(html, /data-view="blackjack"/);
     assert.match(app, /blackjack: mountBlackjack/);
@@ -235,8 +236,10 @@ describe('frontend/backend contract', () => {
     assert.match(app, /mines: mountMines/);
     assert.match(html, /data-view="plinko"/);
     assert.match(app, /plinko: mountPlinko/);
+    assert.match(html, /data-view="coinflip"/);
+    assert.match(app, /coinflip: mountCoinflip/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
-    assert.match(nginx, /\|blackjack\|crash\|mines\|plinko\|/);
+    assert.match(nginx, /\|blackjack\|crash\|mines\|plinko\|coinflip\|/);
     // Keyboard users can reach the rows of a menu portalled to the end of <body>.
     assert.match(app, /event\.key === 'ArrowDown'/);
   });
@@ -287,7 +290,7 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(crash, /id="crashBig"[^>]*aria-live/);
     // Table games are item-less rows in the feed, not phantom drops.
     const store = await source('assets/js/store.js');
-    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'plinko';/);
+    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'plinko' \|\| raw\.kind === 'coinflip';/);
   });
 
   it('puts a hand in play back on the table after a refresh', async () => {

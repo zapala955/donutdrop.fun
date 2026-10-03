@@ -1,0 +1,282 @@
+/* coinflip.css — 1v1 Coinflip.
+ *
+ * The board reuses the duel lobby wholesale (duel.css: .duel, .duel__table, .duel__row, .duelnew)
+ * so the two PvP modes read as one family; this sheet adds only what a coin needs — the side
+ * chips, the five-column row, the recent strip and the coin itself. Tokens only, no new colours
+ * beyond the two coin metals, which take their tones from the gold and iron ingot art.
+ */
+
+/* ── the row: player, side, stake, winner takes, action ── */
+.cf__row {
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+}
+
+/* ── a side, as a chip ── */
+.cfside {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--ob-line);
+  background: rgba(18, 18, 22, 0.7);
+  font-size: 0.75rem;
+}
+.cfside img {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+.cfside b {
+  font-weight: 700;
+}
+.cfside[data-side='heads'] {
+  border-color: rgba(255, 215, 0, 0.35);
+  color: var(--gold-bright);
+}
+.cfside[data-side='tails'] {
+  border-color: rgba(200, 205, 215, 0.35);
+  color: #d6d9e0;
+}
+
+/* ── picking a side in the create dialog ── */
+.cf__pick {
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+}
+.cf__pick img {
+  width: 22px;
+  height: 22px;
+  image-rendering: pixelated;
+}
+
+/* ── recent flips ── */
+.cf__recenth {
+  margin-top: var(--ob-gap);
+}
+.cf__recent {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.cf__flip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  width: 104px;
+  padding: 10px 8px;
+  border-radius: var(--r-soft);
+  border: 1px solid var(--ob-line);
+  background: rgba(10, 10, 12, 0.6);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ob-ease),
+    background 0.15s var(--ob-ease);
+}
+.cf__flip:hover {
+  border-color: var(--ob-line-hi);
+  background: rgba(22, 22, 27, 0.7);
+}
+.cf__flip img {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+}
+.cf__flip b {
+  font-size: 0.8125rem;
+  color: var(--gold-bright);
+}
+.cf__flip i {
+  font-style: normal;
+  font-size: 0.625rem;
+  color: var(--faint);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cf__flip[data-side='tails'] b {
+  color: #d6d9e0;
+}
+
+/* ═════════════════════════ the flip ═════════════════════════ */
+
+.cfstage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ob-gap);
+  min-width: 0;
+}
+.cfstage__players {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ob-gap);
+  width: 100%;
+}
+.cfstage__player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  min-width: 0;
+  border-radius: var(--r-soft);
+  border: 1px solid var(--ob-line);
+  background: rgba(18, 18, 22, 0.7);
+  transition:
+    border-color 0.3s var(--ob-ease),
+    box-shadow 0.3s var(--ob-ease),
+    opacity 0.3s var(--ob-ease);
+}
+.cfstage__player[data-result='won'] {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 24px -6px rgba(255, 170, 0, 0.55);
+}
+.cfstage__player[data-result='lost'] {
+  opacity: 0.5;
+}
+.cfstage__player b {
+  font-size: 0.875rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The coin: two faces back to back, spun about the Y axis. The spin's length lands it on the
+   result (see coinflip.js), so the animation only has to end where it is told to. */
+.cfcoin {
+  width: 132px;
+  height: 132px;
+  perspective: 700px;
+  margin: 6px 0;
+}
+.cfcoin__body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.cfcoin[data-spin='1'] .cfcoin__body {
+  animation: cf-spin 2.2s cubic-bezier(0.18, 0.72, 0.2, 1) forwards;
+}
+@keyframes cf-spin {
+  0% {
+    transform: translateY(0) rotateY(0deg);
+  }
+  35% {
+    transform: translateY(-28px) rotateY(calc(var(--cf-turns) * 0.55));
+  }
+  100% {
+    transform: translateY(0) rotateY(var(--cf-turns));
+  }
+}
+.cfcoin__face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.cfcoin__face img {
+  width: 52%;
+  height: 52%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+}
+.cfcoin__face--heads {
+  background: radial-gradient(circle at 35% 30%, #fff2a8, #ffd700 38%, #c98a00 100%);
+  box-shadow:
+    inset 0 0 0 6px rgba(150, 95, 0, 0.55),
+    0 10px 30px -8px rgba(255, 170, 0, 0.6);
+}
+.cfcoin__face--tails {
+  transform: rotateY(180deg);
+  background: radial-gradient(circle at 35% 30%, #ffffff, #c9ced8 40%, #7c828f 100%);
+  box-shadow:
+    inset 0 0 0 6px rgba(70, 76, 88, 0.55),
+    0 10px 30px -8px rgba(200, 205, 215, 0.45);
+}
+
+.cfstage__verdict {
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+  color: var(--muted);
+  min-height: 1.5em;
+}
+.cfstage__verdict[data-state='won'] {
+  color: var(--gold-bright);
+}
+.cfstage__verdict[data-state='lost'] {
+  color: var(--red);
+}
+.cfstage__verdict[data-state='neutral'] {
+  color: var(--text);
+}
+
+/* ── the proof ── */
+.cfproof {
+  width: 100%;
+  border-radius: var(--r-soft);
+  border: 1px solid var(--ob-line);
+  background: rgba(10, 10, 12, 0.6);
+  padding: 8px 12px;
+  font-size: 0.75rem;
+}
+.cfproof summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.cfproof__formula {
+  display: block;
+  margin: 8px 0;
+  color: var(--faint);
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+.cfproof__list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+}
+.cfproof__list dt {
+  color: var(--faint);
+}
+.cfproof__list dd {
+  min-width: 0;
+  margin: 0;
+  /* A 64-character seed has no break opportunities, and the shared .mono rule keeps text on one
+     line; without this the proof widens the whole dialog into a sideways scroll. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  color: var(--text);
+}
+
+@media (max-width: 760px) {
+  .cf__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'who who' 'stake take' 'mode mode' 'go go';
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cfcoin[data-spin='1'] .cfcoin__body {
+    animation: none;
+  }
+  .cf__flip {
+    transition: none;
+  }
+}
