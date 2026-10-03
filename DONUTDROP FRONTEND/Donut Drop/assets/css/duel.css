@@ -143,8 +143,13 @@
 /* ═════════════════════════ the arena ═════════════════════════ */
 
 /* Split screen: you on the left, always. The grid collapses to a single column under 760px, with
-   the stage first — on a phone the thing you react to must not be below the fold. */
-.arena {
+   the stage first — on a phone the thing you react to must not be below the fold.
+
+   Scoped to the duel's own root. The Case Battle arena is also `.arena` (platform.css), and this
+   sheet loads after that one, so an unscoped rule turned the battle arena into this three-column
+   grid: its header became a tall left column, the crate strip a row of empty pillars and every
+   reel was squeezed into the last third of the page. */
+.duelwrap .arena {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   grid-template-areas: "left stage right" "pot pot pot";
@@ -328,7 +333,7 @@
 
 @media (max-width: 760px) {
   /* Stage first. On a phone the thing the player reacts to cannot be below the fold. */
-  .arena {
+  .duelwrap .arena {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "stage" "left" "right" "pot";
   }

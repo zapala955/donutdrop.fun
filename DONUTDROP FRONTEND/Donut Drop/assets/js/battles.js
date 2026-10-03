@@ -34,8 +34,11 @@ import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { navigate } from './routing.js';
 
-const TILE_COUNT = 32;
-const WIN_AT = 26;                 // the winner, with six tiles of runway left behind it
+/* The winner sits at WIN_AT with the rest of the strip as runway behind it. The reels now span the
+ * board's full width, so the runway has to cover half of a wide reel or the strip visibly runs out
+ * to the right of the winner as it lands. */
+const TILE_COUNT = 40;
+const WIN_AT = 26;
 const RECONNECT_MS = 2_000;
 
 /* Mirrors of the server's own timing (battle-engine.ts). They are used for exactly one thing:
@@ -73,8 +76,13 @@ const view = {
   code: null,
   battle: null,
   lobbies: [],
+  /* Started public battles: `live` still has reels turning and can be watched mid-spin, `recent`
+   * has finished. Split by the clock, not by status — both are 'settled' from the first frame. */
+  live: [],
+  recent: [],
   modes: null,
   draft: { format: '1v1', mode: 'standard', visibility: 'public', allowBots: false, caseIds: [] },
+  pool: { query: '', sort: 'price' },
   schedule: null,
   fast: false,
 };
@@ -83,6 +91,7 @@ let root = null;
 let socket = null;
 let reconnectTimer = 0;
 let frame = 0;
+let finishedTimer = 0;
 
 export function mountBattles(node) {
   root = $('#battleRoot', node);
@@ -93,11 +102,17 @@ export function mountBattles(node) {
     connect();
     bus.addEventListener('change', (event) => {
       if (!root.isConnected) return;
-      if (['login', 'logout', 'ready'].includes(event.detail)) paint();
+      if (['login', 'logout', 'ready', 'cases'].includes(event.detail)) {
+        /* The lobby keeps its host panel across repaints, so a change that affects the panel —
+         * signing in, the crate list arriving — repaints it explicitly. */
+        if (view.screen === 'lobby') paintCreator();
+        paint();
+      }
     });
     if (!state.cases.length) refreshCases().catch(() => undefined);
     api.get('/v1/battles/modes').then((modes) => {
       view.modes = modes;
+      if (view.screen === 'lobby') paintCreator();
       paint();
     }).catch(() => undefined);
   }
@@ -109,6 +124,7 @@ export function mountBattles(node) {
     view.screen = 'lobby';
     view.code = null;
     refreshLobbies();
+    refreshFinished();
   }
   paint();
 }
@@ -116,6 +132,8 @@ export function mountBattles(node) {
 export function stopBattles() {
   if (frame) cancelAnimationFrame(frame);
   frame = 0;
+  if (finishedTimer) clearTimeout(finishedTimer);
+  finishedTimer = 0;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = 0;
   if (socket) {
@@ -179,11 +197,18 @@ function handle(message) {
   switch (message.type) {
     case 'lobby:created':
     case 'lobby:updated':
-      if (view.screen === 'lobby') refreshLobbies();
+      if (view.screen === 'lobby') {
+        refreshLobbies();
+        /* A lobby that filled has started: it leaves the open list and its reels go live. */
+        if (message.battle && message.battle.status !== 'lobby' && lobbyOnScreen()) refreshFinished();
+      }
       if (view.code && message.battle?.code === view.code) applyBattle(message.battle);
       break;
     case 'lobby:removed':
-      if (view.screen === 'lobby') refreshLobbies();
+      if (view.screen === 'lobby') {
+        refreshLobbies();
+        if (lobbyOnScreen()) refreshFinished();
+      }
       break;
     case 'battle:seat':
       if (message.code === view.code) applyBattle(message.battle);
@@ -225,6 +250,50 @@ async function refreshLobbies() {
     view.lobbies = result.battles ?? [];
     if (view.screen === 'lobby') paint();
   } catch { /* the list is ambient; a failure leaves the last one on screen */ }
+}
+
+/* Started battles for the Live and Recent lists. Public ones only: the list endpoint also returns
+ * private battles once they have settled, and a private lobby's result is not this page's to show. */
+async function refreshFinished() {
+  try {
+    const result = await api.get('/v1/battles?status=settled&limit=12');
+    splitFinished((result.battles ?? []).filter((battle) => battle.visibility === 'public'));
+  } catch { /* ambient, like the open list */ }
+}
+
+/* Live until the last reel stops, Recent after. The split is re-run the moment the next live battle
+ * finishes, and the list is refetched every half minute while the lobby is on screen. */
+function splitFinished(finished) {
+  if (!root?.isConnected) return;
+  const now = Date.now();
+  view.live = finished.filter((battle) => (lobbySpinEnd(battle) ?? 0) > now);
+  view.recent = finished.filter((battle) => (lobbySpinEnd(battle) ?? 0) <= now).slice(0, 8);
+
+  if (finishedTimer) clearTimeout(finishedTimer);
+  const next = Math.min(...view.live.map((battle) => lobbySpinEnd(battle) ?? Infinity));
+  finishedTimer = window.setTimeout(() => {
+    finishedTimer = 0;
+    /* Stops re-arming once the player has moved on; the next visit to the lobby starts it again. */
+    if (!lobbyOnScreen()) return;
+    if (Number.isFinite(next)) splitFinished([...view.live, ...view.recent]);
+    else refreshFinished();
+  }, Number.isFinite(next) ? Math.max(250, next - now + 250) : 30_000);
+
+  if (view.screen === 'lobby') paint();
+}
+
+/* Views are hidden rather than removed when the player navigates away, so "connected" is not
+ * "on screen". The Live and Recent lists are only refetched while somebody can actually see them. */
+function lobbyOnScreen() {
+  return Boolean(root?.isConnected) && view.screen === 'lobby' && !root.closest('.view')?.hidden;
+}
+
+/* When a started battle's last reel stops, from its own start stamp. A normal roll is assumed: a
+ * fast-rolled battle ends sooner and simply moves to Recent on the next split. */
+function lobbySpinEnd(battle) {
+  const started = Date.parse(battle?.startedAt ?? '');
+  if (!Number.isFinite(started)) return null;
+  return started + START_LEAD_MS + ROUND_MS * (battle.rounds?.length ?? 0);
 }
 
 async function openBattle(code, quiet = false) {
@@ -354,74 +423,234 @@ function patchArena() {
 }
 
 function paintLobby() {
-  root.innerHTML = `
-    <div class="btl">
-      <aside class="btl__make" id="btlMake"></aside>
-      <div class="btl__list">
-        <div class="btl__listhead">
-          <h2>Open battles</h2>
-          <span class="btl__count mono" id="btlCount"></span>
+  /* The skeleton is built once and the lists are repainted into it. Rebuilding the whole lobby on
+   * every socket echo also rebuilt the host panel, which threw away a half-typed crate search and
+   * the pool's scroll position each time somebody else joined a battle. */
+  if (!root.querySelector('.btl')) {
+    root.innerHTML = `
+      <div class="btl">
+        <aside class="btl__make" id="btlMake"></aside>
+        <div class="btl__list">
+          <section class="btl__sec" id="btlLiveSec" hidden>
+            <div class="btl__listhead">
+              <h2><i class="btl__dot" aria-hidden="true"></i>Live now</h2>
+              <span class="btl__count mono" id="btlLiveCount"></span>
+            </div>
+            <div class="btl__rows" id="btlLive"></div>
+          </section>
+          <section class="btl__sec">
+            <div class="btl__listhead">
+              <h2>Open battles</h2>
+              <span class="btl__count mono" id="btlCount"></span>
+            </div>
+            <div class="btl__rows" id="btlRows"></div>
+          </section>
+          <section class="btl__sec" id="btlRecentSec" hidden>
+            <div class="btl__listhead">
+              <h2>Recent battles</h2>
+            </div>
+            <div class="btl__recent" id="btlRecent"></div>
+          </section>
         </div>
-        <div class="btl__rows" id="btlRows"></div>
-      </div>
-    </div>`;
-  paintCreator();
+      </div>`;
+    paintCreator();
+  }
+  paintLists();
+}
 
+function paintLists() {
   const rows = $('#btlRows', root);
+  if (!rows) return;
   $('#btlCount', root).textContent = `${view.lobbies.length} waiting`;
+  rows.replaceChildren(...(view.lobbies.length
+    ? view.lobbies.map((lobby) => battleCard(lobby, 'open'))
+    : [el('p', 'empty', 'No open battles. Host one and it appears here.')]));
 
-  if (!view.lobbies.length) {
-    rows.appendChild(el('p', 'empty', 'No open battles. Host one and the lobby appears here.'));
-    return;
+  $('#btlLiveSec', root).hidden = view.live.length === 0;
+  $('#btlLiveCount', root).textContent = `${view.live.length} spinning`;
+  $('#btlLive', root).replaceChildren(...view.live.map((battle) => battleCard(battle, 'live')));
+
+  $('#btlRecentSec', root).hidden = view.recent.length === 0;
+  $('#btlRecent', root).replaceChildren(...view.recent.map(recentRow));
+}
+
+/** A lobby waiting for players, or a battle whose reels are turning right now. */
+function battleCard(battle, kind) {
+  const card = el('article', 'btlcard');
+  card.dataset.mode = battle.mode;
+  card.dataset.kind = kind;
+  const mine = battle.isHost || battle.seats.some((seat) => seat.isYou);
+  card.dataset.mine = mine ? '1' : '0';
+
+  const head = el('div', 'btlcard__head');
+  head.append(formatPill(battle));
+  if (kind === 'live') {
+    const live = el('span', 'btlcard__live');
+    live.append(el('i', 'btl__dot'), document.createTextNode('LIVE'));
+    head.append(live);
   }
+  const rule = el('span', 'btlcard__crazy');
+  rule.textContent = battle.mode === 'crazy' ? 'Crazy · lowest wins' : 'Highest wins';
+  head.append(rule);
 
-  for (const lobby of view.lobbies) {
-    const card = el('div', 'btlcard');
-    card.dataset.mode = lobby.mode;
+  const stats = statRow([
+    ['Entry', money(Number(battle.entryCostMinor))],
+    ['Value', money(battleValue(battle))],
+    ['Rounds', String(battle.rounds.length)],
+  ]);
 
-    const head = el('div', 'btlcard__head');
-    const fmt = el('span', 'btlcard__fmt');
-    fmt.textContent = formatLabel(lobby);
-    const crazy = el('span', 'btlcard__crazy');
-    crazy.textContent = lobby.mode === 'crazy' ? 'CRAZY · lowest wins' : 'Highest wins';
-    head.append(fmt, crazy);
+  const foot = el('div', 'btlcard__foot');
+  const host = el('span', 'btlcard__host');
+  host.textContent = `by ${battle.host}`;
+  const full = battle.seats.length >= battle.seatCount;
+  const action = el('button', 'btn btn--go btlcard__join');
+  action.type = 'button';
+  action.textContent = kind === 'live' ? 'Watch'
+    : mine ? 'Open'
+      : full ? 'Watch' : `Join · ${money(Number(battle.entryCostMinor))}`;
+  action.addEventListener('click', () => {
+    if (kind === 'live' || mine || full) navigate(`/battles?code=${encodeURIComponent(battle.code)}`);
+    else joinBattle(battle.code);
+  });
+  foot.append(host, action);
 
-    const crates = el('div', 'btlcard__crates');
-    for (const round of lobby.rounds.slice(0, 10)) {
-      const art = document.createElement('img');
-      art.src = safeImage(crateArt(round));
-      art.alt = '';
-      art.title = round.name;
-      art.loading = 'lazy';
-      crates.appendChild(art);
-    }
+  card.append(head, crateRow(battle.rounds, 6), seatSlots(battle));
+  if (kind === 'live') card.append(liveProgress(battle));
+  card.append(stats, foot);
+  return card;
+}
 
-    const seats = el('div', 'btlcard__seats');
-    for (let index = 0; index < lobby.seatCount; index += 1) {
-      const occupant = lobby.seats.find((entry) => entry.seat === index);
-      const pip = el('i', 'btlcard__pip');
-      pip.dataset.filled = occupant ? '1' : '0';
-      if (occupant) pip.title = occupant.name;
-      seats.appendChild(pip);
-    }
+/* How far a live battle's reels have got, as a bar that runs itself to the end. */
+function liveProgress(battle) {
+  const bar = el('div', 'btlcard__prog');
+  const started = Date.parse(battle.startedAt ?? '') + START_LEAD_MS;
+  const length = ROUND_MS * battle.rounds.length;
+  const done = Math.min(1, Math.max(0, (Date.now() - started) / length));
+  const fill = el('i');
+  fill.style.setProperty('--from', String(done));
+  fill.style.setProperty('--ms', `${Math.max(0, Math.round((1 - done) * length))}ms`);
+  bar.appendChild(fill);
+  return bar;
+}
 
-    const foot = el('div', 'btlcard__foot');
-    const cost = el('span', 'btlcard__cost mono');
-    cost.append(coin(), document.createTextNode(money(Number(lobby.entryCostMinor))));
-    const host = el('span', 'btlcard__host');
-    host.textContent = `by ${lobby.host}`;
-    const join = el('button', 'btn btn--go btlcard__join');
-    join.type = 'button';
-    join.textContent = lobby.seats.length >= lobby.seatCount ? 'Watch' : 'Join';
-    join.addEventListener('click', () => {
-      if (lobby.seats.length >= lobby.seatCount) openBattle(lobby.code);
-      else joinBattle(lobby.code);
-    });
-    foot.append(cost, host, join);
+/** A finished battle: who took it and how much. */
+function recentRow(battle) {
+  const row = el('div', 'btlrec');
+  row.dataset.mode = battle.mode;
+  const winners = battle.seats.filter((seat) => seat.team === battle.winningTeam);
+  const paid = winners.filter((seat) => Number(seat.payoutMinor) > 0);
 
-    card.append(head, crates, seats, foot);
-    rows.appendChild(card);
+  const who = el('span', 'btlrec__win');
+  who.innerHTML = TROPHY_SVG;
+  const names = el('span');
+  names.textContent = paid.length
+    ? paid.map((seat) => (seat.isYou ? 'You' : seat.name)).join(' & ')
+    : 'Bot';
+  who.appendChild(names);
+
+  const pot = el('b', 'btlrec__pot mono');
+  pot.textContent = money(Number(battle.potMinor ?? 0));
+  const ago = el('span', 'btlrec__ago');
+  ago.textContent = timeAgo(battle.settledAt ?? battle.startedAt);
+  const replay = el('button', 'btn btn--tiny');
+  replay.type = 'button';
+  replay.textContent = 'Replay';
+  replay.addEventListener('click', () => navigate(`/battles?code=${encodeURIComponent(battle.code)}`));
+
+  const crates = crateRow(battle.rounds, 4);
+  crates.classList.add('btlrec__crates');
+  row.append(formatPill(battle), crates, who, pot, ago, replay);
+  return row;
+}
+
+function formatPill(battle) {
+  const pill = el('span', 'btlcard__fmt');
+  pill.textContent = formatLabel(battle);
+  return pill;
+}
+
+function statRow(pairs) {
+  const row = el('div', 'btlstats');
+  for (const [label, value] of pairs) {
+    const cell = el('span');
+    const name = el('i');
+    name.textContent = label;
+    const figure = el('b', 'mono');
+    figure.textContent = value;
+    cell.append(name, figure);
+    row.appendChild(cell);
   }
+  return row;
+}
+
+/* The crates of a battle, each crate once with a count, in the order they are first opened. Ten
+ * thumbnails of the same crate said less than one thumbnail marked x10. */
+function crateGroups(rounds) {
+  const groups = [];
+  for (const round of rounds) {
+    const known = groups.find((group) => group.caseId === round.caseId);
+    if (known) known.count += 1;
+    else groups.push({ caseId: round.caseId, round, count: 1 });
+  }
+  return groups;
+}
+
+function crateRow(rounds, limit) {
+  const row = el('div', 'btlcard__crates');
+  const groups = crateGroups(rounds);
+  for (const group of groups.slice(0, limit)) {
+    const chip = el('span', 'btlcrate');
+    chip.title = group.count > 1 ? `${group.round.name} ×${group.count}` : group.round.name;
+    const art = document.createElement('img');
+    art.src = safeImage(crateArt(group.round));
+    art.alt = '';
+    art.loading = 'lazy';
+    chip.appendChild(art);
+    if (group.count > 1) {
+      const count = el('b', 'btlcrate__n mono');
+      count.textContent = `×${group.count}`;
+      chip.appendChild(count);
+    }
+    row.appendChild(chip);
+  }
+  if (groups.length > limit) {
+    const more = el('span', 'btlcrate btlcrate--more mono');
+    more.textContent = `+${groups.length - limit}`;
+    row.appendChild(more);
+  }
+  return row;
+}
+
+/* Who is in, team by team. A seat is a coloured chip with the player's initial, an open seat a
+ * dashed ring, and the teams are split by "vs" so a 2v2 reads as two pairs rather than four. */
+function seatSlots(battle) {
+  const row = el('div', 'btlslots');
+  for (let team = 0; team < battle.teamCount; team += 1) {
+    if (team > 0) row.appendChild(el('i', 'btlslots__vs', 'vs'));
+    const group = el('span', 'btlslots__team');
+    group.dataset.team = String(team);
+    for (let offset = 0; offset < battle.teamSize; offset += 1) {
+      const index = team * battle.teamSize + offset;
+      const occupant = battle.seats.find((seat) => seat.seat === index);
+      const slot = el('span', 'btlslot');
+      slot.dataset.filled = occupant ? '1' : '0';
+      if (occupant) {
+        slot.dataset.you = occupant.isYou ? '1' : '0';
+        slot.dataset.bot = occupant.isBot ? '1' : '0';
+        slot.textContent = occupant.isBot ? 'B' : initials(occupant.name);
+        slot.title = occupant.isYou ? 'You' : occupant.name;
+      } else {
+        slot.textContent = '+';
+        slot.title = 'Open seat';
+      }
+      group.appendChild(slot);
+    }
+    row.appendChild(group);
+  }
+  const count = el('span', 'btlslots__count mono');
+  count.textContent = `${battle.seats.length}/${battle.seatCount}`;
+  row.appendChild(count);
+  return row;
 }
 
 function paintCreator() {
@@ -429,11 +658,6 @@ function paintCreator() {
   if (!panel) return;
 
   const formats = view.modes?.modes ?? [];
-  const picked = view.draft.caseIds;
-  const total = picked.reduce((sum, id) => {
-    const crate = state.cases.find((entry) => entry.id === id);
-    return sum + (crate?.price ?? 0);
-  }, 0);
 
   panel.innerHTML = `
     <h2>Host a battle</h2>
@@ -454,15 +678,25 @@ function paintCreator() {
       <i class="btl__sw" aria-hidden="true"></i>
     </label>
     <div class="btl__field">
-      <span class="btl__label">Crates <b id="btlPickCount"></b></span>
+      <span class="btl__label btl__label--row">Crates <b id="btlPickCount"></b>
+        <button class="btl__clear" id="btlClear" type="button">Clear</button>
+      </span>
       <div class="btl__picked" id="btlPicked"></div>
+      <div class="btl__find">
+        <input id="btlSearch" type="search" placeholder="Search crates" autocomplete="off" maxlength="40" aria-label="Search crates" />
+        <select id="btlSort" aria-label="Sort crates">
+          <option value="price">Price ↑</option>
+          <option value="price-desc">Price ↓</option>
+          <option value="name">Name</option>
+        </select>
+      </div>
       <div class="btl__pool" id="btlPool"></div>
     </div>
-    <div class="btl__cost">
-      <span class="btl__label">Entry per seat</span>
-      <b class="mono" id="btlTotal"></b>
+    <div class="btl__sum">
+      <span><i>Entry per seat</i><b class="mono" id="btlTotal"></b></span>
+      <span><i id="btlValueLabel">Battle value</i><b class="mono" id="btlValue"></b></span>
     </div>
-    <button class="btn btn--go btl__go" id="btlCreate">Create battle</button>`;
+    <button class="btn btn--go btl__go" id="btlCreate" type="button">Create battle</button>`;
 
   const formatChips = $('#btlFormats', panel);
   for (const format of formats) {
@@ -512,55 +746,141 @@ function paintCreator() {
     paintCreator();
   });
 
+  $('#btlClear', panel).addEventListener('click', () => {
+    view.draft.caseIds = [];
+    paintPicks(panel);
+  });
+
+  /* Typing filters the pool in place. Repainting the panel per keystroke would take the focus out
+   * of the very box being typed in. */
+  const search = $('#btlSearch', panel);
+  search.value = view.pool.query;
+  search.addEventListener('input', () => {
+    view.pool.query = search.value;
+    paintPool(panel);
+  });
+  const sort = $('#btlSort', panel);
+  sort.value = view.pool.sort;
+  sort.addEventListener('change', () => {
+    view.pool.sort = sort.value;
+    paintPool(panel);
+  });
+
+  $('#btlCreate', panel).addEventListener('click', () => {
+    if (!state.authenticated) { $('#loginBtn')?.click(); return; }
+    createBattle();
+  });
+
+  paintPicks(panel);
+}
+
+/** Everything that changes when a crate is added or removed — and nothing that does not. */
+function paintPicks(panel) {
   const max = view.modes?.maxRounds ?? 10;
+  const picked = view.draft.caseIds;
+  const format = (view.modes?.modes ?? []).find((entry) => entry.code === view.draft.format);
+  const seats = format ? format.teamCount * format.teamSize : 2;
+  const entry = picked.reduce((sum, id) => {
+    const crate = state.cases.find((candidate) => candidate.id === id);
+    return sum + (crate?.price ?? 0);
+  }, 0);
+
   $('#btlPickCount', panel).textContent = `${picked.length}/${max}`;
-  $('#btlTotal', panel).textContent = money(total);
+  $('#btlClear', panel).hidden = picked.length === 0;
+  $('#btlTotal', panel).textContent = money(entry);
+  $('#btlValueLabel', panel).textContent = `Value · ${seats} seats`;
+  $('#btlValue', panel).textContent = money(entry * seats);
 
   const pickedRow = $('#btlPicked', panel);
-  picked.forEach((id, index) => {
-    const crate = state.cases.find((entry) => entry.id === id);
-    if (!crate) return;
-    const chip = el('button', 'btl__crate');
+  pickedRow.replaceChildren();
+  for (const group of crateGroups(picked.map((id) => ({ caseId: id })))) {
+    const crate = state.cases.find((candidate) => candidate.id === group.caseId);
+    if (!crate) continue;
+    const chip = el('button', 'btl__crate btl__pick');
     chip.type = 'button';
-    chip.title = `${crate.name} — click to remove`;
+    chip.title = `${crate.name} — click to remove one`;
     const art = document.createElement('img');
     art.src = safeImage(crate.art);
     art.alt = '';
     chip.appendChild(art);
+    if (group.count > 1) {
+      const count = el('b', 'btlcrate__n mono');
+      count.textContent = `×${group.count}`;
+      chip.appendChild(count);
+    }
     chip.addEventListener('click', () => {
-      view.draft.caseIds.splice(index, 1);
-      paintCreator();
+      const at = view.draft.caseIds.lastIndexOf(crate.id);
+      if (at >= 0) view.draft.caseIds.splice(at, 1);
+      paintPicks(panel);
     });
     pickedRow.appendChild(chip);
-  });
+  }
+  if (!picked.length) {
+    const hint = el('p', 'btl__hint');
+    hint.textContent = 'Pick up to ten crates below. Every seat opens the same ones, in order.';
+    pickedRow.appendChild(hint);
+  }
 
+  const create = $('#btlCreate', panel);
+  create.disabled = state.authenticated && picked.length < 1;
+  create.textContent = !state.authenticated
+    ? 'Log in to host'
+    : picked.length < 1 ? 'Pick at least one crate' : `Create · ${money(entry)}`;
+
+  paintPool(panel);
+}
+
+function paintPool(panel) {
   const pool = $('#btlPool', panel);
-  for (const crate of [...state.cases].sort((a, b) => a.price - b.price).slice(0, 24)) {
+  if (!pool) return;
+  const max = view.modes?.maxRounds ?? 10;
+  const picked = view.draft.caseIds;
+  const query = view.pool.query.trim().toLowerCase();
+  const crates = state.cases.filter((crate) => !query || crate.name.toLowerCase().includes(query));
+  crates.sort((a, b) => (
+    view.pool.sort === 'name' ? a.name.localeCompare(b.name)
+      : view.pool.sort === 'price-desc' ? b.price - a.price
+        : a.price - b.price
+  ));
+
+  /* Rebuilt in place with its scroll kept, so picking a crate far down the list does not throw
+   * the player back to the top of it. */
+  const top = pool.scrollTop;
+  pool.replaceChildren();
+  for (const crate of crates) {
     const chip = el('button', 'btl__crate btl__crate--pool');
     chip.type = 'button';
     chip.title = `${crate.name} · ${money(crate.price)}`;
     chip.disabled = picked.length >= max;
+    const count = picked.filter((id) => id === crate.id).length;
+    if (count) chip.dataset.picked = '1';
     const art = document.createElement('img');
     art.src = safeImage(crate.art);
     art.alt = '';
+    art.loading = 'lazy';
     const price = el('span', 'btl__cratecost mono');
     price.textContent = money(crate.price);
     chip.append(art, price);
+    /* Picked once is the gold border; a count is only worth a badge from two up. */
+    if (count > 1) {
+      const badge = el('b', 'btlcrate__n mono');
+      badge.textContent = `×${count}`;
+      chip.appendChild(badge);
+    }
     chip.addEventListener('click', () => {
       if (view.draft.caseIds.length >= max) return;
       view.draft.caseIds.push(crate.id);
       playSound('click');
-      paintCreator();
+      paintPicks(panel);
     });
     pool.appendChild(chip);
   }
-
-  const create = $('#btlCreate', panel);
-  create.disabled = picked.length < 1 || !state.authenticated;
-  create.textContent = !state.authenticated
-    ? 'Log in to host'
-    : picked.length < 1 ? 'Pick at least one crate' : `Create · ${money(total)}`;
-  create.addEventListener('click', createBattle);
+  if (!crates.length) {
+    const none = el('p', 'btl__hint');
+    none.textContent = state.cases.length ? 'No crate matches that search.' : 'Loading crates…';
+    pool.appendChild(none);
+  }
+  pool.scrollTop = top;
 }
 
 function paintArena() {
@@ -570,12 +890,16 @@ function paintArena() {
   const revealed = isRevealed(battle);
 
   root.innerHTML = `
-    <div class="arena">
+    <div class="arena barena">
       <header class="arena__head">
         <button class="btn arena__back" id="arenaBack" type="button">← Lobby</button>
         <div class="arena__title">
-          <h2 id="arenaFmt"></h2>
+          <h2><span class="btlcard__fmt" id="arenaFmt"></span><span class="arena__mode" id="arenaMode"></span></h2>
           <span class="arena__code mono" id="arenaCode"></span>
+        </div>
+        <div class="arena__stats">
+          <span class="arena__stat"><i id="arenaValueLabel"></i><b class="mono" id="arenaValue"></b></span>
+          <span class="arena__stat"><i>Round</i><b class="mono" id="arenaRound">–</b></span>
         </div>
         <div class="arena__tools">
           <button class="btn arena__copy" id="arenaCopy" type="button">Copy invite</button>
@@ -583,16 +907,24 @@ function paintArena() {
         </div>
       </header>
       <div class="arena__strip" id="arenaStrip"></div>
+      <div class="arena__result" id="arenaResult" hidden></div>
       <div class="arena__board" id="arenaBoard"></div>
+      <details class="bfair" id="arenaFair" hidden></details>
     </div>`;
 
   const arena = root.querySelector('.arena');
   arena.dataset.phase = battle.status === 'lobby' ? 'lobby' : 'run';
   arena.dataset.seats = String(battle.seats.length);
+  arena.dataset.mode = battle.mode;
 
-  $('#arenaFmt', root).textContent =
-    `${formatLabel(battle)} · ${battle.mode === 'crazy' ? 'Crazy — lowest wins' : 'Highest wins'}`;
+  $('#arenaFmt', root).textContent = formatLabel(battle);
+  $('#arenaMode', root).textContent = battle.mode === 'crazy' ? 'Crazy · lowest wins' : 'Highest wins';
   $('#arenaCode', root).textContent = battle.code;
+  /* The pot is the sum of every drop, so it is the answer: it stays hidden behind the battle's
+   * value until the last reel stops, like everything else the result touches. */
+  $('#arenaValueLabel', root).textContent = revealed ? 'Pot' : 'Battle value';
+  $('#arenaValue', root).textContent = money(revealed ? Number(battle.potMinor ?? 0) : battleValue(battle));
+  if (battle.status === 'lobby') $('#arenaRound', root).textContent = `0/${battle.rounds.length}`;
   $('#arenaBack', root).addEventListener('click', goLobby);
 
   const copy = $('#arenaCopy', root);
@@ -622,33 +954,59 @@ function paintArena() {
   battle.rounds.forEach((round) => {
     const cell = el('div', 'arena__round');
     cell.dataset.index = String(round.index);
+    cell.title = round.name;
     const art = document.createElement('img');
     art.src = safeImage(crateArt(round));
     art.alt = '';
-    art.title = round.name;
-    cell.appendChild(art);
+    const price = el('span', 'arena__roundprice mono');
+    price.textContent = money(Number(round.priceMinor));
+    cell.append(art, price);
     strip.appendChild(cell);
   });
 
+  /* Team by team, split by "vs". A 2v2 is two boxed pairs with a combined total each; a free-for-all
+   * is every player in their own lane. Seats are laid out team-major by the server, so a seat's
+   * index alone says which team it sits in. */
   const board = $('#arenaBoard', root);
   board.dataset.seats = String(battle.seatCount);
-  for (const seat of battle.seats) {
-    board.appendChild(buildSeat(battle, seat, revealed));
-  }
-  for (let index = battle.seats.length; index < battle.seatCount; index += 1) {
-    const empty = el('div', 'seat seat--empty');
-    const label = el('p', 'seat__waiting');
-    label.textContent = 'Waiting for a player…';
-    const join = el('button', 'btn btn--go');
-    join.type = 'button';
-    join.textContent = 'Take this seat';
-    join.addEventListener('click', () => joinBattle(battle.code));
-    empty.append(label, join);
-    board.appendChild(empty);
+  board.dataset.teams = String(battle.teamCount);
+  for (let team = 0; team < battle.teamCount; team += 1) {
+    if (team > 0) board.appendChild(versus());
+    const block = el('section', 'bteam');
+    block.dataset.team = String(team);
+    block.dataset.squad = battle.teamSize > 1 ? '1' : '0';
+    if (revealed) block.dataset.won = battle.winningTeam === team ? '1' : '0';
+    if (battle.teamSize > 1) {
+      const head = el('header', 'bteam__head');
+      const name = el('span', 'bteam__name');
+      name.textContent = `Team ${team + 1}`;
+      const total = el('span', 'bteam__total mono');
+      total.dataset.team = String(team);
+      total.textContent = money(revealed ? teamTotal(battle, team) : 0);
+      head.append(name, total);
+      block.appendChild(head);
+    }
+    for (let offset = 0; offset < battle.teamSize; offset += 1) {
+      const index = team * battle.teamSize + offset;
+      const seat = battle.seats.find((entry) => entry.seat === index);
+      block.appendChild(seat ? buildSeat(battle, seat, revealed) : emptySeat(battle));
+    }
+    board.appendChild(block);
   }
 
   if (battle.status === 'lobby') paintWaiting(battle);
+  if (revealed) {
+    paintResult(battle);
+    paintFairness(battle);
+  }
   startAnimation();
+}
+
+function versus() {
+  const vs = el('div', 'bvs');
+  vs.textContent = 'VS';
+  vs.setAttribute('aria-hidden', 'true');
+  return vs;
 }
 
 function buildSeat(battle, seat, revealed) {
@@ -656,26 +1014,28 @@ function buildSeat(battle, seat, revealed) {
   cell.dataset.seat = String(seat.seat);
   cell.dataset.team = String(seat.team);
   cell.dataset.you = seat.isYou ? '1' : '0';
-  if (revealed) {
-    cell.dataset.won = battle.winningTeam === seat.team && Number(seat.payoutMinor) > 0 ? '1' : '0';
-  }
+  /* The winning TEAM is marked, bots included: when a bot takes the battle that is the result,
+   * even though nobody is paid for it. The payout line below is what only humans get. */
+  if (revealed) cell.dataset.won = battle.winningTeam === seat.team ? '1' : '0';
 
-  const head = el('div', 'seat__head');
+  const info = el('div', 'seat__info');
+  const avatar = el('span', 'seat__av');
+  avatar.dataset.bot = seat.isBot ? '1' : '0';
+  avatar.textContent = seat.isBot ? 'BOT' : initials(seat.name);
+
+  const who = el('div', 'seat__who');
   const name = el('span', 'seat__name');
   name.textContent = seat.name;
-  const team = el('span', 'seat__team mono');
-  team.textContent = battle.teamSize > 1 ? `TEAM ${seat.team + 1}` : `P${seat.seat + 1}`;
-  head.append(name, team);
-  if (seat.isBot) {
-    const bot = el('span', 'seat__bot');
-    bot.textContent = 'BOT';
-    head.appendChild(bot);
-  }
+  const tags = el('span', 'seat__tags');
+  if (seat.isYou) tags.appendChild(el('i', 'seat__you', 'YOU'));
+  if (seat.isBot) tags.appendChild(el('i', 'seat__bot', 'BOT'));
+  const place = el('i', 'seat__team mono');
+  place.textContent = battle.teamSize > 1 ? `TEAM ${seat.team + 1}` : `P${seat.seat + 1}`;
+  tags.appendChild(place);
+  who.append(name, tags);
 
-  const reel = el('div', 'seat__reel');
-  const track = el('div', 'seat__track');
-  track.dataset.seat = String(seat.seat);
-  reel.append(track, el('i', 'seat__marker'));
+  const crown = el('span', 'seat__crown', CROWN_SVG);
+  crown.setAttribute('aria-hidden', 'true');
 
   /* The running total starts at zero and is counted up by the animation as each round lands. It
    * used to open on `totalDropMinor` — the settled, final figure — which handed the player the
@@ -690,9 +1050,122 @@ function buildSeat(battle, seat, revealed) {
   if (revealed && Number(seat.payoutMinor) > 0) {
     won.textContent = `+${money(Number(seat.payoutMinor))}`;
   }
+  info.append(avatar, who, crown, total, won);
 
-  cell.append(head, reel, total, won);
+  const play = el('div', 'seat__play');
+  const reel = el('div', 'seat__reel');
+  const track = el('div', 'seat__track');
+  track.dataset.seat = String(seat.seat);
+  reel.append(track, el('i', 'seat__marker'));
+  /* Every drop this seat has landed so far, filled in round by round by the animation. */
+  const drops = el('div', 'seat__drops');
+  drops.dataset.seat = String(seat.seat);
+  play.append(reel, drops);
+
+  cell.append(info, play);
   return cell;
+}
+
+function emptySeat(battle) {
+  const empty = el('div', 'seat seat--empty');
+  const label = el('p', 'seat__waiting');
+  label.textContent = 'Waiting for a player…';
+  empty.appendChild(label);
+  /* Only offered to someone not already at the table — a seated player taking a second seat is a
+   * request the server refuses anyway. */
+  if (!battle.seats.some((seat) => seat.isYou)) {
+    const join = el('button', 'btn btn--go');
+    join.type = 'button';
+    join.textContent = `Take this seat · ${money(Number(battle.entryCostMinor))}`;
+    join.addEventListener('click', () => joinBattle(battle.code));
+    empty.appendChild(join);
+  }
+  return empty;
+}
+
+/* The banner over the board once the last reel stops: who took it, and for the player who did,
+ * how much. A battle a bot won says so — the house keeps that pot and nobody is paid. */
+function paintResult(battle) {
+  const box = $('#arenaResult', root);
+  if (!box || battle.winningTeam === null || battle.winningTeam === undefined) return;
+  const mine = battle.seats.find((seat) => seat.isYou);
+  const winners = battle.seats.filter((seat) => seat.team === battle.winningTeam);
+  const paid = winners.filter((seat) => Number(seat.payoutMinor) > 0);
+  const youWon = Boolean(mine && Number(mine.payoutMinor) > 0);
+
+  box.hidden = false;
+  box.dataset.state = youWon ? 'won' : mine ? 'lost' : 'neutral';
+
+  const text = el('div', 'arena__resulttext');
+  const title = el('strong', 'arena__resulttitle');
+  const sub = el('span', 'arena__resultsub');
+  const side = battle.teamSize > 1
+    ? `Team ${battle.winningTeam + 1}`
+    : (winners[0]?.isYou ? 'You' : winners[0]?.name ?? 'A player');
+  if (youWon) title.textContent = `You won ${money(Number(mine.payoutMinor))}`;
+  else if (!paid.length) title.textContent = `${side} wins — the bot takes it`;
+  else title.textContent = `${side} ${side === 'You' ? 'win' : 'wins'}`;
+  const rule = battle.mode === 'crazy' ? 'lowest' : 'highest';
+  sub.textContent = `${money(Number(battle.potMinor ?? 0))} pot · ${rule} total `
+    + `${money(teamTotal(battle, battle.winningTeam))}`;
+  text.append(title, sub);
+
+  const trophy = el('span', 'arena__trophy', TROPHY_SVG);
+  trophy.setAttribute('aria-hidden', 'true');
+  box.replaceChildren(trophy, text);
+
+  if (state.authenticated) {
+    const again = el('button', 'btn btn--go arena__again');
+    again.type = 'button';
+    again.textContent = 'Battle again';
+    again.title = 'Host a new battle with the same crates and format';
+    again.addEventListener('click', () => rematch(battle));
+    box.appendChild(again);
+  }
+}
+
+/* Every input the result was derived from, published with the result. */
+function paintFairness(battle) {
+  const box = $('#arenaFair', root);
+  const fairness = battle.fairness;
+  if (!box || !fairness?.serverSeedReveal) return;
+  box.hidden = false;
+  const summary = el('summary');
+  summary.textContent = 'Verify this battle';
+  const formula = el('code', 'bfair__formula');
+  formula.textContent = fairness.formula ?? '';
+  const list = el('dl', 'bfair__list');
+  const rows = [
+    ['Server seed hash', fairness.serverSeedHash],
+    ['Server seed', fairness.serverSeedReveal],
+    ['Combined seed', fairness.combinedSeedHash],
+    ['Nonce', String(fairness.nonce ?? 0)],
+    ...battle.seats.map((seat) => [`Seat ${seat.seat + 1} seed`, seat.clientSeed]),
+  ];
+  for (const [label, value] of rows) {
+    const term = el('dt');
+    term.textContent = label;
+    const detail = el('dd');
+    detail.textContent = value ?? '—';
+    list.append(term, detail);
+  }
+  box.replaceChildren(summary, formula, list);
+}
+
+/* "Battle again": the same crates, format and rules, back in the host panel. Nothing is staked
+ * until the player presses Create, so this is a shortcut and never a second wager. */
+function rematch(battle) {
+  const format = (view.modes?.modes ?? []).find((entry) => (
+    entry.teamCount === battle.teamCount && entry.teamSize === battle.teamSize
+  ));
+  view.draft = {
+    format: format?.code ?? '1v1',
+    mode: battle.mode,
+    visibility: battle.visibility === 'private' ? 'private' : 'public',
+    allowBots: Boolean(battle.allowBots),
+    caseIds: battle.rounds.map((round) => round.caseId).slice(0, view.modes?.maxRounds ?? 10),
+  };
+  goLobby();
 }
 
 function paintWaiting(battle) {
@@ -742,10 +1215,18 @@ function startAnimation() {
   frame = 0;
 
   const battle = view.battle;
-  if (!battle || battle.status === 'lobby') return;
+  if (!battle) return;
 
   const tracks = [...root.querySelectorAll('.seat__track')];
   if (!tracks.length) return;
+
+  /* A lobby still filling has no results at all, so its reels can safely show the first crate's
+   * contents at rest — a seated player sees what they are about to open instead of an empty bar. */
+  if (battle.status === 'lobby') {
+    dress(tracks, new Map(), battle, 0);
+    for (const track of tracks) settle(track, 0);
+    return;
+  }
 
   const byRound = new Map();
   for (const result of battle.results ?? []) {
@@ -767,7 +1248,7 @@ function startAnimation() {
     dress(tracks, byRound, battle, round);
     markRound(round);
     for (const track of tracks) settle(track, parked ? 1 : 0);
-    paintTotals(battle, parked ? totalRounds : 0, byRound);
+    paintProgress(battle, parked ? totalRounds : 0, byRound);
     reveal(battle, false);
     return;
   }
@@ -811,7 +1292,7 @@ function startAnimation() {
     const landed = finished ? totalRounds : index + (eased >= 1 ? 1 : 0);
     if (landed !== lastLanded) {
       lastLanded = landed;
-      paintTotals(battle, landed, byRound);
+      paintProgress(battle, landed, byRound);
     }
 
     if (finished) {
@@ -841,8 +1322,13 @@ function travel(progress) {
 
 function markRound(index) {
   for (const cell of root.querySelectorAll('.arena__round')) {
-    cell.dataset.active = Number(cell.dataset.index) === index ? '1' : '0';
+    const at = Number(cell.dataset.index);
+    cell.dataset.active = at === index ? '1' : '0';
+    cell.dataset.done = at < index ? '1' : '0';
   }
+  const total = view.battle?.rounds?.length ?? 0;
+  const label = $('#arenaRound', root);
+  if (label && total) label.textContent = `${Math.min(index + 1, total)}/${total}`;
 }
 
 function dress(tracks, byRound, battle, roundIndex) {
@@ -919,7 +1405,10 @@ function buildStrip(track, result, battle, roundIndex, seat) {
 
 function buildTile(item, winning, result) {
   const tile = el('div', 'seat__tile');
-  if (winning) tile.dataset.win = '1';
+  /* `winner`, not the old `win`: that attribute lit the tile gold the moment the strip was built,
+   * so the drop could be read off the reel while it was still racing. battles.css lights this one
+   * only once its reel reports landed, and hides the value until then. */
+  if (winning) tile.dataset.winner = '1';
   if (item?.rarity) tile.dataset.rarity = item.rarity;
 
   const art = document.createElement('img');
@@ -977,19 +1466,68 @@ function weightedPick(items, random) {
   return items[items.length - 1];
 }
 
-/* The running total, summed over the rounds that have actually landed. */
-function paintTotals(battle, landedRounds, byRound) {
+/* Everything that moves as a round lands: each seat's running total and its row of drops, each
+ * team's combined total, and the crown over whoever is ahead. Summed only over the rounds that have
+ * actually landed, so none of it can run ahead of the reels. */
+function paintProgress(battle, landedRounds, byRound) {
+  const seatTotals = new Map();
   for (const seat of battle.seats) {
-    const node = root.querySelector(`.seat__total[data-seat="${seat.seat}"]`);
-    if (!node) continue;
     let total = 0n;
+    const drops = root.querySelector(`.seat__drops[data-seat="${seat.seat}"]`);
     for (let index = 0; index < landedRounds; index += 1) {
       const result = byRound.get(index)?.get(seat.seat);
-      if (result) total += BigInt(result.payoutMinor ?? 0);
+      if (!result) continue;
+      total += BigInt(result.payoutMinor ?? 0);
+      if (drops && !drops.querySelector(`[data-round="${index}"]`)) {
+        drops.appendChild(dropChip(result, index));
+      }
     }
-    node.innerHTML = '';
-    node.append(coin(), document.createTextNode(money(Number(total))));
+    /* A fast-roll toggle re-anchors the clock, which can move the landed count backwards. */
+    for (const chip of drops?.querySelectorAll('[data-round]') ?? []) {
+      if (Number(chip.dataset.round) >= landedRounds) chip.remove();
+    }
+    seatTotals.set(seat.seat, total);
+    const node = root.querySelector(`.seat__total[data-seat="${seat.seat}"]`);
+    if (node) node.replaceChildren(coin(), document.createTextNode(money(Number(total))));
   }
+
+  const teamTotals = new Map();
+  for (const seat of battle.seats) {
+    teamTotals.set(seat.team, (teamTotals.get(seat.team) ?? 0n) + (seatTotals.get(seat.seat) ?? 0n));
+  }
+  for (const node of root.querySelectorAll('.bteam__total')) {
+    node.textContent = money(Number(teamTotals.get(Number(node.dataset.team)) ?? 0n));
+  }
+
+  /* The leader under the battle's own rule — lowest in crazy mode. Nobody leads before a round has
+   * landed, nor when every team is level, and the crown hands over to the result once revealed. */
+  let leaders = new Set();
+  if (landedRounds > 0 && !isRevealed(battle) && teamTotals.size > 1) {
+    const values = [...teamTotals.values()];
+    const best = values.reduce((pick, value) => (
+      battle.mode === 'crazy' ? (value < pick ? value : pick) : (value > pick ? value : pick)
+    ));
+    leaders = new Set([...teamTotals].filter(([, value]) => value === best).map(([team]) => team));
+    if (leaders.size === teamTotals.size) leaders = new Set();
+  }
+  for (const cell of root.querySelectorAll('.seat[data-seat]')) {
+    cell.dataset.lead = leaders.has(Number(cell.dataset.team)) ? '1' : '0';
+  }
+}
+
+function dropChip(result, round) {
+  const item = result.item ? normalizeItem(result.item) : null;
+  const chip = el('span', 'seat__drop');
+  chip.dataset.round = String(round);
+  if (item?.rarity) chip.dataset.rarity = item.rarity;
+  chip.title = `${item?.displayName ?? ''} · ${money(Number(result.payoutMinor))}`;
+  const art = document.createElement('img');
+  art.src = safeImage(item?.img ?? item?.imageUrl ?? '');
+  art.alt = '';
+  const value = el('b', 'mono');
+  value.textContent = money(Number(result.payoutMinor));
+  chip.append(art, value);
+  return chip;
 }
 
 /* The moment the last reel stops. The arena repaints with the result it has been holding back —
@@ -1006,6 +1544,7 @@ function reveal(battle, watched) {
 
   const mine = battle.seats.find((seat) => seat.isYou);
   const won = mine && Number(mine.payoutMinor) > 0;
+  if (won) confetti();
   playSound(won ? 'jackpot' : 'lose');
   toast({
     kind: won ? 'win' : 'lose',
@@ -1021,7 +1560,7 @@ function reveal(battle, watched) {
 
 async function createBattle() {
   if (!state.authenticated) {
-    toast({ kind: 'lose', title: 'Log in first', body: 'Hosting a battle stakes real balance.' });
+    $('#loginBtn')?.click();
     return;
   }
   try {
@@ -1048,7 +1587,7 @@ async function createBattle() {
 
 async function joinBattle(code) {
   if (!state.authenticated) {
-    toast({ kind: 'lose', title: 'Log in first', body: 'Joining a battle stakes real balance.' });
+    $('#loginBtn')?.click();
     return;
   }
   try {
@@ -1074,19 +1613,76 @@ function randomSeed() {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/* 1v1, 1v1v1, 2v2, 2v2v2 — the same names the host panel offers. Team formats used to print as
+ * "2x2", so the lobby card and the chip that created it disagreed about what the battle was. */
 function formatLabel(battle) {
-  return battle.teamSize > 1
-    ? `${battle.teamCount}x${battle.teamSize}`
-    : Array.from({ length: battle.teamCount }, () => '1').join('v');
+  return Array.from({ length: battle.teamCount }, () => String(battle.teamSize)).join('v');
 }
 
+/* A round's crate art: the catalogue's own entry first, so a battle shows exactly the picture the
+ * crate list does, then the crate's decal under the same rules the catalogue applies to it. */
 function crateArt(round) {
+  const known = state.cases.find((entry) => entry.id === round?.caseId);
+  if (known?.art) return known.art;
   const asset = round?.metadata?.frontendAsset;
-  if (typeof asset === 'string' && /^(?:items|block)\/[A-Za-z0-9_-]+\.(?:png|gif|jpe?g|webp)$/.test(asset)) {
-    return `assets/img/${asset}`;
+  if (typeof asset === 'string'
+    && /^(?:(?:items|block)\/)?[A-Za-z0-9_-]+\.(?:png|gif|jpe?g|webp)$/.test(asset)) {
+    return `assets/img/${asset.includes('/') ? asset : `block/${asset}`}`;
   }
   return round?.imageUrl || 'assets/img/items/chest.png';
 }
+
+/* What every seat's crates are worth together, before anything is opened. The pot — the sum of
+ * what was actually pulled — is only shown once the result is. */
+function battleValue(battle) {
+  return Number(battle.entryCostMinor ?? 0) * Number(battle.seatCount ?? 0);
+}
+
+function teamTotal(battle, team) {
+  return battle.seats
+    .filter((seat) => seat.team === team)
+    .reduce((sum, seat) => sum + Number(seat.totalDropMinor ?? 0), 0);
+}
+
+/* Names arrive masked ("D*******"), so this is usually one letter, which is all a chip needs. */
+function initials(name) {
+  const letters = String(name ?? '').replace(/[^A-Za-z0-9]/g, '');
+  return (letters.slice(0, 2) || '?').toUpperCase();
+}
+
+function timeAgo(iso) {
+  const at = Date.parse(iso ?? '');
+  if (!Number.isFinite(at)) return '';
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (seconds < 45) return 'just now';
+  if (seconds < 3_600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3_600)}h ago`;
+  return `${Math.round(seconds / 86_400)}d ago`;
+}
+
+/* A short burst over the result banner for the player who took the pot. Decoration only, and
+ * skipped entirely under reduced motion. */
+function confetti() {
+  if (reduceMotion()) return;
+  const host = $('#arenaResult', root);
+  if (!host) return;
+  const layer = el('div', 'bconfetti');
+  layer.setAttribute('aria-hidden', 'true');
+  for (let index = 0; index < 32; index += 1) {
+    const bit = el('i');
+    bit.dataset.c = String(index % 4);
+    bit.style.setProperty('--x', `${Math.round((Math.random() * 2 - 1) * 280)}px`);
+    bit.style.setProperty('--y', `${Math.round(-60 - Math.random() * 140)}px`);
+    bit.style.setProperty('--r', `${Math.round(Math.random() * 900 - 450)}deg`);
+    bit.style.setProperty('--d', `${(Math.random() * 0.18).toFixed(2)}s`);
+    layer.appendChild(bit);
+  }
+  host.appendChild(layer);
+  window.setTimeout(() => layer.remove(), 2_600);
+}
+
+const CROWN_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.5l4.5 3.5L12 5l4.5 7L21 8.5 19 18H5L3 8.5z"/><rect x="5" y="19.2" width="14" height="1.8" rx=".9"/></svg>';
+const TROPHY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M16 5h3a3 3 0 0 1-3 4M8 5H5a3 3 0 0 0 3 4"/><path d="M12 13v4M8.5 20h7M10 17h4v3h-4z"/></svg>';
 
 function coin() {
   const mark = el('i', 'coin');

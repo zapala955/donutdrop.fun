@@ -1,0 +1,966 @@
+/* battles.css — Case Battles: the lobby lists, the host panel's extras and the arena board.
+ *
+ * Loaded after platform.css (which holds the original battle sheet) and duel.css, so the rules
+ * here refine those rather than restating them. Team colours are Minecraft's own metals and
+ * dusts — gold, diamond, redstone, emerald — so a 2v2v2 reads at a glance without a legend.
+ */
+
+[data-team='0'] {
+  --bt: #ffaa00;
+}
+[data-team='1'] {
+  --bt: #5ad1ff;
+}
+[data-team='2'] {
+  --bt: #ff5a4a;
+}
+[data-team='3'] {
+  --bt: #7ee08a;
+}
+
+/* ═════════════════════════ the lobby ═════════════════════════ */
+
+.btl__list {
+  gap: 20px;
+}
+.btl__sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.btl__listhead h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The live marker: a redstone dot with a slow pulse, used on the section and on each live card. */
+.btl__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3b1f;
+  box-shadow: 0 0 0 0 rgba(255, 59, 31, 0.55);
+  animation: btl-pulse 1.6s ease-out infinite;
+}
+@keyframes btl-pulse {
+  to {
+    box-shadow: 0 0 0 9px rgba(255, 59, 31, 0);
+  }
+}
+
+/* ── cards ── */
+.btlcard {
+  gap: 10px;
+}
+.btlcard[data-mine='1'] {
+  border-color: rgba(255, 170, 0, 0.5);
+}
+.btlcard[data-kind='live'] {
+  border-color: rgba(255, 59, 31, 0.38);
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(255, 59, 31, 0.09), transparent 60%),
+    linear-gradient(180deg, rgba(28, 24, 15, 0.7), rgba(11, 10, 8, 0.92));
+}
+.btlcard__head .btlcard__crazy {
+  margin-left: auto;
+}
+.btlcard__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #ff6a4a;
+}
+
+.btlcard__crates {
+  gap: 6px;
+}
+.btlcrate {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.btlcard__crates .btlcrate img {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.btlcrate__n {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #0a0a0c;
+  background-image: var(--b-ramp);
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.8);
+}
+.btlcrate--more {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: var(--faint);
+}
+
+/* ── who is in ── */
+.btlslots {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.btlslots__team {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bt) 32%, transparent);
+}
+.btlslots__vs {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.btlslot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.btlslot[data-filled='1'] {
+  color: #0a0a0c;
+  background: var(--bt);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.3);
+}
+.btlslot[data-filled='0'] {
+  color: var(--faint);
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+}
+.btlslot[data-bot='1'] {
+  color: var(--muted);
+  background: #383b44;
+}
+.btlslot[data-you='1'] {
+  box-shadow: 0 0 0 2px #fff;
+}
+.btlslots__count {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  color: var(--faint);
+}
+
+/* ── three figures ── */
+.btlstats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.btlstats span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.btlstats i {
+  font-size: 0.5625rem;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.btlstats b {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--b-gold-hi);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A live card's reels, as a bar that runs itself to the end from where it was drawn. */
+.btlcard__prog {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.btlcard__prog i {
+  display: block;
+  width: calc(var(--from, 0) * 100%);
+  height: 100%;
+  background-image: linear-gradient(90deg, #ff3b1f, #ffaa00);
+  animation: btl-prog var(--ms, 0ms) linear forwards;
+}
+@keyframes btl-prog {
+  to {
+    width: 100%;
+  }
+}
+
+/* ── recent results ── */
+.btl__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.btlrec {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(10, 10, 12, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.btlrec .btlcard__crates {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.btlrec .btlcrate {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
+.btlrec .btlcard__crates .btlcrate img {
+  width: 22px;
+  height: 22px;
+}
+.btlrec .btlcrate__n {
+  top: -5px;
+  right: -5px;
+}
+.btlrec__win {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.btlrec__win svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--b-gold-hi);
+}
+.btlrec__win span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btlrec__pot {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--b-gold-hi);
+  white-space: nowrap;
+}
+.btlrec__ago {
+  font-size: 0.625rem;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ═════════════════════════ the host panel ═════════════════════════ */
+
+.btl__label--row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btl__clear {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  cursor: pointer;
+}
+.btl__clear:hover {
+  color: var(--b-gold-hi);
+}
+.btl__hint {
+  margin: 0;
+  padding: 4px 2px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.btl__pick,
+.btl__crate--pool {
+  position: relative;
+}
+.btl__crate[data-picked='1'] {
+  border-color: var(--b-gold);
+  background: rgba(255, 170, 0, 0.1);
+}
+.btl__find {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.btl__find input,
+.btl__find select {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.btl__find input {
+  flex: 1 1 auto;
+}
+.btl__find select {
+  flex: none;
+}
+.btl__find input:focus,
+.btl__find select:focus {
+  outline: none;
+  border-color: rgba(255, 170, 0, 0.5);
+}
+.btl__pool {
+  max-height: 236px;
+}
+.btl__sum {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.btl__sum span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--b-line);
+}
+.btl__sum i {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.btl__sum b {
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--b-gold-hi);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═════════════════════════ the arena ═════════════════════════ */
+
+.barena {
+  gap: 14px;
+}
+.barena .arena__title h2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.arena__mode {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.barena[data-mode='crazy'] .arena__mode {
+  color: #ff6a4a;
+}
+.arena__stats {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.arena__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 96px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--b-line);
+}
+.arena__stat i {
+  font-size: 0.5625rem;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.arena__stat b {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--b-gold-hi);
+  white-space: nowrap;
+}
+
+/* ── the crate strip ── */
+.barena .arena__strip {
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
+}
+.barena .arena__round {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 66px;
+  padding: 6px 8px;
+}
+.barena .arena__round img {
+  width: 34px;
+  height: 34px;
+}
+.arena__roundprice {
+  font-size: 0.5625rem;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.barena .arena__round[data-done='1'] {
+  opacity: 0.45;
+}
+.barena .arena__round[data-active='1'] .arena__roundprice {
+  color: var(--b-gold-hi);
+}
+
+/* ── the board: teams, top to bottom, split by VS ── */
+.barena .arena__board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bteam {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.bteam[data-squad='1'] {
+  padding: 10px;
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bt) 7%, transparent),
+    transparent 70%
+  );
+  border: 1px solid color-mix(in srgb, var(--bt) 26%, transparent);
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.bteam[data-squad='1'][data-won='1'] {
+  border-color: var(--b-gold);
+  box-shadow: 0 0 40px -18px var(--b-gold);
+}
+.bteam__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+.bteam__name {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--bt);
+}
+.bteam__total {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.bvs {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 22px;
+  margin: -4px 0;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #0a0a0c;
+  background-image: var(--b-ramp);
+  box-shadow: 0 0 18px -6px var(--b-gold);
+}
+
+/* ── a seat: who and how much on the left, their reel and drops on the right ── */
+.barena .seat {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px 12px 10px 10px;
+  border-left: 3px solid var(--bt, transparent);
+}
+.barena .seat[data-lead='1'] {
+  border-color: color-mix(in srgb, var(--bt) 60%, transparent);
+  box-shadow: 0 0 28px -16px var(--bt);
+}
+.barena .seat[data-won='0'] {
+  opacity: 0.55;
+}
+.seat__info {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'av who crown'
+    'total total total'
+    'won won won';
+  align-content: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.seat__av {
+  grid-area: av;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #0a0a0c;
+  background: var(--bt, #ffaa00);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.35);
+}
+.seat__av[data-bot='1'] {
+  font-size: 0.5625rem;
+  color: var(--muted);
+  background: #383b44;
+}
+.seat__who {
+  grid-area: who;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+.seat__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.seat__tags i {
+  font-style: normal;
+}
+.seat__you {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #0a0a0c;
+  background-image: var(--b-ramp);
+}
+.seat__crown {
+  grid-area: crown;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  color: var(--b-gold-hi);
+  opacity: 0;
+  transform: scale(0.6) translateY(4px);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.seat__crown svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 6px rgba(255, 170, 0, 0.6));
+}
+.seat[data-lead='1'] .seat__crown,
+.seat[data-won='1'] .seat__crown {
+  opacity: 1;
+  transform: none;
+}
+.barena .seat__total {
+  grid-area: total;
+  font-size: 1.25rem;
+}
+.barena .seat__won {
+  grid-area: won;
+}
+.barena .seat__won:empty {
+  display: none;
+}
+.seat__play {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.barena .seat__reel {
+  height: 108px;
+}
+.barena .arena__board[data-seats='6'] .seat__reel,
+.barena .arena__board[data-seats='8'] .seat__reel {
+  height: 96px;
+}
+
+/* Every drop this seat has landed, in order, dropping in as its round stops. */
+.seat__drops {
+  display: flex;
+  gap: 4px;
+  min-height: 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.seat__drops::-webkit-scrollbar {
+  display: none;
+}
+.seat__drop {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: seat-drop 0.35s var(--ob-ease, ease) both;
+}
+.seat__drop img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.seat__drop b {
+  font-size: 0.625rem;
+  font-weight: 800;
+  color: var(--b-gold-hi);
+  white-space: nowrap;
+}
+.seat__drop[data-rarity='rare'] {
+  border-color: rgba(255, 215, 0, 0.35);
+}
+.seat__drop[data-rarity='epic'] {
+  border-color: rgba(255, 34, 34, 0.45);
+  background: rgba(255, 34, 34, 0.08);
+}
+.seat__drop[data-rarity='legendary'] {
+  border-color: rgba(255, 170, 0, 0.6);
+  background: rgba(255, 170, 0, 0.12);
+  box-shadow: 0 0 14px -6px var(--b-gold);
+}
+@keyframes seat-drop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+}
+
+.barena .seat--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 132px;
+}
+
+/* The winner is an ordinary tile until its reel lands: no gold, no value. Lighting it from the
+   first frame told the player what they had pulled before the reel had slowed down. */
+.seat__reel[data-landed='1'] .seat__tile[data-winner='1'] {
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(255, 170, 0, 0.24), transparent 70%), rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 170, 0, 0.6);
+  box-shadow: 0 0 22px -8px var(--b-gold);
+  animation: tile-land 0.4s var(--ob-ease, ease) both;
+}
+.seat__reel:not([data-landed='1']) .seat__tileval {
+  visibility: hidden;
+}
+@keyframes tile-land {
+  from {
+    transform: scale(1.08);
+  }
+}
+
+/* Author display rules beat the [hidden] attribute, so every block this sheet lays out as flex or
+   grid states it explicitly. Without this the hidden result banner drew as an empty bar. */
+.btl__sec[hidden],
+.arena__result[hidden],
+.bfair[hidden] {
+  display: none;
+}
+
+/* ── the result ── */
+.arena__result {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--b-line);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 170, 0, 0.16), transparent 60%),
+    rgba(12, 11, 9, 0.92);
+  animation: result-in 0.45s var(--ob-ease, ease) both;
+}
+.arena__result[data-state='won'] {
+  border-color: var(--b-gold);
+  box-shadow: 0 0 50px -16px var(--b-gold);
+}
+.arena__result[data-state='lost'] {
+  border-color: rgba(255, 59, 31, 0.4);
+}
+.arena__trophy {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  color: var(--b-gold-hi);
+}
+.arena__trophy svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.arena__resulttext {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.arena__resulttitle {
+  font-size: 1.125rem;
+  font-weight: 900;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.arena__result[data-state='won'] .arena__resulttitle {
+  color: var(--b-gold-hi);
+}
+.arena__resultsub {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.arena__again {
+  flex: none;
+}
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+/* The burst, anchored to the middle of the banner. */
+.bconfetti {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.bconfetti i {
+  position: absolute;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: #ffd700;
+  opacity: 0;
+  animation: confetti 1.7s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d, 0s) forwards;
+}
+.bconfetti i[data-c='1'] {
+  background: #ffaa00;
+}
+.bconfetti i[data-c='2'] {
+  background: #5ad1ff;
+}
+.bconfetti i[data-c='3'] {
+  background: #7ee08a;
+}
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  45% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 0.7), var(--y)) rotate(calc(var(--r) * 0.5));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), calc(var(--y) + 200px)) rotate(var(--r));
+  }
+}
+
+/* ── the proof ── */
+.bfair {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(10, 10, 12, 0.6);
+  font-size: 0.75rem;
+}
+.bfair summary {
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.bfair__formula {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.6875rem;
+  color: var(--faint);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.bfair__list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+}
+.bfair__list dt {
+  color: var(--faint);
+}
+.bfair__list dd {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+/* ═════════════════════════ narrow ═════════════════════════ */
+
+@media (max-width: 760px) {
+  .btlrec {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .btlrec .btlcard__crates,
+  .btlrec__ago {
+    display: none;
+  }
+
+  .arena__stats {
+    order: 3;
+    width: 100%;
+  }
+  .arena__stat {
+    flex: 1 1 0;
+    align-items: flex-start;
+  }
+  .barena .seat {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .seat__info {
+    grid-template-columns: 34px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'av who total crown'
+      'won won won won';
+  }
+  .seat__av {
+    width: 34px;
+    height: 34px;
+  }
+  .barena .seat__total {
+    font-size: 1rem;
+  }
+  .barena .seat__reel {
+    height: 100px;
+  }
+  .arena__result {
+    flex-wrap: wrap;
+  }
+  .arena__again {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btl__dot,
+  .btlcard__prog i,
+  .seat__drop,
+  .arena__result,
+  .seat__reel[data-landed='1'] .seat__tile[data-winner='1'] {
+    animation: none;
+  }
+  .seat__crown,
+  .bteam[data-squad='1'] {
+    transition: none;
+  }
+}

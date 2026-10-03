@@ -68,6 +68,9 @@ export const BATTLE_MODES: readonly {
   { code: '1v1v1', label: '1v1v1', teamCount: 3, teamSize: 1, blurb: 'Three ways, winner takes all.' },
   { code: '1v1v1v1', label: '1v1v1v1', teamCount: 4, teamSize: 1, blurb: 'Four ways. Long odds, big pot.' },
   { code: '2v2', label: '2v2', teamCount: 2, teamSize: 2, blurb: 'Teams of two. Totals combine.' },
+  /* Three pairs. Inside the shapes battles has always allowed — at most four teams, at most two a
+   * side, at most eight seats — so it needs no migration, only an entry here. */
+  { code: '2v2v2', label: '2v2v2', teamCount: 3, teamSize: 2, blurb: 'Three teams of two. Best pair takes it.' },
 ];
 
 export const MIN_ROUNDS = 1;

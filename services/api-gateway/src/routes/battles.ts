@@ -73,7 +73,7 @@ const BOT_NAMES = [
 
 const createSchema = z
   .object({
-    format: z.enum(['1v1', '1v1v1', '1v1v1v1', '2v2']),
+    format: z.enum(['1v1', '1v1v1', '1v1v1v1', '2v2', '2v2v2']),
     mode: z.enum(['standard', 'crazy']),
     visibility: z.enum(['public', 'private']),
     allowBots: z.boolean().default(false),
