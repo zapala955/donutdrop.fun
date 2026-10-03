@@ -50,6 +50,8 @@ export type DuelEvent =
       readonly roundMs: number;
       /** For 'sequence' only: the order to memorise. Empty for the timing variants. */
       readonly symbols: readonly number[];
+      /** For 'precision' only: where the mark sits, ms from `startsAt`. Null otherwise. */
+      readonly targetOffsetMs: number | null;
     }
   /* Sent when the cue is due. Deliberately not bundled into duel:round — see the header. */
   | { readonly type: 'duel:cue'; readonly code: string; readonly roundIndex: number; readonly at: number }

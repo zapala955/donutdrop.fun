@@ -508,10 +508,17 @@ function renderArena() {
   /* The whole stage is the input surface: a duel decided on a 200ms reaction must not also be a
    * test of mouse travel to a button. Keyboard gets the same, because a reflex test that only
    * accepts a click excludes anyone who plays on a keyboard. */
-  stage.addEventListener('pointerdown', submitInput);
+  /* Sequence answers go through the symbol pad, which sits INSIDE the stage. Without this guard
+   * the first tap on a pad key bubbled up as a stage press and sent an empty answer before the
+   * key's own click handler ran, so every sequence round was lost on its first touch. */
+  const stagePress = () => {
+    if (active?.variant === 'sequence') return;
+    void submitInput();
+  };
+  stage.addEventListener('pointerdown', stagePress);
   stage.tabIndex = 0;
   stage.addEventListener('keydown', (event) => {
-    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); submitInput(); }
+    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); stagePress(); }
   });
 }
 
@@ -524,6 +531,7 @@ function openRound(message) {
     startsAt: localStart,
     roundMs: message.roundMs,
     symbols: message.symbols ?? [],
+    targetMs: message.targetOffsetMs ?? null,
     cueAt: null,
     sent: false,
     entered: [],
@@ -564,15 +572,20 @@ function fireCue(message) {
   playSound('click', { rate: 1.6 });
 }
 
-/** The precision needle. One rAF loop against the shared start, so both screens agree. */
+/** The precision needle. One rAF loop against the shared start, so both screens agree.
+ *  Both properties go on the STAGE: the needle and the mark are the stage's own ::before and
+ *  ::after, and a custom property set on a child never reaches its parent's pseudo-elements. */
 function startSweep() {
-  const cue = $('#duelCue');
-  if (!cue) return;
+  const stage = $('#duelStage');
+  if (!stage || !round) return;
+  if (round.targetMs !== null) {
+    stage.style.setProperty('--target', String(clamp(round.targetMs / round.roundMs, 0, 1)));
+  }
   const step = () => {
     if (!round || !active) return;
     const elapsed = Date.now() - round.startsAt;
     if (elapsed > round.roundMs || round.sent) return;
-    cue.style.setProperty('--sweep', String(clamp(elapsed / round.roundMs, 0, 1)));
+    stage.style.setProperty('--sweep', String(clamp(elapsed / round.roundMs, 0, 1)));
     window.requestAnimationFrame(step);
   };
   window.requestAnimationFrame(step);
@@ -591,6 +604,9 @@ function showSequence() {
   });
   stage.append(pad);
 
+  /* Sequences grow each round; each extra symbol gets the time its staggered entrance costs, so
+   * the last one is on screen as long in round three as the fourth one was in round one. */
+  const showMs = 1_600 + Math.max(0, round.symbols.length - 4) * 400;
   window.setTimeout(() => {
     pad.remove();
     const answer = el('div', 'arena__pad arena__pad--live');
@@ -609,7 +625,7 @@ function showSequence() {
       answer.append(key);
     });
     stage.append(answer);
-  }, 1_600);
+  }, showMs);
 }
 
 /**

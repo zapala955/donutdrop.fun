@@ -8,9 +8,12 @@ import { creditWallet, recordWager } from '../lib/cash-settlement.js';
 import { decryptSecret, encryptSecret, hmacHex, safeEqualText } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { battleCodeFrom, deterministicUuid } from '../lib/battle-engine.js';
+import { appendAudit } from '../lib/audit.js';
 import {
   VARIANT_RULES,
+  consistencySuspicion,
   duelMarginPerPlayer,
+  isSuspiciouslyConsistent,
   judge,
   resolveDuel,
   scheduleFor,
@@ -514,10 +517,13 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       roundIndex,
       startsAt,
       roundMs: rules.roundMs,
-      /* The sequence to memorise is the challenge itself, so it ships with the round. The timing
-       * variants send nothing here — their challenge is WHEN, and that stays secret until it
-       * happens. */
+      /* The sequence to memorise is the challenge itself, so it ships with the round. The reflex
+       * cue is the opposite — its challenge is WHEN, and that stays secret until it happens. */
       symbols: variant === 'sequence' ? schedule.symbols : [],
+      /* Precision's mark is likewise the challenge, not a secret: "stop on the mark" needs the
+       * mark on screen. Withholding it left players aiming at a fixed centre line while being
+       * scored against a target anywhere in the middle 70%, which made the mode a coin toss. */
+      targetOffsetMs: variant === 'precision' ? schedule.targetOffsetMs : null,
     });
 
     if (variant !== 'sequence') {
@@ -682,9 +688,42 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       );
       if (settled) {
         hub.broadcast(code, { type: 'duel:settled', code, duel: publicDuel(settled, null) });
+        if (winnerUserId) await flagScriptedTiming(row, rounds.rows);
       }
     } catch (error) {
       app.log.error({ error, code, roundIndex }, 'duel round close failed');
+    }
+  }
+
+  /**
+   * Writes an audit entry for each player whose timings were too consistent to be a hand.
+   *
+   * A review signal and nothing more: it runs after the pot has been paid and cannot hold or
+   * reverse it — see `isSuspiciouslyConsistent` for why a statistic alone must not confiscate.
+   * Its own transaction, so a failure here can never touch the settlement that already committed.
+   */
+  async function flagScriptedTiming(
+    row: DuelRow,
+    rounds: readonly { user_id: string; verdict: string; score: number | null }[],
+  ): Promise<void> {
+    const variant = row.variant as DuelVariant;
+    for (const userId of [row.host_user_id, row.opponent_user_id]) {
+      if (!userId) continue;
+      const scores = rounds
+        .filter((r) => r.user_id === userId && r.verdict === 'valid' && r.score !== null)
+        .map((r) => Number(r.score));
+      if (!isSuspiciouslyConsistent(variant, scores)) continue;
+      const spreadMs = consistencySuspicion(scores);
+      app.log.warn({ code: row.code, userId, scores, spreadMs }, 'duel timings implausibly consistent');
+      await db.transaction((client) =>
+        appendAudit(client, config, {
+          actorUserId: null,
+          action: 'duel.timing_flagged',
+          targetType: 'user',
+          targetId: userId,
+          details: { duelCode: row.code, variant, scores, spreadMs },
+        }),
+      );
     }
   }
 
@@ -729,6 +768,81 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       return { ok: true, refundedMinor: result.stake_minor };
     },
   );
+
+  /* ─────────────────────────── stranded money ─────────────────────────── */
+
+  /**
+   * Returns stakes held by a duel that nothing will ever move on.
+   *
+   * Rounds are driven by in-process timers. A deploy or a crash mid-duel loses them, and nothing
+   * else advances a 'running' duel — so both stakes stayed locked with no way back, because cancel
+   * only accepts an unjoined lobby. A duel still running well past the longest it can possibly take
+   * is settled as expired: both stakes returned whole, the house paid nothing.
+   *
+   * Unjoined lobbies past their TTL are cancelled and refunded exactly as the host's own cancel
+   * would, with the same deterministic ledger reference, so the two paths cannot both pay.
+   */
+  const LONGEST_ROUND_MS = Math.max(...Object.values(VARIANT_RULES).map((rules) => rules.roundMs))
+    + ROUND_LEAD_MS + INPUT_GRACE_MS;
+  const STRANDED_SLACK_SECONDS = 60;
+
+  async function sweepStranded(): Promise<void> {
+    if (!config.skillDuelEnabled) return;
+
+    const stranded = await db.query<{ code: string }>(
+      `SELECT code FROM duel_lobbies
+        WHERE status = 'running'
+          AND started_at < now() - make_interval(secs => rounds_total * $1::float8 + $2)
+        LIMIT 50`,
+      [LONGEST_ROUND_MS / 1000, STRANDED_SLACK_SECONDS],
+    );
+    for (const { code } of stranded.rows) {
+      const settled = await db.transaction(async (client) => {
+        const locked = await client.query<DuelRow>(
+          `${SELECT_DUEL} WHERE d.code = $1 FOR UPDATE OF d`, [code],
+        );
+        const row = locked.rows[0];
+        if (!row || row.status !== 'running') return null;
+        return settleDuel(client, row, 'expired', null);
+      });
+      if (settled) {
+        app.log.warn({ code }, 'stranded duel settled as expired; both stakes refunded');
+        hub.broadcast(code, { type: 'duel:settled', code, duel: publicDuel(settled, null) });
+      }
+    }
+
+    const lapsed = await db.query<{ code: string }>(
+      `SELECT code FROM duel_lobbies WHERE status = 'lobby' AND expires_at <= now() LIMIT 50`,
+    );
+    for (const { code } of lapsed.rows) {
+      const refunded = await db.transaction(async (client) => {
+        const locked = await client.query<DuelRow>(
+          `${SELECT_DUEL} WHERE d.code = $1 FOR UPDATE OF d`, [code],
+        );
+        const row = locked.rows[0];
+        if (!row || row.status !== 'lobby') return false;
+        await client.query(
+          `UPDATE duel_lobbies SET status = 'cancelled' WHERE id = $1 AND status = 'lobby'`,
+          [row.id],
+        );
+        await creditWallet(
+          client, row.host_user_id, BigInt(row.stake_minor), 'duel_refund',
+          deterministicUuid('duel_refund', row.id, 'host'),
+        );
+        return true;
+      });
+      if (refunded) {
+        hub.broadcastLobby({ type: 'duel:removed', code });
+        hub.broadcast(code, { type: 'duel:cancelled', code, reason: 'Nobody joined in time — your stake is back' });
+      }
+    }
+  }
+
+  const sweeper = setInterval(() => {
+    sweepStranded().catch((error: unknown) => app.log.error({ error }, 'duel sweep failed'));
+  }, 30_000);
+  sweeper.unref();
+  app.addHook('onClose', async () => clearInterval(sweeper));
 
   /* ─────────────────────────── the socket ─────────────────────────── */
 

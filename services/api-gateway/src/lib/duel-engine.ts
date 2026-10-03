@@ -143,6 +143,18 @@ export interface RoundSchedule {
 }
 
 /**
+ * How many symbols a sequence round asks for: four, then one more each round, up to eight.
+ *
+ * A flat four is a length nearly everyone recalls perfectly, so both players scored zero wrong,
+ * every round tied and almost every duel settled as a refunded draw. Growing the sequence is what
+ * gives the later rounds a chance to separate two players. Eight is the input schema's ceiling and
+ * stays inside the digest bytes the draw reads from.
+ */
+export function sequenceLength(roundIndex: number): number {
+  return Math.min(4 + Math.max(0, roundIndex), 8);
+}
+
+/**
  * Derives one round's cue schedule from the committed server seed.
  *
  * Deterministic, so the reveal lets a player replay it and confirm the cue they were shown is the
@@ -181,9 +193,9 @@ export function scheduleFor(
 
   const symbols: number[] = [];
   if (variant === 'sequence') {
-    /* Four symbols out of six, drawn from successive bytes. Repeats are allowed: a sequence that
-     * can never repeat leaks information about every position the player has already seen. */
-    for (let index = 0; index < 4; index += 1) {
+    /* Symbols out of six, drawn from successive bytes. Repeats are allowed: a sequence that can
+     * never repeat leaks information about every position the player has already seen. */
+    for (let index = 0; index < sequenceLength(roundIndex); index += 1) {
       symbols.push(digest[8 + index]! % 6);
     }
   }
@@ -344,4 +356,23 @@ export function consistencySuspicion(scores: readonly number[]): number | null {
   const mean = valid.reduce((sum, score) => sum + score, 0) / valid.length;
   const variance = valid.reduce((sum, score) => sum + (score - mean) ** 2, 0) / valid.length;
   return Math.sqrt(variance);
+}
+
+/**
+ * The spread below which a player's timings are flagged for review.
+ *
+ * A human's reaction times or stopping distances over five rounds scatter by tens of milliseconds.
+ * Under 8ms across at least three valid rounds is the shape of a script adding a small constant,
+ * not of a hand. Only the timing variants are judged: sequence scores are counts of wrong symbols,
+ * and a player who gets every symbol right has a spread of zero honestly.
+ */
+export const SUSPICIOUS_SPREAD_MS = 8;
+
+export function isSuspiciouslyConsistent(
+  variant: DuelVariant,
+  scores: readonly number[],
+): boolean {
+  if (variant === 'sequence') return false;
+  const spread = consistencySuspicion(scores);
+  return spread !== null && spread < SUSPICIOUS_SPREAD_MS;
 }

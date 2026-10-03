@@ -6,9 +6,11 @@ import {
   VARIANT_RULES,
   consistencySuspicion,
   duelMarginPerPlayer,
+  isSuspiciouslyConsistent,
   judge,
   resolveDuel,
   scheduleFor,
+  sequenceLength,
   splitPot,
 } from '../src/lib/duel-engine.js';
 
@@ -251,4 +253,25 @@ test('a machine scatters less than a hand', () => {
   const human = consistencySuspicion([198, 265, 231, 302, 214]);
   assert.ok(machine !== null && human !== null);
   assert.ok(machine! < human!, 'a constant-offset script must look tighter than a person');
+});
+
+test('timing variants flag a script-tight spread and leave a human alone', () => {
+  assert.equal(isSuspiciouslyConsistent('reflex', [150, 152, 149, 151, 150]), true);
+  assert.equal(isSuspiciouslyConsistent('precision', [2, 0, 3, 1, 2]), true);
+  assert.equal(isSuspiciouslyConsistent('reflex', [198, 265, 231, 302, 214]), false);
+  assert.equal(isSuspiciouslyConsistent('reflex', [150, 150]), false, 'too few rounds to judge');
+});
+
+test('a perfect sequence player is never flagged', () => {
+  // Zero wrong every round is a spread of zero, and it is what an honest good memory produces.
+  assert.equal(isSuspiciouslyConsistent('sequence', [0, 0, 0]), false);
+});
+
+/* ═════════════════════════ sequence length ═════════════════════════ */
+
+test('sequences start at four symbols and grow one per round, capped at eight', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 8].map(sequenceLength), [4, 5, 6, 7, 8, 8, 8]);
+  for (let round = 0; round < VARIANT_RULES.sequence.rounds; round += 1) {
+    assert.equal(scheduleFor('s', 'sequence', round).symbols.length, sequenceLength(round));
+  }
 });

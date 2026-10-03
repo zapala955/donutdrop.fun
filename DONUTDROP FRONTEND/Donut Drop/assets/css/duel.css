@@ -239,15 +239,15 @@
   background: linear-gradient(180deg, transparent, #ffd700 20%, #fff 50%, #ffd700 80%, transparent);
   box-shadow: 0 0 16px 2px rgba(255, 215, 0, .8);
 }
-/* The mark to stop on. Centred, because the target is the middle of the band the server draws
-   from and a visible mark that lies about where the target is would be worse than none. */
+/* The mark to stop on, placed by --target: the round's real target, sent with the round. The
+   centre fallback only applies to a server too old to send one. */
 .arena__stage[data-state="sweep"]::after {
   content: "";
-  position: absolute; top: 12%; bottom: 12%; left: 50%;
-  width: 3px; transform: translateX(-50%);
+  position: absolute; top: 12%; bottom: 12%; left: calc(var(--target, .5) * 100%);
+  width: 4px; transform: translateX(-50%);
   border-radius: 999px;
-  background: rgba(255, 170, 0, .3);
-  box-shadow: 0 0 0 1px rgba(255, 215, 0, .2);
+  background: rgba(255, 170, 0, .55);
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, .45), 0 0 14px rgba(255, 170, 0, .35);
 }
 
 /* ── sequence: the pad ── */
