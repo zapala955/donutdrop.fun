@@ -6,6 +6,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import { creditWallet } from '../lib/cash-settlement.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { assertGameEligible } from '../lib/game-eligibility.js';
 import { impliedMultiplierBps, settlePool, type Bet } from '../lib/sidebet-engine.js';
 import { parseWith } from '../lib/validation.js';
 
@@ -183,6 +184,10 @@ export async function registerSideBetRoutes(app: FastifyInstance, db: Database, 
         if (await isParticipant(client, market, userId)) {
           throw new AppError(403, 'IN_THE_MATCH', 'You cannot bet on a match you are in');
         }
+
+        /* Every other wager path rechecks the account under lock before it debits; this one did
+         * not, so a suspended account could keep staking on side markets. */
+        await assertGameEligible(client, userId);
 
         const debited = await client.query<{ balance_minor: string }>(
           `UPDATE user_wallets SET balance_minor = balance_minor - $2, updated_at = now()
