@@ -2844,9 +2844,16 @@ async function startRain() {
 }
 
 async function reviewCreator(application, maxBps) {
+  /* Applications filed before the 6-character minimum can carry a 3 to 5 character code, which
+   * cannot be approved as it stands. Said up front rather than discovered on submit. */
+  const shortCode = !/^[A-Z0-9]{6,16}$/.test(application.requested_code ?? '');
   const values = await editRecord({
     title: `Review ${application.minecraft_username}`,
-    description: `${application.platform}: ${application.channel_url}. Maximum ${maxBps} bps.`,
+    description:
+      `${application.platform}: ${application.channel_url}. Maximum ${maxBps} bps.` +
+      (shortCode
+        ? ` The requested code is under 6 characters: enter a 6-16 character code to approve.`
+        : ''),
     fields: [
       { name: 'decision', label: 'Decision', type: 'select', options: ['approved', 'rejected'] },
       { name: 'code', label: 'Creator code', value: application.requested_code },

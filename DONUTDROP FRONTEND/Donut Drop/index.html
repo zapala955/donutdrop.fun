@@ -344,21 +344,16 @@
 
   <!-- ══════════ live chat rail ══════════ -->
   <aside class="chat" id="chat" aria-label="Live chat">
-    <div class="chat__rain">
-      <img src="assets/img/items/gold_block.png" alt="" />
-      <div>
-        <b class="mono" id="rainPot">$0</b>
-        <span>RAIN POT</span>
-      </div>
-      <span class="chat__timer mono" id="rainTimer">12:00</span>
-      <button class="btn btn--tiny" id="rainJoin">Join</button>
-    </div>
+    <!-- Lava Rain. Empty and hidden until GET /v1/social/rain reports a live drop; chat.js builds
+         the pot, the countdown and the claim button from that answer. It used to ship a static
+         "$0 · RAIN POT · 12:00 · Join" here that showed whenever no drop was running. -->
+    <div class="chat__rain" hidden></div>
     <div class="chat__head">
       <span>GLOBAL CHAT</span>
     </div>
     <div class="chat__log" id="chatLog"></div>
     <form class="chat__send" id="chatForm">
-      <input id="chatInput" placeholder="Send message…" maxlength="120" aria-label="Chat message" />
+      <input id="chatInput" placeholder="Send message…" maxlength="240" aria-label="Chat message" autocomplete="off" />
       <button class="btn btn--tiny" type="submit">Send</button>
     </form>
   </aside>

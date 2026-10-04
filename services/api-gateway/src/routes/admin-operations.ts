@@ -56,11 +56,12 @@ const creatorDecisionSchema = z
   .object({
     decision: z.enum(['approved', 'rejected']),
     revshareBps: z.number().int().min(0).max(10_000).optional(),
+    // The shape referral_codes enforces: the approved code is inserted there.
     code: z
       .string()
       .trim()
       .toUpperCase()
-      .regex(/^[A-Z0-9]{3,16}$/)
+      .regex(/^[A-Z0-9]{6,16}$/, 'A code is 6 to 16 letters and digits')
       .optional(),
     note: safeText(3, 512),
   })
@@ -580,6 +581,16 @@ export async function registerAdminOperationRoutes(
           conflict('APPLICATION_NOT_PENDING', 'That application is no longer pending');
         const code = body.code ?? application.requested_code;
         if (body.decision === 'approved') {
+          /* Applications filed before the 6-character minimum can still ask for 3 to 5. Refused
+           * here with a reason the operator can act on, rather than by referral_codes' CHECK as a
+           * 500; approving under a longer code (`code`) still works. */
+          if (!/^[A-Z0-9]{6,16}$/.test(code)) {
+            throw new AppError(
+              400,
+              'CREATOR_CODE_INVALID',
+              'Creator codes are 6 to 16 letters and digits. Enter a longer code to approve this one.',
+            );
+          }
           await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
             `referral-code:${code}`,
           ]);

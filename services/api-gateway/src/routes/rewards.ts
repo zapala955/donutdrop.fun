@@ -38,11 +38,14 @@ const applySchema = z
       .max(512)
       .refine((value) => /^https:\/\//.test(value), 'must be an https URL'),
     audienceSize: z.number().int().min(0).max(1_000_000_000),
+    /* 6 to 16, the shape `referral_codes` enforces. An approved creator code IS a referral code,
+     * and this used to accept 3 to 5 characters that could never be approved: the insert into
+     * referral_codes failed its CHECK and the admin got a 500. */
     requestedCode: z
       .string()
       .trim()
       .toUpperCase()
-      .regex(/^[A-Z0-9]{3,16}$/),
+      .regex(/^[A-Z0-9]{6,16}$/, 'A creator code is 6 to 16 letters and digits'),
   })
   .strict();
 

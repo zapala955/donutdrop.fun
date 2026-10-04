@@ -8,6 +8,8 @@ export type LiveTopic =
   | 'activity'
   | 'balance'
   | 'chat'
+  // A Lava Rain drop opened, gained a claimant, or settled.
+  | 'rain'
   | 'roulette'
   | 'settings'
   // A crash round changed: a bet, a cash-out, the curve starting, a new round opening.

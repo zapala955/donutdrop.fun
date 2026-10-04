@@ -27,7 +27,7 @@ export const state = {
   promotions: null,
   chat: {
     messages: [], slowModeSeconds: 0, maxLength: 240, bigHitMinor: '0',
-    resetId: null, clearedAt: null, loaded: false,
+    resetId: null, clearedAt: null, loaded: false, requestedAt: 0, limit: 50,
   },
   quests: [],
   questDay: null,
@@ -643,9 +643,17 @@ export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false 
  * Reads are public so the rail has content before login; writing needs a session. The big-hit
  * threshold comes from the server alongside the messages, so the client never has to guess what
  * counts as big. */
+const CHAT_WINDOW = 50;
+
 export async function refreshChat(notify = true) {
-  const result = await api.get('/v1/chat?limit=50');
+  /* Stamped before the request leaves. A line drawn after this moment may be newer than the
+   * snapshot that comes back, so chat.js only treats a line missing from it as deleted when the
+   * line was already on screen when the request started. */
+  const requestedAt = Date.now();
+  const result = await api.get(`/v1/chat?limit=${CHAT_WINDOW}`);
   state.chat = {
+    requestedAt,
+    limit: CHAT_WINDOW,
     messages: result.messages || [],
     slowModeSeconds: Number(result.slowModeSeconds || 0),
     maxLength: Number(result.maxLength || 240),

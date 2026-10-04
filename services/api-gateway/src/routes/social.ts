@@ -8,6 +8,7 @@ import { creditWallet, wageredSince } from '../lib/cash-settlement.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { readJackpot } from '../lib/jackpot.js';
+import { liveEvents } from '../lib/live-events.js';
 import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
@@ -158,15 +159,16 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     const due = await db.query<{ id: string }>(
       `SELECT id FROM lava_rain_events WHERE status = 'open' AND closes_at <= now() LIMIT 5`,
     );
+    let closedAny = false;
     for (const row of due.rows) {
       try {
-        await db.transaction(async (client) => {
+        const closed = await db.transaction(async (client) => {
           const locked = await client.query<RainRow>(
             `SELECT * FROM lava_rain_events WHERE id = $1 AND status = 'open' FOR UPDATE`,
             [row.id],
           );
           const event = locked.rows[0];
-          if (!event) return;
+          if (!event) return false;
 
           const claims = await client.query<{ user_id: string }>(
             'SELECT user_id FROM lava_rain_claims WHERE event_id = $1 ORDER BY claimed_at',
@@ -183,7 +185,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
                 WHERE id = $1 AND status = 'open'`,
               [event.id, pool.toString()],
             );
-            return;
+            return true;
           }
 
           /* Integer division, with the undividable units kept on the row rather than quietly
@@ -198,7 +200,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
               WHERE id = $1 AND status = 'open'`,
             [event.id, count, each.toString(), remainder.toString()],
           );
-          if (claimed.rowCount === 0) return; // somebody else settled it first
+          if (claimed.rowCount === 0) return false; // somebody else settled it first
 
           for (const claim of claims.rows) {
             await client.query(
@@ -215,11 +217,16 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
               );
             }
           }
+          return true;
         });
+        closedAny ||= closed;
       } catch (error) {
         app.log.error({ error, eventId: row.id }, 'lava rain settlement failed');
       }
     }
+    /* Only when this reader actually closed one. Every open card refetches on the event, and a
+     * refetch that finds nothing due publishes nothing, so this cannot feed itself. */
+    if (closedAny) liveEvents.publish('rain');
   }
 
   app.get('/v1/social/rain', { preHandler: softAuth }, async (request) => {
@@ -258,15 +265,33 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       : null;
 
     const settled = await db.query<{
+      id: string;
       pool_minor: string;
       claimant_count: number | null;
       per_claim_minor: string | null;
       settled_at: Date | null;
     }>(
-      `SELECT pool_minor, claimant_count, per_claim_minor, settled_at
+      `SELECT id, pool_minor, claimant_count, per_claim_minor, settled_at
          FROM lava_rain_events WHERE status = 'settled'
         ORDER BY settled_at DESC LIMIT 3`,
     );
+
+    /* The viewer's own share of a drop that has just paid out. The money moved at settlement,
+     * possibly while nobody had this page open, so the card says so once it next loads -- the same
+     * readout-of-a-completed-fact shape as the jackpot's `yourWin`. Ten minutes survives a reload
+     * without replaying last night's drop every morning. */
+    const payout = viewerId
+      ? await db.query<{ event_id: string; paid_minor: string; claimant_count: number }>(
+          `SELECT c.event_id, c.paid_minor::text AS paid_minor, e.claimant_count
+             FROM lava_rain_claims c
+             JOIN lava_rain_events e ON e.id = c.event_id
+            WHERE c.user_id = $1 AND e.status = 'settled' AND c.paid_minor > 0
+              AND e.settled_at > now() - interval '10 minutes'
+            ORDER BY e.settled_at DESC LIMIT 1`,
+          [viewerId],
+        )
+      : null;
+    const paid = payout?.rows[0];
 
     return {
       active: event
@@ -275,12 +300,17 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
             poolMinor: event.pool_minor,
             minWageredMinor: event.min_wagered_minor,
             windowMinutes: event.window_minutes,
+            opensAt: event.opens_at.toISOString(),
             closesAt: event.closes_at.toISOString(),
             claimants: Number(claimants?.rows[0]?.n ?? '0'),
           }
         : null,
       you,
+      yourPayout: paid
+        ? { eventId: paid.event_id, paidMinor: paid.paid_minor, claimants: paid.claimant_count }
+        : null,
       recent: settled.rows.map((row) => ({
+        id: row.id,
         poolMinor: row.pool_minor,
         claimants: row.claimant_count,
         perClaimMinor: row.per_claim_minor,
@@ -298,7 +328,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       }
       const userId = requireUser(request);
 
-      return db.transaction(async (client) => {
+      const result = await db.transaction(async (client) => {
         const live = await client.query<RainRow>(
           `SELECT * FROM lava_rain_events
             WHERE status = 'open' AND closes_at > now()
@@ -343,6 +373,9 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
           closesAt: event.closes_at.toISOString(),
         };
       });
+      /* After the commit, so every other card refetches a claimant count that includes this one. */
+      liveEvents.publish('rain');
+      return result;
     },
   );
 
@@ -398,6 +431,8 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
           },
         });
       });
+      /* A five-minute window is too short to wait for the next poll to notice it. */
+      liveEvents.publish('rain');
       return { id, poolMinor: pool.toString(), claimMinutes: minutes };
     },
   );

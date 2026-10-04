@@ -200,8 +200,8 @@ function openForm(data) {
         </label>
         <label class="cform__field">
           <span>Requested code</span>
-          <input class="cform__in mono" id="cCode" maxlength="16" autocomplete="off"
-                 spellcheck="false" placeholder="ABC123">
+          <input class="cform__in mono" id="cCode" minlength="6" maxlength="16" autocomplete="off"
+                 spellcheck="false" placeholder="6-16 letters or digits">
         </label>
         <span class="cform__hint" id="cHint"></span>
         <button class="btn btn--go" id="cSubmit" type="button">SUBMIT</button>
@@ -238,9 +238,10 @@ async function submit(body, data) {
     hint.textContent = 'Audience size must be a whole number';
     return;
   }
-  if (!/^[A-Z0-9]{3,16}$/.test(requestedCode)) {
+  // 6 to 16: an approved creator code becomes the player's referral code, which has that shape.
+  if (!/^[A-Z0-9]{6,16}$/.test(requestedCode)) {
     hint.dataset.bad = '1';
-    hint.textContent = 'Code must be 3-16 letters or digits';
+    hint.textContent = 'Code must be 6-16 letters or digits';
     return;
   }
 

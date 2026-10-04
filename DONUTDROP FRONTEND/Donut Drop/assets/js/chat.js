@@ -2,10 +2,13 @@
  *
  * Four kinds of line share this log and nothing else does:
  *
- *   1. messages players typed, stored server-side and readable by everyone;
- *   2. BIG hits only — a real payout over the configured threshold, with a replay link;
+ *   1. messages players typed, stored server-side and readable by everyone — an approved
+ *      creator's carry a MEDIA nametag with their code;
+ *   2. BIG hits only — a real payout over the configured threshold;
  *   3. tips, when one player hands another player money;
- *   4. the lava rain card, which is a live pot with a countdown and a claim.
+ *   4. lava rain: a line when a drop opens and when it pays out.
+ *
+ * Above the log sits the lava rain card itself, a live pot with a countdown and a claim.
  *
  * Every small drop still scrolls past in the ticker at the bottom of the page. Putting them here
  * too would bury the conversation under its own feed.
@@ -35,8 +38,18 @@ import { api, API_BASE_URL } from './api.js';
 
 // Recovery-only fallback. New messages arrive over /v1/live while the connection is healthy.
 const POLL_MS = 30_000;
-const RAIN_POLL_MS = 8000;
+/* Rain is pushed too: a drop opening, a claim and a settlement each arrive as a `rain` live event.
+ * The poll is the fallback for a dropped stream, and the gap is the most often a busy drop is
+ * refetched, since every claim on the site is broadcast to every open card. */
+const RAIN_POLL_MS = 15_000;
+const RAIN_OFF_POLL_MS = 60_000;
+const RAIN_EVENT_GAP_MS = 1500;
+/* A paid drop older than this is history, not news, and gets no line in the log on page load. */
+const RAIN_ANNOUNCE_HORIZON_MS = 30 * 60_000;
+const RAIN_PAID_KEY = 'dd.rain.paid';
 const MAX_LINES = 60;
+/* Within this of the bottom counts as reading the tail. */
+const TAIL_SLACK_PX = 60;
 /* The games that pay money rather than an item, and the name each one's big-win card carries. */
 const TABLE_GAMES = new Map([
   ['roulette', 'Roulette'],
@@ -54,9 +67,20 @@ const DOCK_KEY = 'dd.chat.collapsed';
 let log = null;
 let form = null;
 let input = null;
+let jump = null;
 let timer = 0;
+let rainCard = null;
 let rainTimer = 0;
 let rainCountdown = 0;
+let rainInFlight = false;
+let rainFetchedAt = 0;
+let lastRainBoard = null;
+/* Slow mode, shown on the send button rather than discovered by being refused. */
+let cooldownUntil = 0;
+let cooldownTimer = 0;
+/* `open:<id>` and `paid:<id>`: the rain lines already in the log. */
+const announcedRain = new Set();
+const toastedPayouts = new Set();
 /* Ids already drawn. Polling returns overlapping windows, so without this every refresh would
  * redraw the same messages and the log would grow without bound. */
 const seenMessages = new Set();
@@ -77,6 +101,7 @@ export function initChat() {
   if (!log) return;
 
   initDock();
+  initJump();
   initRain();
 
   if (form) {
@@ -89,6 +114,7 @@ export function initChat() {
     if (event.detail === 'chat') {
       drainMessages();
       drainBigHits();
+      announceRain(lastRainBoard);
     }
     if (event.detail === 'activity' || event.detail === 'ready') drainBigHits();
     if (['login', 'logout', 'ready', 'private'].includes(event.detail)) paintAuthState();
@@ -142,6 +168,37 @@ function initDock() {
   paint();
 }
 
+/**
+ * The "new messages" pill.
+ *
+ * The log already refuses to yank a reader away from a line they are reading (see appendLine). The
+ * cost was that someone scrolled up had no way to know the conversation had moved on under them.
+ */
+function initJump() {
+  const rail = $('#chat');
+  if (!rail || !log) return;
+  jump = el('button', 'chat__jump');
+  jump.type = 'button';
+  jump.hidden = true;
+  jump.textContent = 'New messages ↓';
+  jump.addEventListener('click', () => {
+    log.scrollTop = log.scrollHeight;
+    jump.hidden = true;
+  });
+  log.addEventListener(
+    'scroll',
+    () => {
+      if (!jump.hidden && atTail()) jump.hidden = true;
+    },
+    { passive: true },
+  );
+  rail.appendChild(jump);
+}
+
+function atTail() {
+  return log.scrollHeight - log.scrollTop - log.clientHeight < TAIL_SLACK_PX;
+}
+
 /* ═════════════════════════ lava rain ═════════════════════════ */
 
 /**
@@ -153,38 +210,77 @@ function initDock() {
  * window shuts and the divisor is finally known.
  */
 function initRain() {
-  const card = document.querySelector('.chat__rain');
-  if (!card) return;
-  card.hidden = true;
-  void pollRain(card);
+  rainCard = document.querySelector('.chat__rain');
+  if (!rainCard) return;
+  rainCard.hidden = true;
+  /* Opened, claimed into, settled, or switched on in the admin panel: live.js turns each of those
+   * into this event, so a five-minute window is not spent waiting for a poll to notice it. */
+  window.addEventListener('donut:rain', scheduleRain);
+  /* The button depends on who is looking. Logging in used to leave a disabled LOG IN on the card
+   * until the next poll came round. */
+  bus.addEventListener('change', (event) => {
+    if (event.detail === 'login' || event.detail === 'logout') scheduleRain();
+  });
+  void pollRain();
 }
 
-async function pollRain(card) {
+/** Every claim on the site is broadcast, so a busy drop is refetched at most once per gap. */
+function scheduleRain() {
+  if (!rainCard) return;
   window.clearTimeout(rainTimer);
+  const wait = Math.max(0, rainFetchedAt + RAIN_EVENT_GAP_MS - Date.now());
+  rainTimer = window.setTimeout(() => void pollRain(), wait);
+}
+
+async function pollRain() {
+  if (!rainCard) return;
+  window.clearTimeout(rainTimer);
+  if (rainInFlight) {
+    rainTimer = window.setTimeout(() => void pollRain(), RAIN_EVENT_GAP_MS);
+    return;
+  }
+  rainInFlight = true;
+  rainFetchedAt = Date.now();
   let board;
   try {
     board = await api.get('/v1/social/rain');
   } catch (error) {
-    if (error?.code === 'RAIN_DISABLED') {
-      card.remove();
-      return;
-    }
-    rainTimer = window.setTimeout(() => void pollRain(card), RAIN_POLL_MS * 2);
+    /* Switched off is a state, not an ending. The card used to be removed from the page here, so
+     * an operator turning Lava Rain on mid-session reached nobody who already had the site open. */
+    const off = error?.code === 'RAIN_DISABLED';
+    if (off) hideRain();
+    rainTimer = window.setTimeout(() => void pollRain(), off ? RAIN_OFF_POLL_MS : RAIN_POLL_MS * 2);
     return;
+  } finally {
+    rainInFlight = false;
   }
 
-  paintRain(card, board);
-  rainTimer = window.setTimeout(() => void pollRain(card), RAIN_POLL_MS);
+  lastRainBoard = board;
+  paintRain(board);
+  announceRain(board);
+  noticePayout(board);
+  rainTimer = window.setTimeout(() => void pollRain(), RAIN_POLL_MS);
 }
 
-function paintRain(card, board) {
+function hideRain() {
+  window.clearInterval(rainCountdown);
+  if (rainCard) rainCard.hidden = true;
+  delete document.body.dataset.rain;
+}
+
+function paintRain(board) {
+  const card = rainCard;
   window.clearInterval(rainCountdown);
   if (!board.active) {
-    card.hidden = true;
+    hideRain();
     return;
   }
   card.hidden = false;
+  document.body.dataset.rain = '1';
   card.replaceChildren();
+
+  const active = board.active;
+  const you = board.you;
 
   const art = document.createElement('img');
   art.src = safeImage('assets/img/items/gold_block.png');
@@ -193,53 +289,68 @@ function paintRain(card, board) {
 
   const figures = el('div', 'chat__rainfig');
   const pot = el('b', 'mono');
-  pot.textContent = money(Number(board.active.poolMinor));
+  pot.textContent = money(Number(active.poolMinor));
   const caption = el('span');
-  caption.textContent = `LAVA RAIN · ${board.active.claimants} IN`;
+  caption.textContent = you?.claimed
+    ? `YOU'RE IN · ${active.claimants} IN`
+    : `LAVA RAIN · ${active.claimants} IN`;
   figures.append(pot, caption);
+  /* What a share is worth right now. Labelled as an estimate everywhere it appears, because every
+   * claim until the window shuts moves the divisor. */
+  figures.title = `About ${money(
+    Number(active.poolMinor) / Math.max(1, active.claimants + (you?.claimed ? 0 : 1)),
+  )} each if you claim now · split evenly when the window closes`;
   card.appendChild(figures);
 
   const clockNode = el('span', 'chat__timer mono');
   card.appendChild(clockNode);
 
   const button = el('button', 'btn btn--tiny');
-  const closesAt = new Date(board.active.closesAt).getTime();
+  button.type = 'button';
+  const closesAt = new Date(active.closesAt).getTime();
 
-  const paintButton = () => {
+  const paintClock = () => {
     const remaining = Math.max(0, closesAt - Date.now());
     clockNode.textContent = `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(
       Math.floor((remaining % 60000) / 1000),
     ).padStart(2, '0')}`;
+    card.dataset.closing = remaining <= 30_000 ? '1' : '0';
     if (remaining <= 0) {
       window.clearInterval(rainCountdown);
-      void pollRain(card);
+      /* Throttled, not immediate. The server decides when the window has shut by its own clock;
+       * a browser running a few seconds fast used to refetch, still see the drop open, repaint at
+       * 00:00 and refetch again, as fast as the network allowed, until the server caught up. */
+      scheduleRain();
     }
   };
-  paintButton();
-  rainCountdown = window.setInterval(paintButton, 1000);
+  paintClock();
+  rainCountdown = window.setInterval(paintClock, 1000);
 
   if (!state.authenticated) {
+    /* A disabled LOG IN was a dead end on the one card with a deadline on it. */
     button.textContent = 'LOG IN';
-    button.disabled = true;
-  } else if (board.you?.claimed) {
+    button.addEventListener('click', () => document.querySelector('#loginBtn')?.click());
+  } else if (you?.claimed) {
     button.textContent = 'CLAIMED';
     button.disabled = true;
-  } else if (!board.you?.eligible) {
+  } else if (!you?.eligible) {
     /* The bar is stated as a figure, not as a sentence. A player who is short needs to know by how
-     * much, and "wager $10M in 60 minutes" is a rule they can act on where a paragraph is not. */
-    button.textContent = `NEED ${money(Number(board.active.minWageredMinor))}`;
+     * much, and "wager $10M in 60 minutes" is a rule they can act on where a paragraph is not. The
+     * figure is the shortfall, not the bar: someone $1M away should not read "NEED $10M". */
+    const short = Number(BigInt(active.minWageredMinor) - BigInt(you?.wageredMinor ?? '0'));
+    button.textContent = `NEED ${money(Math.max(0, short))}`;
     button.disabled = true;
-    button.title = `Wagered in the last ${board.active.windowMinutes}m: ${money(
-      Number(board.you?.wageredMinor ?? 0),
-    )}`;
+    button.title = `Wager ${money(Number(active.minWageredMinor))} in ${active.windowMinutes}m to claim · ${money(
+      Number(you?.wageredMinor ?? 0),
+    )} so far`;
   } else {
-    button.textContent = 'CLAIM SHARE';
-    button.addEventListener('click', () => void claimRain(card, button));
+    button.textContent = 'CLAIM';
+    button.addEventListener('click', () => void claimRain(button));
   }
   card.appendChild(button);
 }
 
-async function claimRain(card, button) {
+async function claimRain(button) {
   button.disabled = true;
   try {
     const result = await api.post('/v1/social/rain/claim', {});
@@ -250,22 +361,142 @@ async function claimRain(card, button) {
       /* Labelled an estimate on purpose: the divisor is still moving while the window is open. */
       body: `${result.claimants} in · about ${money(Number(result.estimatedShareMinor))} each`,
     });
-    void pollRain(card);
+    void pollRain();
   } catch (error) {
     button.disabled = false;
     toast({ kind: 'lose', title: 'NOT CLAIMED', body: error?.message || 'Try again' });
+    /* Already claimed, window shut, or no longer eligible: all of them mean the card is stale. */
+    scheduleRain();
   }
+}
+
+/**
+ * The viewer's share, once it has actually landed.
+ *
+ * Settlement pays everybody at once when the window shuts, usually while the claimant is looking
+ * at something else, and nothing used to say so: the balance just went up. Shown once per drop,
+ * remembered for the tab so a reload inside the server's ten-minute window does not replay it.
+ */
+function noticePayout(board) {
+  const payout = board.yourPayout;
+  if (!payout?.eventId) return;
+  let shown = '';
+  try {
+    shown = window.sessionStorage.getItem(RAIN_PAID_KEY) || '';
+  } catch {
+    /* No storage: the in-memory set below still holds for this page. */
+  }
+  if (shown === payout.eventId || toastedPayouts.has(payout.eventId)) return;
+  toastedPayouts.add(payout.eventId);
+  try {
+    window.sessionStorage.setItem(RAIN_PAID_KEY, payout.eventId);
+  } catch {
+    /* A repeat toast after a reload is the worst case. */
+  }
+  playSound('coin');
+  toast({
+    kind: 'gold',
+    title: 'LAVA RAIN PAID',
+    body: `${money(Number(payout.paidMinor))} landed · split ${payout.claimants} ${
+      payout.claimants === 1 ? 'way' : 'ways'
+    }`,
+  });
+  void refreshBalance();
+}
+
+/**
+ * A drop opening and a drop paying out, as lines in the conversation.
+ *
+ * The card at the top of the rail is easy to scroll past and invisible inside a closed drawer; a
+ * line in the log is where people are already looking. Both are server facts with server times, so
+ * they sort into the timeline like everything else and honour a chat reset like everything else.
+ */
+function announceRain(board) {
+  /* Not before the timeline has loaded: the reset boundary is not known yet, and the first load
+   * of a cleared chat would otherwise wipe these lines straight back out. The chat load calls
+   * back in here with the last board. */
+  if (!log || !board || !state.chat?.loaded) return;
+  applyChatReset();
+  const clearedAt = resetTimestamp();
+  let added = false;
+
+  const active = board.active;
+  if (active?.id && !announcedRain.has(`open:${active.id}`)) {
+    const at = new Date(active.opensAt ?? Date.now()).getTime();
+    announcedRain.add(`open:${active.id}`);
+    if (at > clearedAt) {
+      const bar = BigInt(active.minWageredMinor ?? '0');
+      const text =
+        `${money(Number(active.poolMinor))} is falling. Claim a share above` +
+        (bar > 0n ? ` · needs ${money(Number(bar))} wagered in ${active.windowMinutes}m.` : '.');
+      appendLine(buildRainLine('LIVE', text, at), at);
+      added = true;
+    }
+  }
+
+  const horizon = Date.now() - RAIN_ANNOUNCE_HORIZON_MS;
+  for (const drop of board.recent ?? []) {
+    if (!drop?.id || !drop.settledAt || announcedRain.has(`paid:${drop.id}`)) continue;
+    announcedRain.add(`paid:${drop.id}`);
+    const at = new Date(drop.settledAt).getTime();
+    if (at <= clearedAt || at < horizon) continue;
+    const ways = Number(drop.claimants) || 0;
+    const text = `${money(Number(drop.poolMinor))} split ${ways} ${ways === 1 ? 'way' : 'ways'} · ${money(
+      Number(drop.perClaimMinor ?? 0),
+    )} each.`;
+    appendLine(buildRainLine('PAID', text, at), at);
+    added = true;
+  }
+  if (added) trim();
 }
 
 /* ═════════════════════════ sending ═════════════════════════ */
 
 function paintAuthState() {
+  paintMine();
   if (!form || !input) return;
-  const button = form.querySelector('button');
   const online = state.authenticated;
   input.disabled = !online;
-  if (button) button.disabled = !online;
+  paintSendButton();
   input.placeholder = online ? 'Say something, or /tip name amount' : 'Log in to chat';
+}
+
+/** Marks the viewer's own lines, again on every login and logout since the viewer changed. */
+function paintMine() {
+  if (!log) return;
+  const me = state.authenticated ? state.user?.id : null;
+  for (const node of log.querySelectorAll('[data-author]')) {
+    node.classList.toggle('msg--me', Boolean(me) && node.dataset.author === me);
+  }
+}
+
+/* ─────────── slow mode ───────────
+ * The server has always enforced it; the client only found out by being refused, which arrived as
+ * a red "Slow down" toast on a message the player had already finished typing. The button now
+ * counts the wait down instead, and Enter does nothing until it is over. */
+function startCooldown(seconds) {
+  if (!form || !(seconds > 0)) return;
+  cooldownUntil = Date.now() + seconds * 1000;
+  window.clearInterval(cooldownTimer);
+  cooldownTimer = window.setInterval(paintSendButton, 250);
+  paintSendButton();
+}
+
+function paintSendButton() {
+  const button = form?.querySelector('button');
+  if (!button) return;
+  button.disabled = !state.authenticated;
+  const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
+  /* aria-disabled rather than disabled: a form whose submit button is disabled refuses Enter
+   * entirely, and `/tip` goes through this form without being subject to slow mode. */
+  if (left > 0 && state.authenticated) {
+    button.textContent = `${left}s`;
+    button.setAttribute('aria-disabled', 'true');
+    return;
+  }
+  window.clearInterval(cooldownTimer);
+  button.textContent = 'Send';
+  button.removeAttribute('aria-disabled');
 }
 
 async function onSubmit(event) {
@@ -285,6 +516,8 @@ async function onSubmit(event) {
     await sendTip(tip[1], parseAmount(tip[2]), tip[3]?.trim() || undefined);
     return;
   }
+  // Slow mode is a chat rule; a tip is not a message and is not held back by it.
+  if (Date.now() < cooldownUntil) return;
 
   const button = form.querySelector('button');
   input.disabled = true;
@@ -293,7 +526,14 @@ async function onSubmit(event) {
     await sendChat(body);
     input.value = '';
     playSound('click');
+    startCooldown(Number(state.chat?.slowModeSeconds) || 0);
   } catch (error) {
+    if (error?.code === 'CHAT_SLOW_MODE') {
+      /* Another tab, or a clock that drifted: take the server's figure and keep the text. */
+      const wait = Number(/(\d+)s/.exec(error?.message || '')?.[1]) || 0;
+      startCooldown(wait);
+      return;
+    }
     toast({
       kind: 'lose',
       title:
@@ -308,7 +548,7 @@ async function onSubmit(event) {
     });
   } finally {
     input.disabled = !state.authenticated;
-    if (button) button.disabled = !state.authenticated;
+    paintSendButton();
     input.focus();
   }
 }
@@ -410,6 +650,7 @@ function drainMessages() {
   applyChatReset();
   const clearedAt = resetTimestamp();
   const messages = state.chat?.messages ?? [];
+  pruneRemoved(messages);
   for (const message of messages) {
     if (new Date(message.createdAt).getTime() <= clearedAt) continue;
     if (seenMessages.has(message.id)) continue;
@@ -417,6 +658,33 @@ function drainMessages() {
     appendLine(buildMessage(message), message.createdAt);
   }
   trim();
+}
+
+/**
+ * Takes down lines a moderator deleted.
+ *
+ * The delete endpoint soft-deletes and publishes `chat`, and the next snapshot simply leaves the
+ * message out -- but this log only ever added, so the moderator's own screen was the only one the
+ * line disappeared from. Everybody else kept reading it until they reloaded.
+ *
+ * A line is only judged against a snapshot that could have contained it: it must have been on
+ * screen before that request was sent (so a message posted while a refresh was in flight is not
+ * mistaken for a deleted one), and it must fall inside the window the server returned (a full page
+ * of 50 says nothing about anything older than its oldest row). Its id stays in `seenMessages`, so
+ * a deleted message can never be drawn again by a later snapshot that happens to be stale.
+ */
+function pruneRemoved(messages) {
+  const requestedAt = Number(state.chat?.requestedAt || 0);
+  if (!requestedAt || !log) return;
+  const present = new Set(messages.map((message) => message.id));
+  const full = messages.length >= Number(state.chat?.limit || Infinity);
+  const floor = full && messages[0] ? new Date(messages[0].createdAt).getTime() : -Infinity;
+  for (const node of log.querySelectorAll('[data-mid]')) {
+    if (present.has(node.dataset.mid)) continue;
+    if (Number(node.dataset.seen || 0) >= requestedAt) continue;
+    if (Number(node.dataset.at || 0) <= floor) continue;
+    node.remove();
+  }
 }
 
 function drainBigHits() {
@@ -470,7 +738,9 @@ function applyChatReset() {
   seenMessages.clear();
   seenHits.clear();
   lastHitAt.clear();
+  announcedRain.clear();
   log.replaceChildren();
+  if (jump) jump.hidden = true;
 }
 
 /**
@@ -537,6 +807,12 @@ function buildMessage(message) {
   const line = el('div', 'msg');
   // Carried so a moderator deleting a message can find the line it is on without a second lookup.
   line.dataset.mid = message.id;
+  // When this page first drew it, by this page's clock. See pruneRemoved.
+  line.dataset.seen = String(Date.now());
+  if (message.authorId) line.dataset.author = message.authorId;
+  if (state.authenticated && message.authorId && message.authorId === state.user?.id) {
+    line.classList.add('msg--me');
+  }
   if (message.isStaff) line.dataset.staff = '1';
   if (message.vip?.isHighRoller) line.dataset.whale = '1';
 
@@ -548,11 +824,17 @@ function buildMessage(message) {
 
   const who = el('span', 'msg__who');
   /* Masked for display only. `message.author` stays the real Mojang username everywhere it is
-   * sent back to the server â€” tipping and the admin timeout endpoints both resolve it against
+   * sent back to the server — tipping and the admin timeout endpoints both resolve it against
    * normalized_username, and a masked name resolves to nobody. */
   who.textContent = censorName(message.author);
 
   top.append(avatar, who);
+
+  if (message.media?.code) {
+    line.dataset.media = '1';
+    if (message.media.platform) line.dataset.platform = message.media.platform;
+    top.append(mediaTag(message.media));
+  }
 
   if (message.isStaff) {
     const badge = el('i', 'msg__badge msg__badge--staff');
@@ -590,6 +872,75 @@ function buildMessage(message) {
     openModTools(message, event.clientX, event.clientY);
   });
 
+  return line;
+}
+
+const PLATFORM_NAMES = {
+  youtube: 'YouTube',
+  twitch: 'Twitch',
+  tiktok: 'TikTok',
+  kick: 'Kick',
+  x: 'X',
+};
+
+/**
+ * The media nametag: MEDIA and the creator's code, on every line an approved creator posts.
+ *
+ * The server only sends it for a creator whose application was approved, with the code that
+ * currently works (see routes/chat.ts), so there is nothing here to verify. It is a button because
+ * the one thing a viewer wants from somebody else's code is a copy of it.
+ */
+function mediaTag(media) {
+  const code = String(media.code);
+  const platform = PLATFORM_NAMES[media.platform] ?? '';
+  const tag = el('button', 'msg__badge msg__badge--media');
+  tag.type = 'button';
+  if (media.platform) tag.dataset.platform = media.platform;
+  tag.append(document.createTextNode('MEDIA'));
+  const label = el('b');
+  label.textContent = code;
+  tag.append(label);
+  const describe = `Creator code ${code}${platform ? ` · ${platform}` : ''}`;
+  tag.title = `${describe} · tap to copy`;
+  tag.setAttribute('aria-label', `${describe}. Copy code`);
+  tag.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(code);
+      toast({
+        kind: 'gold',
+        title: 'CODE COPIED',
+        body: state.authenticated ? `Creator code ${code}` : `${code} · use it when you sign up`,
+      });
+    } catch {
+      /* No clipboard permission (an insecure origin, an old browser): show it to type instead. */
+      toast({ kind: 'gold', title: 'CREATOR CODE', body: code });
+    }
+  });
+  return tag;
+}
+
+/** A Lava Rain fact in the log. Its own small art, no player, nothing to tip. */
+function buildRainLine(label, text, at) {
+  const line = el('div', 'msg msg--rain');
+  const top = el('div', 'msg__top');
+  const mark = el('span', 'msg__av');
+  const art = document.createElement('img');
+  art.src = safeImage('assets/img/items/gold_block.png');
+  art.alt = '';
+  mark.appendChild(art);
+  const who = el('span', 'msg__who');
+  who.textContent = 'Lava Rain';
+  const badge = el('i', 'msg__badge msg__badge--rain');
+  badge.textContent = label;
+  const when = el('span', 'msg__t');
+  when.textContent = clock(at);
+  top.append(mark, who, badge, when);
+  const body = el('div', 'msg__body');
+  const span = el('span');
+  span.textContent = text;
+  body.appendChild(span);
+  line.append(top, body);
   return line;
 }
 
@@ -770,8 +1121,7 @@ function appendLine(node, when) {
   /* Measure before changing the log. Measuring after append makes a newly-added line increase
    * scrollHeight first, so a reader who was exactly at the bottom suddenly appears not to be and
    * the rail stops following. An empty log always follows while its initial history is filled. */
-  const followTail =
-    !log.children.length || log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const followTail = !log.children.length || atTail();
 
   /* Messages and big hits come from separate requests and either one can finish first. Comparing
    * only with the final row is not enough: after one older hit is inserted, that final row remains
@@ -790,6 +1140,8 @@ function appendLine(node, when) {
   // Only follow the tail when the reader is already at it; yanking someone away from a line they
   // are reading is the most annoying thing a chat can do.
   if (followTail) log.scrollTop = log.scrollHeight;
+  // Only for something that landed below the reader. An older card slotting in above them is not news.
+  else if (jump && log.lastElementChild === node) jump.hidden = false;
 }
 
 function trim() {
