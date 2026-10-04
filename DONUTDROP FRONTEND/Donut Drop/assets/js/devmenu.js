@@ -13,11 +13,14 @@
  * start lying about what shipped.
  *
  * It is developer surface, not player surface: hidden by default, opened with a
- * keyboard chord or ?dev=1, and it never touches the balance.
+ * keyboard chord or ?dev=1, the tests shown only to staff accounts, and it never
+ * touches the balance.
  */
 import { ITEMS, BY_ID, CRATES, RARITY } from './data.js';
-import { state, devLogin, logout } from './store.js';
-import { $, el, money } from './util.js';
+import { state, bus, devLogin, logout, refreshUpgradeConfig } from './store.js';
+import { $, el, money, pct, parseAmount } from './util.js';
+import { currentRouteName, navigate } from './routing.js';
+import { playTestSpin, quoteTestSpin } from './upgrader.js';
 
 /* The developer login token is NEVER persisted.
  *
@@ -111,7 +114,62 @@ const TESTS = [
       return playReveal({ won: false, item, stake: 250000, payout: 0 });
     },
   },
+  {
+    id: 'upg-hit',
+    n: '6',
+    name: 'Upgrader spin · hit',
+    sub: 'upgrader.js · 5.2s · fake roll inside the band, then the chest arc',
+    accent: 'var(--amber)',
+    run: (opts) => fakeUpgraderSpin(true, opts),
+  },
+  {
+    id: 'upg-miss',
+    n: '7',
+    name: 'Upgrader spin · miss',
+    sub: 'upgrader.js · 5.2s · fake roll outside the band, then the lava',
+    accent: 'var(--crimson)',
+    run: (opts) => fakeUpgraderSpin(false, opts),
+  },
 ];
+
+/* The stake the upgrader rows play with: whatever is typed in FAKE STAKE, or a quarter of the
+ * item when the box is empty. null when the box holds something that is not an amount. */
+function testStake(item) {
+  const typed = $('#devStake', root).value;
+  if (typed.trim() === '') return Math.max(1, Math.round(item.value / 4));
+  const stake = parseAmount(typed);
+  return stake > 0 ? stake : null;
+}
+
+/* The upgrader dial with a made-up stake and roll instead of the server's.
+ *
+ * playTestSpin is the real spin with the outcome handed in, so this exercises the shipped dial and
+ * not a lookalike, and the odds come from the live formula and config. The roll is drawn HERE
+ * because upgrader.js must hold no source of chance — the frontend contract test greps it for one. */
+async function fakeUpgraderSpin(won, opts) {
+  const item = opts.item || BY_ID.elytra;
+  const stake = testStake(item);
+  if (!stake) throw new Error('fake stake is not an amount');
+  // the dial lives on the upgrader page, so go there first
+  if (currentRouteName() !== 'upgrader') navigate('/upgrader');
+  if (!state.upgradeConfig) await refreshUpgradeConfig();
+  // two frames, so the freshly shown view has laid out before the dial measures itself
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  return playTestSpin({ won, roll: Math.random(), item, stake });
+}
+
+/* Staff only. The role is what /v1/auth/me says the account is, but the gate itself runs in the
+ * browser: it keeps the bench off players' screens, it is not a permission. That is acceptable
+ * because nothing behind it reaches the server — the tests replay animations and nothing more.
+ *
+ * The test login is outside the gate on purpose, and the account it signs into counts as staff.
+ * The backend forces that account to the player role, so a gate on the role alone hid every test
+ * from the bench's own login — the one account the bench exists to be used with. It is recognised
+ * by its `dev:` identity, which only /v1/dev/login mints, and that route does not exist in
+ * production: the backend refuses to start with developer login enabled there. */
+const isStaff = () => state.authenticated && (
+  state.user?.role === 'admin' || String(state.user?.minecraftIdentity ?? '').startsWith('dev:')
+);
 
 let root = null;
 let open = false;
@@ -142,9 +200,21 @@ export function initDevMenu(mount) {
         Runs the real exported animation, not a preview copy. Nothing here spends balance.
       </p>
 
-      <label class="devpanel__field">
-        <span class="devpanel__label mono">ITEM</span>
+      <p class="devpanel__note" data-guest-only>
+        The animation tests are for staff accounts and the test login below. Sign in with
+        either to see them.
+      </p>
+
+      <label class="devpanel__field" data-staff-only>
+        <span class="devpanel__label mono">ITEM · ALSO THE UPGRADER TARGET</span>
         <select class="devpanel__sel mono" id="devItem"></select>
+      </label>
+
+      <label class="devpanel__field" data-staff-only>
+        <span class="devpanel__label mono">FAKE STAKE · UPGRADER ROWS</span>
+        <input class="devpanel__sel mono" id="devStake" inputmode="text" autocomplete="off"
+               spellcheck="false" placeholder="empty = a quarter of the item · 10m, 1.5b…">
+        <span class="devpanel__quote mono" id="devQuote" aria-live="polite"></span>
       </label>
 
       <!-- Test login. The pay-login flow needs a custody bot online to take a payment and
@@ -169,7 +239,7 @@ export function initDevMenu(mount) {
         <span class="devauth__state mono" id="devAuthState">signed out</span>
       </div>
 
-      <div class="devlist" id="devList"></div>
+      <div class="devlist" id="devList" data-staff-only></div>
 
       <div class="devpanel__foot mono">
         <span id="devStatus">idle</span>
@@ -208,8 +278,32 @@ export function initDevMenu(mount) {
     list.appendChild(row);
   }
 
+  /* What the upgrader rows will play, read back through the live formula before RUN is pressed. */
+  const quote = $('#devQuote', root);
+  function paintQuote() {
+    const item = BY_ID[sel.value] || BY_ID.elytra;
+    const stake = testStake(item);
+    if (!stake) {
+      quote.dataset.err = '1';
+      quote.textContent = 'not an amount';
+      return;
+    }
+    delete quote.dataset.err;
+    const chance = quoteTestSpin({ item, stake });
+    quote.textContent = `${money(stake)} → ${item.name} ${money(item.value)} · `
+      + `${(item.value / stake).toFixed(2)}x · `
+      + (chance > 0 ? `${pct(chance, 2)} to hit` : 'odds load with the upgrader config');
+  }
+  sel.addEventListener('change', paintQuote);
+  $('#devStake', root).addEventListener('input', paintQuote);
+
+  const applyAccess = () => { root.dataset.staff = isStaff() ? '1' : '0'; };
+  bus.addEventListener('change', () => { applyAccess(); paintQuote(); });
+  applyAccess();
+  paintQuote();
+
   async function fire(test) {
-    if (busy) return;
+    if (busy || !isStaff()) return;
     busy = true;
     root.dataset.busy = '1';
     status.textContent = 'running ' + test.id + '…';
@@ -223,7 +317,7 @@ export function initDevMenu(mount) {
       await test.run({ item: id ? BY_ID[id] : null });
       status.textContent = `${test.id} finished in ${((performance.now() - t0) / 1000).toFixed(2)}s`;
     } catch (err) {
-      status.textContent = test.id + ' FAILED — see console';
+      status.textContent = `${test.id} FAILED — ${err?.message || 'see console'}`;
       console.error('[test bench] ' + test.id + ' failed', err);
     } finally {
       busy = false;
