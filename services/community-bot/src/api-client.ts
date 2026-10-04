@@ -42,6 +42,44 @@ export class ApiUnavailable extends Error {
   }
 }
 
+/** The platform answered and said no, with a reason written for the player. */
+export class ApiRefused extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiRefused';
+  }
+}
+
+export interface RewardLine {
+  readonly kind: 'join' | 'tag' | 'invite';
+  readonly amountMinor: string;
+  readonly to: 'you' | 'inviter';
+}
+
+export interface LinkResult {
+  readonly username: string;
+  readonly rewards: RewardLine[];
+  readonly joinSkipped: string | null;
+}
+
+export type TagResult =
+  | { readonly paid: true; readonly amountMinor: string; readonly username: string }
+  | { readonly paid: false; readonly reason: string; readonly nextAt?: string };
+
+export interface RewardStatus {
+  readonly linked: boolean;
+  readonly username: string | null;
+  readonly enabled: boolean;
+  readonly amounts: { joinMinor: string; tagMinor: string; inviteMinor: string };
+  readonly minAccountAgeDays: number;
+  readonly join: { claimed: boolean } | null;
+  readonly tag: { claimedToday: boolean; days: number } | null;
+  readonly invites: { rewarded: number; totalMinor: string } | null;
+}
+
 export class PlatformApi {
   /** Null when the deployment did not configure the lookup, which is a supported way to run. */
   static from(config: CommunityConfig): PlatformApi | null {
@@ -55,8 +93,37 @@ export class PlatformApi {
   ) {}
 
   async profile(discordUserId: string): Promise<ProfileLookup> {
-    const path = '/internal/v1/community/profile';
-    const body = { discordUserId };
+    return this.post<ProfileLookup>('/internal/v1/community/profile', { discordUserId });
+  }
+
+  /** `/link <code>`: the code the site showed a signed-in player. */
+  async link(body: {
+    discordUserId: string;
+    discordUsername: string;
+    guildId: string;
+    code: string;
+  }): Promise<LinkResult> {
+    return this.post<LinkResult>('/internal/v1/community/link', body);
+  }
+
+  /** `/tag`: today's reward for wearing the server's tag, as far as this bot can see. */
+  async claimTag(discordUserId: string, wearingTag: boolean): Promise<TagResult> {
+    return this.post<TagResult>('/internal/v1/community/rewards/tag', {
+      discordUserId,
+      wearingTag,
+    });
+  }
+
+  async rewardStatus(discordUserId: string): Promise<RewardStatus> {
+    return this.post<RewardStatus>('/internal/v1/community/rewards/status', { discordUserId });
+  }
+
+  /**
+   * One signed call. The gateway's refusals carry a code and a sentence written for players
+   * (a wrong link code, an account linked elsewhere); those come back as `ApiRefused` so the
+   * command can say what went wrong. Anything else is the platform being unavailable.
+   */
+  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const timestamp = Date.now().toString();
     const signature = hmacHex(
       this.secret,
@@ -94,11 +161,18 @@ export class PlatformApi {
     }
 
     if (!response.ok) {
-      /* The gateway's own error text is not repeated into a public channel. It is written for an
-       * operator reading a log, and this reply is read by whoever typed the command. */
-      throw new ApiUnavailable(`The platform refused the lookup (${response.status})`);
+      const problem = (await response.json().catch(() => null)) as {
+        error?: { code?: string; message?: string };
+      } | null;
+      /* Player-facing refusals (4xx with a code) are passed on; the text is the gateway's own
+       * sentence for that code. Server errors are not repeated into a channel: they are written
+       * for an operator reading a log. */
+      if (response.status >= 400 && response.status < 500 && problem?.error?.code) {
+        throw new ApiRefused(problem.error.code, problem.error.message ?? 'Refused');
+      }
+      throw new ApiUnavailable(`The platform refused the request (${response.status})`);
     }
 
-    return (await response.json()) as ProfileLookup;
+    return (await response.json()) as T;
   }
 }

@@ -50,7 +50,8 @@ export type ContributionSource =
   | 'crash'
   | 'mines'
   | 'plinko'
-  | 'coinflip';
+  | 'coinflip'
+  | 'dice';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

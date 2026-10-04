@@ -81,6 +81,13 @@ export const GAMES: readonly GameDefinition[] = [
     refunds: [],
   },
   {
+    key: 'dice',
+    label: 'Dice',
+    stakes: ['dice_stake'],
+    payouts: ['dice_payout'],
+    refunds: [],
+  },
+  {
     key: 'coinflip',
     label: 'Coinflip',
     stakes: ['coinflip_stake'],
@@ -124,6 +131,9 @@ export const PROMO_KINDS: Readonly<Record<string, string>> = Object.freeze({
   signup_bonus: 'Sign-up bonus',
   jackpot_win: 'Vault jackpot',
   vault_yield: 'Vault yield',
+  discord_join_reward: 'Discord join',
+  discord_tag_reward: 'Discord tag',
+  discord_invite_reward: 'Discord invites',
 });
 
 export const ITEM_BUYBACK_KINDS = ['item_sale'] as const;

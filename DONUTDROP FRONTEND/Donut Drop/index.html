@@ -65,6 +65,7 @@
 <link rel="stylesheet" href="assets/css/crash.css" />
 <link rel="stylesheet" href="assets/css/mines.css" />
 <link rel="stylesheet" href="assets/css/plinko.css" />
+<link rel="stylesheet" href="assets/css/dice.css" />
 <!-- after duel.css, whose lobby table the coinflip board reuses and narrows to five columns -->
 <link rel="stylesheet" href="assets/css/coinflip.css" />
 <!-- the Case Battle board: after platform.css's battle sheet and duel.css, which it refines -->
@@ -131,6 +132,10 @@
         <a class="tabdrop__row" href="/plinko" data-route="plinko" role="menuitem">
           <img src="assets/img/items/slime_ball.png" alt="" />
           <span><b>Plinko</b><i>Drop a ball down the pegs</i></span>
+        </a>
+        <a class="tabdrop__row" href="/dice" data-route="dice" role="menuitem">
+          <img src="assets/img/items/snow_block.png" alt="" />
+          <span><b>Dice</b><i>Roll over or under your line</i></span>
         </a>
         <a class="tabdrop__row" href="/coinflip" data-route="coinflip" role="menuitem">
           <img src="assets/img/items/gold_ingot.png" alt="" />
@@ -523,6 +528,16 @@
           data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
       </header>
       <div class="plinko" id="plinkoRoot"></div>
+    </section>
+
+    <!-- ─────── DICE ─────── -->
+    <section class="view" data-view="dice" hidden>
+      <header class="phead">
+        <h1>Dice <button class="ihint" type="button"
+          aria-label="Draw a line from 0 to 100 and pick a side. The roll lands anywhere from 0.00 to 99.99: roll under your line, or over it, to win. The narrower your side, the bigger the multiplier. Every line returns 90% on average: the house edge is 10%, whatever you choose."
+          data-tip="Draw a line from 0 to 100 and pick a side. The roll lands anywhere from 0.00 to 99.99: roll under your line, or over it, to win. The narrower your side, the bigger the multiplier. Every line returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
+      </header>
+      <div class="dice" id="diceRoot"></div>
     </section>
 
     <!-- ─────── COINFLIP ─────── -->

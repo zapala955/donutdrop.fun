@@ -77,7 +77,15 @@ export type WalletKind =
    * game is cancelled or nobody takes it in time. The stake itself is a debit, written by the
    * route, like a duel's. */
   | 'coinflip_win'
-  | 'coinflip_refund';
+  | 'coinflip_refund'
+  // A winning dice roll paying out, stake included. Referenced by the bet's id.
+  | 'dice_payout'
+  /* Discord: the one-off reward for joining the server and linking an account, the daily reward
+   * for wearing the server's tag, and the inviter's reward when somebody they brought in links.
+   * Each is referenced so the ledger's unique index is what makes a second payment impossible. */
+  | 'discord_join_reward'
+  | 'discord_tag_reward'
+  | 'discord_invite_reward';
 
 /**
  * Credits the wallet and writes the matching ledger row.

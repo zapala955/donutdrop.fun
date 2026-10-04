@@ -18,6 +18,7 @@ import { parseWith } from '../lib/validation.js';
  *   crash     a bet cashed out or busted.
  *   mines     a game cashed out or hit TNT.
  *   plinko    a ball landed in a slot.
+ *   dice      a roll landed over or under the line.
  *   faction   a wager was credited to a team in the running faction war.
  *
  * Every settled round appears, win or lose. An earlier version filtered upgrader losses out,
@@ -193,6 +194,24 @@ export async function registerActivityRoutes(
                 1 AS quantity, 0 AS chance_ppm,
                 NULL::smallint AS game_result
            FROM (SELECT * FROM plinko_bets ORDER BY created_at DESC LIMIT $1) b
+           JOIN users u ON u.id = b.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
+         UNION ALL
+         /* A dice roll: the stake, and what the roll paid. Like Plinko, every roll settles as it
+            is placed, so this branch reads only the newest $1 of them off their index. */
+         SELECT b.id, 'dice'::text AS kind, b.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Dice'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM (SELECT * FROM dice_bets ORDER BY created_at DESC LIMIT $1) b
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
          UNION ALL

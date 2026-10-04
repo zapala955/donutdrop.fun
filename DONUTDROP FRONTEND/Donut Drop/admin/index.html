@@ -437,6 +437,16 @@
             <span class="hint">Read-only here so a stolen browser session cannot rewrite security or game maths.</span>
           </div>
           <div class="tablewrap"><table class="grid" id="protectedSystemTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Staff and Discord operators</h3>
+            <span class="hint">Staff are left out of every dashboard figure. An operator can mint a console link with /dashboard in Discord.</span>
+          </div>
+          <div class="tablewrap"><table class="grid" id="staffTable"></table></div>
+          <p class="hint" id="staffHowTo">
+            To add someone: they sign in on the site once, then on the VPS run
+            <code>sudo /opt/donutdrop/app/infra/vps/add-admin.sh &lt;minecraft-name&gt; &lt;discord-user-id&gt;</code>.
+            It keeps every existing admin and restarts the API only after the new configuration loads.
+          </p>
         </section>
       </div>
     </main>

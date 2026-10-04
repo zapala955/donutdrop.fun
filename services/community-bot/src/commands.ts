@@ -361,6 +361,9 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
           .setDescription('How many winners (default 1)')
           .setMinValue(1)
           .setMaxValue(20),
+      )
+      .addBooleanOption((option) =>
+        option.setName('tag_only').setDescription('Only members wearing the server tag can enter'),
       ) as SlashCommandBuilder,
   );
 
@@ -431,7 +434,26 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('link')
-      .setDescription('How to connect your Discord to your Donut Drop account'),
+      .setDescription('Connect your Discord to your Donut Drop account')
+      .addStringOption((option) =>
+        option
+          .setName('code')
+          .setDescription('The code shown at donutdrop.fun/discord')
+          .setMinLength(4)
+          .setMaxLength(16),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('tag')
+      .setDescription('Claim today’s reward for wearing the server tag'),
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('rewards')
+      .setDescription('What this server pays, and what you have collected'),
   );
 
   add(

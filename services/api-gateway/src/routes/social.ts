@@ -229,6 +229,69 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     if (closedAny) liveEvents.publish('rain');
   }
 
+  /**
+   * Opens a drop by itself when automatic rain is on and none has opened for the configured
+   * interval -- a drop started by hand resets the clock too. Under the same advisory lock as the
+   * manual start, so two API processes, or a tick racing an operator, cannot open two at once.
+   * `created_by` is null, which is how the table has always marked an automated drop.
+   */
+  async function autoDropRain(): Promise<boolean> {
+    if (!config.lavaRainEnabled || config.lavaRainAutoEveryMinutes <= 0) return false;
+    const pool =
+      config.lavaRainAutoPoolMinor < config.lavaRainMaxPoolMinor
+        ? config.lavaRainAutoPoolMinor
+        : config.lavaRainMaxPoolMinor;
+    return db.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('lava-rain-create', 0))");
+      const recent = await client.query(
+        `SELECT 1 FROM lava_rain_events
+          WHERE (status = 'open' AND closes_at > now())
+             OR created_at > now() - make_interval(mins => $1)
+          LIMIT 1`,
+        [config.lavaRainAutoEveryMinutes],
+      );
+      if (recent.rows[0]) return false;
+      await client.query(
+        `INSERT INTO lava_rain_events
+           (id, pool_minor, created_by, min_wagered_minor, window_minutes,
+            opens_at, closes_at, status)
+         VALUES ($1, $2, NULL, $3, $4, now(), now() + make_interval(mins => $5), 'open')`,
+        [
+          randomUUID(),
+          pool.toString(),
+          config.lavaRainMinWageredMinor.toString(),
+          config.lavaRainWindowMinutes,
+          config.lavaRainClaimMinutes,
+        ],
+      );
+      return true;
+    });
+  }
+
+  /* ── the rain clock ──
+   * Settlement used to happen only when somebody loaded the card, so a drop whose window shut with
+   * the site quiet stayed unpaid until the next visitor. This pays it within fifteen seconds of
+   * closing, page open or not, and opens the automatic drops. Correctness never depends on it: the
+   * card still settles whatever is due before it reads. */
+  if (typeof app.addHook === 'function') {
+    let running = false;
+    const tick = async () => {
+      if (running) return;
+      running = true;
+      try {
+        await settleClosedRain();
+        if (await autoDropRain()) liveEvents.publish('rain');
+      } catch (error) {
+        app.log.error({ err: error }, 'lava rain tick failed');
+      } finally {
+        running = false;
+      }
+    };
+    const timer = setInterval(() => void tick(), 15_000);
+    timer.unref?.();
+    app.addHook('onClose', async () => clearInterval(timer));
+  }
+
   app.get('/v1/social/rain', { preHandler: softAuth }, async (request) => {
     if (!config.lavaRainEnabled) {
       throw new AppError(404, 'RAIN_DISABLED', 'Lava rain is not switched on');
@@ -293,7 +356,27 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       : null;
     const paid = payout?.rows[0];
 
+    /* When the next automatic drop is due, for the countdown the card shows between drops. Null
+     * while one is falling or while drops are only started by hand. */
+    let next: { at: string; poolMinor: string } | null = null;
+    if (!event && config.lavaRainAutoEveryMinutes > 0) {
+      const last = await db.query<{ due: Date }>(
+        `SELECT greatest(now(), max(created_at) + make_interval(mins => $1)) AS due
+           FROM lava_rain_events`,
+        [config.lavaRainAutoEveryMinutes],
+      );
+      const pool =
+        config.lavaRainAutoPoolMinor < config.lavaRainMaxPoolMinor
+          ? config.lavaRainAutoPoolMinor
+          : config.lavaRainMaxPoolMinor;
+      next = {
+        at: (last.rows[0]?.due ?? new Date()).toISOString(),
+        poolMinor: pool.toString(),
+      };
+    }
+
     return {
+      next,
       active: event
         ? {
             id: event.id,

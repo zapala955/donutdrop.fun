@@ -57,6 +57,7 @@ const TABLE_GAMES = new Map([
   ['crash', 'Crash'],
   ['mines', 'Mines'],
   ['plinko', 'Plinko'],
+  ['dice', 'Dice'],
   ['coinflip', 'Coinflip'],
 ]);
 const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -219,7 +220,9 @@ function initRain() {
   /* The button depends on who is looking. Logging in used to leave a disabled LOG IN on the card
    * until the next poll came round. */
   bus.addEventListener('change', (event) => {
-    if (event.detail === 'login' || event.detail === 'logout') scheduleRain();
+    /* `ready` too: a returning player's session arrives as `ready`, not `login`, and the card
+     * painted before it would otherwise offer them LOG IN until the next poll. */
+    if (['ready', 'login', 'logout'].includes(event.detail)) scheduleRain();
   });
   void pollRain();
 }
@@ -272,9 +275,11 @@ function paintRain(board) {
   const card = rainCard;
   window.clearInterval(rainCountdown);
   if (!board.active) {
-    hideRain();
+    if (board.next) paintNextRain(board.next);
+    else hideRain();
     return;
   }
+  delete card.dataset.next;
   card.hidden = false;
   document.body.dataset.rain = '1';
   card.replaceChildren();
@@ -348,6 +353,48 @@ function paintRain(board) {
     button.addEventListener('click', () => void claimRain(button));
   }
   card.appendChild(button);
+}
+
+/**
+ * Between automatic drops: the pot that is coming and when, so the rail says rain is on its way
+ * rather than showing nothing. No button -- there is nothing to claim yet -- and the card refetches
+ * the moment the countdown reaches zero, which is when the drop opens.
+ */
+function paintNextRain(next) {
+  const card = rainCard;
+  card.hidden = false;
+  card.dataset.next = '1';
+  delete document.body.dataset.rain;
+  card.replaceChildren();
+
+  const art = document.createElement('img');
+  art.src = safeImage('assets/img/items/gold_block.png');
+  art.alt = '';
+  card.appendChild(art);
+
+  const figures = el('div', 'chat__rainfig');
+  const pot = el('b', 'mono');
+  pot.textContent = money(Number(next.poolMinor));
+  const caption = el('span');
+  caption.textContent = 'NEXT LAVA RAIN';
+  figures.append(pot, caption);
+  card.appendChild(figures);
+
+  const clockNode = el('span', 'chat__timer mono');
+  card.appendChild(clockNode);
+  const opensAt = new Date(next.at).getTime();
+  const paintClock = () => {
+    const remaining = Math.max(0, opensAt - Date.now());
+    clockNode.textContent = `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(
+      Math.floor((remaining % 60000) / 1000),
+    ).padStart(2, '0')}`;
+    if (remaining <= 0) {
+      window.clearInterval(rainCountdown);
+      scheduleRain();
+    }
+  };
+  paintClock();
+  rainCountdown = window.setInterval(paintClock, 1000);
 }
 
 async function claimRain(button) {

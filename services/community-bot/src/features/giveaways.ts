@@ -11,6 +11,7 @@ import {
 } from 'discord.js';
 import type { Database } from '../db.js';
 import { COLOR, absolute, bad, clip, embed, ok, parseDuration, relative } from '../ui.js';
+import { wearsServerTag } from './rewards.js';
 
 /**
  * giveaways.ts — a prize, a deadline, and a button.
@@ -27,6 +28,10 @@ export async function startGiveaway(db: Database, interaction: ChatInputCommandI
   const prize = interaction.options.getString('prize', true);
   const winnerCount = interaction.options.getInteger('winners') ?? 1;
   const durationRaw = interaction.options.getString('duration', true);
+  /* Only members wearing the server's tag can enter: a giveaway that pays the people advertising
+   * the server. Checked when they press Enter, not at the draw, so nobody is told they are in and
+   * then quietly skipped. */
+  const tagOnly = interaction.options.getBoolean('tag_only') ?? false;
 
   const seconds = parseDuration(durationRaw);
   if (seconds === null) {
@@ -49,8 +54,8 @@ export async function startGiveaway(db: Database, interaction: ChatInputCommandI
 
   await db.query(
     `INSERT INTO discord_giveaways
-       (id, guild_id, channel_id, prize, winner_count, host_id, ends_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       (id, guild_id, channel_id, prize, winner_count, host_id, ends_at, tag_required)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       id,
       interaction.guildId,
@@ -59,13 +64,16 @@ export async function startGiveaway(db: Database, interaction: ChatInputCommandI
       winnerCount,
       interaction.user.id,
       endsAt.toISOString(),
+      tagOnly,
     ],
   );
 
   const here = interaction.channel;
   const posted = here?.isSendable()
     ? await here.send({
-        embeds: [giveawayCard(clip(prize, 256), winnerCount, endsAt, interaction.user.id, 0)],
+        embeds: [
+          giveawayCard(clip(prize, 256), winnerCount, endsAt, interaction.user.id, 0, tagOnly),
+        ],
         components: [entryRow(id)],
       })
     : null;
@@ -89,10 +97,11 @@ export async function enterGiveaway(
   interaction: ButtonInteraction,
   giveawayId: string,
 ) {
-  const giveaway = await db.query<{ ended_at: string | null; guild_id: string }>(
-    'SELECT ended_at, guild_id FROM discord_giveaways WHERE id = $1',
-    [giveawayId],
-  );
+  const giveaway = await db.query<{
+    ended_at: string | null;
+    guild_id: string;
+    tag_required: boolean;
+  }>('SELECT ended_at, guild_id, tag_required FROM discord_giveaways WHERE id = $1', [giveawayId]);
   const row = giveaway.rows[0];
   if (!row || row.guild_id !== interaction.guildId) {
     await interaction.reply({
@@ -104,6 +113,20 @@ export async function enterGiveaway(
   if (row.ended_at) {
     await interaction.reply({
       embeds: [bad('Already over', 'This giveaway has ended.')],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (row.tag_required && !(await wearsServerTag(interaction.user, row.guild_id))) {
+    await interaction.reply({
+      embeds: [
+        bad(
+          'Server tag required',
+          'This giveaway is for members wearing the server tag. Pick it in your profile ' +
+            '(Settings → Profiles → Server Tag), then press Enter again.',
+        ),
+      ],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -315,10 +338,12 @@ function giveawayCard(
   endsAt: Date,
   hostId: string,
   entries: number,
+  tagRequired = false,
 ) {
+  const who = tagRequired ? '**Server tag wearers only.** ' : '';
   return embed(
     prize,
-    `Press **Enter** below.\n\nEnds ${relative(endsAt)} · ${absolute(endsAt)}`,
+    `${who}Press **Enter** below.\n\nEnds ${relative(endsAt)} · ${absolute(endsAt)}`,
   ).addFields(
     { name: 'Winners', value: String(winnerCount), inline: true },
     { name: 'Entries', value: String(entries), inline: true },
@@ -372,8 +397,9 @@ async function refreshCard(db: Database, client: Client, giveawayId: string): Pr
     winner_count: number;
     host_id: string;
     ends_at: string;
+    tag_required: boolean;
   }>(
-    `SELECT channel_id, message_id, prize, winner_count, host_id, ends_at
+    `SELECT channel_id, message_id, prize, winner_count, host_id, ends_at, tag_required
        FROM discord_giveaways WHERE id = $1 AND ended_at IS NULL`,
     [giveawayId],
   );
@@ -388,7 +414,14 @@ async function refreshCard(db: Database, client: Client, giveawayId: string): Pr
   const entries = await countEntries(db, giveawayId);
   await message.edit({
     embeds: [
-      giveawayCard(row.prize, row.winner_count, new Date(row.ends_at), row.host_id, entries),
+      giveawayCard(
+        row.prize,
+        row.winner_count,
+        new Date(row.ends_at),
+        row.host_id,
+        entries,
+        row.tag_required,
+      ),
     ],
     components: [entryRow(giveawayId)],
   });

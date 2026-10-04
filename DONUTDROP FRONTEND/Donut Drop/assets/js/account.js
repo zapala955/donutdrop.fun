@@ -56,6 +56,11 @@ const KIND_LABEL = {
   mines_payout: 'Mines cash-out',
   plinko_stake: 'Plinko ball',
   plinko_payout: 'Plinko payout',
+  dice_stake: 'Dice roll',
+  dice_payout: 'Dice win',
+  discord_join_reward: 'Discord join reward',
+  discord_tag_reward: 'Discord tag reward',
+  discord_invite_reward: 'Discord invite reward',
   rakeback_claim: 'Rakeback',
   race_payout: 'Race prize',
 };

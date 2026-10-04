@@ -221,6 +221,67 @@ export async function registerAdminOperationRoutes(
     if (groups.has('chat')) liveEvents.publish('chat');
   };
 
+  /**
+   * Who is staff, and who can mint a console link from Discord. Read-only: the list is pinned in
+   * the deployment (ADMIN_MINECRAFT_IDS and the operator map) and checked against itself at boot,
+   * so a stolen console session cannot make an administrator. infra/vps/add-admin.sh adds one.
+   * The developer test login and the system accounts are listed too, because the dashboard leaves
+   * them out of every figure for the same reason it leaves admins out.
+   */
+  const staffList = async () => {
+    const identities = [...config.adminMinecraftIds];
+    const rows = await db.query<{
+      minecraft_identity: string;
+      minecraft_username: string;
+      role: string;
+      status: string;
+      discord_user_id: string | null;
+      last_login_at: Date | null;
+    }>(
+      `SELECT minecraft_identity, minecraft_username, role, status, discord_user_id, last_login_at
+         FROM users
+        WHERE minecraft_identity = ANY($1::text[]) OR role = 'admin'
+           OR minecraft_identity LIKE 'dev:%' OR minecraft_identity LIKE 'system:%'
+        ORDER BY role, minecraft_username`,
+      [identities],
+    );
+    const operatorsOf = (identity: string) =>
+      [...config.discordOperators].filter(([, mapped]) => mapped === identity).map(([id]) => id);
+    const seen = new Set(rows.rows.map((row) => row.minecraft_identity));
+    return [
+      ...rows.rows.map((row) => ({
+        username: row.minecraft_username,
+        identity: row.minecraft_identity,
+        kind: config.adminMinecraftIds.has(row.minecraft_identity)
+          ? 'admin'
+          : row.minecraft_identity.startsWith('dev:')
+            ? 'test login'
+            : row.minecraft_identity.startsWith('system:')
+              ? 'system'
+              : 'admin role (not configured)',
+        status: row.status,
+        linkedDiscordId: row.discord_user_id,
+        discordOperatorIds: operatorsOf(row.minecraft_identity),
+        canMintLinks:
+          config.discordControlEnabled && operatorsOf(row.minecraft_identity).length > 0,
+        lastLoginAt: row.last_login_at,
+      })),
+      // A configured admin who has never signed in has no row yet, and is still staff.
+      ...identities
+        .filter((identity) => !seen.has(identity))
+        .map((identity) => ({
+          username: null,
+          identity,
+          kind: 'admin (never signed in)',
+          status: null,
+          linkedDiscordId: null,
+          discordOperatorIds: operatorsOf(identity),
+          canMintLinks: config.discordControlEnabled && operatorsOf(identity).length > 0,
+          lastLoginAt: null,
+        })),
+    ];
+  };
+
   const requireAdminRead = async (request: Parameters<typeof guards.authenticate>[0]) => {
     await guards.authenticate(request);
     if (request.authUser?.role !== 'admin' || request.authUser.status !== 'active') {
@@ -1024,6 +1085,7 @@ export async function registerAdminOperationRoutes(
 
   app.get('/v1/admin/system-config', { preHandler: requireAdminRead }, async () => ({
     restartRequired: false,
+    staff: await staffList(),
     note:
       'Every control in the table above applies immediately and is written to the audit log with ' +
       'its previous value, its new value and your reason. The settings below define the trust ' +

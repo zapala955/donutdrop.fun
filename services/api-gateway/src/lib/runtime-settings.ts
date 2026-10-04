@@ -16,6 +16,8 @@ type SettingGroup =
   | 'crash'
   | 'mines'
   | 'plinko'
+  | 'dice'
+  | 'discord'
   | 'duels'
   | 'coinflip'
   | 'jackpot'
@@ -402,6 +404,68 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── dice ── The edge is fixed in lib/dice.ts; these are the limits. */
+  diceEnabled: { kind: 'boolean', group: 'dice', label: 'Dice open' },
+  diceMinStakeMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  diceMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  diceMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice maximum payout per roll (a stake whose win would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── discord rewards ── Paid through the community bot to accounts linked to Discord. */
+  discordRewardsEnabled: { kind: 'boolean', group: 'discord', label: 'Discord rewards on' },
+  discordJoinRewardMinor: {
+    kind: 'bigint',
+    group: 'discord',
+    label: 'Discord join reward (once per account, 0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  discordTagRewardMinor: {
+    kind: 'bigint',
+    group: 'discord',
+    label: 'Discord server-tag reward (per UTC day, 0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  discordInviteRewardMinor: {
+    kind: 'bigint',
+    group: 'discord',
+    label: 'Discord invite reward (to the inviter, per new member who links, 0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  discordRewardMinAccountAgeDays: {
+    kind: 'integer',
+    group: 'discord',
+    label: 'Minimum Discord account age for join and invite rewards (days)',
+    min: 0n,
+    max: 3650n,
+  },
+  discordInviteRewardDailyCap: {
+    kind: 'integer',
+    group: 'discord',
+    label: 'Invite rewards one inviter can earn per UTC day',
+    min: 0n,
+    max: 1000n,
+  },
+
   /* ── 1v1 skill duels ── */
   skillDuelRakeBps: {
     kind: 'integer',
@@ -519,6 +583,20 @@ export const runtimeSettingDefinitions = {
     label: 'Lava Rain claim window (minutes)',
     min: 1n,
     max: 60n,
+  },
+  lavaRainAutoEveryMinutes: {
+    kind: 'integer',
+    group: 'rain',
+    label: 'Lava Rain automatic drop every N minutes (0 = only by hand)',
+    min: 0n,
+    max: 10080n,
+  },
+  lavaRainAutoPoolMinor: {
+    kind: 'bigint',
+    group: 'rain',
+    label: 'Lava Rain automatic drop pool',
+    min: 1n,
+    max: BIGINT_MAX,
   },
 
   /* ── money moving sideways ── */
@@ -691,6 +769,9 @@ function assertInvariants(view: AppConfig): void {
     ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
+    ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
+    ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
+    ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [

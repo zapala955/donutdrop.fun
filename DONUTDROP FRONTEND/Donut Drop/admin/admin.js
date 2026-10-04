@@ -3180,6 +3180,8 @@ const GROUP_LABELS = {
   crash: 'Crash',
   mines: 'Mines',
   plinko: 'Plinko',
+  dice: 'Dice',
+  discord: 'Discord rewards',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',
@@ -3470,6 +3472,27 @@ async function loadSystem() {
   }
   renderSettingGroups();
   renderSettingRows();
+  table(
+    $('staffTable'),
+    ['Account', 'Kind', 'Discord operator', 'Mints links', 'Linked Discord', 'Last sign-in'],
+    data.staff ?? [],
+    (row) => {
+      const tr = document.createElement('tr');
+      const who = cell(row.username ?? row.identity, { mono: !row.username });
+      if (row.username) who.title = row.identity;
+      const mints = document.createElement('td');
+      mints.append(pill(row.canMintLinks ? 'yes' : 'no', row.canMintLinks ? 'ok' : undefined));
+      tr.append(
+        who,
+        cell(row.kind),
+        cell(row.discordOperatorIds?.join(', ') || '', { mono: true }),
+        mints,
+        cell(row.linkedDiscordId ?? '', { mono: true }),
+        cell(row.lastLoginAt),
+      );
+      return tr;
+    },
+  );
   const protectedRows = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
   table($('protectedSystemTable'), ['Setting', 'Current value', 'Management'], protectedRows, (row) => {
     const tr = document.createElement('tr');

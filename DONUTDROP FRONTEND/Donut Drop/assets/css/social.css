@@ -104,6 +104,9 @@
 }
 .chat__rain .btn { flex: 0 0 auto; white-space: nowrap; }
 .chat__rain[data-closing="1"] .chat__timer { color: var(--gold-bright); }
+/* Between automatic drops: the coming pot, quieter than a live one, with its countdown. */
+.chat__rain[data-next="1"] { opacity: .82; border-style: dashed; }
+.chat__rain[data-next="1"] .chat__rainfig b { color: var(--muted); }
 
 /* ═════════════════════════ the composer and the tail ═════════════════════════ */
 

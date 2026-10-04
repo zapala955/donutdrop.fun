@@ -543,6 +543,15 @@ const environmentSchema = z
     PLINKO_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     PLINKO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     PLINKO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Dice. The edge is fixed in lib/dice.ts. A roll whose win would pay more than the ceiling is
+     * refused, so the ceiling sets the largest stake at each multiplier. */
+    DICE_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    DICE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    DICE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    DICE_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -593,6 +602,11 @@ const environmentSchema = z
       .default('10000000'),
     LAVA_RAIN_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
     LAVA_RAIN_CLAIM_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
+    /* Drops that start themselves: every N minutes a pool of LAVA_RAIN_AUTO_POOL_MINOR opens, if
+     * none is already falling. 0 leaves rain to the operator's hand, which is the default -- an
+     * automatic drop spends the operator's money, so it is switched on deliberately. */
+    LAVA_RAIN_AUTO_EVERY_MINUTES: z.coerce.number().int().min(0).max(10080).default(0),
+    LAVA_RAIN_AUTO_POOL_MINOR: positiveBigintString.default('10000000'),
     /* ── tips ──
      * Player money moving sideways, with no house cut. Bounded at both ends: a floor so the table
      * is not a spam log, and a ceiling because an unbounded transfer between accounts is the
@@ -674,6 +688,19 @@ const environmentSchema = z
      * quietly open a second door. */
     COMMUNITY_BOT_ENABLED: booleanString,
     COMMUNITY_BOT_HMAC_KEY: z.string().default(''),
+    /* What the Discord server pays, through the community bot, to accounts linked to it: once for
+     * joining and linking, every UTC day for wearing the server's tag, and to an inviter when
+     * somebody they brought in links an account. 0 switches one off. The minimum Discord account
+     * age is what keeps a stack of fresh alt accounts from farming the join and invite rewards. */
+    DISCORD_REWARDS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    DISCORD_JOIN_REWARD_MINOR: nonNegativeBigintString.default('2000000'),
+    DISCORD_TAG_REWARD_MINOR: nonNegativeBigintString.default('500000'),
+    DISCORD_INVITE_REWARD_MINOR: nonNegativeBigintString.default('3000000'),
+    DISCORD_REWARD_MIN_ACCOUNT_AGE_DAYS: z.coerce.number().int().min(0).max(3650).default(14),
+    DISCORD_INVITE_REWARD_DAILY_CAP: z.coerce.number().int().min(0).max(1000).default(10),
     /* Where operational alerts are posted. Outbound only; the bot never reads it. */
     DISCORD_ALERT_CHANNEL_ID: z
       .string()
@@ -877,6 +904,22 @@ const environmentSchema = z
         path: ['PLINKO_MAX_STAKE_MINOR'],
         message: 'must be at least PLINKO_MIN_STAKE_MINOR',
       });
+    }
+    for (const game of ['DICE'] as const) {
+      if (BigInt(env[`${game}_MIN_STAKE_MINOR`]) > BigInt(env[`${game}_MAX_STAKE_MINOR`])) {
+        context.addIssue({
+          code: 'custom',
+          path: [`${game}_MAX_STAKE_MINOR`],
+          message: `must be at least ${game}_MIN_STAKE_MINOR`,
+        });
+      }
+      if (BigInt(env[`${game}_MAX_PAYOUT_MINOR`]) < BigInt(env[`${game}_MAX_STAKE_MINOR`])) {
+        context.addIssue({
+          code: 'custom',
+          path: [`${game}_MAX_PAYOUT_MINOR`],
+          message: `must be at least ${game}_MAX_STAKE_MINOR`,
+        });
+      }
     }
     if (BigInt(env.PLINKO_MAX_PAYOUT_MINOR) < BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
       context.addIssue({
@@ -1243,6 +1286,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     lavaRainMinWageredMinor: BigInt(env.LAVA_RAIN_MIN_WAGERED_MINOR),
     lavaRainWindowMinutes: env.LAVA_RAIN_WINDOW_MINUTES,
     lavaRainClaimMinutes: env.LAVA_RAIN_CLAIM_MINUTES,
+    lavaRainAutoEveryMinutes: env.LAVA_RAIN_AUTO_EVERY_MINUTES,
+    lavaRainAutoPoolMinor: BigInt(env.LAVA_RAIN_AUTO_POOL_MINOR),
     tipsEnabled: env.TIPS_ENABLED,
     tipMinMinor: BigInt(env.TIP_MIN_MINOR),
     tipMaxMinor: BigInt(env.TIP_MAX_MINOR),
@@ -1274,6 +1319,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordControlHmacKey: env.DISCORD_CONTROL_HMAC_KEY,
     communityBotEnabled: env.COMMUNITY_BOT_ENABLED,
     communityBotHmacKey: env.COMMUNITY_BOT_HMAC_KEY,
+    discordRewardsEnabled: env.DISCORD_REWARDS_ENABLED,
+    discordJoinRewardMinor: BigInt(env.DISCORD_JOIN_REWARD_MINOR),
+    discordTagRewardMinor: BigInt(env.DISCORD_TAG_REWARD_MINOR),
+    discordInviteRewardMinor: BigInt(env.DISCORD_INVITE_REWARD_MINOR),
+    discordRewardMinAccountAgeDays: env.DISCORD_REWARD_MIN_ACCOUNT_AGE_DAYS,
+    discordInviteRewardDailyCap: env.DISCORD_INVITE_REWARD_DAILY_CAP,
     discordOperators,
     discordAlertChannelId: env.DISCORD_ALERT_CHANNEL_ID,
     discordAdminLinkTtlSeconds: env.DISCORD_ADMIN_LINK_TTL_SECONDS,
@@ -1313,6 +1364,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
     plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),
     plinkoMaxPayoutMinor: BigInt(env.PLINKO_MAX_PAYOUT_MINOR),
+    diceEnabled: env.DICE_ENABLED,
+    diceMinStakeMinor: BigInt(env.DICE_MIN_STAKE_MINOR),
+    diceMaxStakeMinor: BigInt(env.DICE_MAX_STAKE_MINOR),
+    diceMaxPayoutMinor: BigInt(env.DICE_MAX_PAYOUT_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

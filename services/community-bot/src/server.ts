@@ -63,6 +63,7 @@ import {
   whoInvited,
 } from './features/invites.js';
 import { showLink, showProfile } from './features/link.js';
+import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import {
   avatar,
   castPollVote,
@@ -284,8 +285,15 @@ async function main(): Promise<void> {
       case 'invite-sync':
         return syncInvites(db, interaction);
 
-      case 'link':
+      case 'link': {
+        const code = interaction.options.getString('code');
+        if (code && api) return linkWithCode(api, interaction, code);
         return showLink(api, interaction);
+      }
+      case 'tag':
+        return claimTag(api, interaction);
+      case 'rewards':
+        return showRewards(api, interaction);
       case 'profile':
         return showProfile(api, interaction);
 

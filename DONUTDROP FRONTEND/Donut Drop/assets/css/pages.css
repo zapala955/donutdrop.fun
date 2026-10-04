@@ -235,10 +235,8 @@
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    DISCORD
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
-/* The Discord tab: one invite card.
-   This block used to carry a verification portal -- a status badge, an OAuth button and two
-   progress conditions for the referral bonus. The Discord requirement was dropped from that
-   programme, so the page and its styles went with it. */
+/* The Discord tab: the invite card, and the server-rewards card under it (the link code, and what
+   joining, wearing the tag and inviting pay). */
 .dsync { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .dsync__invite {
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
@@ -263,6 +261,41 @@
 .dsync__go:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
 /* The address in plain text, for somebody reading on a phone and playing on a PC. */
 .dsync__inviteurl { font-size: .8125rem; color: var(--faint); word-break: break-all; }
+
+/* The rewards card: what the server pays, what has been collected, and the link code. */
+.dsync__rewards {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  padding: clamp(20px, 5vw, 32px);
+  border: 1px solid var(--ob-line-hi, var(--line)); border-radius: var(--r);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(88, 101, 242, .12), transparent 60%),
+    var(--panel);
+  max-width: 34rem;
+}
+.dsync__rewards:empty { display: none; }
+.dsync__rewardlist { display: grid; gap: 8px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.dsync__reward {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--r-s);
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
+}
+.dsync__reward[data-done="1"] { border-color: rgba(53, 208, 127, .35); }
+.dsync__rewardname { font-size: .875rem; color: var(--muted); }
+.dsync__rewardvalue { font-size: .875rem; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.dsync__reward[data-done="1"] .dsync__rewardvalue { color: #35d07f; }
+.dsync__fine { margin: 0; font-size: .75rem; line-height: 1.5; color: var(--faint); }
+.dsync__linked { margin: 0; font-weight: 700; color: #35d07f; }
+.dsync__code {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 10px;
+  width: 100%; padding: 14px; border-radius: var(--r-s);
+  border: 1px dashed var(--gold-edge-hi, var(--line2)); background: rgba(255, 170, 0, .05);
+}
+.dsync__codelabel, .dsync__codeexp { grid-column: 1 / -1; font-size: .75rem; color: var(--faint); }
+.dsync__codecmd {
+  min-width: 0; padding: 8px 10px; border-radius: 6px; background: var(--bg);
+  font-size: 1rem; font-weight: 800; color: var(--text); letter-spacing: .04em;
+  overflow-wrap: anywhere; user-select: all;
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
    WAGER RACE

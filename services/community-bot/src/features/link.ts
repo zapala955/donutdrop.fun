@@ -5,15 +5,14 @@ import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
 /**
  * link.ts — the bridge to donutdrop.fun, such as it is.
  *
- * This bot does NOT link accounts. The site has done that over Discord OAuth since migration 016:
- * a signed-in browser presses a button, Discord redirects back, and the callback writes
- * `users.discord_user_id`. That flow proves both halves — Discord proves the snowflake, the
- * session proves the account — and a code typed into a chat box proves neither.
- *
- * So `/link` is a signpost and `/profile` is a read. Neither writes anything.
+ * The bot does not decide who owns what. The site mints a one-time code for a signed-in browser
+ * (the session proves the account), the member types it into `/link code:` here (Discord proves the
+ * snowflake), and the gateway joins the two. The code never comes from this bot, so the bot cannot
+ * choose which account a Discord account lands on. Without a code, `/link` is a signpost; the
+ * linking itself is in features/rewards.ts. `/profile` is a read.
  */
 
-const LINK_PAGE = 'https://donutdrop.fun/referrals';
+const LINK_PAGE = 'https://donutdrop.fun/discord';
 
 export async function showLink(api: PlatformApi | null, interaction: ChatInputCommandInteraction) {
   if (!api) {
@@ -54,11 +53,11 @@ export async function showLink(api: PlatformApi | null, interaction: ChatInputCo
         'Link your account',
         [
           `1. Sign in at **${LINK_PAGE}**`,
-          '2. Press **Connect Discord**',
-          '3. Approve the prompt',
+          '2. Press **Get link code**',
+          '3. Run `/link code:<the code>` here',
           '',
-          'That is the whole thing — there is no code to type, and nobody here will ever ask you ' +
-            'for one. Anyone who does is not staff.',
+          'The code is shown to you on the site and works once, for ten minutes. Never paste ' +
+            'somebody else’s code, and never give yours away: anyone who asks for it is not staff.',
         ].join('\n'),
       ),
     ],

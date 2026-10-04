@@ -3,19 +3,22 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
+import { claimTagReward, linkWithCode, rewardStatus } from '../lib/discord-rewards.js';
 import { parseWith } from '../lib/validation.js';
 import { vipStandingFor } from '../lib/vip.js';
 
 /**
- * community-bot.ts — the one thing the public server's bot may ask this platform.
+ * community-bot.ts — what the public server's bot may ask this platform.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * WHY THERE IS EXACTLY ONE ENDPOINT HERE
+ * WHY THE SURFACE IS THIS SMALL
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * The community bot runs in a server anyone can join, moderating messages from strangers, invited
  * by whoever holds Manage Server. Everything it can call is something a compromise of that
- * process can call. So the surface is one read: given a Discord snowflake, what is public about
- * the account it is linked to.
+ * process can call. So the surface is: a read of what is public about a linked account, a link
+ * made with a code the SITE issued, the daily tag reward, and a reward status read. Every payment
+ * it can trigger is once per account (or once per account per day) and capped -- see
+ * lib/discord-rewards.ts, which holds the rules.
  *
  * WHAT IS DELIBERATELY NOT RETURNED, even though the query is one join away:
  *
@@ -39,18 +42,33 @@ import { vipStandingFor } from '../lib/vip.js';
  * there is worse than no comment.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * WHY IT DOES NOT WRITE THE LINK
+ * HOW IT CAN WRITE THE LINK
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * `users.discord_user_id` is written by the OAuth callback in referrals.ts and nowhere else. The
- * bot can prove which Discord account is talking to it, but not which site account that person
- * owns — only a signed-in browser can prove that. A chat-issued link code would have been a
- * second, weaker path into the same column, and with two paths the weaker one decides how strong
- * the link is.
+ * The bot can prove which Discord account is talking to it, but not which site account that
+ * person owns -- only a signed-in browser can. So the code that joins the two is minted by the
+ * SITE for a session (POST /v1/discord/link-code) and only typed into the bot; the bot cannot pick
+ * an account, only report who typed a code the site gave out. OAuth (referrals.ts) remains the
+ * stronger path, because it trusts nothing in between; this one exists because a deployment
+ * without a Discord client secret otherwise has no way to link at all, and then no way to pay the
+ * server's rewards to anybody.
  */
 
+const snowflake = z.string().regex(/^[0-9]{5,32}$/);
+
 const lookupSchema = z.object({
-  discordUserId: z.string().regex(/^[0-9]{5,32}$/),
+  discordUserId: snowflake,
 });
+
+const linkSchema = z
+  .object({
+    discordUserId: snowflake,
+    discordUsername: z.string().min(1).max(64),
+    guildId: snowflake,
+    code: z.string().min(4).max(16),
+  })
+  .strict();
+
+const tagSchema = z.object({ discordUserId: snowflake, wearingTag: z.boolean() }).strict();
 
 export async function registerCommunityBotRoutes(
   app: FastifyInstance,
@@ -99,6 +117,60 @@ export async function registerCommunityBotRoutes(
         linkedAt: row.discord_verified_at?.toISOString() ?? null,
         wageredMinor: wagered.toString(),
         vip: vipStandingFor(wagered),
+      };
+    },
+  );
+
+  /* `/link <code>`: ties the Discord account to the site account the code was minted for, and pays
+   * what that unlocks -- the join reward, and the invite rewards that were waiting on it. */
+  app.post(
+    '/internal/v1/community/link',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(linkSchema, request.body);
+      return linkWithCode(db, config, body);
+    },
+  );
+
+  /* `/tag`: the daily reward for wearing the server's tag, which only the bot can see. */
+  app.post(
+    '/internal/v1/community/rewards/tag',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(tagSchema, request.body);
+      return claimTagReward(db, config, body);
+    },
+  );
+
+  /* `/rewards`: where a member stands. Amounts and counts only; no balance, for the same reason the
+   * profile read above leaves it out. */
+  app.post(
+    '/internal/v1/community/rewards/status',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(lookupSchema, request.body);
+      const linked = await db.query<{ id: string; minecraft_username: string; status: string }>(
+        'SELECT id, minecraft_username, status FROM users WHERE discord_user_id = $1',
+        [body.discordUserId],
+      );
+      const row = linked.rows[0];
+      const status = row && row.status === 'active' ? await rewardStatus(db, config, row.id) : null;
+      return {
+        linked: Boolean(status),
+        username: status ? row!.minecraft_username : null,
+        enabled: config.discordRewardsEnabled,
+        amounts: {
+          joinMinor: config.discordJoinRewardMinor.toString(),
+          tagMinor: config.discordTagRewardMinor.toString(),
+          inviteMinor: config.discordInviteRewardMinor.toString(),
+        },
+        minAccountAgeDays: config.discordRewardMinAccountAgeDays,
+        join: status?.join ?? null,
+        tag: status?.tag ?? null,
+        invites: status?.invites ?? null,
       };
     },
   );
