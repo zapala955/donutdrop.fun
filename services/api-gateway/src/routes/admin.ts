@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
+import {
+  GAME_KINDS,
+  PROMO_KINDS,
+  summarizeGames,
+  type KindAggregate,
+} from '../lib/admin-stats.js';
 import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import { canonicalJson, safeEqualText, sha256Hex } from '../lib/crypto.js';
@@ -434,7 +440,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
    * four facts that decide it. */
   app.get('/v1/admin/users/:id', { preHandler: requireAdminRead }, async (request) => {
     const params = parseWith(idSchema, request.params);
-    const [user, wallet, ledger, sessions, turnover, external] = await Promise.all([
+    const [user, wallet, ledger, sessions, turnover, external, kindRows] = await Promise.all([
       db.query<AdminEntityRow>(
         `SELECT id, minecraft_identity, minecraft_username, normalized_username, role, status,
                 terms_accepted_at, created_at, updated_at, last_login_at
@@ -484,27 +490,41 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
                          'cash_withdrawal', 'cash_withdrawal_refund')`,
         [params.id],
       ),
+      /* The player's whole ledger, one row per kind: the one source for their result, their
+       * per-game figures, and what staff or other players did to their balance. */
+      db.query<{ kind: string; total: string; rows: string }>(
+        `SELECT kind, sum(amount_minor)::text AS total, count(*)::text AS rows
+           FROM wallet_transactions WHERE user_id = $1 GROUP BY kind`,
+        [params.id],
+      ),
     ]);
     if (!user.rows[0]) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
     /* No wallet row means a player who has never had a balance, which is zero, not missing. */
     const balanceMinor = BigInt(wallet.rows[0]?.balance_minor ?? '0');
 
-    /* Profit and loss, from the player's side.
+    /* Profit and loss, from the player's side: what the games and the promotions paid them, less
+     * what they staked. Positive means the player is up on the house.
      *
-     *     pnl = balance - net external money
+     * This used to be `balance - net external money`, on the argument that whatever sits in a
+     * balance came from outside or was won inside. That is false the moment anything else touches
+     * a wallet: a staff adjustment, a tip. The first operator who clawed back a player's winnings
+     * with an adjustment made the sheet report that player as up by a third of what they had
+     * really taken (+720M shown against +1.86B won), which is the opposite of what a moderator
+     * looking at a suspect account needs to see. The result is now summed from the kinds that ARE
+     * the games and the promotions, the same ones the dashboard uses, and the things that are
+     * neither are reported beside it instead of leaking into it.
      *
-     * Everything sitting in a balance either came from outside the platform or was won inside it,
-     * so subtracting the outside part leaves exactly what playing here produced. Positive means
-     * the player is up on the house; negative means the house is up on them.
-     *
-     * Derived rather than tallied. A running total would be a fourth place the truth lives, and
-     * the first one to drift — this cannot disagree with the wallet, because it IS the wallet
-     * minus two kinds of row.
-     *
-     * Deposits and withdrawals are reported separately beside it, because "up $40M" reads very
-     * differently on $5M deposited than on $500M, and an operator looking at one number will
-     * always want the other two next. */
-    const netExternalMinor = BigInt(external.rows[0]?.net_external_minor ?? '0');
+     * Deposits and withdrawals stay separate: "up $40M" reads very differently on $5M deposited
+     * than on $500M. */
+    const kinds = new Map<string, KindAggregate>(
+      kindRows.rows.map((row) => [
+        row.kind,
+        { amount: BigInt(row.total), rows: Number(row.rows), users: 1 },
+      ]),
+    );
+    const sumKinds = (names: readonly string[]): bigint =>
+      names.reduce((total, name) => total + (kinds.get(name)?.amount ?? 0n), 0n);
+    const resultMinor = sumKinds([...GAME_KINDS, ...Object.keys(PROMO_KINDS)]);
 
     return {
       user: user.rows[0],
@@ -516,7 +536,19 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         wagers: Number(turnover.rows[0]?.wagers ?? '0'),
         depositedMinor: external.rows[0]?.deposited_minor ?? '0',
         withdrawnMinor: external.rows[0]?.withdrawn_minor ?? '0',
-        pnlMinor: (balanceMinor - netExternalMinor).toString(),
+        pnlMinor: resultMinor.toString(),
+        /* Money moved onto or off this wallet by something that is not play: an operator's
+         * adjustment, and tips between players. Neither is a win or a loss. */
+        adjustmentsMinor: sumKinds(['admin_adjustment']).toString(),
+        transfersMinor: sumKinds(['tip_sent', 'tip_received']).toString(),
+        byGame: summarizeGames(kinds).map((game) => ({
+          key: game.key,
+          label: game.label,
+          wageredMinor: game.wagered.toString(),
+          bets: game.bets,
+          // summarizeGames reports the HOUSE's take; the sheet is from the player's side.
+          netMinor: (-game.ggr).toString(),
+        })),
       },
     };
   });

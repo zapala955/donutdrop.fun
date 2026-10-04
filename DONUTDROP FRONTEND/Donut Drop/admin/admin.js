@@ -1387,6 +1387,8 @@ function renderPlayer(data) {
     ],
     ['Deposited', amountText(stats.depositedMinor ?? '0'), null],
     ['Withdrawn', amountText(stats.withdrawnMinor ?? '0'), null],
+    ['Staff adjustments', signedAmount(stats.adjustmentsMinor), null],
+    ['Tips, net', signedAmount(stats.transfersMinor), null],
     ['Sessions', String((data.sessions ?? []).length), null],
     [
       'Last login',
@@ -1414,6 +1416,26 @@ function renderPlayer(data) {
   }
 
   renderPlayerActions(user, data);
+
+  table(
+    $('sheetGames'),
+    ['Game', 'Wagered', 'Bets', 'Player result'],
+    stats.byGame ?? [],
+    (game) => {
+      const tr = document.createElement('tr');
+      const net = BigInt(game.netMinor);
+      const result = cell(signedAmount(game.netMinor), { mono: true });
+      result.dataset.sign = net < 0n ? 'down' : 'up';
+      result.title = amountText(game.netMinor);
+      tr.append(
+        cell(game.label),
+        cell(compactAmount(game.wageredMinor), { mono: true }),
+        cell(game.bets, { mono: true }),
+        result,
+      );
+      return tr;
+    },
+  );
 
   table(
     $('sheetSessions'),

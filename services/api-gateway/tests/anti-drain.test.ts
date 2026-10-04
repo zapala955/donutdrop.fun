@@ -329,6 +329,24 @@ describe('how the holds are wired', () => {
     assert.match(sql, /CREATE FUNCTION donut_schema_ready_v58\(\) RETURNS boolean/);
   });
 
+  it("reports a player's result from the games and promotions, not from their balance", async () => {
+    const source = await read('../src/routes/admin.ts');
+    assert.doesNotMatch(
+      source,
+      /balanceMinor - netExternalMinor/,
+      'a staff clawback must not make a winner look like a smaller winner',
+    );
+    assert.match(source, /sumKinds\(\[\.\.\.GAME_KINDS, \.\.\.Object\.keys\(PROMO_KINDS\)\]\)/);
+    assert.match(source, /adjustmentsMinor: sumKinds\(\['admin_adjustment'\]\)/);
+    assert.match(source, /netMinor: \(-game\.ggr\)\.toString\(\)/);
+    const html = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/index.html');
+    const js = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/admin.js');
+    assert.match(html, /id="sheetGames"/);
+    assert.match(html, /admin\.js\?v=9/, 'a changed script needs a new cache-busting version');
+    assert.match(js, /\$\('sheetGames'\)/);
+    assert.match(js, /Staff adjustments/);
+  });
+
   it('shows the operator the queue, the holds and the emergency controls', async () => {
     const html = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/index.html');
     const js = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/admin.js');
