@@ -35,6 +35,12 @@ ALTER TABLE cash_withdrawals ADD COLUMN review_reason varchar(300);
 -- the ledger.
 GRANT DELETE ON TABLE battle_players TO donut_api_runtime;
 
+-- Idempotent, and deliberate: if an operator shut battles at the database as an emergency stopgap
+-- before this deploy (REVOKE INSERT ON battles, battle_players), deploying puts the grants back so
+-- re-opening battles from the admin System tab later is all it takes. Until then the game is closed
+-- by BATTLES_ENABLED, which is the switch that is meant to be used.
+GRANT SELECT, INSERT ON TABLE battles, battle_players TO donut_api_runtime;
+
 -- A seat's stake is debited under a reference and refunded under one derived from it. The
 -- reference used to be derived from the battle and the SEAT NUMBER, so a seat that was left and
 -- taken again collided with its own earlier ledger row (the ledger is unique on kind and
