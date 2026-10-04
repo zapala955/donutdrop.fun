@@ -144,6 +144,24 @@ export async function registerBattleRoutes(
   const hub = new BattleHub();
   app.addHook('onClose', async () => hub.close());
 
+  /* Money goes into a lobby only while battles are open. Leaving one is always allowed, and the
+   * sweeper below refunds every open lobby for as long as they are shut. */
+  const assertOpen = () => {
+    if (!config.battlesEnabled) {
+      throw new AppError(
+        503, 'BATTLES_PAUSED', 'Case battles are paused right now. Open lobbies are refunded.',
+      );
+    }
+  };
+
+  /* A seat's refund is keyed on the occupancy that paid, not on the seat number: a seat that is
+   * left and taken again must not collide with its own earlier refund. Seats taken before
+   * migration 058 have no stake_ref and keep the old battle-and-seat derivation. */
+  const refundReference = (battleId: string, seat: number, stakeRef: string | null) =>
+    stakeRef
+      ? deterministicUuid('battle_refund', stakeRef)
+      : deterministicUuid('battle_refund', battleId, seat);
+
   /* ─────────────────────────── shared readers ─────────────────────────── */
 
   /** The full public shape of a battle: lobby row, seats, crate list, and results if settled. */
@@ -472,6 +490,8 @@ export async function registerBattleRoutes(
   /* ─────────────────────────── REST ─────────────────────────── */
 
   app.get('/v1/battles/modes', async () => ({
+    enabled: config.battlesEnabled,
+    botsEnabled: config.battleBotsEnabled,
     modes: BATTLE_MODES,
     minRounds: MIN_ROUNDS,
     maxRounds: MAX_ROUNDS,
@@ -505,9 +525,13 @@ export async function registerBattleRoutes(
     '/v1/battles',
     { preHandler: guards.requireCsrf, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (request, reply) => {
+      assertOpen();
       const body = parseWith(createSchema, request.body);
       const userId = request.authUser?.id;
       if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Log in to host a battle');
+      if (body.allowBots && !config.battleBotsEnabled) {
+        throw new AppError(503, 'BOTS_PAUSED', 'Bot fillers are paused right now');
+      }
 
       const shape = shapeFor(body.format);
 
@@ -591,6 +615,7 @@ export async function registerBattleRoutes(
     '/v1/battles/:code/join',
     { preHandler: guards.requireCsrf, config: { rateLimit: { max: 40, timeWindow: '1 minute' } } },
     async (request) => {
+      assertOpen();
       const params = parseWith(codeSchema, request.params);
       const body = parseWith(joinSchema, request.body);
       const userId = request.authUser?.id;
@@ -658,6 +683,10 @@ export async function registerBattleRoutes(
     '/v1/battles/:code/bots',
     { preHandler: guards.requireCsrf, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (request) => {
+      assertOpen();
+      if (!config.battleBotsEnabled) {
+        throw new AppError(503, 'BOTS_PAUSED', 'Bot fillers are paused right now');
+      }
       const params = parseWith(codeSchema, request.params);
       const userId = request.authUser?.id;
       if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Log in first');
@@ -738,8 +767,10 @@ export async function registerBattleRoutes(
           throw new AppError(409, 'BATTLE_CLOSED', 'A running battle cannot be left');
         }
 
-        const seat = await client.query<{ seat: number; staked_minor: string }>(
-          `SELECT seat, staked_minor FROM battle_players
+        const seat = await client.query<{
+          seat: number; staked_minor: string; stake_ref: string | null;
+        }>(
+          `SELECT seat, staked_minor, stake_ref FROM battle_players
             WHERE battle_id = $1 AND user_id = $2`,
           [battle.id, userId],
         );
@@ -751,7 +782,7 @@ export async function registerBattleRoutes(
         if (BigInt(row.staked_minor) > 0n) {
           await creditWallet(
             client, userId, BigInt(row.staked_minor), 'battle_refund',
-            deterministicUuid('battle_refund', battle.id, row.seat),
+            refundReference(battle.id, row.seat, row.stake_ref),
           );
         }
         await client.query(
@@ -762,15 +793,17 @@ export async function registerBattleRoutes(
         /* The host leaving cancels the lobby and refunds everybody, rather than leaving an
          * ownerless room that can never be started or cleaned up. */
         if (battle.host_user_id === userId) {
-          const remaining = await client.query<{ seat: number; user_id: string | null; staked_minor: string }>(
-            `SELECT seat, user_id, staked_minor FROM battle_players WHERE battle_id = $1`,
+          const remaining = await client.query<{
+            seat: number; user_id: string | null; staked_minor: string; stake_ref: string | null;
+          }>(
+            `SELECT seat, user_id, staked_minor, stake_ref FROM battle_players WHERE battle_id = $1`,
             [battle.id],
           );
           for (const other of remaining.rows) {
             if (other.user_id && BigInt(other.staked_minor) > 0n) {
               await creditWallet(
                 client, other.user_id, BigInt(other.staked_minor), 'battle_refund',
-                deterministicUuid('battle_refund', battle.id, other.seat),
+                refundReference(battle.id, other.seat, other.stake_ref),
               );
             }
           }
@@ -885,6 +918,76 @@ export async function registerBattleRoutes(
     });
   });
 
+  /* ─────────────────────────── the lobby sweeper ─────────────────────────── */
+
+  /**
+   * Cancels a lobby and hands every seated player their stake back. Idempotent: a lobby that is no
+   * longer a lobby is left alone, and each refund is keyed on the seat's own occupancy, so a sweep
+   * racing a player's own leave cannot pay twice (the ledger is unique on kind and reference).
+   *
+   * Seats are kept, not deleted: a cancelled battle still shows who was in it.
+   */
+  async function cancelLobby(client: DbClient, battleId: string): Promise<boolean> {
+    const locked = await client.query<{ status: string }>(
+      'SELECT status FROM battles WHERE id = $1 FOR UPDATE',
+      [battleId],
+    );
+    if (locked.rows[0]?.status !== 'lobby') return false;
+    const seats = await client.query<{
+      seat: number; user_id: string | null; staked_minor: string; stake_ref: string | null;
+    }>(
+      'SELECT seat, user_id, staked_minor, stake_ref FROM battle_players WHERE battle_id = $1',
+      [battleId],
+    );
+    for (const seat of seats.rows) {
+      if (seat.user_id && BigInt(seat.staked_minor) > 0n) {
+        await creditWallet(
+          client, seat.user_id, BigInt(seat.staked_minor), 'battle_refund',
+          refundReference(battleId, seat.seat, seat.stake_ref),
+        );
+      }
+    }
+    await client.query(`UPDATE battles SET status = 'cancelled' WHERE id = $1`, [battleId]);
+    return true;
+  }
+
+  /**
+   * Refunds lobbies that expired, and EVERY open lobby while battles are switched off.
+   *
+   * A lobby that "must not hold its host's money forever" had nothing enforcing that: nothing ever
+   * cancelled an expired one, so a stake sat until its owner found the leave button. With battles
+   * shut, nobody can add to a lobby, so refunding the open ones is what closing the game means.
+   */
+  async function sweepLobbies(): Promise<void> {
+    const due = await db.query<{ id: string; code: string }>(
+      `SELECT id, code FROM battles
+        WHERE status = 'lobby' AND ($1::boolean OR expires_at <= now())
+        ORDER BY created_at LIMIT 25`,
+      [!config.battlesEnabled],
+    );
+    for (const lobby of due.rows) {
+      const cancelled = await db.transaction((client) => cancelLobby(client, lobby.id));
+      if (!cancelled) continue;
+      hub.broadcast(lobby.code, {
+        type: 'battle:cancelled', code: lobby.code, reason: 'The lobby closed and every stake was refunded',
+      });
+      hub.broadcastLobby({ type: 'lobby:removed', code: lobby.code });
+    }
+  }
+
+  let sweeping = false;
+  const sweeper = setInterval(() => {
+    if (sweeping) return;
+    sweeping = true;
+    sweepLobbies()
+      .catch((error: unknown) => app.log.error({ error }, 'battle lobby sweep failed'))
+      .finally(() => {
+        sweeping = false;
+      });
+  }, 15_000);
+  sweeper.unref();
+  app.addHook('onClose', async () => clearInterval(sweeper));
+
   /* ─────────────────────────── helpers ─────────────────────────── */
 
   /**
@@ -930,23 +1033,25 @@ export async function registerBattleRoutes(
     }
     const balanceAfter = debited.rows[0]?.balance_minor ?? '0';
 
+    /* One reference per OCCUPANCY of the seat, stored on the seat. Derived from the battle and the
+     * seat number it collided with the ledger row of whoever sat there before, so after anybody
+     * left a seat nobody could take it again -- joining and leaving broke any lobby. */
+    const stakeRef = randomUUID();
     await client.query(
       `INSERT INTO wallet_transactions
          (id, user_id, amount_minor, balance_after_minor, kind, reference_id)
        VALUES ($1, $2, $3, $4, 'battle_stake', $5)`,
-      [
-        randomUUID(), userId, (-stake).toString(), balanceAfter,
-        deterministicUuid('battle_stake', battleId, seat),
-      ],
+      [randomUUID(), userId, (-stake).toString(), balanceAfter, stakeRef],
     );
 
     await client.query(
       `INSERT INTO battle_players
-         (battle_id, seat, team, user_id, is_bot, display_name, client_seed, staked_minor)
-       VALUES ($1, $2, $3, $4, false, $5, $6, $7)`,
+         (battle_id, seat, team, user_id, is_bot, display_name, client_seed, staked_minor,
+          stake_ref)
+       VALUES ($1, $2, $3, $4, false, $5, $6, $7, $8)`,
       [
         battleId, seat, teamForSeat(seat, teamSize), userId,
-        player.minecraft_username, clientSeed, stake.toString(),
+        player.minecraft_username, clientSeed, stake.toString(), stakeRef,
       ],
     );
 

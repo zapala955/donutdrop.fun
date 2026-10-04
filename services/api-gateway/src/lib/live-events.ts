@@ -18,7 +18,10 @@ export type LiveTopic =
   // of drawing past the crash point for as long as a refetch takes.
   | 'crash_bust'
   // A coinflip game opened, was taken or closed.
-  | 'coinflip';
+  | 'coinflip'
+  // A mines duel opened, was taken, had a player finish, or settled. Carries nothing about a
+  // player's tiles: a refresh reads what the reader is allowed to see.
+  | 'minesduel';
 
 interface Subscriber {
   readonly response: ServerResponse;

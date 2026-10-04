@@ -493,6 +493,10 @@ function paintLobby() {
       <div class="btl">
         <aside class="btl__make" id="btlMake"></aside>
         <div class="btl__list">
+          <p class="btl__paused" id="btlPaused" role="status" hidden>
+            Case Battles are paused for now. Open lobbies are being refunded, and nobody can host or
+            join until they are back.
+          </p>
           <section class="btl__sec" id="btlLiveSec" hidden>
             <div class="btl__listhead">
               <h2><i class="btl__dot" aria-hidden="true"></i>Live now</h2>
@@ -520,9 +524,15 @@ function paintLobby() {
   paintLists();
 }
 
+/** The server says whether battles are open; until it has answered they are assumed to be. */
+function battlesPaused() {
+  return view.modes?.enabled === false;
+}
+
 function paintLists() {
   const rows = $('#btlRows', root);
   if (!rows) return;
+  $('#btlPaused', root).hidden = !battlesPaused();
   $('#btlCount', root).textContent = `${view.lobbies.length} waiting`;
   rows.replaceChildren(...(view.lobbies.length
     ? view.lobbies.map((lobby) => battleCard(lobby, 'open'))
@@ -1623,11 +1633,20 @@ function reveal(battle, watched) {
 
 /* ─────────────────────────── actions ─────────────────────────── */
 
+function toastPaused() {
+  toast({
+    kind: 'lose',
+    title: 'Battles paused',
+    body: 'Case Battles are closed for now. Open lobbies are refunded.',
+  });
+}
+
 async function createBattle() {
   if (!state.authenticated) {
     $('#loginBtn')?.click();
     return;
   }
+  if (battlesPaused()) return toastPaused();
   try {
     const result = await api.post('/v1/battles', {
       format: view.draft.format,
@@ -1655,6 +1674,7 @@ async function joinBattle(code, entryCostMinor) {
     $('#loginBtn')?.click();
     return;
   }
+  if (battlesPaused()) return toastPaused();
   /* Taken before the request: taking the last seat settles the battle inside this very call, and
    * the server's balance event can arrive ahead of its HTTP answer. Only the stake is shown leaving
    * the wallet; whatever the battle pays waits for the reels. */

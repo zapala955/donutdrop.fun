@@ -543,15 +543,6 @@ const environmentSchema = z
     PLINKO_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     PLINKO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     PLINKO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
-    /* Dice. The edge is fixed in lib/dice.ts. A roll whose win would pay more than the ceiling is
-     * refused, so the ceiling sets the largest stake at each multiplier. */
-    DICE_ENABLED: z
-      .enum(['true', 'false'])
-      .default('true')
-      .transform((value) => value === 'true'),
-    DICE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
-    DICE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
-    DICE_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -569,6 +560,55 @@ const environmentSchema = z
     COINFLIP_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     COINFLIP_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     COINFLIP_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
+    /* Mines Duel. Player against player on one shared field; the house holds no side, so the rake
+     * is its whole margin and faces the same checks a duel's and a coinflip's do. PLAY_SECONDS is
+     * the clock both players share once a game is taken, snapshot onto the game. */
+    MINES_DUEL_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    MINES_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    MINES_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    MINES_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
+    MINES_DUEL_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
+    MINES_DUEL_PLAY_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
+    /* Case battles. OFF unless an operator switches them on. A battle with a bot seated on the
+     * host's own team used to pay the host the whole pot -- about 180% back per game, by script --
+     * and a lobby is real money, so the game stays shut until it has been looked at again. The
+     * engine is fixed; this is the second lock. BATTLE_BOTS_ENABLED separately allows the "fill
+     * with bots" button, which is how a lobby gets filled without a second human. */
+    BATTLES_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    BATTLE_BOTS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    /* Anti-drain. CASH_PAYOUTS_HOLD sends EVERY new withdrawal to the operator queue, whoever asks
+     * and however small. CASH_APPROVAL_THRESHOLD_MINOR is the single request above which a human
+     * approves first (0 means every request). The ANTI_DRAIN_* amounts are the automatic
+     * triggers; each is OFF at 0:
+     *   NET_CASHOUT   a player's cash taken out, this request included, less every deposit they
+     *                 ever made, over this -> their request waits for a human
+     *   HOUSE_HOURLY  cash the house sent out in the last hour less what came in, this request
+     *                 included, over this -> every request waits (the circuit breaker)
+     *   WIN_1H/24H    a player's net result on the games and promotions over the window, over this
+     *                 -> the monitor puts a hold on the player
+     * Staff are never held by these rules. */
+    CASH_PAYOUTS_HOLD: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    CASH_APPROVAL_THRESHOLD_MINOR: nonNegativeBigintString.default('500000000'),
+    ANTI_DRAIN_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    ANTI_DRAIN_NET_CASHOUT_MINOR: nonNegativeBigintString.default('100000000'),
+    ANTI_DRAIN_HOUSE_HOURLY_MINOR: nonNegativeBigintString.default('750000000'),
+    ANTI_DRAIN_WIN_1H_MINOR: nonNegativeBigintString.default('75000000'),
+    ANTI_DRAIN_WIN_24H_MINOR: nonNegativeBigintString.default('150000000'),
     /* ── the vault jackpot ──
      * A share of platform volume set aside into one pot, drawn for on every wager and paid whole to
      * one player. The contribution is a share of the WAGER (the brief's "0.1% of all platform
@@ -874,6 +914,37 @@ const environmentSchema = z
           'must exceed the 200 bps VIP rakeback ceiling: a coinflip rake at or below it pays out more than the game collected',
       });
     }
+    if (env.MINES_DUEL_ENABLED && env.VIP_ENABLED && env.MINES_DUEL_RAKE_BPS <= 200) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MINES_DUEL_RAKE_BPS'],
+        message:
+          'must exceed the 200 bps VIP rakeback ceiling: a mines duel rake at or below it pays out more than the game collected',
+      });
+    }
+    if (
+      env.MINES_DUEL_ENABLED &&
+      BigInt(env.MINES_DUEL_MIN_STAKE_MINOR) > BigInt(env.MINES_DUEL_MAX_STAKE_MINOR)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MINES_DUEL_MAX_STAKE_MINOR'],
+        message: 'must be at least MINES_DUEL_MIN_STAKE_MINOR',
+      });
+    }
+    if (
+      env.MINES_DUEL_ENABLED &&
+      env.MINES_DUEL_RAKE_BPS > 0 &&
+      (BigInt(env.MINES_DUEL_MIN_STAKE_MINOR) * 2n * BigInt(env.MINES_DUEL_RAKE_BPS)) / 10_000n ===
+        0n
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MINES_DUEL_MIN_STAKE_MINOR'],
+        message:
+          'is too small for MINES_DUEL_RAKE_BPS to collect anything: the rake would truncate to zero on a minimum-stake duel',
+      });
+    }
     if (
       env.COINFLIP_ENABLED &&
       BigInt(env.COINFLIP_MIN_STAKE_MINOR) > BigInt(env.COINFLIP_MAX_STAKE_MINOR)
@@ -904,22 +975,6 @@ const environmentSchema = z
         path: ['PLINKO_MAX_STAKE_MINOR'],
         message: 'must be at least PLINKO_MIN_STAKE_MINOR',
       });
-    }
-    for (const game of ['DICE'] as const) {
-      if (BigInt(env[`${game}_MIN_STAKE_MINOR`]) > BigInt(env[`${game}_MAX_STAKE_MINOR`])) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${game}_MAX_STAKE_MINOR`],
-          message: `must be at least ${game}_MIN_STAKE_MINOR`,
-        });
-      }
-      if (BigInt(env[`${game}_MAX_PAYOUT_MINOR`]) < BigInt(env[`${game}_MAX_STAKE_MINOR`])) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${game}_MAX_PAYOUT_MINOR`],
-          message: `must be at least ${game}_MAX_STAKE_MINOR`,
-        });
-      }
     }
     if (BigInt(env.PLINKO_MAX_PAYOUT_MINOR) < BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
       context.addIssue({
@@ -1276,6 +1331,21 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     coinflipRakeBps: env.COINFLIP_RAKE_BPS,
     coinflipMinStakeMinor: BigInt(env.COINFLIP_MIN_STAKE_MINOR),
     coinflipMaxStakeMinor: BigInt(env.COINFLIP_MAX_STAKE_MINOR),
+    minesDuelEnabled: env.MINES_DUEL_ENABLED,
+    minesDuelRakeBps: env.MINES_DUEL_RAKE_BPS,
+    minesDuelMinStakeMinor: BigInt(env.MINES_DUEL_MIN_STAKE_MINOR),
+    minesDuelMaxStakeMinor: BigInt(env.MINES_DUEL_MAX_STAKE_MINOR),
+    minesDuelLobbyTtlMinutes: env.MINES_DUEL_LOBBY_TTL_MINUTES,
+    minesDuelPlaySeconds: env.MINES_DUEL_PLAY_SECONDS,
+    battlesEnabled: env.BATTLES_ENABLED,
+    battleBotsEnabled: env.BATTLE_BOTS_ENABLED,
+    cashPayoutsHold: env.CASH_PAYOUTS_HOLD,
+    cashApprovalThresholdMinor: BigInt(env.CASH_APPROVAL_THRESHOLD_MINOR),
+    antiDrainEnabled: env.ANTI_DRAIN_ENABLED,
+    antiDrainNetCashoutMinor: BigInt(env.ANTI_DRAIN_NET_CASHOUT_MINOR),
+    antiDrainHouseHourlyMinor: BigInt(env.ANTI_DRAIN_HOUSE_HOURLY_MINOR),
+    antiDrainWin1hMinor: BigInt(env.ANTI_DRAIN_WIN_1H_MINOR),
+    antiDrainWin24hMinor: BigInt(env.ANTI_DRAIN_WIN_24H_MINOR),
     coinflipLobbyTtlMinutes: env.COINFLIP_LOBBY_TTL_MINUTES,
     vaultJackpotEnabled: env.VAULT_JACKPOT_ENABLED,
     vaultJackpotContributionBps: env.VAULT_JACKPOT_CONTRIBUTION_BPS,
@@ -1364,10 +1434,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
     plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),
     plinkoMaxPayoutMinor: BigInt(env.PLINKO_MAX_PAYOUT_MINOR),
-    diceEnabled: env.DICE_ENABLED,
-    diceMinStakeMinor: BigInt(env.DICE_MIN_STAKE_MINOR),
-    diceMaxStakeMinor: BigInt(env.DICE_MAX_STAKE_MINOR),
-    diceMaxPayoutMinor: BigInt(env.DICE_MAX_PAYOUT_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

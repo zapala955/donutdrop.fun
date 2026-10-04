@@ -21,6 +21,7 @@ import { registerBattleRoutes } from './routes/battles.js';
 import { registerCommunityRoutes } from './routes/community.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminOperationRoutes } from './routes/admin-operations.js';
+import { registerAdminPayoutRoutes } from './routes/admin-payouts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerPayLoginRoutes } from './routes/auth-pay.js';
@@ -34,6 +35,7 @@ import { registerDiscordControlRoutes } from './routes/discord-control.js';
 import { registerEngagementRoutes } from './routes/engagement.js';
 import { registerCaseRoutes } from './routes/cases.js';
 import { registerCoinflipRoutes } from './routes/coinflip.js';
+import { registerMinesDuelRoutes } from './routes/mines-duel.js';
 import { registerDuelRoutes } from './routes/duels.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -49,9 +51,9 @@ import { registerBlackjackRoutes } from './routes/blackjack.js';
 import { registerCrashRoutes } from './routes/crash.js';
 import { registerMinesRoutes } from './routes/mines.js';
 import { registerPlinkoRoutes } from './routes/plinko.js';
-import { registerDiceRoutes } from './routes/dice.js';
 import { registerDiscordRewardRoutes } from './routes/discord-rewards.js';
 import { registerVipRoutes } from './routes/vip.js';
+import { startAntiDrainMonitor } from './lib/anti-drain.js';
 import { startTellerSweeper } from './lib/teller-sweeper.js';
 import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
@@ -231,6 +233,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerBattleRoutes(app, db, config);
   await registerDuelRoutes(app, db, config);
   await registerCoinflipRoutes(app, db, config);
+  await registerMinesDuelRoutes(app, db, config);
   await registerSocialRoutes(app, db, config);
   await registerSideBetRoutes(app, db, config);
   await registerCommunityRoutes(app, db, config);
@@ -247,7 +250,6 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerCrashRoutes(app, db, config);
   await registerMinesRoutes(app, db, config);
   await registerPlinkoRoutes(app, db, config);
-  await registerDiceRoutes(app, db, config);
   await registerDiscordRewardRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
@@ -256,6 +258,8 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerDevRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
   await registerAdminOperationRoutes(app, db, config, runtimeSettings);
+  await registerAdminPayoutRoutes(app, db, config);
+  startAntiDrainMonitor(app, db, config);
   /* Registers nothing at all unless DISCORD_CONTROL_ENABLED is on — see the note in the module.
    * Sits next to the admin routes because that is what it is: a second, narrower door into the
    * same privileges, and the two belong where a reader finds them together. */

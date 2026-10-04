@@ -3,6 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
+import {
+  RELEASE_HELD_JOB_SQL,
+  evaluateWithdrawal,
+  loadWithdrawalFacts,
+  reasonText,
+  rulesFrom,
+} from '../lib/anti-drain.js';
 import { findVaultBot, pickBot } from '../lib/bots.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
@@ -38,14 +45,9 @@ import {
 /** Below this, a payout is not worth a command to the server. */
 const MIN_WITHDRAWAL_MINOR = 10_000n;
 
-/**
- * Over this, a human approves it before the bot is told anything.
- *
- * The gate is on the amount rather than on the player, because the thing worth catching is a
- * single large outflow, however it came to be — a real cash-out, a bug, or an account that just
- * acquired a balance it should not have.
- */
-const APPROVAL_THRESHOLD_MINOR = 500_000_000n;
+/* Whether a request goes to a human before the bot is told anything is decided by
+ * lib/anti-drain.ts: the single-request ceiling (`cashApprovalThresholdMinor`, a live setting), a
+ * hold on the player, the global hold, and the automatic net cash-out and house outflow rules. */
 /**
  * A completed or failed request cannot be immediately followed by another payout request.
  *
@@ -170,7 +172,7 @@ export async function queueWithdrawalJob(
     await client.query(
       `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
        VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
-       ON CONFLICT (kind, reference_id) DO NOTHING`,
+       ${RELEASE_HELD_JOB_SQL}`,
       [
         randomUUID(),
         withdrawal.bot_id,
@@ -266,7 +268,7 @@ export async function queueWithdrawalPayoutAfterRelease(
   await client.query(
     `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
      VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
-     ON CONFLICT (kind, reference_id) DO NOTHING`,
+     ${RELEASE_HELD_JOB_SQL}`,
     [
       randomUUID(),
       withdrawal.bot_id,
@@ -317,7 +319,7 @@ export async function registerCashWithdrawalRoutes(
         wagerRequirementRemainingMinor: wagerRemaining.toString(),
         payeeUsername: request.authUser?.minecraftUsername ?? null,
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
-        approvalThresholdMinor: APPROVAL_THRESHOLD_MINOR.toString(),
+        approvalThresholdMinor: config.cashApprovalThresholdMinor.toString(),
         cooldownSeconds: WITHDRAWAL_COOLDOWN_SECONDS,
         cooldownRemainingSeconds: live.rows[0]?.cooldown_seconds ?? 0,
         pending: pending ? view(pending, pendingPosition) : null,
@@ -348,6 +350,14 @@ export async function registerCashWithdrawalRoutes(
         );
       }
 
+      /* The anti-drain figures are sums over the ledger. They are read here, on their own, rather
+       * than inside the serializable transaction below: a transaction that has read a range of
+       * wallet_transactions conflicts with every game bet that inserts into it, and a withdrawal
+       * is the last request that should be retried because somebody placed a bet. They are a
+       * gauge, not a lock -- one live payout per player and the cooldown already serialise the
+       * player, and the hold flag is re-read from the locked account row inside. */
+      const facts = await loadWithdrawalFacts(db, userId, amount);
+
       const created = await db.transaction(async (client) => {
         const replayed = await client.query<WithdrawalRow>(
           `SELECT id, amount_minor, payee_username, status, error_code, created_at, paid_at
@@ -359,8 +369,8 @@ export async function registerCashWithdrawalRoutes(
         /* One row, one column. This used to join responsible_limits for a cooldown and a
          * self-exclusion window and read four compliance fields off users; none of them exists
          * any more. The lock stays, because money is about to leave this account. */
-        const account = await client.query<DepositEligibilityState>(
-          'SELECT status FROM users WHERE id = $1 FOR UPDATE',
+        const account = await client.query<DepositEligibilityState & { payout_hold_reason: string | null }>(
+          'SELECT status, payout_hold_reason FROM users WHERE id = $1 FOR UPDATE',
           [userId],
         );
         if (!isDepositEligible(account.rows[0])) {
@@ -423,14 +433,19 @@ export async function registerCashWithdrawalRoutes(
           throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Not enough balance for that withdrawal');
         }
 
-        const needsApproval = amount > APPROVAL_THRESHOLD_MINOR;
+        const decision = evaluateWithdrawal(
+          { ...facts, userHoldReason: account.rows[0]?.payout_hold_reason ?? null },
+          rulesFrom(config),
+        );
+        const needsApproval = decision.review;
         const withdrawalId = randomUUID();
         let inserted;
         try {
           inserted = await client.query<WithdrawalRow>(
             `INSERT INTO cash_withdrawals
-               (id, user_id, bot_id, payee_username, amount_minor, status, idempotency_key)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+               (id, user_id, bot_id, payee_username, amount_minor, status, idempotency_key,
+                review_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id, amount_minor, payee_username, status, error_code, created_at, paid_at`,
             [
               withdrawalId,
@@ -440,6 +455,7 @@ export async function registerCashWithdrawalRoutes(
               amount.toString(),
               needsApproval ? 'pending_approval' : 'queued',
               idempotencyKey,
+              needsApproval ? reasonText(decision.reasons) : null,
             ],
           );
         } catch (error) {

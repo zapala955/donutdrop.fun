@@ -82,10 +82,17 @@ export const GAMES: readonly GameDefinition[] = [
   },
   {
     key: 'dice',
-    label: 'Dice',
+    label: 'Dice (retired)',
     stakes: ['dice_stake'],
     payouts: ['dice_payout'],
     refunds: [],
+  },
+  {
+    key: 'minesduel',
+    label: 'Mines duels',
+    stakes: ['mines_duel_stake'],
+    payouts: ['mines_duel_win'],
+    refunds: ['mines_duel_refund'],
   },
   {
     key: 'coinflip',

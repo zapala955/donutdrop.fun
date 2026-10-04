@@ -296,6 +296,33 @@ body {
   margin-top: 12px;
 }
 
+/* The payout console's control strip: state first, rules second, the buttons that act last. */
+.payctl {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--ob-raised);
+}
+.payctl__state {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ok);
+}
+.payctl__state[data-hold='1'] {
+  color: var(--danger);
+}
+.payctl__rules {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.grid [data-alarm='1'] {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 /* A bot the server refused a payment for lack of funds. First thing on the overview, because
    players are waiting on it and the fix is one in-game payment. */
 .shortbots {

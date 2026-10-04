@@ -16,10 +16,11 @@ type SettingGroup =
   | 'crash'
   | 'mines'
   | 'plinko'
-  | 'dice'
   | 'discord'
   | 'duels'
   | 'coinflip'
+  | 'minesduel'
+  | 'payouts'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -83,6 +84,15 @@ export const runtimeSettingDefinitions = {
     label: 'Creator programme enabled',
   },
   referralsEnabled: { kind: 'boolean', group: 'features', label: 'Referrals enabled' },
+  /* Case battles. Read on every create, join and bot fill, so flipping it closes the door at once.
+   * A player can still LEAVE a lobby and take their stake back with it off, and every open lobby
+   * is refunded by the sweeper while it stays off. */
+  battlesEnabled: { kind: 'boolean', group: 'features', label: 'Case battles open' },
+  battleBotsEnabled: {
+    kind: 'boolean',
+    group: 'features',
+    label: 'Case battles: fill with bots',
+  },
   discordFlexEnabled: { kind: 'boolean', group: 'features', label: 'Discord flex enabled' },
   /* Settles crate and upgrader prizes as cash instead of a lot. Safe to move either way: the item
    * still carries the rarity, the name and the art the reveal needs, rounds already settled are
@@ -404,30 +414,6 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
-  /* ── dice ── The edge is fixed in lib/dice.ts; these are the limits. */
-  diceEnabled: { kind: 'boolean', group: 'dice', label: 'Dice open' },
-  diceMinStakeMinor: {
-    kind: 'bigint',
-    group: 'dice',
-    label: 'Dice minimum stake',
-    min: 1n,
-    max: BIGINT_MAX,
-  },
-  diceMaxStakeMinor: {
-    kind: 'bigint',
-    group: 'dice',
-    label: 'Dice maximum stake',
-    min: 1n,
-    max: BIGINT_MAX,
-  },
-  diceMaxPayoutMinor: {
-    kind: 'bigint',
-    group: 'dice',
-    label: 'Dice maximum payout per roll (a stake whose win would pay more is refused)',
-    min: 1n,
-    max: BIGINT_MAX,
-  },
-
   /* ── discord rewards ── Paid through the community bot to accounts linked to Discord. */
   discordRewardsEnabled: { kind: 'boolean', group: 'discord', label: 'Discord rewards on' },
   discordJoinRewardMinor: {
@@ -530,6 +516,100 @@ export const runtimeSettingDefinitions = {
     label: 'Coinflip open game expiry (minutes)',
     min: 1n,
     max: 1440n,
+  },
+
+  /* ── mines duel ── The rake and the clock are snapshot onto each game as it opens, so a change
+   * only prices the next one. */
+  minesDuelEnabled: {
+    kind: 'boolean',
+    group: 'minesduel',
+    label: 'Mines Duel open',
+  },
+  minesDuelRakeBps: {
+    kind: 'integer',
+    group: 'minesduel',
+    label: 'Mines Duel rake (bps of pot)',
+    min: 0n,
+    max: 1_000n,
+  },
+  minesDuelMinStakeMinor: {
+    kind: 'bigint',
+    group: 'minesduel',
+    label: 'Mines Duel minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  minesDuelMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'minesduel',
+    label: 'Mines Duel maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  minesDuelLobbyTtlMinutes: {
+    kind: 'integer',
+    group: 'minesduel',
+    label: 'Mines Duel open game expiry (minutes)',
+    min: 1n,
+    max: 1440n,
+  },
+  minesDuelPlaySeconds: {
+    kind: 'integer',
+    group: 'minesduel',
+    label: 'Mines Duel play time (seconds both players share)',
+    min: 15n,
+    max: 600n,
+  },
+
+  /* ── payouts and the anti-drain rules ──
+   *
+   * Every one is read when a withdrawal is requested or when the monitor runs, never captured at
+   * boot. Holding a payout never takes money from a player: the wallet was debited when they
+   * asked, and a hold only decides whether the bot is told to send it yet. */
+  cashPayoutsHold: {
+    kind: 'boolean',
+    group: 'payouts',
+    label: 'HOLD ALL PAYOUTS: every withdrawal waits for a human',
+  },
+  cashApprovalThresholdMinor: {
+    kind: 'bigint',
+    group: 'payouts',
+    label: 'A single withdrawal above this waits for a human (0 = every one)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  antiDrainEnabled: {
+    kind: 'boolean',
+    group: 'payouts',
+    label: 'Anti-drain rules and monitor on',
+  },
+  antiDrainNetCashoutMinor: {
+    kind: 'bigint',
+    group: 'payouts',
+    label: 'Net cash-out per player before review (withdrawn less deposited, 0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  antiDrainHouseHourlyMinor: {
+    kind: 'bigint',
+    group: 'payouts',
+    label: 'House net outflow per hour before every payout waits (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  antiDrainWin1hMinor: {
+    kind: 'bigint',
+    group: 'payouts',
+    label: 'Player net winnings in 1 hour that earns a payout hold (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  antiDrainWin24hMinor: {
+    kind: 'bigint',
+    group: 'payouts',
+    label: 'Player net winnings in 24 hours that earns a payout hold (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
   },
 
   /* ── the vault jackpot ── */
@@ -761,6 +841,7 @@ function assertInvariants(view: AppConfig): void {
     ],
     ['Duel minimum stake', view.skillDuelMinStakeMinor, 'the maximum', view.skillDuelMaxStakeMinor],
     ['Coinflip minimum stake', view.coinflipMinStakeMinor, 'the maximum', view.coinflipMaxStakeMinor],
+    ['Mines Duel minimum stake', view.minesDuelMinStakeMinor, 'the maximum', view.minesDuelMaxStakeMinor],
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],
     ['Blackjack minimum stake', view.blackjackMinStakeMinor, 'the maximum', view.blackjackMaxStakeMinor],
@@ -769,8 +850,6 @@ function assertInvariants(view: AppConfig): void {
     ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
-    ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
-    ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */

@@ -56,6 +56,9 @@
           <button class="tab" type="button" data-panel="overview" aria-selected="true">
             Overview
           </button>
+          <button class="tab" type="button" data-panel="payouts" aria-selected="false">
+            Payouts
+          </button>
           <button class="tab" type="button" data-panel="players" aria-selected="false">
             Players
           </button>
@@ -304,6 +307,29 @@
             <div class="chips" id="botLedgerFilter" role="group" aria-label="Filter by bot"></div>
           </div>
           <div class="tablewrap"><table class="grid" id="botLedgerTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="payouts" hidden>
+          <div class="panel__head">
+            <h2>Payout queue</h2>
+            <button class="btn" type="button" data-refresh="payouts">Refresh</button>
+          </div>
+          <!-- The emergency controls and the rules in force, then the queue itself. Holding a
+               payout never takes money from a player: it only decides whether the bot is told to
+               send it yet. Built by admin.js from /v1/admin/payout-queue. -->
+          <div class="payctl" id="payControls"></div>
+          <div class="stats" id="payStats"></div>
+          <div class="panel__head panel__head--sub"><h3>Waiting for a decision or for the bot</h3></div>
+          <div class="tablewrap"><table class="grid" id="payQueueTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Players on hold</h3></div>
+          <div class="tablewrap"><table class="grid" id="payHeldTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Biggest winners</h3>
+            <div class="chips" id="payWindow" role="group" aria-label="Period"></div>
+          </div>
+          <div class="tablewrap"><table class="grid" id="payLeaderTable"></table></div>
+          <div class="panel__head panel__head--sub"><h3>Recently finished</h3></div>
+          <div class="tablewrap"><table class="grid" id="payRecentTable"></table></div>
         </section>
 
         <section class="panel" data-panel="jobs" hidden>

@@ -50,6 +50,9 @@ export function initLiveEvents() {
     once('activity', () => refreshActivity());
   });
   // Coinflip: a game opened, was taken or closed. The board refetches; the flip animates locally.
+  source.addEventListener('minesduel', () =>
+    window.dispatchEvent(new CustomEvent('donut:minesduel')),
+  );
   source.addEventListener('coinflip', () =>
     window.dispatchEvent(new CustomEvent('donut:coinflip')),
   );
@@ -69,6 +72,7 @@ export function initLiveEvents() {
     window.dispatchEvent(new CustomEvent('donut:roulette'));
     window.dispatchEvent(new CustomEvent('donut:crash'));
     window.dispatchEvent(new CustomEvent('donut:coinflip'));
+    window.dispatchEvent(new CustomEvent('donut:minesduel'));
     window.dispatchEvent(new CustomEvent('donut:rain'));
   });
 }

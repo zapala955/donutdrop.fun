@@ -3182,6 +3182,8 @@ const GROUP_LABELS = {
   plinko: 'Plinko',
   dice: 'Dice',
   discord: 'Discord rewards',
+  minesduel: 'Mines Duel',
+  payouts: 'Payouts & anti-drain',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',
@@ -3547,7 +3549,379 @@ async function publishLadder() {
   }
 }
 
+/* ═════════════════════════ payout queue ═════════════════════════
+ *
+ * The anti-drain console. Everything here is a view of /v1/admin/payout-queue and a handful of
+ * writes, each with a reason that lands in the audit log. A hold never takes money from a player:
+ * the wallet was debited when they asked, and a hold only decides whether the bot is told to send
+ * it yet. */
+
+const payoutState = { window: '24h' };
+const WINDOWS = [
+  ['24h', '24 hours'],
+  ['7d', '7 days'],
+  ['30d', '30 days'],
+  ['all', 'All time'],
+];
+
+function ageText(at) {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(at).getTime()) / 1000));
+  if (seconds < 90) return `${seconds}s`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 172800) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+const signedAmount = (minor) => {
+  const value = BigInt(minor ?? 0);
+  return (value > 0n ? '+' : '') + compactAmount(value);
+};
+
+async function setRuntimeSwitch(key, value, message) {
+  const reason = await confirmAction(message);
+  if (!reason) return;
+  await api.patch('/v1/admin/runtime-settings', { settings: { [key]: value }, reason });
+  toast('Applied immediately.');
+  await loadPayoutQueue();
+}
+
+function renderPayControls(data) {
+  const host = $('payControls');
+  host.replaceChildren();
+  const settings = data.settings;
+
+  const state = document.createElement('p');
+  state.className = 'payctl__state';
+  state.dataset.hold = settings.holdAll ? '1' : '0';
+  state.textContent = settings.holdAll
+    ? 'ALL PAYOUTS ARE ON HOLD. Every withdrawal waits here for a human.'
+    : settings.antiDrainEnabled
+      ? 'Payouts are live. Anti-drain rules are on: a request that trips one waits here for a human.'
+      : 'Payouts are live and the anti-drain rules are OFF.';
+
+  const rules = document.createElement('p');
+  rules.className = 'payctl__rules faint';
+  const off = (value) => (BigInt(value) === 0n ? 'off' : compactAmount(value));
+  rules.textContent =
+    `One request over ${BigInt(settings.approvalThresholdMinor) === 0n ? 'any amount' : compactAmount(settings.approvalThresholdMinor)} · ` +
+    `net cash-out per player ${off(settings.netCashoutMinor)} · house net outflow per hour ${off(settings.houseHourlyMinor)} · ` +
+    `player winnings ${off(settings.win1hMinor)} in 1h / ${off(settings.win24hMinor)} in 24h earn a hold. ` +
+    'Change them in System → Payouts & anti-drain.';
+
+  const buttons = document.createElement('div');
+  buttons.className = 'rowacts';
+  buttons.append(
+    button(
+      settings.holdAll ? 'Resume automatic payouts' : 'HOLD ALL PAYOUTS',
+      () =>
+        setRuntimeSwitch(
+          'cashPayoutsHold',
+          !settings.holdAll,
+          settings.holdAll
+            ? 'Resume sending payouts to the bot automatically? Requests already waiting here stay here until you approve them.'
+            : 'Hold ALL payouts? Every new withdrawal will wait here for a human. Players keep their balance and can keep playing.',
+        ),
+      { danger: !settings.holdAll },
+    ),
+    button(
+      'Pull queued payouts back to review',
+      async (node) => {
+        const reason = await confirmAction(
+          'Pull every payout that has not reached the bot yet back into this queue? Payouts the bot is already sending are not touched.',
+        );
+        if (!reason) return;
+        node.disabled = true;
+        const result = await api.post('/v1/admin/cash-withdrawals/hold-queued', { reason });
+        toast(`Pulled back ${result.held}; ${result.skipped} could not be (already with the bot or vault-funded).`);
+        await loadPayoutQueue();
+      },
+      { danger: true },
+    ),
+    button(
+      settings.battlesEnabled ? 'Turn case battles OFF' : 'Turn case battles ON',
+      () =>
+        setRuntimeSwitch(
+          'battlesEnabled',
+          !settings.battlesEnabled,
+          settings.battlesEnabled
+            ? 'Close case battles? Nobody can host, join or fill with bots, and every open lobby is refunded within seconds.'
+            : 'Open case battles again? Only do this once the payout bug is confirmed fixed on this deploy.',
+        ),
+      { danger: settings.battlesEnabled },
+    ),
+  );
+  host.append(state, rules, buttons);
+}
+
+function renderPayStats(data) {
+  const by = data.totals.byStatus;
+  const part = (...names) => {
+    let count = 0;
+    let amount = 0n;
+    for (const name of names) {
+      count += by[name]?.count ?? 0;
+      amount += BigInt(by[name]?.amountMinor ?? 0);
+    }
+    return { count, amount };
+  };
+  const waiting = part('pending_approval');
+  const bot = part('queued', 'awaiting_vault', 'processing');
+  const review = part('manual_review');
+  const teller = data.bots.find((entry) => entry.role === 'teller');
+  const vault = data.bots.find((entry) => entry.role === 'vault');
+  renderStats($('payStats'), [
+    [
+      'Waiting for you',
+      `${waiting.count} · ${compactAmount(waiting.amount)}`,
+      waiting.count > 0,
+      amountText(waiting.amount),
+    ],
+    [
+      'With the bot',
+      `${bot.count} · ${compactAmount(bot.amount)}`,
+      false,
+      amountText(bot.amount),
+    ],
+    ['Needs checking', `${review.count} · ${compactAmount(review.amount)}`, review.count > 0],
+    [
+      'Paid, last 24h',
+      `${data.totals.paid24h.count} · ${compactAmount(data.totals.paid24h.amountMinor)}`,
+      false,
+      amountText(data.totals.paid24h.amountMinor),
+    ],
+    [
+      'House net outflow, 1h',
+      signedAmount(data.totals.houseNetOutflowHourMinor),
+      BigInt(data.settings.houseHourlyMinor) > 0n &&
+        BigInt(data.totals.houseNetOutflowHourMinor) >= BigInt(data.settings.houseHourlyMinor),
+      'Cash sent out less cash that came in, staff excluded. A request waiting here has not gone anywhere and is not counted.',
+    ],
+    [
+      'Teller · vault hold',
+      `${teller ? compactAmount(teller.trackedBalanceMinor) : '—'} · ${vault ? compactAmount(vault.trackedBalanceMinor) : '—'}`,
+    ],
+  ]);
+}
+
+function riskCell(player, settings) {
+  const td = document.createElement('td');
+  td.className = 'wrap';
+  const out = BigInt(player.withdrawnMinor);
+  const inn = BigInt(player.depositedMinor);
+  const net = out - inn;
+  const first = document.createElement('div');
+  first.textContent = `balance ${compactAmount(player.balanceMinor)} · in ${compactAmount(inn)} · out ${compactAmount(out)}`;
+  const second = document.createElement('div');
+  second.textContent = `24h ${signedAmount(player.result24hMinor)} · all time ${signedAmount(player.resultAllMinor)} · net out ${signedAmount(net)}`;
+  const hot =
+    (BigInt(settings.win24hMinor) > 0n && BigInt(player.result24hMinor) >= BigInt(settings.win24hMinor)) ||
+    (BigInt(settings.netCashoutMinor) > 0n && net > BigInt(settings.netCashoutMinor));
+  if (hot) second.dataset.alarm = '1';
+  td.append(first, second);
+  return td;
+}
+
+async function holdPlayer(userId, name) {
+  const reason = await confirmAction(
+    `Hold payouts for ${name}? Their next withdrawal waits for you, and anything they have queued for the bot is pulled back. Their balance and play are untouched.`,
+  );
+  if (!reason) return;
+  const result = await api.post(`/v1/admin/users/${userId}/payout-hold`, { reason });
+  toast(`${name} is on hold. Pulled back ${result.pulledBack} queued payout(s).`);
+  await loadPayoutQueue();
+}
+
+function renderPayQueue(data) {
+  table(
+    $('payQueueTable'),
+    ['Waiting', 'Player', 'Amount', 'State', 'Why', 'Player', ''],
+    data.queue,
+    (item) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(ageText(item.createdAt)), cell(item.name));
+      const amount = cell(amountText(item.amountMinor), { mono: true });
+      amount.title = `Pays ${item.payee} in game`;
+      tr.append(amount);
+      const state = document.createElement('td');
+      const parked = item.job?.held === true;
+      state.append(
+        pill(
+          item.status === 'pending_approval'
+            ? parked
+              ? 'pulled back'
+              : 'needs a decision'
+            : item.status === 'queued'
+              ? 'with the bot queue'
+              : item.status === 'processing'
+                ? 'bot is sending'
+                : item.status === 'awaiting_vault'
+                  ? 'waiting for the vault'
+                  : item.status,
+          item.status === 'manual_review' ? 'bad' : item.status === 'pending_approval' ? 'warn' : 'ok',
+        ),
+      );
+      tr.append(state);
+      const why = document.createElement('td');
+      why.className = 'wrap';
+      why.textContent = item.reviewReason ?? item.holdReason ?? '—';
+      tr.append(why, riskCell(item.player, data.settings));
+
+      const buttons = [];
+      if (item.status === 'pending_approval') {
+        buttons.push(
+          button('Approve', async (node) => {
+            const reason = await confirmAction(
+              `Approve ${amountText(item.amountMinor)} to ${item.payee}? The bot is told to send it.`,
+            );
+            if (!reason) return;
+            node.disabled = true;
+            await api.post(`/v1/admin/cash-withdrawals/${item.id}/approve`, { reason });
+            toast('Approved and queued for the bot.');
+            await loadPayoutQueue();
+          }),
+          button(
+            'Reject & refund',
+            async (node) => {
+              const reason = await confirmAction(
+                `Reject this payout and return ${amountText(item.amountMinor)} to ${item.name}'s wallet?`,
+              );
+              if (!reason) return;
+              node.disabled = true;
+              await api.post(`/v1/admin/cash-withdrawals/${item.id}/reject`, { reason });
+              toast('Rejected and refunded.');
+              await loadPayoutQueue();
+            },
+            { danger: true },
+          ),
+        );
+      }
+      if (item.status === 'queued' && item.funding !== 'vault' && !parked && item.job?.status === 'queued') {
+        buttons.push(
+          button(
+            'Hold',
+            async (node) => {
+              const reason = await confirmAction(
+                `Pull ${amountText(item.amountMinor)} for ${item.name} back from the bot into review?`,
+              );
+              if (!reason) return;
+              node.disabled = true;
+              await api.post(`/v1/admin/cash-withdrawals/${item.id}/hold`, { reason });
+              toast('Pulled back for review.');
+              await loadPayoutQueue();
+            },
+            { danger: true },
+          ),
+        );
+      }
+      if (item.status === 'manual_review') {
+        const note = document.createElement('span');
+        note.className = 'faint';
+        note.textContent = 'Resolve in the Economy tab';
+        buttons.push(note);
+      }
+      if (!item.holdReason && ['pending_approval', 'queued'].includes(item.status)) {
+        buttons.push(button('Hold player', () => holdPlayer(item.userId, item.name)));
+      }
+      tr.append(actions(...buttons));
+      return tr;
+    },
+  );
+}
+
+function renderPayHeld(data) {
+  table($('payHeldTable'), ['Player', 'Why', 'Since', 'By', ''], data.held, (row) => {
+    const tr = document.createElement('tr');
+    const why = document.createElement('td');
+    why.className = 'wrap';
+    why.textContent = row.reason;
+    tr.append(cell(row.name), why, cell(row.at), cell(row.by ?? 'anti-drain monitor'));
+    tr.append(
+      actions(
+        button('Release', async (node) => {
+          const reason = await confirmAction(
+            `Lift the payout hold on ${row.name}? Withdrawals already waiting stay in the queue until you approve them.`,
+          );
+          if (!reason) return;
+          node.disabled = true;
+          await api.post(`/v1/admin/users/${row.userId}/payout-release`, { reason });
+          toast(`${row.name} released.`);
+          await loadPayoutQueue();
+        }),
+      ),
+    );
+    return tr;
+  });
+}
+
+function renderPayLeaders(data) {
+  const chips = $('payWindow');
+  chips.replaceChildren();
+  for (const [value, label] of WINDOWS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = label;
+    chip.setAttribute('aria-pressed', String(payoutState.window === value));
+    chip.addEventListener('click', () => {
+      payoutState.window = value;
+      loadPayoutQueue().catch((error) => toast(`${error.code}: ${error.message}`, 'bad'));
+    });
+    chips.append(chip);
+  }
+  table(
+    $('payLeaderTable'),
+    ['Player', 'Net winnings', 'Balance', 'Status', ''],
+    data.leaders,
+    (row) => {
+      const tr = document.createElement('tr');
+      const net = cell(signedAmount(row.netMinor), { mono: true });
+      net.title = amountText(row.netMinor);
+      tr.append(cell(row.name), net, cell(compactAmount(row.balanceMinor), { mono: true }));
+      const status = document.createElement('td');
+      status.append(
+        row.holdReason
+          ? pill('payout hold', 'warn')
+          : row.status === 'active'
+            ? pill('active', 'ok')
+            : pill(row.status, 'bad'),
+      );
+      tr.append(
+        status,
+        actions(...(row.holdReason ? [] : [button('Hold player', () => holdPlayer(row.userId, row.name))])),
+      );
+      return tr;
+    },
+  );
+}
+
+function renderPayRecent(data) {
+  table($('payRecentTable'), ['When', 'Player', 'Amount', 'Result'], data.recent, (row) => {
+    const tr = document.createElement('tr');
+    tr.append(cell(row.at), cell(row.name), cell(amountText(row.amountMinor), { mono: true }));
+    const result = document.createElement('td');
+    result.append(
+      pill(
+        row.errorCode && row.status !== 'paid' ? `${row.status} · ${row.errorCode}` : row.status,
+        row.status === 'paid' ? 'ok' : row.status === 'rejected' ? 'warn' : 'bad',
+      ),
+    );
+    tr.append(result);
+    return tr;
+  });
+}
+
+async function loadPayoutQueue() {
+  const data = await api.get(`/v1/admin/payout-queue?window=${payoutState.window}`);
+  renderPayControls(data);
+  renderPayStats(data);
+  renderPayQueue(data);
+  renderPayHeld(data);
+  renderPayLeaders(data);
+  renderPayRecent(data);
+}
+
 const LOADERS = {
+  payouts: loadPayoutQueue,
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
   economy: loadEconomy,

@@ -1310,6 +1310,15 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
             WHERE id = $1`,
           [params.id, actor],
         );
+        /* A payout the operator pulled back from the bot left its job parked in bot_jobs (see
+         * lib/anti-drain.ts). The money is refunded, so that job must never run: retire it. A job
+         * that does not exist, or that is not a parked one, is simply not touched. */
+        await client.query(
+          `UPDATE bot_jobs SET status = 'failed', last_error_code = 'REJECTED_BY_ADMIN',
+                  updated_at = now()
+            WHERE kind = 'cash_payout' AND reference_id = $1 AND status = 'queued'`,
+          [params.id],
+        );
         await appendAudit(client, config, {
           actorUserId: actor,
           action: 'cash_withdrawal.reject',

@@ -200,8 +200,8 @@ function gameCell(play) {
             : kind === 'crash' ? '\u2197'
               : kind === 'mines' ? '\u25C6'
                 : kind === 'plinko' ? '\u25CF'
-                : kind === 'dice' ? '\u2684'
                 : kind === 'coinflip' ? '\u25D0'
+                : kind === 'minesduel' ? '\u25A6'
                 : '\u2694';
   const node = cell('feedrow__game', '');
   const chip = el('span', 'gamechip');
@@ -274,8 +274,8 @@ function gameLabel(play) {
   if (kind === 'crash') return 'Crash';
   if (kind === 'mines') return 'Mines';
   if (kind === 'plinko') return 'Plinko';
-  if (kind === 'dice') return 'Dice';
   if (kind === 'coinflip') return 'Coinflip';
+  if (kind === 'minesduel') return 'Mines Duel';
   return play.sourceName || play.source_name || 'Round';
 }
 

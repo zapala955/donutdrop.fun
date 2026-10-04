@@ -51,7 +51,7 @@ export type ContributionSource =
   | 'mines'
   | 'plinko'
   | 'coinflip'
-  | 'dice';
+  | 'mines_duel';
 
 /**
  * Advances every enabled quest that watches this metric, for the current UTC day.

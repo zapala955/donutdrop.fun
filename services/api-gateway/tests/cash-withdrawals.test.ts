@@ -79,8 +79,8 @@ function fakeDb(options: {
     if (sql.includes('FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key')) {
       return result([]);
     }
-    if (sql.includes('SELECT status FROM users WHERE id = $1 FOR UPDATE')) {
-      return result([{ status: 'active' }]);
+    if (sql.includes('SELECT status, payout_hold_reason FROM users WHERE id = $1 FOR UPDATE')) {
+      return result([{ status: 'active', payout_hold_reason: null }]);
     }
     if (sql.includes('AS retry_after_seconds')) {
       return options.cooldownSeconds === undefined
@@ -229,7 +229,9 @@ describe('cash withdrawals', () => {
      * status is read inside the transaction that is about to debit this wallet, because reading it
      * outside is how an account gets suspended in the gap between the check and the debit. */
     const { statements } = await post({ balance: 5_000_000n }, '1000000');
-    const eligibility = statements.find(({ sql }) => sql.includes('SELECT status FROM users'));
+    const eligibility = statements.find(({ sql }) =>
+      sql.includes('SELECT status, payout_hold_reason FROM users'),
+    );
     assert.ok(eligibility, 'no eligibility query was issued');
     assert.match(eligibility.sql, /FOR UPDATE/);
     for (const { sql } of statements) {
@@ -306,12 +308,15 @@ describe('cash withdrawals', () => {
     );
   });
 
-  it('queues the bot job itself when the amount is under the ceiling', async () => {
-    const { response, statements } = await post({ balance: 900_000_000n }, '500000000');
+  it('queues the bot job itself when the amount is under every limit', async () => {
+    /* Under the single-request ceiling AND under the net cash-out allowance, which counts what a
+     * player has taken out against what they have put in: with no deposits on record, a request
+     * of the full ceiling is no longer waved through (see tests/anti-drain.test.ts). */
+    const { response, statements } = await post({ balance: 900_000_000n }, '90000000');
     assert.equal(response.withdrawal.status, 'queued');
     const job = statements.find(({ sql }) => sql.includes('INSERT INTO bot_jobs'));
     assert.ok(job, 'no job queued');
-    assert.match(String(job.values[3]), /"amountMinor":"500000000"/);
+    assert.match(String(job.values[3]), /"amountMinor":"90000000"/);
   });
 
   it('turns the one-live-payout index into a conflict rather than a 500', async () => {

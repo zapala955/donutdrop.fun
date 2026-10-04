@@ -200,8 +200,11 @@ export interface BattleOutcome {
   readonly winningSeats: readonly number[];
   /** Total of every drop across every reel — the pot. */
   readonly potMinor: bigint;
-  /** What each winning seat receives. Sums exactly to potMinor. */
+  /** What each winning HUMAN seat receives. Paid plus retained sums exactly to potMinor. */
   readonly payouts: ReadonlyMap<number, bigint>;
+  /** The part of the pot nobody is paid: the shares of winning bot seats, and the whole pot
+   *  when no human is on a winning team. It stays with the house. */
+  readonly retainedMinor: bigint;
   /** Per-team totals, for the scoreboard. */
   readonly teamTotals: ReadonlyMap<number, bigint>;
 }
@@ -258,38 +261,53 @@ export function resolveBattle(
   const winners = [...teamTotals.keys()].filter((team) => (teamTotals.get(team) ?? 0n) === best);
   const winningTeam = winners[0] ?? 0;
 
-  /* Only human seats on a winning team are paid. A 2v2 with one bot partner pays the whole team
-   * share to the human, rather than burning half of it. */
-  const winningSeats = seatTotals
-    .filter((entry) => winners.includes(entry.team) && !botSeats.has(entry.seat))
+  /* EVERY seat on a winning team takes a share of the pot, the bot seats included.
+   *
+   * The pot is the sum of what every reel dropped, bot reels among them, and each seat on the
+   * winning side is entitled to an equal part of it. A bot is not paid -- it has no wallet -- so
+   * its part stays with the house.
+   *
+   * This used to hand a bot's part to the human instead ("rather than burning half of it"), and
+   * that was a money printer. In a 2v2 or a 2v2v2 the host fills the empty seats with bots, the
+   * bot seated beside them is their teammate, and a win paid the whole pot -- four reels, three of
+   * them free -- for the price of one entry: about 180% back on every game, repeatable by script
+   * for as long as the house had money. The same rule paid a tie against a bot the full pot rather
+   * than half of it, which is a smaller version of the same hole.
+   *
+   * With the part retained the expectation is the crates' own 90% at every table, bots or not:
+   * each seat has the same chance of winning and the same share of what it wins. */
+  const winningSeatsAll = seatTotals
+    .filter((entry) => winners.includes(entry.team))
     .map((entry) => entry.seat)
     .sort((left, right) => left - right);
+  const winningSeats = winningSeatsAll.filter((seat) => !botSeats.has(seat));
 
   /* Integer division leaves a remainder that has to go somewhere, or the pot does not balance.
-   * It goes to the earliest seat — an arbitrary but DETERMINISTIC rule, which is the property
-   * that matters: the same battle settles the same way however many times it is recomputed. */
+   * It goes to the earliest human seat -- an arbitrary but DETERMINISTIC rule, which is the
+   * property that matters: the same battle settles the same way however many times it is
+   * recomputed. With no human winner it stays with the house like everything else. */
+  const share = potMinor / BigInt(winningSeatsAll.length);
+  const remainder = potMinor - share * BigInt(winningSeatsAll.length);
   const payouts = new Map<number, bigint>();
-  if (winningSeats.length > 0) {
-    const share = potMinor / BigInt(winningSeats.length);
-    const remainder = potMinor - share * BigInt(winningSeats.length);
-    winningSeats.forEach((seat, index) => {
-      payouts.set(seat, index === 0 ? share + remainder : share);
-    });
-  }
+  winningSeats.forEach((seat, index) => {
+    payouts.set(seat, index === 0 ? share + remainder : share);
+  });
 
-  /* The pot is paid out in full, or not at all.
+  /* Paid plus retained is the pot, to the penny, or the battle does not settle.
    *
-   * "Not at all" is the bot-wins case: there is no human on the winning team, so the stakes stay
-   * with the house exactly as they do when a player loses any other wager. Every other case must
-   * still balance to the penny — that check is what stops a battle minting money or losing it, and
-   * relaxing it into an inequality would have quietly permitted both. */
+   * What is retained is exactly the winning bots' shares (and, when no human wins, the whole
+   * pot). That check is what stops a battle minting money or losing it, and relaxing it into an
+   * inequality would have quietly permitted both. */
   const paid = [...payouts.values()].reduce((sum, value) => sum + value, 0n);
-  const expected = winningSeats.length > 0 ? potMinor : 0n;
-  if (paid !== expected) {
-    throw new Error(`battle payout ${paid} does not balance against an expected ${expected}`);
+  const botShares = share * BigInt(winningSeatsAll.length - winningSeats.length);
+  const retainedMinor = winningSeats.length > 0 ? botShares : potMinor;
+  if (paid + retainedMinor !== potMinor) {
+    throw new Error(
+      `battle payout ${paid} plus retained ${retainedMinor} does not balance against a pot of ${potMinor}`,
+    );
   }
 
-  return { winningTeam, winningSeats, potMinor, payouts, teamTotals };
+  return { winningTeam, winningSeats, potMinor, payouts, retainedMinor, teamTotals };
 }
 
 /**
