@@ -162,10 +162,14 @@ async function fakeUpgraderSpin(won, opts) {
  * browser: it keeps the bench off players' screens, it is not a permission. That is acceptable
  * because nothing behind it reaches the server — the tests replay animations and nothing more.
  *
- * The test login is outside the gate on purpose. The account it signs into is forced to the
- * player role by the backend, so gating it would lock the bench's own login out of the bench,
- * and without DEV_LOGIN_TOKEN it does nothing anyway. */
-const isStaff = () => state.authenticated && state.user?.role === 'admin';
+ * The test login is outside the gate on purpose, and the account it signs into counts as staff.
+ * The backend forces that account to the player role, so a gate on the role alone hid every test
+ * from the bench's own login — the one account the bench exists to be used with. It is recognised
+ * by its `dev:` identity, which only /v1/dev/login mints, and that route does not exist in
+ * production: the backend refuses to start with developer login enabled there. */
+const isStaff = () => state.authenticated && (
+  state.user?.role === 'admin' || String(state.user?.minecraftIdentity ?? '').startsWith('dev:')
+);
 
 let root = null;
 let open = false;
@@ -197,7 +201,8 @@ export function initDevMenu(mount) {
       </p>
 
       <p class="devpanel__note" data-guest-only>
-        The animation tests are for staff accounts. Sign in with one to see them.
+        The animation tests are for staff accounts and the test login below. Sign in with
+        either to see them.
       </p>
 
       <label class="devpanel__field" data-staff-only>

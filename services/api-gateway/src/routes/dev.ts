@@ -130,11 +130,6 @@ export async function registerDevRoutes(app: FastifyInstance, db: Database, conf
           user.role = 'player';
         }
 
-        await client.query(
-          'SELECT 1',
-          [user.id],
-        );
-
         // One live session at a time keeps the test account from accumulating stale sessions
         // every time the button is pressed.
         await client.query(
