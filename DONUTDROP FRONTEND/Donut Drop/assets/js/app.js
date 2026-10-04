@@ -13,7 +13,7 @@ import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
 } from './util.js';
 import {
-  toast, initModal, initWallet, initHints, broadcast,
+  toast, initModal, initWallet, initHints, initHeaderFit, broadcast,
   openModal, closeModal,
 } from './ui.js';
 import { API_BASE_URL } from './api.js';
@@ -1255,6 +1255,8 @@ $('#skipToMain')?.addEventListener('click', () => {
 /* The level pill. Owns its own bus subscription, so it repaints on every snapshot without the
  * router having to remember it. */
 initVipWidget();
+/* After everything that fills the header, so its first fit measures the real labels. */
+initHeaderFit();
 initChat();
 initVaultJackpot(document.getElementById('vaultJackpot'));
 initAudioEngine();

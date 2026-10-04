@@ -175,6 +175,58 @@ export function initWallet() {
   paint();
 }
 
+/* ─────────── header fit ───────────
+ * The desktop header is one row: brand, the nav, then the wallet cluster, which never shrinks. Its
+ * width is not knowable ahead of time -- a VIP label runs from "BRONZE I" to "HIGH ROLLER V", a
+ * username from 3 to 16 characters, a balance from $0 to $1.2B -- and the nav, which does shrink,
+ * scrolls with its scrollbar hidden. So a signed-in high roller on a 1536px screen (1920 at 125%)
+ * lost the Discord pill off the end of the nav, and at 1280px the invite pill went with it, with
+ * nothing on screen saying anything was missing.
+ *
+ * Breakpoints cannot fix that, because what decides the fit is the content. This measures instead:
+ * while the nav overflows, the header sheds the next label in order of least use, and stops the
+ * moment everything fits. Every step keeps the control and drops only words or decoration, except
+ * the level pill and the mute toggle, which both live one tap away in the account menu (the phone
+ * header drops them for the same reason). Only if all of it is not enough does the nav scroll, and
+ * then its edge fades so the cut is visible. */
+const HEADER_STEPS = ['dc', 'ref', 'bar', 'tag', 'name', 'mute', 'lvl', 'brand', 'money'];
+export function initHeaderFit() {
+  const top = $('.top');
+  const tabs = top?.querySelector('.tabs');
+  if (!top || !tabs) return;
+  const desktop = window.matchMedia('(min-width: 1081px)');
+  const fits = () => tabs.scrollWidth <= tabs.clientWidth + 1;
+  const fit = () => {
+    if (!desktop.matches) {
+      delete top.dataset.squeeze;
+      delete top.dataset.overflow;
+      return;
+    }
+    const shed = [];
+    top.dataset.squeeze = '';
+    for (const step of HEADER_STEPS) {
+      if (fits()) break;
+      shed.push(step);
+      top.dataset.squeeze = shed.join(' ');
+    }
+    top.dataset.overflow = fits() ? '0' : '1';
+  };
+  /* Refit when the bar or anything in it changes size: the window, a balance gaining a digit, the
+   * level label changing, the invite figure arriving. A refit settles in one more pass at most --
+   * the second measure lands on the same steps -- so this cannot loop. */
+  let frame = 0;
+  const schedule = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(fit);
+  };
+  const observer = new ResizeObserver(schedule);
+  for (const node of [top, top.querySelector('.wallet'), top.querySelector('.brand'), ...tabs.children]) {
+    if (node) observer.observe(node);
+  }
+  desktop.addEventListener('change', schedule);
+  fit();
+}
+
 /* ─────────── item detail ───────────
  * Catalog details are read-only; inventory actions live on the Inventory page. */
 /* itemSheet is retired along with inventory: nothing in a cash-only platform hands the player an

@@ -463,6 +463,35 @@ html {
   }
 }
 
+/* ── the header, fitted ──
+   ui.js measures the bar and names, in `data-squeeze`, each label the header has had to shed for
+   everything to fit on one row, least-used first. Desktop only: the phone and tablet header is a
+   different layout with its own rules (mobile.css). Each step drops words or decoration and keeps
+   the control, except the level pill and the mute toggle, which both live in the account menu. */
+@media (min-width: 1081px) {
+  .top[data-squeeze~="dc"] .tabs .navdc__txt { display: none; }
+  .top[data-squeeze~="dc"] .tabs .navdc { padding: 7px 10px; }
+  .top[data-squeeze~="ref"] .tabs .navref__txt b { display: none; }
+  .top[data-squeeze~="bar"] .lvl__bar { display: none; }
+  .top[data-squeeze~="tag"] .lvl__n::before { content: none; }
+  .top[data-squeeze~="name"] #loginLabel { display: none; }
+  .top[data-squeeze~="name"] #loginBtn { padding-inline: 10px; }
+  .top[data-squeeze~="mute"] .mute { display: none; }
+  .top[data-squeeze~="lvl"] .lvl,
+  .top[data-squeeze~="lvl"] .lvl__tip { display: none; }
+  .top[data-squeeze~="brand"] .brand__txt { display: none; }
+  .top[data-squeeze~="money"] #depositBtn span,
+  .top[data-squeeze~="money"] #withdrawBtn span { display: none; }
+  .top[data-squeeze~="money"] #depositBtn,
+  .top[data-squeeze~="money"] #withdrawBtn { padding-inline: 10px; }
+  /* Everything shed and it still does not fit: the nav scrolls, and its end fades out so the cut
+     reads as "there is more" rather than as a broken pill. */
+  .top[data-overflow="1"] .tabs {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+}
+
 /* ── the invite badge ──
    It pulses again. It was switched off in matte.css, and the reason was sound: the version before
    that animated its own box-shadow spread, and a spreading shadow on an inline-flex item inside a
