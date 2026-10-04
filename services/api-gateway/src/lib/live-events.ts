@@ -121,6 +121,11 @@ export async function registerLiveEventRoutes(
     async (request, reply) => {
       reply.hijack();
       reply.raw.writeHead(200, {
+        /* A hijacked reply bypasses Fastify's own header flush, so the CORS headers @fastify/cors
+         * has already set on it would be dropped. Same-origin production never noticed; the local
+         * setup (page on APP_ORIGIN, API on another port) lost every live event to the browser's
+         * CORS check, and with it the balance, feed and table updates. */
+        ...(reply.getHeaders() as Record<string, string | string[]>),
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache, no-transform',
         connection: 'keep-alive',
