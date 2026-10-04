@@ -27,12 +27,15 @@
  * and lobby codes are all server-supplied values.
  */
 import { api, API_BASE_URL } from './api.js';
-import { state, bus, refreshBalance, refreshCases, normalizeItem } from './store.js';
+import {
+  state, bus, refreshBalance, refreshActivity, refreshCases, normalizeItem, holdLiveFigures,
+  showBalance,
+} from './store.js';
 import { $, el, money, safeImage, grouped, reduceMotion } from './util.js';
 import { bezier, span } from './fx.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { navigate } from './routing.js';
+import { navigate, onNavigate } from './routing.js';
 
 /* The winner sits at WIN_AT with the rest of the strip as runway behind it. The reels now span the
  * board's full width, so the runway has to cover half of a wide reel or the strip visibly runs out
@@ -93,6 +96,36 @@ let reconnectTimer = 0;
 let frame = 0;
 let finishedTimer = 0;
 
+/* ─────────────────────────── holding the wallet still ───────────────────────────
+ *
+ * A battle is settled — and its winners paid — the instant the last seat fills, seconds before
+ * the first reel moves. The server's balance event then moved the wallet pill straight away, so the
+ * winner watched their own payout land in the header and then sat through the reels that were
+ * supposed to tell them. While the viewer has a seat in a battle whose result has not been shown,
+ * the live figures are held; they are released, and refreshed, when the reels stop or the player
+ * leaves the page. */
+let seatHold = null;
+
+function holdForBattle(battle) {
+  if (seatHold || !battle?.seats?.some((seat) => seat.isYou) || isRevealed(battle)) return;
+  seatHold = holdLiveFigures();
+}
+
+function releaseBattleHold() {
+  if (!seatHold) return false;
+  seatHold();
+  seatHold = null;
+  refreshBalance().catch(() => undefined);
+  refreshActivity().catch(() => undefined);
+  return true;
+}
+
+/* Views are hidden, not removed, when the player navigates away — a hold kept past that point
+ * would freeze the wallet on every other page until they came back. */
+onNavigate(() => {
+  if (seatHold && root?.closest('.view')?.hidden) releaseBattleHold();
+});
+
 export function mountBattles(node) {
   root = $('#battleRoot', node);
   if (!root) return;
@@ -132,6 +165,7 @@ export function mountBattles(node) {
 export function stopBattles() {
   if (frame) cancelAnimationFrame(frame);
   frame = 0;
+  releaseBattleHold();
   if (finishedTimer) clearTimeout(finishedTimer);
   finishedTimer = 0;
   if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -244,7 +278,33 @@ function handle(message) {
 
 /* ─────────────────────────── data ─────────────────────────── */
 
-async function refreshLobbies() {
+/* Coalesces a burst of calls into at most one request per window: the first runs at once, the
+ * rest collapse into a single trailing run. Every lobby event used to fetch, and a busy lobby emits
+ * several a second — enough to walk a spectator into the API's per-user rate limit, at which point
+ * their own Join is the request that gets refused. */
+function coalesce(fn, windowMs) {
+  let last = 0;
+  let trailing = 0;
+  return () => {
+    const wait = last + windowMs - Date.now();
+    if (wait <= 0) {
+      last = Date.now();
+      void fn();
+      return;
+    }
+    if (trailing) return;
+    trailing = window.setTimeout(() => {
+      trailing = 0;
+      last = Date.now();
+      void fn();
+    }, wait);
+  };
+}
+
+const refreshLobbies = coalesce(fetchLobbies, 1_000);
+const refreshFinished = coalesce(fetchFinished, 3_000);
+
+async function fetchLobbies() {
   try {
     const result = await api.get('/v1/battles?status=lobby&limit=24');
     view.lobbies = result.battles ?? [];
@@ -254,7 +314,7 @@ async function refreshLobbies() {
 
 /* Started battles for the Live and Recent lists. Public ones only: the list endpoint also returns
  * private battles once they have settled, and a private lobby's result is not this page's to show. */
-async function refreshFinished() {
+async function fetchFinished() {
   try {
     const result = await api.get('/v1/battles?status=settled&limit=12');
     splitFinished((result.battles ?? []).filter((battle) => battle.visibility === 'public'));
@@ -324,6 +384,7 @@ function applyBattle(battle) {
   if (!battle) return;
   view.battle = battle;
   if (battle.schedule) view.schedule = battle.schedule;
+  holdForBattle(battle);
   paint();
 }
 
@@ -335,6 +396,7 @@ function goLobby() {
   view.schedule = null;
   if (frame) cancelAnimationFrame(frame);
   frame = 0;
+  releaseBattleHold();
   navigate('/battles');
   refreshLobbies();
   paint();
@@ -510,7 +572,7 @@ function battleCard(battle, kind) {
       : full ? 'Watch' : `Join · ${money(Number(battle.entryCostMinor))}`;
   action.addEventListener('click', () => {
     if (kind === 'live' || mine || full) navigate(`/battles?code=${encodeURIComponent(battle.code)}`);
-    else joinBattle(battle.code);
+    else joinBattle(battle.code, battle.entryCostMinor);
   });
   foot.append(host, action);
 
@@ -1077,7 +1139,7 @@ function emptySeat(battle) {
     const join = el('button', 'btn btn--go');
     join.type = 'button';
     join.textContent = `Take this seat · ${money(Number(battle.entryCostMinor))}`;
-    join.addEventListener('click', () => joinBattle(battle.code));
+    join.addEventListener('click', () => joinBattle(battle.code, battle.entryCostMinor));
     empty.appendChild(join);
   }
   return empty;
@@ -1540,6 +1602,9 @@ function reveal(battle, watched) {
   if (battle.status !== 'settled' || announced === battle.code) return;
   announced = battle.code;
   paintArena();
+  /* Released before the replay check: a battle that finished while the tab was hidden reaches
+   * here on its first frame, and still has to hand the wallet back. */
+  const held = releaseBattleHold();
   if (!watched) return;   // a replay, not a result
 
   const mine = battle.seats.find((seat) => seat.isYou);
@@ -1553,7 +1618,7 @@ function reveal(battle, watched) {
       ? `+${money(Number(mine.payoutMinor))} from a ${money(Number(battle.potMinor))} pot`
       : `Team ${battle.winningTeam + 1} took ${money(Number(battle.potMinor))}`,
   });
-  refreshBalance().catch(() => undefined);
+  if (!held) refreshBalance().catch(() => undefined);
 }
 
 /* ─────────────────────────── actions ─────────────────────────── */
@@ -1585,17 +1650,23 @@ async function createBattle() {
   }
 }
 
-async function joinBattle(code) {
+async function joinBattle(code, entryCostMinor) {
   if (!state.authenticated) {
     $('#loginBtn')?.click();
     return;
   }
+  /* Taken before the request: taking the last seat settles the battle inside this very call, and
+   * the server's balance event can arrive ahead of its HTTP answer. Only the stake is shown leaving
+   * the wallet; whatever the battle pays waits for the reels. */
+  const before = BigInt(state.balanceMinor || '0');
+  holdForBattle({ seats: [{ isYou: true }] });
   try {
     await api.post(`/v1/battles/${encodeURIComponent(code)}/join`, { clientSeed: randomSeed() });
     playSound('coin');
-    await refreshBalance().catch(() => undefined);
+    if (entryCostMinor !== undefined) showBalance(before - BigInt(entryCostMinor));
     navigate(`/battles?code=${encodeURIComponent(code)}`);
   } catch (error) {
+    releaseBattleHold();
     toast({
       kind: 'lose',
       title: error?.code ? String(error.code).replaceAll('_', ' ') : 'Could not join',

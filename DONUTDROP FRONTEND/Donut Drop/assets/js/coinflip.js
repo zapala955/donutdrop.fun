@@ -5,7 +5,15 @@
  * onto the side the server named and shows the seeds that prove it. The host learns their result
  * from the live stream: when one of their open games leaves the board, it is re-read and played.
  */
-import { state, bus, refreshBalance } from './store.js';
+import {
+  state,
+  bus,
+  refreshBalance,
+  refreshActivity,
+  holdLiveFigures,
+  showBalance,
+} from './store.js';
+import { onNavigate } from './routing.js';
 import { $, el, money, clamp, reduceMotion } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -23,6 +31,37 @@ const shown = new Set();
 
 let pollTimer = 0;
 let refreshing = false;
+
+/* ─────────── holding the wallet still ───────────
+ *
+ * The coin is flipped and paid in the request that takes a game, so the server's balance event
+ * reaches the wallet pill before the coin has left the hand: the joiner watched their win pop in the
+ * header and then sat through the spin, and so did a host whose game was taken. The live figures are
+ * therefore held while this player has anything in the air on the board in front of them — an open
+ * game of theirs, a join on its way, a flip that has not landed — and stakes and wins are applied to
+ * the pill locally, from figures the server already confirmed. Leaving the page, or the last flip
+ * landing, releases the hold and refreshes for real. */
+let hold = null;
+let inFlight = 0;
+
+function onScreen() {
+  return Boolean(root?.isConnected) && !root.closest('.view')?.hidden;
+}
+
+function syncHold() {
+  const needed = onScreen() && (watching.size > 0 || inFlight > 0);
+  if (needed && !hold) hold = holdLiveFigures();
+  if (!needed && hold) {
+    hold();
+    hold = null;
+    refreshBalance().catch(() => undefined);
+    refreshActivity().catch(() => undefined);
+  }
+}
+
+function moveBalance(deltaMinor) {
+  showBalance(BigInt(state.balanceMinor || '0') + BigInt(deltaMinor));
+}
 
 const SIDE = {
   heads: { label: 'Heads', art: 'assets/img/items/gold_ingot.png' },
@@ -42,10 +81,13 @@ export function mountCoinflip(view) {
       if (['login', 'logout', 'ready'].includes(event.detail)) void refresh();
     });
     window.addEventListener('donut:coinflip', () => {
-      if (root?.isConnected) void refresh();
+      if (onScreen()) void refresh();
     });
+    onNavigate(syncHold);
   }
-  /* The live stream is the real trigger; this is the recovery path for a stream that dropped. */
+  /* The live stream is the real trigger; this is the recovery path for a stream that dropped.
+   * Views are hidden rather than removed on navigation, so "connected" alone kept this polling on
+   * every other page of the site; it now runs only while the board is actually on screen. */
   if (!pollTimer) {
     pollTimer = window.setInterval(() => {
       if (!root?.isConnected) {
@@ -53,7 +95,7 @@ export function mountCoinflip(view) {
         pollTimer = 0;
         return;
       }
-      if (!document.hidden) void refresh();
+      if (!document.hidden && onScreen()) void refresh();
     }, 15_000);
   }
   void refresh();
@@ -86,14 +128,25 @@ async function refresh() {
   for (const code of [...watching]) {
     if (stillOpen.has(code)) continue;
     watching.delete(code);
+    /* Counted before the read, so the hold outlives the gap between "my game left the board" and
+     * the flip that tells me how it went. */
+    inFlight += 1;
     void api
       .get(`/v1/coinflip/${code}`)
       .then((game) => {
-        if (game.status === 'settled') showFlip(game);
+        if (game.status === 'settled') showFlip(game, { counted: true });
+        else landed();
       })
-      .catch(() => undefined);
+      .catch(() => landed());
   }
+  syncHold();
   render();
+}
+
+/** One thing that was in the air has come down. */
+function landed() {
+  inFlight = Math.max(0, inFlight - 1);
+  syncHold();
 }
 
 /* ═════════════════════════ the board ═════════════════════════ */
@@ -199,7 +252,7 @@ function render() {
         const cancel = el('button', 'btn btn--tiny');
         cancel.type = 'button';
         cancel.textContent = 'Cancel';
-        cancel.addEventListener('click', () => void cancelGame(game.code, cancel));
+        cancel.addEventListener('click', () => void cancelGame(game, cancel));
         go.append(cancel);
       } else {
         const join = el('button', 'btn btn--go btn--tiny');
@@ -320,9 +373,11 @@ function openCreate() {
         clientSeed: clientSeed(),
       });
       watching.add(created.code);
+      syncHold();
+      /* The stake is the whole of what opening a game does to the wallet. */
+      moveBalance(-BigInt(stake));
       closeModal();
       playSound('coin');
-      void refreshBalance(false);
       await refresh();
     } catch (error) {
       toast({ kind: 'red', title: 'NOT OPENED', body: error?.message || 'Try again' });
@@ -343,24 +398,31 @@ async function takeGame(game, button) {
     return;
   }
   button.disabled = true;
+  /* Held before the request: the flip is decided and paid inside it, and the balance event can
+   * beat its answer here. Only the stake is shown leaving; the win waits for the coin. */
+  inFlight += 1;
+  syncHold();
   try {
     const settled = await api.post(`/v1/coinflip/${game.code}/join`, { clientSeed: clientSeed() });
-    showFlip(settled);
+    moveBalance(-BigInt(game.stakeMinor));
+    showFlip(settled, { counted: true });
     void refresh();
   } catch (error) {
+    landed();
     toast({ kind: 'red', title: 'NOT JOINED', body: error?.message || 'Try again' });
     button.disabled = false;
     void refresh();
   }
 }
 
-async function cancelGame(code, button) {
+async function cancelGame(game, button) {
   button.disabled = true;
   try {
-    await api.post(`/v1/coinflip/${code}/cancel`, {});
-    watching.delete(code);
+    await api.post(`/v1/coinflip/${game.code}/cancel`, {});
+    watching.delete(game.code);
+    moveBalance(BigInt(game.stakeMinor));
+    syncHold();
     toast({ kind: 'gold', title: 'CANCELLED', body: 'Your stake is back in your wallet' });
-    void refreshBalance(false);
     await refresh();
   } catch (error) {
     toast({ kind: 'red', title: 'NOT CANCELLED', body: error?.message || 'Try again' });
@@ -377,9 +439,12 @@ async function cancelGame(code, button) {
  * The spin is decoration with a fixed length. The number of half-turns is picked so the face
  * that ends up showing is the result, which is the only thing about the animation that matters.
  */
-function showFlip(game, { replay = false } = {}) {
+function showFlip(game, { replay = false, counted = false } = {}) {
   if (!replay) {
-    if (shown.has(game.code)) return;
+    if (shown.has(game.code)) {
+      if (counted) landed();
+      return;
+    }
     shown.add(game.code);
   }
 
@@ -447,8 +512,11 @@ function showFlip(game, { replay = false } = {}) {
     verdict.textContent = `${SIDE[game.result].label} — ${name} ${winner?.isYou ? 'win' : 'wins'} ${money(Number(game.payoutMinor))}`;
     if (youPlayed) {
       playSound(game.youWon ? 'win' : 'lose');
-      void refreshBalance(false);
+      /* The pot reaches the pill now, on the frame the coin lands; a real refresh follows as soon
+       * as nothing else of this player's is still in the air. */
+      if (game.youWon && !replay) moveBalance(BigInt(game.payoutMinor));
     }
+    if (counted) landed();
   };
 
   /* Whole turns plus a half for tails: the face showing at rest is the result. */

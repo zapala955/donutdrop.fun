@@ -682,7 +682,9 @@ async function openSelected() {
      * be verified independently — and independent verification is the entire point of the
      * fairness hub. */
     for (let run = 0; run < runs; run += 1) {
-      const result = await requestCaseOpen(crate);
+      /* Deferred: the wallet pill and the live feed learn the result when the reel lands, not
+       * when the server answers. See openCase in store.js. */
+      const result = await requestCaseOpen(crate, { defer: true });
       const payout = Number(result.round?.payoutMinor ?? 0);
       paidOut += payout;
       if (payout >= crate.price) winners += 1;
@@ -724,6 +726,9 @@ async function openSelected() {
       } catch (animationError) {
         // A failed reveal must never swallow a settled round; the result still has to land.
         console.error('[crates] reveal failed', animationError);
+      } finally {
+        /* The reel has stopped (or was skipped, or failed): now the pill and the feed may move. */
+        await result.settle();
       }
 
       if (runs === 1) {

@@ -498,23 +498,58 @@ export async function logout() {
   emit('logout');
 }
 
-export async function openCase(selectedCase) {
+/* Opening a crate, with the same separable settlement as runBalanceUpgrade below.
+ *
+ * The round is decided when the request returns, but the player is told by a reel that runs for
+ * seconds afterwards. Applying `balanceMinor` here moved the wallet pill — win pop and all — and
+ * refreshed the live feed with the player's own pull before the reel had started, so a cash-settled
+ * crate announced its prize in the header while the strip was still racing.
+ *
+ * With `defer`, the live figures are held from BEFORE the request (the server's balance event can
+ * outrun its own HTTP answer), the stake alone leaves the pill at once, and `settle` — idempotent,
+ * safe in a finally — applies the round's real balance and refreshes the rest at the moment the
+ * caller shows the result. */
+export async function openCase(selectedCase, { defer = false } = {}) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before opening a case');
   if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
-  const result = await api.post(
-    '/v1/cases/' + encodeURIComponent(selectedCase.id) + '/open',
-    {
-      clientSeed: clientSeed(),
-      serverSeedHash: state.fairness.serverSeedHash,
-      expectedPriceMinor: selectedCase.priceMinor,
-    },
-    { idempotencyKey: idempotencyKey() },
-  );
-  state.balanceMinor = String(result.balanceMinor);
-  state.balance = toSafeNumber(state.balanceMinor);
-  await Promise.all([refreshInventory(false), refreshFairness(false), refreshActivity(false)]);
-  emit('case-open');
-  return { ...result, item: normalizeItem(result.item) };
+  const release = defer ? holdLiveFigures() : () => {};
+  const before = BigInt(state.balanceMinor || '0');
+  let result;
+  try {
+    result = await api.post(
+      '/v1/cases/' + encodeURIComponent(selectedCase.id) + '/open',
+      {
+        clientSeed: clientSeed(),
+        serverSeedHash: state.fairness.serverSeedHash,
+        expectedPriceMinor: selectedCase.priceMinor,
+      },
+      { idempotencyKey: idempotencyKey() },
+    );
+  } catch (error) {
+    release();
+    throw error;
+  }
+
+  let done = false;
+  const settle = async () => {
+    if (done) return;
+    done = true;
+    release();
+    /* `balanceMinor` is the wallet after the stake only. A cash-settled crate credits its prize
+     * after that, and the round carries the figure that includes it; this used to be left for the
+     * server's balance event to correct, which is exactly the event the hold now keeps back. */
+    state.balanceMinor = String(result.round?.payoutBalanceAfterMinor ?? result.balanceMinor);
+    state.balance = toSafeNumber(state.balanceMinor);
+    emit('case-open');
+    await Promise.all([
+      refreshBalance(false), refreshInventory(false), refreshFairness(false), refreshActivity(false),
+    ]);
+    emit('case-open');
+  };
+
+  if (defer) showBalance(before - BigInt(selectedCase.priceMinor));
+  else await settle();
+  return { ...result, item: normalizeItem(result.item), settle };
 }
 
 export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {

@@ -66,7 +66,9 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(upgrader, /Math\.random/);
     assert.doesNotMatch(crates, /Math\.random/);
     // every outcome is awaited from the server, never computed here
-    assert.match(crates, /await requestCaseOpen\(crate\)/);
+    assert.match(crates, /await requestCaseOpen\(crate[,)]/);
+    // a crate's settlement is deferred to its reel like the upgrader's, so it must still settle
+    assert.match(crates, /await result\.settle\(\)/);
     /* The arguments are not the point and pinning them broke this when the settlement was made
        deferrable. What matters is that the outcome is AWAITED FROM THE SERVER here and that the
        module holds no source of chance, which the assertions above and below cover. */
