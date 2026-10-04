@@ -25,6 +25,16 @@
   --r: 12px;
   --pad: clamp(16px, 3vw, 28px);
 
+  /* Chart colours. Series identity: blue first, orange second; net profit runs blue above zero
+     and red below. Checked with the dataviz palette validator against --ob-raised (#121216):
+     lightness band, chroma, colour-blind separation (dE 26.8 / 19.2) and 3:1 contrast all pass.
+     Marks only -- text on a chart stays in the ink colours. */
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-neg: #e66767;
+  --viz-grid: rgba(255, 255, 255, 0.06);
+  --viz-axis: rgba(255, 255, 255, 0.2);
+
   --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
@@ -311,6 +321,495 @@ body {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+/* ── the dashboard ──
+   One period chosen at the top drives everything under it: the headline, the tiles, the charts
+   and the tables. Cards share the panel surface so the gold stays for what is being read. */
+.alertbar {
+  display: block;
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid rgba(224, 86, 63, 0.5);
+  border-radius: var(--r);
+  background: rgba(224, 86, 63, 0.08);
+  color: #ffd9d1;
+  font: 700 0.875rem/1.4 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.alertbar[hidden] {
+  display: none;
+}
+.alertbar:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+.dash {
+  display: grid;
+  gap: 14px;
+  transition: opacity 160ms ease;
+}
+.dash[aria-busy='true'] {
+  opacity: 0.6;
+}
+.dash__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+/* The staff switch is a switch, not a fourth period: a box that fills when it is on, and a
+   little air between it and the period chips. */
+.chip--toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+.chip--toggle::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.chip--toggle[aria-pressed='true']::before {
+  background: currentColor;
+  box-shadow: inset 0 0 0 2px var(--ob);
+}
+.dash__window {
+  margin: 0 0 0 auto;
+  font-size: 0.8125rem;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.dash__grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dash__grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.card {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--ob-raised);
+}
+.card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 14px;
+}
+.card__title {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card__sub {
+  margin: -4px 0 12px;
+  font-size: 0.8125rem;
+  color: var(--faint);
+}
+.card .tablewrap {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: transparent;
+}
+
+/* The headline: net profit, how it was made, and its own chart. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.8fr) minmax(0, 2fr);
+  gap: 18px 28px;
+  align-items: center;
+  border-color: var(--line-hi);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 215, 0, 0.07), transparent 55%), var(--ob-raised);
+}
+.hero__label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hero__value {
+  display: block;
+  margin: 2px 0 4px;
+  font-family: var(--mono);
+  font-size: clamp(2rem, 4.4vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.hero__value[data-sign='down'] {
+  color: var(--danger);
+}
+.hero__delta {
+  margin: 0 0 14px;
+  font-size: 0.8125rem;
+  color: var(--faint);
+}
+.bridge {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+.bridge__item {
+  min-width: 0;
+}
+.bridge dt {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.bridge dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Change against the previous period. The arrow and sign carry the direction; the colour only
+   says whether that direction is good news for this figure. */
+.delta {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font: 700 0.75rem/1.5 var(--mono);
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+.delta[data-tone='good'] {
+  background: rgba(67, 196, 100, 0.12);
+  color: var(--ok);
+}
+.delta[data-tone='bad'] {
+  background: rgba(224, 86, 63, 0.12);
+  color: #ff8a73;
+}
+
+.kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 16px 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--ob-raised);
+  overflow: hidden;
+}
+.kpi__label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.kpi__value {
+  margin: 4px 0 6px;
+  font-family: var(--mono);
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.kpi__foot {
+  position: relative;
+  z-index: 1;
+  font-size: 0.75rem;
+  color: var(--faint);
+}
+.kpi__spark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  width: 100%;
+  height: 24px;
+  fill: none;
+  stroke: rgba(255, 170, 0, 0.55);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sw {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+.sw--1 {
+  background: var(--viz-1);
+}
+.sw--2 {
+  background: var(--viz-2);
+}
+
+/* ── charts ── */
+.chart {
+  position: relative;
+  min-width: 0;
+  min-height: 190px;
+}
+.chart--hero {
+  min-height: 150px;
+}
+.chart__svg {
+  display: block;
+  overflow: visible;
+}
+.chart__grid {
+  stroke: var(--viz-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.chart__zero {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.chart__tick {
+  font: 11px var(--sans);
+  fill: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.chart__end {
+  font: 600 11px var(--sans);
+  fill: var(--muted);
+}
+.chart__col {
+  transition: opacity 120ms ease;
+}
+.chart__col.is-dim {
+  opacity: 0.35;
+}
+.chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+/* A 2px ring in the surface colour keeps a hovered point readable where it sits on a line. */
+.chart__dot {
+  stroke: var(--ob-raised);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.chart__cross {
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+.chart__hit {
+  fill: transparent;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+.tip {
+  position: absolute;
+  top: -6px;
+  z-index: 2;
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-hi);
+  border-radius: 8px;
+  background: var(--ob-high);
+  box-shadow: 0 14px 34px -18px #000;
+  font-size: 0.75rem;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-100%);
+}
+.tip[hidden] {
+  display: none;
+}
+.tip b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.tip__row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.tip__row i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.tip__row strong {
+  font-family: var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.chart__data {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--faint);
+}
+.chart__data summary {
+  width: max-content;
+  cursor: pointer;
+}
+.chart__data summary:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+.chart__data .tablewrap {
+  max-height: 260px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+/* Rewards and buybacks: one thin bar per programme, its amount beside it. */
+.hbars {
+  display: grid;
+  gap: 10px;
+}
+.hbar {
+  display: grid;
+  grid-template-columns: minmax(96px, 9.5rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8125rem;
+}
+.hbar__label {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hbar__track {
+  height: 10px;
+}
+.hbar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--viz-2);
+}
+.hbar__value {
+  font-family: var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The games table's share column: a bar against the busiest game, the share of turnover beside it. */
+.grid td.sharecell {
+  min-width: 140px;
+}
+.sharecell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sharebar {
+  flex: 1 1 auto;
+  min-width: 60px;
+  height: 8px;
+}
+.sharebar span {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--viz-1);
+}
+.sharecell__pct {
+  min-width: 3.5em;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.grid--compact th,
+.grid--compact td {
+  padding: 9px 12px;
+}
+.grid tr.rowlink {
+  cursor: pointer;
+}
+.grid tr.rowlink:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: -2px;
+}
+
+@media (max-width: 1180px) {
+  .dash__grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .dash__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .dash__window {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi {
+    padding: 12px 12px 30px;
+  }
+  .kpi__value {
+    font-size: 1.125rem;
+  }
+  .card {
+    padding: 14px;
+  }
+  .hbar {
+    grid-template-columns: minmax(80px, 7rem) minmax(0, 1fr) auto;
+  }
 }
 
 /* ── tables ──

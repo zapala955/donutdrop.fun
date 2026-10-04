@@ -210,7 +210,7 @@ function actions(...nodes) {
 
 function renderStats(host, tiles) {
   host.replaceChildren();
-  for (const [label, value, alarm = false] of tiles) {
+  for (const [label, value, alarm = false, title = ''] of tiles) {
     const card = document.createElement('div');
     card.className = 'stat';
     if (alarm) card.dataset.alarm = '1';
@@ -220,6 +220,7 @@ function renderStats(host, tiles) {
     const amount = document.createElement('strong');
     amount.className = 'stat__value';
     amount.textContent = String(value);
+    if (title) amount.title = title;
     card.append(name, amount);
     host.append(card);
   }
@@ -467,7 +468,10 @@ function confirmAmount(message, { label = 'Amount', signed = false } = {}) {
 /* ═════════════════════════ panels ═════════════════════════ */
 
 async function loadOverview() {
-  const { metrics: m, shortBots = [] } = await api.get('/v1/admin/overview');
+  const [{ metrics: m, shortBots = [] }] = await Promise.all([
+    api.get('/v1/admin/overview'),
+    loadDashboard(),
+  ]);
   const short = $('overviewShortBots');
   short.replaceChildren(
     ...shortBots.map((bot) => {
@@ -490,18 +494,42 @@ async function loadOverview() {
     }),
   );
   short.hidden = shortBots.length === 0;
+  /* Players only: admins, the developer test login and the system accounts are counted apart, so
+   * a test balance is never read as money the site owes its players. */
   renderStats($('overviewStats'), [
     ['Players', m.users_total ?? 0],
-    ['Active players', m.users_active ?? 0],
+    ['Active accounts', m.users_active ?? 0],
     ['Live sessions', m.sessions_live ?? 0],
-    ['Wallet liability', amountText(m.wallet_total_minor ?? 0)],
-    ['Wagered today', amountText(m.wagered_today_minor ?? 0)],
+    /* Read at a glance here; the exact figure is on hover and on the Economy tab. */
+    [
+      'Player balances',
+      compactAmount(m.wallet_total_minor ?? 0),
+      false,
+      amountText(m.wallet_total_minor ?? 0),
+    ],
+    [
+      'Staff balances',
+      compactAmount(m.wallet_staff_minor ?? 0),
+      false,
+      amountText(m.wallet_staff_minor ?? 0),
+    ],
+    [
+      'Wagered today',
+      compactAmount(m.wagered_today_minor ?? 0),
+      false,
+      amountText(m.wagered_today_minor ?? 0),
+    ],
+    [
+      'Roulette wagered today',
+      compactAmount(m.roulette_wagered_today_minor ?? 0),
+      false,
+      amountText(m.roulette_wagered_today_minor ?? 0),
+    ],
+    ['Roulette open bets', m.roulette_open_bets ?? 0],
     ['Enabled cases', m.cases_enabled ?? 0],
     ['Catalog items', m.catalog_items_enabled ?? 0],
-    ['Roulette open bets', m.roulette_open_bets ?? 0],
-    ['Roulette wagered today', amountText(m.roulette_wagered_today_minor ?? 0)],
   ]);
-  renderStats($('overviewAttention'), [
+  const attention = [
     ['Quarantined bots', m.bots_quarantined ?? 0, Number(m.bots_quarantined) > 0],
     ['Dead-letter jobs', m.jobs_dead_letter ?? 0, Number(m.jobs_dead_letter) > 0],
     [
@@ -520,7 +548,755 @@ async function loadOverview() {
       Number(m.creator_applications_pending) > 0,
     ],
     ['Active chat timeouts', m.chat_timeouts_active ?? 0],
-  ]);
+  ];
+  renderStats($('overviewAttention'), attention);
+  /* The operations tiles sit under the dashboard, so anything alarming among them is also named at
+   * the top -- a dead-letter job must not wait for somebody to scroll past the charts. */
+  const alarms = attention.filter(([, , alarm]) => alarm).map(([label]) => label);
+  const alert = $('overviewAlert');
+  alert.hidden = alarms.length === 0;
+  alert.textContent = alarms.length
+    ? `Needs attention: ${alarms.join(' · ')} — jump to operations`
+    : '';
+}
+
+/* ═════════════════════════ the dashboard ═════════════════════════
+ *
+ * What the site earned over a period, from /v1/admin/stats: turnover, what the house kept (GGR),
+ * what it paid back (rakeback, referrals, races, rain, bonuses, item buybacks) and the net, each
+ * against the period before it, with the series behind them as charts. Staff accounts are left
+ * out unless "Include staff" is on: an operator's test spins are not turnover.
+ *
+ * Amounts arrive as decimal strings of minor units and are formatted from BigInt. Charts convert
+ * to Number only to place marks -- a pixel does not need 2^53 -- and every label and tooltip
+ * shows the figure from the exact value. */
+
+const DASH_RANGES = [
+  [1, 'Today'],
+  [7, '7 days'],
+  [30, '30 days'],
+  [90, '90 days'],
+];
+const dashState = { days: 7, includeStaff: false, seq: 0, report: null, bound: false };
+try {
+  const saved = JSON.parse(localStorage.getItem('du_admin_dash') || '{}');
+  if (DASH_RANGES.some(([days]) => days === saved.days)) dashState.days = saved.days;
+  dashState.includeStaff = saved.includeStaff === true;
+} catch {
+  /* Storage is a convenience; without it the dashboard opens on its defaults. */
+}
+
+const big = (value) => BigInt(value ?? 0);
+const countText = (value) => Number(value ?? 0).toLocaleString('en-US');
+const compactCount = (value) =>
+  Number(value).toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+/** Hold, edge, share: a ratio of two exact amounts, to one decimal. */
+function percentOf(part, whole) {
+  const w = big(whole);
+  if (w === 0n) return '—';
+  return `${(Number((big(part) * 10000n) / w) / 100).toFixed(1)}%`;
+}
+
+function bindDashboard() {
+  if (dashState.bound) return;
+  dashState.bound = true;
+  const range = $('dashRange');
+  for (const [days, label] of DASH_RANGES) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.days = String(days);
+    chip.textContent = label;
+    chip.addEventListener('click', () => {
+      dashState.days = days;
+      void reloadDashboard();
+    });
+    range.append(chip);
+  }
+  $('dashStaff').addEventListener('click', () => {
+    dashState.includeStaff = !dashState.includeStaff;
+    void reloadDashboard();
+  });
+  $('overviewAlert').addEventListener('click', () =>
+    $('opsHead').scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  );
+  /* Charts are drawn at their real width, so they are redrawn when it changes: a resized window,
+   * or the panel coming back from hidden (zero width) when its tab is chosen again. */
+  let frame = 0;
+  let drawnAt = 0;
+  new ResizeObserver(([entry]) => {
+    // Width only: a chart's table opening makes the panel taller, and must not redraw (and close) it.
+    const width = Math.round(entry.contentRect.width);
+    if (width === drawnAt) return;
+    drawnAt = width;
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      if (dashState.report) drawDashboardCharts(dashState.report);
+    });
+  }).observe($('dash'));
+}
+
+async function reloadDashboard() {
+  try {
+    await loadDashboard();
+  } catch (error) {
+    toast(`${error.code || 'ERROR'}: ${error.message || 'Could not load the dashboard'}`, 'bad');
+  }
+}
+
+async function loadDashboard() {
+  bindDashboard();
+  try {
+    localStorage.setItem(
+      'du_admin_dash',
+      JSON.stringify({ days: dashState.days, includeStaff: dashState.includeStaff }),
+    );
+  } catch {
+    /* see above */
+  }
+  for (const chip of $('dashRange').children) {
+    chip.setAttribute('aria-pressed', String(Number(chip.dataset.days) === dashState.days));
+  }
+  $('dashStaff').setAttribute('aria-pressed', String(dashState.includeStaff));
+  const seq = ++dashState.seq;
+  $('dash').setAttribute('aria-busy', 'true');
+  try {
+    const report = await api.get(
+      `/v1/admin/stats?days=${dashState.days}&includeStaff=${dashState.includeStaff ? 1 : 0}`,
+    );
+    // A slower answer to an earlier click must not overwrite the period chosen since.
+    if (seq !== dashState.seq) return;
+    dashState.report = report;
+    renderDashboard(report);
+  } finally {
+    if (seq === dashState.seq) $('dash').setAttribute('aria-busy', 'false');
+  }
+}
+
+const UTC_DAY = { timeZone: 'UTC', month: 'short', day: 'numeric' };
+function bucketLabel(at, unit, { long = false } = {}) {
+  const date = new Date(at);
+  if (unit === 'hour') {
+    const hour = date.toISOString().slice(11, 16);
+    if (!long) return hour;
+    const next = new Date(date.getTime() + 3_600_000).toISOString().slice(11, 16);
+    return `${date.toLocaleDateString('en-US', UTC_DAY)}, ${hour}–${next} UTC`;
+  }
+  return long
+    ? date.toLocaleDateString('en-US', { ...UTC_DAY, weekday: 'short' })
+    : date.toLocaleDateString('en-US', UTC_DAY);
+}
+
+function periodWords(days) {
+  return days === 1 ? 'yesterday at this time' : `the previous ${days} days`;
+}
+
+/**
+ * The change against the previous period, as words and a direction. `good` says which way is
+ * good news for this figure (a cost going up is not); the arrow and the sign carry the direction
+ * so it never rests on colour alone.
+ */
+function deltaOf(current, previous, good = 'up') {
+  const now = Number(current);
+  const before = Number(previous);
+  if (now === 0 && before === 0) return { text: 'no change', tone: 'flat' };
+  if (before === 0) {
+    if (good === 'none') return { text: 'new', tone: 'flat' };
+    return { text: 'new', tone: (now > 0) === (good === 'up') ? 'good' : 'bad' };
+  }
+  const change = ((now - before) / Math.abs(before)) * 100;
+  if (Math.abs(change) < 0.05) return { text: '0.0%', tone: 'flat' };
+  const up = change > 0;
+  const size = Math.abs(change);
+  const text = `${up ? '▲' : '▼'} ${size >= 1000 ? `${Math.round(size / 100) / 10}k` : size.toFixed(1)}%`;
+  if (good === 'none') return { text, tone: 'flat' };
+  return { text, tone: up === (good === 'up') ? 'good' : 'bad' };
+}
+
+function renderDashboard(report) {
+  const { totals: t, previous: p, window: w } = report;
+  const days = dashState.days;
+  const from = new Date(w.from);
+  const to = new Date(w.to);
+  const span =
+    days === 1
+      ? `Today, ${from.toLocaleDateString('en-US', UTC_DAY)} 00:00–${to.toISOString().slice(11, 16)} UTC`
+      : `${from.toLocaleDateString('en-US', UTC_DAY)} – ${to.toLocaleDateString('en-US', UTC_DAY)} (UTC)`;
+  $('dashWindow').textContent = report.includeStaff
+    ? `${span} · staff included`
+    : `${span} · ${report.staffAccounts} staff account${report.staffAccounts === 1 ? '' : 's'} excluded`;
+
+  /* ── the headline ── */
+  const hero = $('dashHero');
+  hero.replaceChildren();
+  const label = document.createElement('span');
+  label.className = 'hero__label';
+  label.textContent = 'Net profit';
+  const value = document.createElement('strong');
+  value.className = 'hero__value';
+  value.dataset.sign = big(t.net) < 0n ? 'down' : 'up';
+  value.textContent = compactAmount(t.net);
+  value.title = amountText(t.net);
+  const change = deltaOf(t.net, p.net);
+  const foot = document.createElement('p');
+  foot.className = 'hero__delta';
+  const badge = document.createElement('span');
+  badge.className = 'delta';
+  badge.dataset.tone = change.tone;
+  badge.textContent = change.text;
+  foot.append(badge, ` vs ${periodWords(days)} (${compactAmount(p.net)})`);
+  /* How the net is made, left to right, so a bad day says whether the games lost or the promos
+   * cost: house take, less what was paid back, less items bought back. */
+  const bridge = document.createElement('dl');
+  bridge.className = 'bridge';
+  for (const [name, amount, sign] of [
+    ['House take', t.ggr, ''],
+    ['Promos & rewards', t.promo, '−'],
+    ['Item buybacks', t.itemBuybacks, '−'],
+    ['Net', t.net, '='],
+  ]) {
+    const item = document.createElement('div');
+    item.className = 'bridge__item';
+    const dt = document.createElement('dt');
+    dt.textContent = sign ? `${sign} ${name}` : name;
+    const dd = document.createElement('dd');
+    dd.textContent = compactAmount(amount);
+    dd.title = amountText(amount);
+    item.append(dt, dd);
+    bridge.append(item);
+  }
+  const text = document.createElement('div');
+  text.className = 'hero__text';
+  text.append(label, value, foot, bridge);
+  const chart = document.createElement('div');
+  chart.className = 'chart chart--hero';
+  chart.id = 'chartNet';
+  hero.append(text, chart);
+
+  /* ── the tiles ── */
+  const series = report.series;
+  const pick = (key) => series.map((point) => Number(point[key]));
+  const avgBet = t.bets > 0 ? big(t.wagered) / BigInt(t.bets) : 0n;
+  const previousAvgBet = p.bets > 0 ? big(p.wagered) / BigInt(p.bets) : 0n;
+  const perPlayer = t.players > 0 ? big(t.net) / BigInt(t.players) : 0n;
+  const previousPerPlayer = p.players > 0 ? big(p.net) / BigInt(p.players) : 0n;
+  const variance = big(t.ggr) - big(t.expectedGgr);
+  const tiles = [
+    {
+      label: 'Wagered',
+      value: compactAmount(t.wagered),
+      exact: amountText(t.wagered),
+      delta: deltaOf(t.wagered, p.wagered),
+      spark: pick('wagered'),
+      note: `${countText(t.bets)} bets`,
+    },
+    {
+      label: 'House take (GGR)',
+      value: compactAmount(t.ggr),
+      exact: amountText(t.ggr),
+      delta: deltaOf(t.ggr, p.ggr),
+      spark: pick('ggr'),
+      note: `Hold ${percentOf(t.ggr, t.wagered)}`,
+    },
+    {
+      label: 'Promos & buybacks',
+      value: compactAmount(big(t.promo) + big(t.itemBuybacks)),
+      exact: amountText(big(t.promo) + big(t.itemBuybacks)),
+      delta: deltaOf(big(t.promo) + big(t.itemBuybacks), big(p.promo) + big(p.itemBuybacks), 'down'),
+      spark: pick('promo'),
+      // A share of a take that was zero or negative says nothing; say what it means instead.
+      note:
+        big(t.ggr) > 0n
+          ? `${percentOf(big(t.promo) + big(t.itemBuybacks), t.ggr)} of take`
+          : big(t.promo) + big(t.itemBuybacks) > 0n
+            ? 'More than the house took'
+            : '',
+    },
+    {
+      label: 'Expected take',
+      value: compactAmount(t.expectedGgr),
+      exact: amountText(t.expectedGgr),
+      note: `${variance >= 0n ? 'Ran hot' : 'Ran cold'}: ${variance >= 0n ? '+' : ''}${compactAmount(variance)}`,
+      title: 'What the games’ edges predict the house keeps from these wagers. The gap to the real take is luck.',
+    },
+    {
+      label: 'Deposits',
+      value: compactAmount(t.deposits),
+      exact: amountText(t.deposits),
+      delta: deltaOf(t.deposits, p.deposits),
+      spark: pick('deposits'),
+      note: `${countText(t.depositors)} depositor${t.depositors === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'Withdrawals',
+      value: compactAmount(t.withdrawals),
+      exact: amountText(t.withdrawals),
+      delta: deltaOf(t.withdrawals, p.withdrawals, 'none'),
+      spark: pick('withdrawals'),
+    },
+    {
+      label: 'Net cash in',
+      value: compactAmount(big(t.deposits) - big(t.withdrawals)),
+      exact: amountText(big(t.deposits) - big(t.withdrawals)),
+      delta: deltaOf(big(t.deposits) - big(t.withdrawals), big(p.deposits) - big(p.withdrawals)),
+      note:
+        big(t.adjustments) !== 0n
+          ? `Manual adjustments ${big(t.adjustments) > 0n ? '+' : ''}${compactAmount(t.adjustments)}`
+          : 'Deposits less withdrawals',
+    },
+    {
+      label: 'Average bet',
+      value: compactAmount(avgBet),
+      exact: amountText(avgBet),
+      delta: deltaOf(avgBet, previousAvgBet),
+    },
+    {
+      label: 'Active players',
+      value: countText(t.players),
+      delta: deltaOf(t.players, p.players),
+      spark: pick('players'),
+      note: 'Placed at least one bet',
+    },
+    {
+      label: 'New players',
+      value: countText(t.newPlayers),
+      delta: deltaOf(t.newPlayers, p.newPlayers),
+      spark: pick('newPlayers'),
+    },
+    {
+      label: 'Net per player',
+      value: compactAmount(perPlayer),
+      exact: amountText(perPlayer),
+      delta: deltaOf(perPlayer, previousPerPlayer),
+      note: 'Net profit ÷ active players',
+    },
+    {
+      label: 'Bets placed',
+      value: countText(t.bets),
+      delta: deltaOf(t.bets, p.bets),
+      spark: pick('bets'),
+    },
+  ];
+  $('dashKpis').replaceChildren(...tiles.map(kpiTile));
+
+  renderGames(report);
+  renderCosts(report);
+  renderPeople($('dashTop'), report.topPlayers, 'No bets in this period.');
+  renderPeople($('dashWinners'), report.winners, 'Nobody came out ahead.');
+  renderPeople($('dashLosers'), report.losers, 'Nobody came out behind.');
+  drawDashboardCharts(report);
+}
+
+function kpiTile({ label, value, exact, delta, spark, note, title }) {
+  const card = document.createElement('div');
+  card.className = 'kpi';
+  if (title) card.title = title;
+  const name = document.createElement('span');
+  name.className = 'kpi__label';
+  name.textContent = label;
+  const amount = document.createElement('strong');
+  amount.className = 'kpi__value';
+  amount.textContent = value;
+  if (exact) amount.title = exact;
+  card.append(name, amount);
+  const foot = document.createElement('span');
+  foot.className = 'kpi__foot';
+  if (delta) {
+    const badge = document.createElement('span');
+    badge.className = 'delta';
+    badge.dataset.tone = delta.tone;
+    badge.textContent = delta.text;
+    foot.append(badge);
+  }
+  if (note) {
+    const words = document.createElement('span');
+    words.textContent = note;
+    foot.append(words);
+  }
+  if (foot.childNodes.length) card.append(foot);
+  if (spark && spark.length > 1 && spark.some((point) => point !== 0)) card.append(sparkline(spark));
+  return card;
+}
+
+/** The trend under a tile: one quiet line, no axis. The chart below carries the numbers. */
+function sparkline(values) {
+  const low = Math.min(0, ...values);
+  const high = Math.max(0, ...values);
+  const range = high - low || 1;
+  const step = 100 / (values.length - 1);
+  const root = svgNode('svg', {
+    class: 'kpi__spark',
+    viewBox: '0 0 100 24',
+    preserveAspectRatio: 'none',
+    'aria-hidden': 'true',
+  });
+  svgNode(
+    'polyline',
+    {
+      points: values.map((v, i) => `${(i * step).toFixed(2)},${(22 - ((v - low) / range) * 20).toFixed(2)}`).join(' '),
+      'vector-effect': 'non-scaling-stroke',
+    },
+    root,
+  );
+  return root;
+}
+
+function renderGames(report) {
+  const games = [...report.games].sort((a, b) => (big(b.wagered) > big(a.wagered) ? 1 : -1));
+  const most = games.reduce((top, game) => (big(game.wagered) > top ? big(game.wagered) : top), 0n);
+  const total = big(report.totals.wagered);
+  table(
+    $('dashGames'),
+    ['Game', 'Wagered', 'Share', 'Bets', 'Players', 'House take', 'Hold'],
+    games,
+    (game) => {
+      const tr = document.createElement('tr');
+      const share = document.createElement('td');
+      share.className = 'sharecell';
+      const bar = document.createElement('span');
+      bar.className = 'sharebar';
+      const fill = document.createElement('span');
+      fill.style.width = most > 0n ? `${Number((big(game.wagered) * 1000n) / most) / 10}%` : '0%';
+      bar.append(fill);
+      const pct = document.createElement('span');
+      pct.className = 'sharecell__pct';
+      pct.textContent = percentOf(game.wagered, total);
+      share.append(bar, pct);
+      const take = cell(compactAmount(game.ggr), { mono: true });
+      take.title = amountText(game.ggr);
+      take.dataset.sign = big(game.ggr) < 0n ? 'down' : 'up';
+      const wagered = cell(compactAmount(game.wagered), { mono: true });
+      wagered.title = amountText(game.wagered);
+      tr.append(
+        cell(game.label),
+        wagered,
+        share,
+        cell(countText(game.bets), { mono: true }),
+        cell(countText(game.players), { mono: true }),
+        take,
+        cell(percentOf(game.ggr, game.wagered), { mono: true }),
+      );
+      return tr;
+    },
+  );
+}
+
+/** What the house paid back, largest first: a bar per programme, the amount written beside it. */
+function renderCosts(report) {
+  const host = $('dashCosts');
+  host.replaceChildren();
+  const rows = report.promo;
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nothing paid out in rewards or buybacks in this period.';
+    host.append(empty);
+    return;
+  }
+  const most = rows.reduce((top, row) => (big(row.amount) > top ? big(row.amount) : top), 1n);
+  const take = big(report.totals.ggr);
+  for (const row of rows) {
+    const line = document.createElement('div');
+    line.className = 'hbar';
+    const name = document.createElement('span');
+    name.className = 'hbar__label';
+    name.textContent = row.label;
+    const track = document.createElement('span');
+    track.className = 'hbar__track';
+    const fill = document.createElement('span');
+    fill.className = 'hbar__fill';
+    fill.style.width = `${Math.max(0.5, Number((big(row.amount) * 1000n) / most) / 10)}%`;
+    track.append(fill);
+    const amount = document.createElement('span');
+    amount.className = 'hbar__value';
+    amount.textContent = compactAmount(row.amount);
+    amount.title = `${amountText(row.amount)}${take > 0n ? ` · ${percentOf(row.amount, take)} of the house take` : ''}`;
+    line.append(name, track, amount);
+    host.append(line);
+  }
+}
+
+/** A player list; a row opens the player sheet, where every lever for that account already is. */
+function renderPeople(node, rows, emptyText) {
+  table(node, ['Player', 'Wagered', 'Bets', 'Their result'], rows, (row) => {
+    const tr = document.createElement('tr');
+    tr.className = 'rowlink';
+    tr.tabIndex = 0;
+    tr.title = `Open ${row.name}`;
+    const open = () => void openPlayer(row.id);
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        open();
+      }
+    });
+    const wagered = cell(compactAmount(row.wagered), { mono: true });
+    wagered.title = amountText(row.wagered);
+    const result = cell(`${big(row.net) > 0n ? '+' : ''}${compactAmount(row.net)}`, { mono: true });
+    result.title = amountText(row.net);
+    result.dataset.sign = big(row.net) < 0n ? 'down' : 'up';
+    tr.append(cell(row.name), wagered, cell(countText(row.bets), { mono: true }), result);
+    return tr;
+  });
+  if (!rows.length) node.querySelector('.empty').textContent = emptyText;
+}
+
+/* ═════════════════════════ charts ═════════════════════════
+ *
+ * Plain SVG, drawn at the container's real width. One y-axis per chart, hairline gridlines, thin
+ * marks: columns at most 24px wide with a 4px rounded end at the data and a gap of at least 2px,
+ * 2px lines. Every chart answers the pointer -- the column under it, or a crosshair across lines --
+ * with a tooltip naming the bucket and each value. Colours: blue first, orange second (validated
+ * for colour-blind separation against this panel's surface); net profit runs blue above zero and
+ * red below. Text is always in the ink colours, never the series colour. */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgNode(tag, attributes = {}, parent = null) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  parent?.append(node);
+  return node;
+}
+
+function drawDashboardCharts(report) {
+  const unit = report.window.unit;
+  const at = report.series.map((point) => point.at);
+  const money = (key) => ({
+    values: report.series.map((point) => Number(point[key])),
+    exact: report.series.map((point) => point[key]),
+  });
+  drawChart($('chartNet'), {
+    unit,
+    at,
+    axis: 'money',
+    diverging: true,
+    series: [{ label: 'Net profit', ...money('net') }],
+  });
+  drawChart($('chartWagered'), {
+    unit,
+    at,
+    axis: 'money',
+    series: [{ label: 'Wagered', color: 'var(--viz-1)', ...money('wagered') }],
+  });
+  drawChart($('chartCash'), {
+    unit,
+    at,
+    axis: 'money',
+    lines: true,
+    series: [
+      { label: 'Deposits', color: 'var(--viz-1)', ...money('deposits') },
+      { label: 'Withdrawals', color: 'var(--viz-2)', ...money('withdrawals') },
+    ],
+  });
+  drawChart($('chartPlayers'), {
+    unit,
+    at,
+    axis: 'count',
+    lines: true,
+    series: [
+      { label: 'Active players', color: 'var(--viz-1)', values: report.series.map((p) => p.players) },
+      { label: 'New players', color: 'var(--viz-2)', values: report.series.map((p) => p.newPlayers) },
+    ],
+  });
+}
+
+function niceScale(low, high, count = 4) {
+  if (low === high) high = low + 1;
+  const raw = (high - low) / count;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= raw);
+  const lo = Math.floor(low / step) * step;
+  const hi = Math.ceil(high / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(Math.abs(v) < step / 1e6 ? 0 : v);
+  return { lo, hi, ticks };
+}
+
+function columnPath(x, width, base, end, radius) {
+  const height = Math.abs(base - end);
+  const r = Math.min(radius, width / 2, height);
+  const up = end < base;
+  const edge = up ? end + r : end - r;
+  return (
+    `M${x},${base}V${edge}Q${x},${end} ${x + r},${end}H${x + width - r}` +
+    `Q${x + width},${end} ${x + width},${edge}V${base}Z`
+  );
+}
+
+function drawChart(host, spec) {
+  if (!host) return;
+  const width = host.clientWidth;
+  if (!width) return; // hidden; the resize observer draws it once it has a size
+  const height = host.classList.contains('chart--hero') ? 150 : 190;
+  const multi = spec.series.length > 1;
+  const pad = { top: 10, right: multi ? 92 : 10, bottom: 24, left: 52 };
+  const plotW = Math.max(10, width - pad.left - pad.right);
+  const plotH = height - pad.top - pad.bottom;
+  const n = spec.at.length;
+  const all = spec.series.flatMap((s) => s.values);
+  const { lo, hi, ticks } = niceScale(Math.min(0, ...all), Math.max(0, ...all));
+  const y = (v) => pad.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const slot = plotW / Math.max(1, n);
+  const cx = (i) => pad.left + slot * i + slot / 2;
+  const tickText = (v) =>
+    spec.axis === 'money' ? compactAmount(BigInt(Math.round(v))) : compactCount(v);
+  const valueText = (s, i) =>
+    s.exact ? compactAmount(s.exact[i]) : countText(s.values[i]);
+
+  host.replaceChildren();
+  const root = svgNode('svg', {
+    class: 'chart__svg',
+    width,
+    height,
+    viewBox: `0 0 ${width} ${height}`,
+    role: 'img',
+    'aria-label': `${spec.series.map((s) => s.label).join(' and ')} by ${spec.unit}`,
+  });
+  host.append(root);
+
+  /* Grid and the y-axis: recessive, with the zero line a step stronger. */
+  for (const tick of ticks) {
+    svgNode(
+      'line',
+      { class: tick === 0 ? 'chart__zero' : 'chart__grid', x1: pad.left, x2: pad.left + plotW, y1: y(tick), y2: y(tick) },
+      root,
+    );
+    const label = svgNode('text', { class: 'chart__tick', x: pad.left - 8, y: y(tick) + 4, 'text-anchor': 'end' }, root);
+    label.textContent = tickText(tick);
+  }
+  /* The x-axis: at most about one label per 70px, always including the first bucket. */
+  const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 70))));
+  for (let i = 0; i < n; i += every) {
+    const label = svgNode('text', { class: 'chart__tick', x: cx(i), y: height - 6, 'text-anchor': 'middle' }, root);
+    label.textContent = bucketLabel(spec.at[i], spec.unit);
+  }
+
+  const marks = svgNode('g', {}, root);
+  const columns = [];
+  if (!spec.lines) {
+    const series = spec.series[0];
+    const barW = Math.max(2, Math.min(24, slot - 2, slot * 0.72));
+    series.values.forEach((v, i) => {
+      if (v === 0) return;
+      let end = y(v);
+      const base = y(0);
+      if (Math.abs(base - end) < 1.5) end = base + (v > 0 ? -1.5 : 1.5);
+      const path = svgNode(
+        'path',
+        { d: columnPath(cx(i) - barW / 2, barW, base, end, 4), class: 'chart__col' },
+        marks,
+      );
+      path.style.fill = spec.diverging ? (v < 0 ? 'var(--viz-neg)' : 'var(--viz-1)') : series.color;
+      columns[i] = path;
+    });
+  } else {
+    for (const series of spec.series) {
+      const points = series.values.map((v, i) => `${cx(i).toFixed(1)},${y(v).toFixed(1)}`);
+      if (n === 1) {
+        svgNode('circle', { cx: cx(0), cy: y(series.values[0]), r: 4, class: 'chart__dot', fill: series.color }, marks);
+      } else {
+        const line = svgNode('polyline', { points: points.join(' '), class: 'chart__line' }, marks);
+        line.style.stroke = series.color;
+      }
+    }
+    /* Direct labels at the line ends, nudged apart so two close lines do not print on each other. */
+    const ends = spec.series
+      .map((series) => ({ series, at: y(series.values[n - 1] ?? 0) }))
+      .sort((a, b) => a.at - b.at);
+    for (let i = 1; i < ends.length; i += 1) {
+      if (ends[i].at - ends[i - 1].at < 14) ends[i].at = ends[i - 1].at + 14;
+    }
+    for (const end of ends) {
+      const tag = svgNode('text', { class: 'chart__end', x: pad.left + plotW + 8, y: end.at + 4 }, root);
+      tag.textContent = end.series.label;
+    }
+  }
+
+  /* The hover layer: one target over the whole plot, resolved to the bucket under the pointer. */
+  const cross = svgNode('line', { class: 'chart__cross', y1: pad.top, y2: pad.top + plotH, visibility: 'hidden' }, root);
+  const dots = spec.lines
+    ? spec.series.map((series) => svgNode('circle', { r: 4, class: 'chart__dot', fill: series.color, visibility: 'hidden' }, root))
+    : [];
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.hidden = true;
+  host.append(tip);
+  const target = svgNode('rect', { x: pad.left, y: pad.top, width: plotW, height: plotH, class: 'chart__hit' }, root);
+  let shown = -1;
+  const show = (event) => {
+    const box = root.getBoundingClientRect();
+    const i = Math.min(n - 1, Math.max(0, Math.floor((event.clientX - box.left - pad.left) / slot)));
+    if (i === shown) return;
+    shown = i;
+    const x = cx(i);
+    cross.setAttribute('x1', x);
+    cross.setAttribute('x2', x);
+    cross.setAttribute('visibility', spec.lines ? 'visible' : 'hidden');
+    spec.series.forEach((series, k) => {
+      if (!dots[k]) return;
+      dots[k].setAttribute('cx', x);
+      dots[k].setAttribute('cy', y(series.values[i]));
+      dots[k].setAttribute('visibility', 'visible');
+    });
+    columns.forEach((column, k) => column?.classList.toggle('is-dim', k !== i));
+    const head = document.createElement('b');
+    head.textContent = bucketLabel(spec.at[i], spec.unit, { long: true });
+    const rows = spec.series.map((series) => {
+      const row = document.createElement('span');
+      row.className = 'tip__row';
+      const swatch = document.createElement('i');
+      const v = series.values[i];
+      swatch.style.background = spec.diverging ? (v < 0 ? 'var(--viz-neg)' : 'var(--viz-1)') : series.color;
+      const name = document.createElement('span');
+      name.textContent = series.label;
+      const amount = document.createElement('strong');
+      amount.textContent = valueText(series, i);
+      if (series.exact) amount.title = amountText(series.exact[i]);
+      row.append(swatch, name, amount);
+      return row;
+    });
+    tip.replaceChildren(head, ...rows);
+    tip.hidden = false;
+    const left = Math.min(Math.max(x - tip.offsetWidth / 2, 0), width - tip.offsetWidth);
+    tip.style.left = `${left}px`;
+  };
+  const hide = () => {
+    shown = -1;
+    tip.hidden = true;
+    cross.setAttribute('visibility', 'hidden');
+    for (const dot of dots) dot.setAttribute('visibility', 'hidden');
+    for (const column of columns) column?.classList.remove('is-dim');
+  };
+  target.addEventListener('pointermove', show);
+  target.addEventListener('pointerdown', show);
+  target.addEventListener('pointerleave', hide);
+
+  /* The same numbers as a table, for a screen reader and for anyone who wants the figures. */
+  const data = document.createElement('details');
+  data.className = 'chart__data';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Show as table';
+  data.append(summary);
+  data.addEventListener(
+    'toggle',
+    () => {
+      if (!data.open || data.querySelector('table')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'tablewrap';
+      const grid = document.createElement('table');
+      grid.className = 'grid';
+      wrap.append(grid);
+      data.append(wrap);
+      table(grid, [spec.unit === 'hour' ? 'Hour (UTC)' : 'Day (UTC)', ...spec.series.map((s) => s.label)], spec.at.map((_, i) => i), (i) => {
+        const tr = document.createElement('tr');
+        tr.append(cell(bucketLabel(spec.at[i], spec.unit, { long: true })));
+        for (const series of spec.series) tr.append(cell(series.exact ? amountText(series.exact[i]) : countText(series.values[i]), { mono: true }));
+        return tr;
+      });
+    },
+  );
+  host.append(data);
 }
 
 async function loadPlayers(query = '') {

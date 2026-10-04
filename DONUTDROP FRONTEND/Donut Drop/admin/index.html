@@ -12,7 +12,7 @@
     <!-- The ?v= is a second belt beside the no-store header nginx sends for these two files: it
      changes the URL, so no layer that already holds a copy can answer for it. Bump it whenever
      this console's behaviour changes in a way a stale copy would hide. -->
-    <link rel="stylesheet" href="admin.css?v=6" />
+    <link rel="stylesheet" href="admin.css?v=7" />
   </head>
   <body>
     <!--
@@ -92,8 +92,88 @@
             <button class="btn" type="button" data-refresh="overview">Refresh</button>
           </div>
           <div class="shortbots" id="overviewShortBots" role="status" hidden></div>
+          <button class="alertbar" id="overviewAlert" type="button" hidden></button>
+
+          <!-- The dashboard. Players only unless "Include staff" is on: admins, the developer test
+               login and the system accounts are not customers, and their test play is not
+               turnover. Built by admin.js from /v1/admin/stats. -->
+          <div class="dash" id="dash" aria-busy="false">
+            <div class="dash__bar">
+              <div class="chips" id="dashRange" role="group" aria-label="Period"></div>
+              <button class="chip chip--toggle" id="dashStaff" type="button" aria-pressed="false">
+                Include staff
+              </button>
+              <p class="dash__window" id="dashWindow" aria-live="polite"></p>
+            </div>
+
+            <article class="card hero" id="dashHero"></article>
+            <div class="kpis" id="dashKpis"></div>
+
+            <div class="dash__grid">
+              <article class="card">
+                <h3 class="card__title">Wagered</h3>
+                <div class="chart" id="chartWagered"></div>
+              </article>
+              <article class="card">
+                <div class="card__head">
+                  <h3 class="card__title">Deposits and withdrawals</h3>
+                  <ul class="legend" aria-label="Legend">
+                    <li><i class="sw sw--1"></i>Deposits</li>
+                    <li><i class="sw sw--2"></i>Withdrawals</li>
+                  </ul>
+                </div>
+                <div class="chart" id="chartCash"></div>
+              </article>
+              <article class="card">
+                <div class="card__head">
+                  <h3 class="card__title">Players</h3>
+                  <ul class="legend" aria-label="Legend">
+                    <li><i class="sw sw--1"></i>Active players</li>
+                    <li><i class="sw sw--2"></i>New players</li>
+                  </ul>
+                </div>
+                <div class="chart" id="chartPlayers"></div>
+              </article>
+              <article class="card">
+                <h3 class="card__title">Promos, rewards and buybacks</h3>
+                <p class="card__sub">What the house paid back out of its take, largest first.</p>
+                <div class="hbars" id="dashCosts"></div>
+              </article>
+            </div>
+
+            <article class="card">
+              <h3 class="card__title">Games</h3>
+              <p class="card__sub">
+                House take is stakes less payouts and refunds. Hold is that take over the amount
+                wagered.
+              </p>
+              <div class="tablewrap"><table class="grid" id="dashGames"></table></div>
+            </article>
+
+            <div class="dash__grid dash__grid--three">
+              <article class="card">
+                <h3 class="card__title">Top players by wager</h3>
+                <div class="tablewrap"><table class="grid grid--compact" id="dashTop"></table></div>
+              </article>
+              <article class="card">
+                <h3 class="card__title">Biggest winners</h3>
+                <div class="tablewrap">
+                  <table class="grid grid--compact" id="dashWinners"></table>
+                </div>
+              </article>
+              <article class="card">
+                <h3 class="card__title">Biggest losers</h3>
+                <div class="tablewrap">
+                  <table class="grid grid--compact" id="dashLosers"></table>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel__head panel__head--sub"><h3>Right now</h3></div>
           <div class="stats" id="overviewStats"></div>
-          <div class="attention" id="overviewAttention"></div>
+          <div class="panel__head panel__head--sub" id="opsHead"><h3>Operations</h3></div>
+          <div class="stats attention" id="overviewAttention"></div>
         </section>
 
         <section class="panel" data-panel="economy" hidden>
@@ -457,6 +537,6 @@
 
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-    <script type="module" src="admin.js?v=7"></script>
+    <script type="module" src="admin.js?v=8"></script>
   </body>
 </html>

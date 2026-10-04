@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
+import { buildStatsReport, RANGE_DAYS, staffPredicate, toJson, type RangeDays } from '../lib/admin-stats.js';
 import { appendAudit } from '../lib/audit.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
@@ -28,6 +29,19 @@ const pageSchema = z
     offset: z.coerce.number().int().min(0).max(100_000).default(0),
   })
   .strict();
+const statsQuerySchema = z
+  .object({
+    days: z.coerce
+      .number()
+      .int()
+      .refine((days): days is RangeDays => (RANGE_DAYS as readonly number[]).includes(days))
+      .default(7),
+    includeStaff: z.enum(['0', '1']).default('0'),
+  })
+  .strict();
+/* Staff accounts -- admins, the developer test login, the catalogue seed -- are not players: what
+ * they stake, win and hold is testing, and in a player count or a turnover figure it is noise. */
+const NOT_STAFF = `NOT ${staffPredicate('u')}`;
 const auditQuerySchema = pageSchema.extend({
   action: safeText(1, 80).optional(),
   targetType: safeText(1, 40).optional(),
@@ -216,14 +230,20 @@ export async function registerAdminOperationRoutes(
   app.get('/v1/admin/overview', { preHandler: requireAdminRead }, async () => {
     const result = await db.query<EntityRow>(
       `SELECT
-         (SELECT count(*) FROM users WHERE minecraft_identity <> 'system:catalog-seed')::text
-           AS users_total,
-         (SELECT count(*) FROM users WHERE status = 'active')::text AS users_active,
-         (SELECT count(*) FROM sessions WHERE revoked_at IS NULL AND expires_at > now())::text
+         (SELECT count(*) FROM users u WHERE ${NOT_STAFF})::text AS users_total,
+         (SELECT count(*) FROM users u WHERE u.status = 'active' AND ${NOT_STAFF})::text
+           AS users_active,
+         (SELECT count(*) FROM users u WHERE ${staffPredicate('u')})::text AS staff_accounts,
+         (SELECT count(*) FROM sessions s JOIN users u ON u.id = s.user_id
+           WHERE s.revoked_at IS NULL AND s.expires_at > now() AND ${NOT_STAFF})::text
            AS sessions_live,
-         (SELECT coalesce(sum(balance_minor), 0) FROM user_wallets)::text AS wallet_total_minor,
-         (SELECT coalesce(sum(amount_minor), 0) FROM wager_events
-           WHERE created_at >= date_trunc('day', now()))::text AS wagered_today_minor,
+         (SELECT coalesce(sum(w.balance_minor), 0) FROM user_wallets w JOIN users u ON u.id = w.user_id
+           WHERE ${NOT_STAFF})::text AS wallet_total_minor,
+         (SELECT coalesce(sum(w.balance_minor), 0) FROM user_wallets w JOIN users u ON u.id = w.user_id
+           WHERE ${staffPredicate('u')})::text AS wallet_staff_minor,
+         (SELECT coalesce(sum(e.amount_minor), 0) FROM wager_events e JOIN users u ON u.id = e.user_id
+           WHERE e.created_at >= date_trunc('day', now()) AND ${NOT_STAFF})::text
+           AS wagered_today_minor,
          (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined')::text
            AS bots_quarantined,
          (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text
@@ -252,8 +272,9 @@ export async function registerAdminOperationRoutes(
          (SELECT count(*) FROM catalog_items WHERE enabled)::text AS catalog_items_enabled,
          (SELECT count(*) FROM roulette_bets b JOIN roulette_rounds r ON r.id = b.round_id
            WHERE r.status = 'open')::text AS roulette_open_bets,
-         (SELECT coalesce(sum(b.stake_minor), 0) FROM roulette_bets b
-           WHERE b.created_at >= date_trunc('day', now()))::text AS roulette_wagered_today_minor`,
+         (SELECT coalesce(sum(b.stake_minor), 0) FROM roulette_bets b JOIN users u ON u.id = b.user_id
+           WHERE b.created_at >= date_trunc('day', now()) AND ${NOT_STAFF})::text
+           AS roulette_wagered_today_minor`,
     );
     /* Bots the server has refused a payment for lack of funds, and what is waiting on them. This
      * is the whole of what an operator needs to act: which account to pay in game, and how much
@@ -271,6 +292,20 @@ export async function registerAdminOperationRoutes(
         ORDER BY b.role`,
     );
     return { metrics: result.rows[0] ?? {}, shortBots: short.rows };
+  });
+
+  /* The dashboard: turnover, what the house kept, what it paid back and the net, over a window,
+   * with the same figures for the window before it and as a series for the charts. See
+   * lib/admin-stats.ts for what each figure is made of. */
+  app.get('/v1/admin/stats', { preHandler: requireAdminRead }, async (request) => {
+    const query = parseWith(statsQuerySchema, request.query);
+    const report = await buildStatsReport(db, {
+      days: query.days,
+      includeStaff: query.includeStaff === '1',
+    });
+    // The series already carries every bucket's start; the bare list would only repeat it.
+    const { from, to, previousFrom, unit } = report.window;
+    return toJson({ ...report, window: { from, to, previousFrom, unit } });
   });
 
   app.get('/v1/admin/economy', { preHandler: requireAdminRead }, async (request) => {
