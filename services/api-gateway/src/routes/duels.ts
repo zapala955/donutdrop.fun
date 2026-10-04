@@ -686,6 +686,9 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
       const settled = await db.transaction((client) =>
         settleDuel(client, row, final.outcome === 'draw' ? 'draw' : 'decided', winnerUserId),
       );
+      /* The idempotency keys for a finished duel are dead weight; without this the set grew by a
+       * key per round for the life of the process. */
+      for (let index = 0; index < row.rounds_total; index += 1) scored.delete(`${code}:${index}`);
       if (settled) {
         hub.broadcast(code, { type: 'duel:settled', code, duel: publicDuel(settled, null) });
         if (winnerUserId) await flagScriptedTiming(row, rounds.rows);

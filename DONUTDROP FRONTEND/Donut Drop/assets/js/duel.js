@@ -30,6 +30,7 @@ import { API_BASE_URL, api } from './api.js';
 let root = null;
 let socket = null;
 let reconnectTimer = 0;
+let pingTimer = 0;
 
 /** Server clock minus local clock, in ms. See the header. */
 let clockSkewMs = 0;
@@ -107,8 +108,10 @@ function connect() {
   socket.addEventListener('open', () => {
     if (active?.code) send({ type: 'watch', code: active.code });
     /* Re-measure the offset periodically. A laptop that sleeps mid-duel wakes with a clock that
-     * has drifted, and a stale offset is worse than none. */
-    window.setInterval(() => send({ type: 'ping' }), 20_000);
+     * has drifted, and a stale offset is worse than none. One timer for the module: this runs on
+     * every reconnect, and starting a fresh interval each time stacked a ping per dropped socket. */
+    if (pingTimer) window.clearInterval(pingTimer);
+    pingTimer = window.setInterval(() => send({ type: 'ping' }), 20_000);
   });
   socket.addEventListener('message', (event) => {
     let message;
