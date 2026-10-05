@@ -1,6 +1,6 @@
-# Donut Drop frontend
+# DonutWin frontend
 
-Static HTML/CSS/JavaScript frontend for the Donut Drop cases and item upgrader API. Identity,
+Static HTML/CSS/JavaScript frontend for the DonutWin cases and item upgrader API. Identity,
 balance, catalog values, inventory, case pools, drops, upgrade outcomes, sales, withdrawals, and
 recent activity all come from the backend. The browser does not persist or calculate economic
 state.

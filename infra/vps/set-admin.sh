@@ -189,7 +189,7 @@ else
   echo
   echo "Save this recovery code somewhere safe. It is shown once and only needed if Discord is"
   echo "unavailable — the /dashboard link issues a session that is already MFA-verified."
-  echo "otpauth://totp/DonutDrop:$identity?secret=$secret&issuer=DonutDrop&algorithm=SHA256&digits=8&period=30"
+  echo "otpauth://totp/DonutWin:$identity?secret=$secret&issuer=DonutWin&algorithm=SHA256&digits=8&period=30"
   echo
   echo "Run /dashboard in Discord to reach the admin panel."
 fi

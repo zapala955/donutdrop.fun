@@ -1,4 +1,4 @@
-/* data.js — Donut Drop fixture data.
+/* data.js — DonutWin fixture data.
  * DonutSMP themed. Currency is in-game DonutSMP dollars, never real money.
  * Every icon is a real Minecraft inventory render downloaded to assets/img/items.
  */

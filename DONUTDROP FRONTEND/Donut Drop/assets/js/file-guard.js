@@ -25,7 +25,7 @@
     var copy = document.createElement('p');
     copy.style.cssText = 'color:#9a8f7a;margin:0 0 14px';
     copy.textContent =
-      'Donut Drop uses JavaScript modules, which browsers block on file:// URLs. Run a static ' +
+      'DonutWin uses JavaScript modules, which browsers block on file:// URLs. Run a static ' +
       'server from this folder and open the address it prints.';
 
     var commands = document.createElement('p');

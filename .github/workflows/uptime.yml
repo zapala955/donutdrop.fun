@@ -25,6 +25,6 @@ jobs:
       - name: Send failure alert
         if: failure() && env.ALERT_WEBHOOK_URL != ''
         run: |
-          payload="$(jq -n --arg message 'Donut Drop external uptime check failed. Inspect the production workflow and VPS.' '{content:$message}')"
+          payload="$(jq -n --arg message 'DonutWin external uptime check failed. Inspect the production workflow and VPS.' '{content:$message}')"
           curl --fail --silent --show-error -H 'content-type: application/json' \
             --data "$payload" "$ALERT_WEBHOOK_URL"

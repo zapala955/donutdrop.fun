@@ -5,7 +5,7 @@ import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
 /**
  * rewards.ts — what this server pays, and the commands that collect it.
  *
- *   /link <code>  ties this Discord account to the Donut Drop account that showed the code, and
+ *   /link <code>  ties this Discord account to the DonutWin account that showed the code, and
  *                 pays the join reward (and the inviter's reward) that the link unlocks.
  *   /tag          today's reward for wearing the server's tag.
  *   /rewards      where you stand.

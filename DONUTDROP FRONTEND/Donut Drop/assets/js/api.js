@@ -53,7 +53,7 @@ async function request(method, path, body, options = {}) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch (error) {
-    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the Donut Drop server', error);
+    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the DonutWin server', error);
   }
   if (response.status === 204) return null;
   const payload = await response.json().catch(() => ({}));

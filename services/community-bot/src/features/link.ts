@@ -100,8 +100,8 @@ export async function showProfile(
         embed(
           'Not linked',
           self
-            ? `You have not linked a Donut Drop account yet. Run \`/link\`.`
-            : `**${target.tag}** has not linked a Donut Drop account.`,
+            ? `You have not linked a DonutWin account yet. Run \`/link\`.`
+            : `**${target.tag}** has not linked a DonutWin account.`,
           COLOR.quiet,
         ),
       ],

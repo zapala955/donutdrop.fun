@@ -161,7 +161,7 @@ if [[ "$totp_state" == "fresh" ]]; then
   echo
   echo "Give this recovery code to $username privately. It is shown once and only needed if Discord"
   echo "is unavailable -- the /dashboard link issues a session that is already MFA-verified."
-  echo "otpauth://totp/DonutDrop:$identity?secret=$secret&issuer=DonutDrop&algorithm=SHA256&digits=8&period=30"
+  echo "otpauth://totp/DonutWin:$identity?secret=$secret&issuer=DonutWin&algorithm=SHA256&digits=8&period=30"
 fi
 echo
 echo "They can now run /dashboard in the control Discord to reach the admin panel."

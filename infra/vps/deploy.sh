@@ -106,7 +106,7 @@ done
 
 for attempt in $(seq 1 60); do
   if curl --fail --silent --show-error http://127.0.0.1:8080/health/ready >/dev/null; then
-    echo "Donut Drop is ready behind the local TLS proxy on 127.0.0.1:8080"
+    echo "DonutWin is ready behind the local TLS proxy on 127.0.0.1:8080"
     exit 0
   fi
   sleep 2

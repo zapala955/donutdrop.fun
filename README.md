@@ -1,4 +1,4 @@
-# Donut Drop cases and upgrader
+# DonutWin cases and upgrader
 
 Security-focused DonutSMP case and Minecraft-item upgrader backend, integrated with the standalone
 vanilla frontend in `DONUTDROP FRONTEND/Donut Drop`. The backend owns account sessions, the on-site

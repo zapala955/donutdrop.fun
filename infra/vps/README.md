@@ -1,4 +1,4 @@
-# Deploying Donut Drop to `donutdrop.fun`
+# Deploying DonutWin to `donutdrop.fun`
 
 The production layout is deliberately one origin:
 

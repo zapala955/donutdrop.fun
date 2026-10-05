@@ -170,7 +170,7 @@ jobs:
             if [ "$attempt" = 30 ]; then docker compose --env-file .env.example -f infra/docker/compose.yml logs; exit 1; fi
             sleep 2
           done
-          curl --fail --silent http://127.0.0.1:8080/ | grep -q '<title>Donut Drop'
+          curl --fail --silent http://127.0.0.1:8080/ | grep -q '<title>DonutWin'
           curl --fail --silent http://127.0.0.1:8080/assets/js/api.js | grep -q 'window.location.origin'
           curl --fail --silent --head http://127.0.0.1:8080/ | grep -qi '^Content-Security-Policy:'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/README.md)" = 404

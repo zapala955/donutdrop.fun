@@ -2,7 +2,7 @@
 
 ## Platform
 
-Responsive static web frontend backed by the Donut Drop Fastify/PostgreSQL API.
+Responsive static web frontend backed by the DonutWin Fastify/PostgreSQL API.
 
 ## Core loop
 

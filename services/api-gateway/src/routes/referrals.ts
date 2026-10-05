@@ -39,7 +39,7 @@ const renameSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).st
  * Words a player may not build a code out of.
  *
  * An invite code is pasted into public chat beside a link to this site, so a code reading
- * DONUTDROPSUPPORT is not a vanity code, it is a costume. The check is on CONTAINMENT rather than
+ * DONUTWINSUPPORT is not a vanity code, it is a costume. The check is on CONTAINMENT rather than
  * equality — XADMINX impersonates exactly as well as ADMIN, and a rule that only caught the exact
  * word would be a rule that advertised its own workaround.
  *

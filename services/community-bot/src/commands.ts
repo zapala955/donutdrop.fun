@@ -434,7 +434,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('link')
-      .setDescription('Connect your Discord to your Donut Drop account')
+      .setDescription('Connect your Discord to your DonutWin account')
       .addStringOption((option) =>
         option
           .setName('code')
@@ -459,7 +459,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('profile')
-      .setDescription('Show a linked Donut Drop profile')
+      .setDescription('Show a linked DonutWin profile')
       .addUserOption((option) =>
         option.setName('member').setDescription('Whose profile — defaults to yours'),
       ) as SlashCommandBuilder,

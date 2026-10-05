@@ -47,7 +47,7 @@ function paintSupport() {
   go.target = '_blank';
   go.rel = 'noopener noreferrer';
   go.textContent = 'OPEN A TICKET';
-  go.setAttribute('aria-label', `Open a support ticket in the Donut Drop Discord at ${SUPPORT_INVITE_URL}`);
+  go.setAttribute('aria-label', `Open a support ticket in the DonutWin Discord at ${SUPPORT_INVITE_URL}`);
 
   const address = el('p', 'dsync__inviteurl mono');
   address.textContent = SUPPORT_INVITE_URL.replace(/^https:\/\//, '');
@@ -76,7 +76,7 @@ function paintTerms() {
   effective.textContent = 'Effective: 21 September 2026';
   const intro = el('p', 'termsdoc__intro');
   intro.textContent =
-    'These terms govern your use of Donut Drop. By creating an account, depositing, playing, or claiming a reward, you agree to them.';
+    'These terms govern your use of DonutWin. By creating an account, depositing, playing, or claiming a reward, you agree to them.';
   document.append(effective, intro);
 
   const sections = [
@@ -84,7 +84,7 @@ function paintTerms() {
       '1. Eligibility',
       [
         'You must be legally allowed to use the service where you live.',
-        'Do not use Donut Drop from a location where this type of service is prohibited.',
+        'Do not use DonutWin from a location where this type of service is prohibited.',
       ],
     ],
     [
@@ -141,7 +141,7 @@ function paintTerms() {
     [
       '9. Responsibility',
       [
-        'To the fullest extent permitted by law, Donut Drop is not responsible for indirect losses, lost opportunities, third-party outages, or events outside its reasonable control.',
+        'To the fullest extent permitted by law, DonutWin is not responsible for indirect losses, lost opportunities, third-party outages, or events outside its reasonable control.',
         'Nothing in these terms excludes rights or liability that cannot legally be excluded.',
       ],
     ],

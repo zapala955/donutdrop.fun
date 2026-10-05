@@ -417,7 +417,7 @@ async function showHelp(interaction: ChatInputCommandInteraction): Promise<void>
         [
           '**Tickets** — press a button on the ticket panel for support or a media application.',
           '**/suggest** — put an idea on the board; everyone votes.',
-          '**/profile** — show a linked Donut Drop profile. **/link** explains how to connect one.',
+          '**/profile** — show a linked DonutWin profile. **/link** explains how to connect one.',
           '**/invites** — how many people you have brought in. **/invite-leaderboard** ranks everyone.',
           '**/userinfo · /serverinfo · /avatar · /poll** — the usual.',
           '',

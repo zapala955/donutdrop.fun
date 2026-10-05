@@ -65,7 +65,7 @@ function inviteCard() {
   go.target = '_blank';
   go.rel = 'noopener noreferrer';
   go.textContent = 'OPEN DISCORD';
-  go.setAttribute('aria-label', `Join the Donut Drop Discord server at ${INVITE_URL}`);
+  go.setAttribute('aria-label', `Join the DonutWin Discord server at ${INVITE_URL}`);
 
   /* The address in plain text, for somebody reading on a phone and playing on a PC. */
   const address = el('p', 'dsync__inviteurl mono');

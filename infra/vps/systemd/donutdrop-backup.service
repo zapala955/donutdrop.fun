@@ -1,5 +1,5 @@
 [Unit]
-Description=Encrypted off-host Donut Drop PostgreSQL backup
+Description=Encrypted off-host DonutWin PostgreSQL backup
 After=docker.service network-online.target
 Wants=network-online.target
 
