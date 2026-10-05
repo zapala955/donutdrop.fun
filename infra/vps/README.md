@@ -1,4 +1,4 @@
-# Deploying DonutWin to `donutdrop.fun`
+# Deploying DonutWin to `donutwin.fun`
 
 The production layout is deliberately one origin:
 
@@ -16,7 +16,7 @@ HTTP-to-HTTPS redirect. Do not publish container port 8080 on a non-loopback add
 ## 1. VPS and DNS
 
 Use a supported Linux VPS with at least 4 GB RAM, Docker Engine, the Docker Compose plugin, Git,
-Curl, OpenSSL, and Caddy. Point the `A` records for `donutdrop.fun` and `www.donutdrop.fun` to the
+Curl, OpenSSL, and Caddy. Point the `A` records for `donutwin.fun` and `www.donutwin.fun` to the
 VPS. Add `AAAA` records only when the VPS really accepts IPv6 traffic. Allow inbound TCP 22, 80,
 and 443; keep 3001, 5432, 6379, and 8080 closed publicly.
 
@@ -40,7 +40,7 @@ sudoedit /opt/donutdrop/shared/donutdrop.env
 ```
 
 Set the real bot UUID, Microsoft login identifier, exact Minecraft username, and any reviewed
-feature flags. `APP_ORIGIN` must remain exactly `https://donutdrop.fun`.
+feature flags. `APP_ORIGIN` must remain exactly `https://donutwin.fun`. (The old domain, donutdrop.fun, only redirects here.)
 
 There is no compliance profile to configure. Country restriction, age verification, KYC,
 self-exclusion and cooldowns were removed along with `GAME_CURRENCY_ONLY`, the flag that used to
@@ -107,9 +107,9 @@ Verify both the private hop and the public domain:
 
 ```bash
 curl --fail http://127.0.0.1:8080/health/ready
-curl --fail https://donutdrop.fun/health/ready
-curl --fail --head https://donutdrop.fun/
-curl --fail --head https://www.donutdrop.fun/
+curl --fail https://donutwin.fun/health/ready
+curl --fail --head https://donutwin.fun/
+curl --fail --head https://www.donutwin.fun/
 ```
 
 The API no longer holds a live simulation in memory, so the constraint that kept it pinned to a
@@ -207,7 +207,7 @@ read-only, and a token that has been pasted anywhere else should be regenerated 
 
 Optional. Off unless configured, and half-configured is refused at boot rather than ignored.
 
-Create a widget in the Cloudflare dashboard under Turnstile for donutdrop.fun. It gives a site key,
+Create a widget in the Cloudflare dashboard under Turnstile for donutwin.fun. It gives a site key,
 which is public and rendered into the page, and a secret key, which is what proves a challenge was
 actually solved and lives in a secret file beside the others.
 

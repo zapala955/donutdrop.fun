@@ -19,9 +19,9 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --retry 2 --retry-all-errors \
-            --max-time 15 https://donutdrop.fun/health/ready | grep -q '"status":"ready"'
+            --max-time 15 https://donutwin.fun/health/ready | grep -q '"status":"ready"'
           curl --fail --silent --show-error --retry 2 --retry-all-errors \
-            --max-time 15 --head https://donutdrop.fun/ >/dev/null
+            --max-time 15 --head https://donutwin.fun/ >/dev/null
       - name: Send failure alert
         if: failure() && env.ALERT_WEBHOOK_URL != ''
         run: |

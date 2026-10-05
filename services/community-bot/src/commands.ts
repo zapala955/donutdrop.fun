@@ -438,7 +438,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
       .addStringOption((option) =>
         option
           .setName('code')
-          .setDescription('The code shown at donutdrop.fun/discord')
+          .setDescription('The code shown at donutwin.fun/discord')
           .setMinLength(4)
           .setMaxLength(16),
       ) as SlashCommandBuilder,

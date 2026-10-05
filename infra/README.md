@@ -5,7 +5,7 @@ egress, and bot internet egress. PostgreSQL and Redis cannot reach one another a
 network. The API and Mineflayer containers have separate outbound bridges and neither has a
 published application port; the Mineflayer container cannot reach either data network.
 
-For the exact `donutdrop.fun` VPS topology, first-deploy commands, TLS configuration, and update
+For the exact `donutwin.fun` VPS topology, first-deploy commands, TLS configuration, and update
 procedure, use [`vps/README.md`](vps/README.md). The Compose nginx bind-mounts the checked-in
 frontend read-only and exposes only `127.0.0.1:8080` for the host TLS proxy.
 

@@ -87,5 +87,5 @@ handoff. Independent review and the legal/operational launch gates in
 `docs/compliance/launch-gates.md` remain required.
 
 API behavior is documented in `docs/api/backend.md`; deployment and secrets are documented in
-`infra/README.md`. The production runbook for `https://donutdrop.fun` is
+`infra/README.md`. The production runbook for `https://donutwin.fun` is
 `infra/vps/README.md`.

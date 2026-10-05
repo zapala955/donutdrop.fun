@@ -19,11 +19,18 @@
 	}
 }
 
-www.donutdrop.fun {
-	redir https://donutdrop.fun{uri} permanent
+# ── the old name ──
+# donutdrop.fun was the site's address until the rebrand. Every link, bookmark and Discord
+# message that still points there lands on the same page at the new address, path and query kept.
+donutdrop.fun, www.donutdrop.fun {
+	redir https://donutwin.fun{uri} permanent
 }
 
-donutdrop.fun {
+www.donutwin.fun {
+	redir https://donutwin.fun{uri} permanent
+}
+
+donutwin.fun {
 	encode zstd gzip
 
 	# ── only Cloudflare may reach this origin ──
@@ -46,7 +53,7 @@ donutdrop.fun {
 	# The ACME path is exempt so a certificate renewal can never be gated on the proxy in front of
 	# it; that route only ever serves a token this server was told to publish minutes earlier.
 	#
-	# TAKING DONUTDROP.FUN OFF CLOUDFLARE (grey cloud in DNS) MAKES THIS REFUSE EVERY REQUEST.
+	# TAKING DONUTWIN.FUN OFF CLOUDFLARE (grey cloud in DNS) MAKES THIS REFUSE EVERY REQUEST.
 	# Comment out the `handle @direct` block first, reload Caddy, and only then change DNS.
 	@direct {
 		not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22

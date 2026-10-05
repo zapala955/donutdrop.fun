@@ -16,7 +16,7 @@ import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
  * services/api-gateway/src/lib/discord-rewards.ts.
  */
 
-const SITE = 'https://donutdrop.fun/discord';
+const SITE = 'https://donutwin.fun/discord';
 
 /**
  * Whether somebody wears THIS server's tag right now.

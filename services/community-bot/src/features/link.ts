@@ -3,7 +3,7 @@ import { ApiUnavailable, type PlatformApi } from '../api-client.js';
 import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
 
 /**
- * link.ts — the bridge to donutdrop.fun, such as it is.
+ * link.ts — the bridge to donutwin.fun, such as it is.
  *
  * The bot does not decide who owns what. The site mints a one-time code for a signed-in browser
  * (the session proves the account), the member types it into `/link code:` here (Discord proves the
@@ -12,7 +12,7 @@ import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
  * linking itself is in features/rewards.ts. `/profile` is a read.
  */
 
-const LINK_PAGE = 'https://donutdrop.fun/discord';
+const LINK_PAGE = 'https://donutwin.fun/discord';
 
 export async function showLink(api: PlatformApi | null, interaction: ChatInputCommandInteraction) {
   if (!api) {
