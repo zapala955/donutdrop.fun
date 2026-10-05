@@ -15,7 +15,6 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { recordBotTransfer } from '../lib/bots.js';
-import { DonutSmpApi, MONEY_MINOR_SCALE } from '../lib/donutsmp-api.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
 import {
@@ -160,9 +159,6 @@ interface AdminEntityRow {
 
 export async function registerAdminRoutes(app: FastifyInstance, db: Database, config: AppConfig) {
   const guards = createAuthGuards(db, config);
-  /* Read-only, and the only thing on this platform that can say what a bot is really holding.
-   * Constructed once: it carries no connection, just the key and the base URL. */
-  const donutsmp = new DonutSmpApi(config);
   const provisionedBotIds = [...config.botCredentials.keys()];
   const requireAdminRead = async (request: Parameters<typeof guards.authenticate>[0]) => {
     await guards.authenticate(request);
@@ -186,48 +182,51 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
    *
    * `tracked_balance_minor` is what the platform believes, maintained from the receipts and payout
    * confirmations the bots report. It is not an authority, and on a float that has just been
-   * switched on it is simply zero while the account holds millions. The real figure comes from
-   * DonutSMP's own stats endpoint, which is the only source that can settle the difference.
+   * switched on it is simply zero while the account holds millions. The real figure is what each
+   * bot last read with its own /bal (DonutSMP switched its stats API off), carried on its
+   * heartbeat. DonutSMP abbreviates large figures, so a reading can be a band: at least
+   * `live_balance_minor`, less than that plus `live_balance_step_minor`.
    *
-   * Best-effort, and deliberately so. A stats API that is slow, rate-limited or unconfigured must
-   * leave the console usable -- an operator still needs to quarantine a bot when DonutSMP is
-   * down. Each lookup resolves to a figure or to a reason, never to a rejection that takes the
-   * whole table with it.
+   * Every bot is listed whatever its reading says: no reading, or an old one, is a reason shown
+   * beside the bot, never a failure of the table.
    */
   app.get('/v1/admin/bots', { preHandler: requireAdminRead }, async () => {
-    const result = await db.query<{ id: string; username: string } & Record<string, unknown>>(
+    const result = await db.query<
+      {
+        id: string;
+        username: string;
+        observed_balance_low_minor: string | null;
+        observed_balance_step_minor: string | null;
+        observed_balance_display: string | null;
+        observed_balance_at: Date | null;
+      } & Record<string, unknown>
+    >(
       `SELECT b.id, b.username, b.status, b.server_host, b.last_heartbeat_at,
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
               b.role, b.tracked_balance_minor,
+              b.observed_balance_low_minor, b.observed_balance_step_minor,
+              b.observed_balance_display, b.observed_balance_at,
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
          FROM bot_accounts b ORDER BY b.role, b.username`,
     );
 
-    // In parallel: two bots must not cost two round trips end to end.
-    const live = await Promise.all(
-      result.rows.map(async (bot) => {
-        if (!donutsmp.configured) return { live: null, error: 'DONUTSMP_API_UNCONFIGURED' };
-        try {
-          /* fetchMoneyMinor returns HUNDREDTHS of a DonutSMP dollar. Every figure in this
-           * platform's ledger is a whole dollar -- see the note on the pay-login credit in
-           * routes/auth.ts, where scaling by a hundred once paid a $930 nonce out as $93,000.
-           * Dividing here keeps the console's columns in one unit. */
-          const hundredths = await donutsmp.fetchMoneyMinor(bot.username);
-          return { live: (hundredths / MONEY_MINOR_SCALE).toString(), error: null };
-        } catch (error) {
-          const code = error instanceof AppError ? error.code : 'DONUTSMP_API_FAILED';
-          return { live: null, error: code };
-        }
-      }),
-    );
-
+    /* What each bot last read with /bal, kept on its row by the heartbeat. A reading older than ten
+     * minutes is still shown, but flagged: it says what the account held then, not now. */
     return {
-      bots: result.rows.map((bot, index) => ({
-        ...bot,
-        live_balance_minor: live[index]?.live ?? null,
-        live_balance_error: live[index]?.error ?? null,
-      })),
+      bots: result.rows.map((bot) => {
+        const low = bot.observed_balance_low_minor;
+        const at = bot.observed_balance_at;
+        const stale = at === null || Date.now() - new Date(at).getTime() > 10 * 60_000;
+        return {
+          ...bot,
+          live_balance_minor: low,
+          live_balance_step_minor: bot.observed_balance_step_minor ?? null,
+          live_balance_display: bot.observed_balance_display ?? null,
+          live_balance_at: at,
+          live_balance_error: low === null ? 'NO_BALANCE_READING' : stale ? 'BALANCE_READING_STALE' : null,
+        };
+      }),
       floatTargetMinor: config.tellerFloatTargetMinor.toString(),
     };
   });

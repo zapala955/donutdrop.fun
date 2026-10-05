@@ -695,3 +695,60 @@ test('recognises the server refusing a payout for funds, and nothing else', asyn
   assert.equal(parsePayoutRefusal({ content: "You don't have enough funds to do this" }), undefined);
   assert.equal(parsePayoutRefusal(null), undefined);
 });
+
+/* /bal, now the only way a bot learns what it holds (DonutSMP switched its stats API off). The
+ * exact wording was never captured, so the reader is tested against every plausible shape and
+ * against the lookalikes it must refuse. */
+test('reads the balance from the reply to /bal, and refuses anything ambiguous', async () => {
+  const { parseBalanceReply } = await import('../src/payment-chat.js');
+  const parts = (...texts: Array<[string, string]>) => ({
+    content: { text: '', extra: texts.map(([text, color]) => ({ text, color })) },
+  });
+
+  // The receipt's own styling: white words, a green "$ ", a white abbreviated figure.
+  const abbreviated = parseBalanceReply(parts(['Your balance is ', 'white'], ['$ ', '#00ff00'], ['1.97M', 'white']));
+  assert.deepEqual(abbreviated, { displayed: '$1.97M', low: 1_970_000n, step: 10_000n });
+  // One plain line, exact with cents (dropped: the platform counts whole dollars).
+  assert.deepEqual(parseBalanceReply({ content: { text: 'Balance: $1,234,567.89', color: 'gold' } }), {
+    displayed: '$1,234,567.89',
+    low: 1_234_567n,
+    step: 1n,
+  });
+  assert.deepEqual(parseBalanceReply({ content: 'You have $250K' }), { displayed: '$250K', low: 250_000n, step: 1_000n });
+  assert.deepEqual(parseBalanceReply({ content: 'Your balance is $0' }), { displayed: '$0', low: 0n, step: 1n });
+  // NBT-tagged, as current servers send it.
+  const tagged = {
+    content: {
+      type: 'compound',
+      value: {
+        text: { type: 'string', value: 'Your money: ' },
+        extra: { type: 'list', value: { type: 'compound', value: [{ text: { type: 'string', value: '$2B' } }] } },
+      },
+    },
+  };
+  assert.deepEqual(parseBalanceReply(tagged), { displayed: '$2B', low: 2_000_000_000n, step: 1_000_000_000n });
+
+  // Lookalikes: payments, refusals, two figures, no figure, no mention of a balance.
+  assert.equal(parseBalanceReply(parts(['You paid wymiar ', 'white'], ['$ ', '#00ff00'], ['5M', 'white'])), undefined);
+  assert.equal(parseBalanceReply({ content: "You don't have enough funds to do this" }), undefined);
+  assert.equal(parseBalanceReply({ content: 'Balance: $1M (bank $2M)' }), undefined);
+  assert.equal(parseBalanceReply({ content: 'Your balance is loading' }), undefined);
+  assert.equal(parseBalanceReply({ content: 'Steve: sell me $5M of shards' }), undefined);
+  assert.equal(parseBalanceReply(null), undefined);
+});
+
+test('reads its balance on join, on a timer and after money moves, and reports it on the heartbeat', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
+  assert.match(source, /bot\.chat\('\/bal'\);/);
+  assert.match(source, /this\.schedule\(\(\) => this\.requestBalance\(\), BALANCE_CHECK_MS\);/);
+  // Never while a /pay waits for its answer.
+  const request = source.slice(source.indexOf('private requestBalance(): void {'));
+  assert.match(request.slice(0, 600), /if \(this\.pendingPayout \|\| this\.transferring\)/);
+  // Only inside its own window, and logged verbatim whether or not it was understood.
+  assert.match(source, /if \(Date\.now\(\) < this\.balanceReplyUntil\) \{/);
+  assert.match(source, /'system chat after \/bal'/);
+  // Carried on the heartbeat, and dropped with the session it described.
+  assert.match(source, /lowMinor: balance\.low\.toString\(\),/);
+  assert.match(source, /this\.balanceTimer = undefined;\s+this\.balanceReplyUntil = 0;\s+this\.observedBalance = undefined;/);
+});

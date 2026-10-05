@@ -65,18 +65,28 @@ describe('emptying the teller into the vault', () => {
     assert.ok(settings.includes('tellerSweepThresholdMinor'));
   });
 
-  /* The whole reason this is a timer. An eight-second HTTP call inside the transaction that
-   * credits a deposit would hold row locks across a network round trip on the hottest path here. */
-  it('reads the balance outside any transaction, and sweeps inside one', async () => {
+  /* DonutSMP switched its stats API off. The teller's real balance is now what its own /bal last
+   * read, kept on its row by the heartbeat -- and only a reading taken after the last money booked
+   * on the bot, or "correcting" by it would book that movement twice. */
+  it("sweeps from the bot's own /bal, and only from a fresh reading newer than every booked movement", async () => {
     const code = await sweeper();
-    const fetchAt = code.indexOf('await donutsmp.fetchMoneyMinor');
-    const transactionAt = code.indexOf('await db.transaction(async (client)');
-    assert.ok(fetchAt > 0 && transactionAt > fetchAt, 'the stats call happens inside a transaction');
+    assert.doesNotMatch(code, /DonutSmpApi|fetchMoneyMinor/);
+    assert.match(code, /const reading = await trustedReading\(client, teller\.id\);/);
+    const trusted = code.slice(code.indexOf('export async function trustedReading('));
+    assert.match(trusted, /b\.observed_balance_at > now\(\) - \(\$2::integer \* interval '1 millisecond'\) AS fresh/);
+    assert.match(trusted, /\(SELECT max\(t\.created_at\) FROM bot_transfers t WHERE t\.bot_id = b\.id\)/);
+    assert.match(trusted, /FROM bot_accounts b WHERE b\.id = \$1 FOR UPDATE/);
+    assert.match(trusted, /if \(!bot\.fresh \|\| !bot\.after_last_movement\) return undefined;/);
   });
 
-  it('converts hundredths to whole dollars before comparing against anything', async () => {
+  /* "1.97M" is a band a hundred thousand wide. Inside it the tracked figure is as right as the
+   * reading can say; outside it, the floor is the one value the reading guarantees -- and the
+   * sweep is sized from the floor, so it never asks the teller for money it may not hold. */
+  it('reads an abbreviated balance as a band, corrects only outside it, and sweeps from its floor', async () => {
     const code = await sweeper();
-    assert.ok(code.includes('hundredths / MONEY_MINOR_SCALE'));
+    assert.match(code, /const fits = tracked >= low && tracked < low \+ step;/);
+    assert.match(code, /correctedTo: fits \? tracked : low,/);
+    assert.match(code, /\{ id: teller\.id, username: teller\.username \},\s+reading\.low,/);
   });
 
   /* A corrected balance that left no trace is a figure nobody can explain afterwards, and this

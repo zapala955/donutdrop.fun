@@ -133,6 +133,85 @@ export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
   return text === INSUFFICIENT_FUNDS_TEXT ? 'insufficient_funds' : undefined;
 }
 
+/** What the bot's own /bal said: the figure as shown, and the interval of balances it stands for. */
+export interface BalanceReading {
+  readonly displayed: string;
+  /** The least the account can hold, in whole dollars. */
+  readonly low: bigint;
+  /** How wide the figure is: the true balance is in [low, low + step). 1 for an exact figure. */
+  readonly step: bigint;
+}
+
+const BALANCE_SCALES: Record<string, bigint> = {
+  '': 1n,
+  K: 1_000n,
+  M: 1_000_000n,
+  B: 1_000_000_000n,
+  T: 1_000_000_000_000n,
+};
+
+/**
+ * Reads the server's answer to this bot's own /bal.
+ *
+ * DonutSMP's stats API was switched off, and /bal is now the only way a bot can learn what it
+ * holds. Its exact wording has not been captured from the live server, so this reads the reply by
+ * what any balance line must contain rather than by one guessed sentence: a mention of a balance
+ * and exactly one dollar figure. It is only consulted in the seconds after the bot sent /bal
+ * itself, and every reply in that window is logged verbatim, so the real wording can be read off
+ * the logs. Anything ambiguous -- two figures, a payment, an error -- is refused, not guessed at.
+ *
+ * DonutSMP abbreviates large figures ("1.97M") and truncates them, so a reading is an interval:
+ * "1.97M" is anything from 1,970,000 up to 1,980,000. An exact figure has its cents dropped, since
+ * every amount on this platform is a whole dollar.
+ */
+export function parseBalanceReply(packet: unknown): BalanceReading | undefined {
+  if (packet === null || typeof packet !== 'object') return undefined;
+  const record = packet as Record<string, unknown>;
+  const text = flattenText(record['content'] ?? record['message'])
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text || text.length > 200) return undefined;
+  // A payment receipt or a refusal is never a balance, whatever figures it carries.
+  if (/\bpaid\b|enough funds|not enough|cannot|can't|unknown command/i.test(text)) return undefined;
+  if (!/\bbal(ance)?\b|\byou have\b|\bmoney\b/i.test(text)) return undefined;
+
+  const figures = [...text.matchAll(/\$\s*(\d[\d,]*(?:\.\d+)?)\s*([KMBT])?(?![A-Za-z0-9])/gi)];
+  if (figures.length !== 1) return undefined;
+  const [, digits, suffix] = figures[0]!;
+  const unit = BALANCE_SCALES[(suffix ?? '').toUpperCase()];
+  if (!digits || unit === undefined) return undefined;
+  const [whole = '', fraction = ''] = digits.replace(/,/g, '').split('.');
+  if (!/^\d+$/.test(whole) || !/^\d*$/.test(fraction)) return undefined;
+
+  if (unit === 1n) {
+    return { displayed: figures[0]![0].replace(/\s+/g, ''), low: BigInt(whole), step: 1n };
+  }
+  const denominator = 10n ** BigInt(fraction.length);
+  const step = unit / denominator;
+  return {
+    displayed: figures[0]![0].replace(/\s+/g, ''),
+    low: (BigInt(whole + fraction) * unit) / denominator,
+    step: step >= 1n ? step : 1n,
+  };
+}
+
+/** All the text in a chat component, in order, whatever its nesting and NBT wrapping. */
+function flattenText(node: unknown, depth = 0): string {
+  if (depth > 8) return '';
+  let value = node;
+  for (let i = 0; i < 4; i += 1) {
+    const next = unwrap(value);
+    if (next === value) break;
+    value = next;
+  }
+  if (typeof value === 'string') return value;
+  if (value === null || typeof value !== 'object') return '';
+  if (Array.isArray(value)) return value.map((part) => flattenText(part, depth + 1)).join('');
+  const own = fieldText(value, 'text') ?? '';
+  const extra = (value as Record<string, unknown>)['extra'];
+  return own + (extra === undefined ? '' : flattenText(extra, depth + 1));
+}
+
 /**
  * The interval of true values an abbreviated display can stand for: [low, low + step).
  *

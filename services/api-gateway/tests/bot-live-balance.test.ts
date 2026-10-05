@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { MONEY_MINOR_SCALE, parseMoneyToMinor } from '../src/lib/donutsmp-api.js';
 
 const repo = path.resolve(import.meta.dirname, '../../..');
 const read = (relative: string) => readFile(path.join(repo, relative), 'utf8');
@@ -11,40 +10,32 @@ const read = (relative: string) => readFile(path.join(repo, relative), 'utf8');
  * The Holding column read $0 beside accounts holding millions.
  *
  * `tracked_balance_minor` is what the platform BELIEVES, maintained from the receipts the bots
- * report, and it starts at zero on a float that has only just been switched on. It is not a
- * balance. DonutSMP's own stats endpoint is the only thing that can say what an account actually
- * holds, and until now nothing called it — the client existed and had no consumers at all.
+ * report. It is not a balance. DonutSMP's stats API used to say what an account really held; it
+ * was switched off, and each bot now reads its own balance with /bal and carries the answer on its
+ * heartbeat.
  */
 describe('what a bot is really holding', () => {
-  /* The trap in this wiring, and the reason the conversion is asserted rather than eyeballed:
-   * DonutSMP reports HUNDREDTHS, and every figure in this platform's ledger is a whole dollar.
-   * Getting this backwards once paid a $930 login nonce out as $93,000. */
-  it('converts DonutSMP hundredths into the whole dollars the rest of the console uses', () => {
-    assert.equal(MONEY_MINOR_SCALE, 100n);
-    // "1975372.25" is a real shape from that API: money is a float64 rendered as a string.
-    const hundredths = parseMoneyToMinor('1975372.25');
-    assert.equal(hundredths, 197_537_225n);
-    assert.equal(hundredths! / MONEY_MINOR_SCALE, 1_975_372n);
+  it('stores what /bal said on the heartbeat, with the time it was read, not the time it arrived', async () => {
+    const route = await read('services/api-gateway/src/routes/minecraft-in.ts');
+    const schema = route.slice(route.indexOf('const heartbeatEvent'), route.indexOf('const linkEvent'));
+    // Optional: a bot that has not read its balance, or an older build, sends none.
+    assert.match(schema, /balance: z\s+\.object\(\{/);
+    assert.match(schema, /\.strict\(\)\s+\.optional\(\),/);
+    const beat = route.slice(route.indexOf('async function processHeartbeat('), route.indexOf('async function processLinkConfirmation('));
+    assert.match(beat, /observed_balance_at = LEAST\(\$5::timestamptz, now\(\)\)/);
+    const migration = await read('packages/db/migrations/059_bot_balance_readings.sql');
+    assert.match(migration, /ADD COLUMN observed_balance_low_minor bigint/);
+    assert.match(migration, /ADD COLUMN observed_balance_step_minor bigint CHECK \(observed_balance_step_minor >= 1\)/);
   });
 
-  it('divides by the scale where it reads the balance', async () => {
+  it('shows the reading in the console, and says when there is none or it is old', async () => {
     const admin = await read('services/api-gateway/src/routes/admin.ts');
+    assert.doesNotMatch(admin, /DonutSmpApi|fetchMoneyMinor|donutsmp-api/);
     const route = admin.slice(admin.indexOf("'/v1/admin/bots'"));
     const handler = route.slice(0, route.indexOf('floatTargetMinor'));
-    assert.match(handler, /hundredths \/ MONEY_MINOR_SCALE/);
-  });
-
-  /* An operator still needs to quarantine a bot while DonutSMP is down, so a stats API that is
-   * slow, rate-limited or simply not configured must not take the table with it. */
-  it('degrades to a reason instead of failing the whole endpoint', async () => {
-    const admin = await read('services/api-gateway/src/routes/admin.ts');
-    const route = admin.slice(admin.indexOf("'/v1/admin/bots'"));
-    const handler = route.slice(0, route.indexOf('floatTargetMinor'));
-    assert.match(handler, /catch \(error\)/);
-    assert.match(handler, /live_balance_error/);
-    assert.match(handler, /DONUTSMP_API_UNCONFIGURED/);
-    // In parallel: two bots must not cost two round trips end to end.
-    assert.match(handler, /Promise\.all\(/);
+    assert.match(handler, /live_balance_minor: low,/);
+    assert.match(handler, /'NO_BALANCE_READING'/);
+    assert.match(handler, /'BALANCE_READING_STALE'/);
   });
 });
 

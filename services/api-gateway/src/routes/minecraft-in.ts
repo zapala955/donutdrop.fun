@@ -30,6 +30,17 @@ const heartbeatEvent = eventBase.extend({
   online: z.boolean(),
   snapshotHealthy: z.boolean(),
   transferCapable: z.boolean(),
+  /* The bot's balance, from its own /bal (DonutSMP's stats API is gone). Optional: a bot that has
+   * not read it yet sends none, and an older bot build never does. */
+  balance: z
+    .object({
+      displayed: z.string().min(1).max(32),
+      lowMinor: z.string().regex(/^\d{1,18}$/),
+      stepMinor: z.string().regex(/^[1-9]\d{0,17}$/),
+      observedAt: z.iso.datetime({ offset: true }),
+    })
+    .strict()
+    .optional(),
 });
 const linkEvent = eventBase.extend({
   type: z.literal('link_confirmation'),
@@ -678,6 +689,24 @@ async function processHeartbeat(
       transfersEnabled && event.transferCapable,
     ],
   );
+  /* The reading keeps the time it was TAKEN, not the time this heartbeat arrived: the same reading
+   * rides every heartbeat until the next /bal, and stamping it fresh each time would hide how old
+   * it is from everything that decides whether to trust it. Capped at now, never in the future. */
+  if (event.balance) {
+    await client.query(
+      `UPDATE bot_accounts
+          SET observed_balance_low_minor = $2, observed_balance_step_minor = $3,
+              observed_balance_display = $4, observed_balance_at = LEAST($5::timestamptz, now())
+        WHERE id = $1`,
+      [
+        event.botId,
+        event.balance.lowMinor,
+        event.balance.stepMinor,
+        event.balance.displayed,
+        event.balance.observedAt,
+      ],
+    );
+  }
 }
 
 async function processLinkConfirmation(

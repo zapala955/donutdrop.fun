@@ -1613,7 +1613,8 @@ async function loadBots() {
        * without reading the column header. */
       role.append(pill(bot.role === 'vault' ? 'VAULT' : 'teller', bot.role === 'vault' ? 'warn' : 'ok'));
 
-      /* What the account is really holding, read from DonutSMP, not what this platform believes.
+      /* What the account is really holding, as the bot's own /bal last read it (DonutSMP switched
+       * its stats API off), not what this platform believes.
        * The tracked figure is maintained from receipts and starts at zero on a float that has
        * just been switched on -- which is why this column read $0 beside an account holding
        * millions. The tracked number is still worth seeing, so it rides in the tooltip next to
@@ -1624,10 +1625,23 @@ async function loadBots() {
       holding.className = 'mono';
       holding.textContent =
         liveBalance === null || liveBalance === undefined ? '—' : compactAmount(liveBalance);
+      const readAt = bot.live_balance_at ? new Date(bot.live_balance_at).toLocaleString() : 'unknown';
+      // DonutSMP abbreviates and rounds down, so "1.97M" means somewhere in [1,970,000, 1,980,000).
+      const band =
+        liveBalance !== null && liveBalance !== undefined &&
+        bot.live_balance_step_minor && bot.live_balance_step_minor !== '1'
+          ? ` (shown in game as ${bot.live_balance_display}, so below ${amountText(
+              BigInt(liveBalance) + BigInt(bot.live_balance_step_minor),
+            )})`
+          : '';
       holding.title =
         liveBalance === null || liveBalance === undefined
-          ? `DonutSMP did not answer (${bot.live_balance_error || 'unknown'}). Tracked: ${amountText(bot.tracked_balance_minor)}`
-          : `Live: ${amountText(liveBalance)}\nTracked by the platform: ${amountText(bot.tracked_balance_minor)}`;
+          ? `No /bal reading from this bot yet. Tracked: ${amountText(bot.tracked_balance_minor)}`
+          : `In game, by /bal at ${readAt}: at least ${amountText(liveBalance)}${band}` +
+            (bot.live_balance_error === 'BALANCE_READING_STALE'
+              ? '\nThis reading is over ten minutes old.'
+              : '') +
+            `\nTracked by the platform: ${amountText(bot.tracked_balance_minor)}`;
       tr.append(role, holding);
       const status = document.createElement('td');
       status.append(
@@ -1826,8 +1840,11 @@ async function reconcileBot(bot) {
     description:
       `Tracked: ${amountText(bot.tracked_balance_minor)}.` +
       (live === null || live === undefined
-        ? ' DonutSMP could not be reached, so enter what /balance says in game.'
-        : ` DonutSMP reports ${amountText(live)}, filled in below.`) +
+        ? ' The bot has not read its balance yet, so enter what /bal says in game.'
+        : ` The bot's /bal shows ${bot.live_balance_display || amountText(live)}` +
+          (bot.live_balance_step_minor && bot.live_balance_step_minor !== '1'
+            ? ', which is rounded down: check the exact figure in game before saving.'
+            : ', filled in below.')) +
       ' The difference is written to the log as an adjustment.',
     fields: [
       // Prefilled from the live reading, so the common case is read it, agree, submit.

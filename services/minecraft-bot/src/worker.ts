@@ -18,6 +18,8 @@ import {
   parsePaymentMessage,
   parsePaymentNotice,
   parsePayoutRefusal,
+  parseBalanceReply,
+  type BalanceReading,
   type OutgoingPayment,
   type PayoutRefusal,
 } from './payment-chat.js';
@@ -30,6 +32,11 @@ const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
 const PAYOUT_CHAT_CAPTURE_MS = 8_000;
 /** How long to wait for the server to confirm a payout before giving up on knowing. */
 const PAYOUT_CONFIRM_MS = 8_000;
+/** How often the bot reads its own balance with /bal, and how long it listens for the answer. */
+const BALANCE_CHECK_MS = 120_000;
+const BALANCE_REPLY_MS = 5_000;
+/** After money moves, read the balance again this long after the last movement. */
+const BALANCE_AFTER_MOVE_MS = 4_000;
 
 interface JobClaimState {
   readonly bot: Bot;
@@ -135,6 +142,11 @@ export class MinecraftWorker {
   private claimBlockReason: string | undefined = 'startup';
   /** While set, system chat is logged verbatim so a payout's server reply can be read back. */
   private payoutChatCaptureUntil = 0;
+  /* The bot's balance as /bal last reported it, sent to the gateway on every heartbeat. DonutSMP's
+   * stats API is gone, so this is the only place the platform learns what a bot really holds. */
+  private observedBalance: (BalanceReading & { observedAt: string }) | undefined;
+  private balanceReplyUntil = 0;
+  private balanceTimer: NodeJS.Timeout | undefined;
   /** The payout waiting on the server's confirmation, if one is in flight. */
   private pendingPayout:
     | {
@@ -220,6 +232,10 @@ export class MinecraftWorker {
       this.run(this.heartbeat(true), 'heartbeat');
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
+      // The balance: once shortly after joining (the server is still sending its join messages
+      // straight away), then every couple of minutes, and again after every movement of money.
+      this.balanceSoon(8_000);
+      this.schedule(() => this.requestBalance(), BALANCE_CHECK_MS);
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
       /* Polled whatever the transfer flag says. BOT_TRANSFERS_ENABLED governs what the bot may do
        * with an ITEM, not whether it may ask for work: cash payouts share this queue and move a
@@ -261,6 +277,24 @@ export class MinecraftWorker {
         const described = describeSystemChat(data);
         if (described) this.log.info({ chat: described }, 'system chat after payout');
       }
+      /* The answer to this bot's own /bal. Every line in the window is logged as it arrived, so
+       * the server's exact wording is on record whether or not the reader understood it. */
+      if (Date.now() < this.balanceReplyUntil) {
+        const described = describeSystemChat(data);
+        if (described) this.log.info({ chat: described }, 'system chat after /bal');
+        const reading = parseBalanceReply(data);
+        if (reading) {
+          this.balanceReplyUntil = 0;
+          this.observedBalance = { ...reading, observedAt: new Date().toISOString() };
+          this.log.info(
+            { displayed: reading.displayed, low: reading.low.toString(), step: reading.step.toString() },
+            'balance read',
+          );
+          // Straight to the gateway rather than waiting up to fifteen seconds for the next beat.
+          this.run(this.heartbeat(true), 'heartbeat');
+          return;
+        }
+      }
       /* The server refusing the payout this bot is waiting on: the money did not move. Read only
        * while a /pay is in flight, which is the only time the message can be about ours. */
       const awaitingAnswer = this.pendingPayout;
@@ -296,6 +330,8 @@ export class MinecraftWorker {
         payment?.amount,
         this.javaUuidFor(bot, notice.payer),
       );
+      // Money arrived: what the bot holds has changed.
+      this.balanceSoon(BALANCE_AFTER_MOVE_MS);
     });
     bot.on('windowClose', () => this.markInventoryDirty());
     bot.on('kicked', (reason) =>
@@ -309,6 +345,12 @@ export class MinecraftWorker {
       for (const timer of this.timers) clearInterval(timer);
       this.timers.clear();
       this.snapshotTimer = undefined;
+      /* Cleared with the rest, so the handle has to go too or no read would ever be scheduled
+       * again. The reading itself is dropped: it describes a session that has ended, and the next
+       * one reads afresh shortly after it joins. */
+      this.balanceTimer = undefined;
+      this.balanceReplyUntil = 0;
+      this.observedBalance = undefined;
       if (this.bot === bot) this.bot = undefined;
       if (this.connectionController === connectionController) {
         this.connectionController = undefined;
@@ -606,6 +648,7 @@ export class MinecraftWorker {
   }
 
   private async heartbeat(online: boolean): Promise<void> {
+    const balance = this.observedBalance;
     await this.api.sendEvent({
       eventId: randomUUID(),
       botId: this.config.botId,
@@ -619,7 +662,49 @@ export class MinecraftWorker {
         this.snapshotHealthy &&
         this.config.transfersEnabled &&
         this.transfers.reviewedCapability,
+      ...(online && balance
+        ? {
+            balance: {
+              displayed: balance.displayed,
+              lowMinor: balance.low.toString(),
+              stepMinor: balance.step.toString(),
+              observedAt: balance.observedAt,
+            },
+          }
+        : {}),
     });
+  }
+
+  /** Reads the balance after a short delay; several calls inside the delay make one /bal. */
+  private balanceSoon(delayMs: number): void {
+    if (this.balanceTimer || this.stopped) return;
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      this.balanceTimer = undefined;
+      this.requestBalance();
+    }, delayMs);
+    timer.unref();
+    this.timers.add(timer);
+    this.balanceTimer = timer;
+  }
+
+  /**
+   * Asks the server what this bot holds, with /bal.
+   *
+   * Not while a /pay is waiting for its answer: the two replies would share the window, and a
+   * payout's confirmation is the one that must not be confused with anything. The next scheduled
+   * read picks it up.
+   */
+  private requestBalance(): void {
+    const bot = this.bot;
+    const connectionController = this.connectionController;
+    if (!bot?.entity || !connectionController || connectionController.signal.aborted) return;
+    if (this.pendingPayout || this.transferring) {
+      this.balanceSoon(BALANCE_AFTER_MOVE_MS);
+      return;
+    }
+    this.balanceReplyUntil = Date.now() + BALANCE_REPLY_MS;
+    bot.chat('/bal');
   }
 
   private async snapshot(): Promise<void> {
@@ -804,6 +889,9 @@ export class MinecraftWorker {
   ): Promise<void> {
     const { payee, amountMinor } = job.payload;
     let receipt: OutgoingPayment | PayoutRefusal | undefined;
+    /* Whatever happens next, the balance is worth reading again once it has: a payout that went
+     * out, or one refused for funds, both say something about what the bot holds. */
+    this.balanceSoon(BALANCE_AFTER_MOVE_MS + PAYOUT_CONFIRM_MS);
     try {
       if (!this.isConnectionLive(claimState)) throw new Error('PAYOUT_NOT_SENT');
       // Re-checked immediately before the write: a disconnect between the guard above and this
