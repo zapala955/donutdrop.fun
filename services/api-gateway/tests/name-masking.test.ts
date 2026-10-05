@@ -90,6 +90,23 @@ describe('public surfaces', () => {
     assert.doesNotMatch(code, /winner: row\.winner/);
   });
 
+  it('masks community case creators, showing the real name only to the creator', async () => {
+    /* The marketplace printed "by PotatoCannon2010" on every card, to anybody who loaded the
+     * page, while every other public surface had been masked for weeks. */
+    const source = await route('community');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.equal(code.match(/\$\{maskedName\('u\.minecraft_username'\)\} AS creator,/g)?.length, 2);
+    assert.doesNotMatch(code, /u\.minecraft_username AS creator\b/);
+    // The full name exists in one query, for one viewer: the creator, on their own case.
+    assert.match(
+      code,
+      /creator: viewerId === crate\.creator_user_id \? crate\.creator_own_name : crate\.creator,/,
+    );
+    assert.equal(code.match(/creator_own_name/g)?.length, 3);
+    // And no row is spread into a response, so the extra column cannot ride out by accident.
+    assert.doesNotMatch(code, /\.\.\.crate\b|\.\.\.row\b/);
+  });
+
   it('keeps the stored name raw, and masks only on the way out', async () => {
     /* battle_players.display_name is captured at join time and an audit of who actually played
      * needs it. The mask belongs in the read, not in the write. */

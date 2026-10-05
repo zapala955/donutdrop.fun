@@ -19,6 +19,7 @@ import {
 } from '../lib/community-cases.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { maskedName } from '../lib/masked-name.js';
 import { safePublicText } from '../lib/sanitize.js';
 import { parseWith } from '../lib/validation.js';
 
@@ -346,7 +347,10 @@ export async function registerCommunityRoutes(
     }>(
       `SELECT c.id, c.slug, c.name, c.description, c.price_minor, c.metadata, c.royalty_bps,
               c.opens_count, c.volume_minor, c.royalties_paid_minor, c.created_at,
-              u.minecraft_username AS creator, u.role AS creator_role,
+              /* Masked like every other public name. The marketplace is open to anyone who loads
+               * the page, and a creator's full name beside their case was a player's identity
+               * handed to every passer-by. */
+              ${maskedName('u.minecraft_username')} AS creator, u.role AS creator_role,
               (SELECT count(*) FROM case_items k WHERE k.case_id = c.id AND k.enabled) AS drop_count
          FROM cases c JOIN users u ON u.id = c.creator_user_id
         WHERE c.community_status = 'published' AND c.enabled
@@ -385,8 +389,12 @@ export async function registerCommunityRoutes(
       metadata: Record<string, unknown> | null; royalty_bps: number; opens_count: string;
       volume_minor: string; royalties_paid_minor: string; created_at: Date; creator: string;
       creator_role: string; community_status: string; creator_user_id: string;
+      creator_own_name: string;
     }>(
-      `SELECT c.*, u.minecraft_username AS creator, u.role AS creator_role
+      /* The name masked for everyone else, and in full only for the creator looking at their own
+       * case, which is the one viewer it tells nothing new. */
+      `SELECT c.*, ${maskedName('u.minecraft_username')} AS creator,
+              u.minecraft_username AS creator_own_name, u.role AS creator_role
          FROM cases c JOIN users u ON u.id = c.creator_user_id
         WHERE c.slug = $1`,
       [params.slug],
@@ -426,7 +434,7 @@ export async function registerCommunityRoutes(
         volumeMinor: crate.volume_minor,
         royaltiesPaidMinor: crate.royalties_paid_minor,
         status: crate.community_status,
-        creator: crate.creator,
+        creator: viewerId === crate.creator_user_id ? crate.creator_own_name : crate.creator,
         creatorVerified: crate.creator_role === 'admin' || Number(crate.opens_count) >= 100,
         createdAt: crate.created_at,
         drops: drops.rows.map((row) => ({
