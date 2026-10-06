@@ -308,7 +308,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
 
     let you = null;
     if (event && viewerId) {
-      const wagered = await wageredSince(db, viewerId, event.window_minutes);
+      const wagered = await wageredSince(db, config, viewerId, event.window_minutes);
       const claimed = await db.query(
         'SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND user_id = $2',
         [event.id, viewerId],
@@ -423,7 +423,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
         /* Eligibility is rechecked HERE, against the live window, rather than trusted from whatever
          * the client was shown. The card a player is looking at may be thirty seconds stale, and
          * thirty seconds is enough for a window to roll past a wager that was inside it. */
-        const wagered = await wageredSince(client, userId, event.window_minutes);
+        const wagered = await wageredSince(client, config, userId, event.window_minutes);
         if (wagered < BigInt(event.min_wagered_minor)) {
           throw new AppError(403, 'RAIN_NOT_ELIGIBLE', 'Not enough wagered inside the window');
         }

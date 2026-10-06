@@ -40,6 +40,48 @@ export function houseMarginMinor(config: AppConfig, wagerMinor: bigint): bigint 
 }
 
 /**
+ * How much of a wager counts toward a reward that pays a fixed amount for VOLUME: the referral
+ * milestone, the daily reward's wager bar and the lava rain's entry bar.
+ *
+ * Every one of those is priced on a house game. "$50M wagered" means "$5M earned by the house" at
+ * a 10% edge, and the break-even arithmetic in .env.example rests on it. A coinflip or a Mines Duel
+ * earns only its rake -- 3% of the stake where a house game earns 10% -- so counting its stake in
+ * full sold the same reward for under a third of the price, and two accounts playing each other
+ * paid nothing but the rake to manufacture the volume. A referee reached a $30M milestone that way
+ * through Mines Duels against the account that referred it, and withdrew.
+ *
+ * So a wager counts as the house wager it is worth: its margin divided back out by the edge.
+ * `marginMinor` is the margin the mode really earned, which only the PvP modes pass to recordWager;
+ * without one the wager is a house game and counts to the unit. Never more than the stake.
+ */
+export function countedWagerMinor(
+  config: AppConfig,
+  wagerMinor: bigint,
+  marginMinor?: bigint,
+): bigint {
+  if (wagerMinor <= 0n) return 0n;
+  if (marginMinor === undefined || config.houseEdgeBps <= 0) return wagerMinor;
+  if (marginMinor <= 0n) return 0n;
+  const equivalent = (marginMinor * 10_000n) / BigInt(config.houseEdgeBps);
+  return equivalent < wagerMinor ? equivalent : wagerMinor;
+}
+
+/**
+ * The same rule as a SQL expression over a `wager_events` row, for the windows summed in SQL.
+ * `edgeParam` is the placeholder carrying houseEdgeBps. A house game's row stores exactly
+ * houseMarginMinor of its stake as its margin, and is recognised by that so it counts to the unit
+ * rather than losing the remainder of a division on the way back.
+ */
+export function countedWagerSql(edgeParam: string): string {
+  return `CASE WHEN ${edgeParam}::integer <= 0
+                 OR margin_minor::numeric >= floor(amount_minor::numeric * ${edgeParam}::integer / 10000)
+               THEN amount_minor
+               ELSE LEAST(amount_minor,
+                          floor(GREATEST(margin_minor, 0)::numeric * 10000 / ${edgeParam}::integer)::bigint)
+          END`;
+}
+
+/**
  * One tier's cash-back on one wager.
  *
  * Integer division truncates, so a wager too small to produce a whole unit earns nothing on that

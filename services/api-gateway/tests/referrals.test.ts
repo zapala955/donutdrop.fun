@@ -11,6 +11,7 @@ import {
   revshareMinor,
   tryUnlockMilestone,
 } from '../src/lib/referrals.js';
+import { countedWagerMinor } from '../src/lib/rewards.js';
 
 const migrationPath = path.resolve(
   import.meta.dirname,
@@ -352,6 +353,63 @@ describe('referral configuration', () => {
       settings.referralBonusWagerMinor >= settings.referralBonusMinor,
       'the bonus must never exceed the wager that unlocks it',
     );
+  });
+});
+
+describe('PvP volume toward the milestone', () => {
+  /* A coinflip or Mines Duel passes recordWager the margin it really earned: its share of the 3%
+   * rake. The gate is priced on a 10% house game, so that stake must count as the house wager its
+   * rake is worth -- 30% of it -- or a referee and the referrer's second account open the gate for
+   * a third of the price. Production saw exactly that: a referee with no deposit reached the $30M
+   * bonus through Mines Duels against the account that referred it. */
+  const pvpMargin = (stake: bigint) => (stake * 300n) / 10_000n;
+
+  it('counts a house game to the unit and a PvP stake at its rake', () => {
+    const settings = config();
+    assert.equal(countedWagerMinor(settings, 10_000_000n), 10_000_000n);
+    assert.equal(countedWagerMinor(settings, 10_000_000n, pvpMargin(10_000_000n)), 3_000_000n);
+    // Never more than the stake, however large a margin is claimed.
+    assert.equal(countedWagerMinor(settings, 1_000_000n, 5_000_000n), 1_000_000n);
+    // A mode that earned nothing counts for nothing.
+    assert.equal(countedWagerMinor(settings, 1_000_000n, 0n), 0n);
+    assert.equal(countedWagerMinor(settings, 0n), 0n);
+  });
+
+  it('does not open the gate with PvP volume equal to the gate', async () => {
+    const settings = config();
+    const gate = settings.referralBonusWagerMinor;
+    const client = new ReferralClient();
+    await accrueReferralWager(
+      client, settings, REFEREE, gate, 'mines_duel', 'duel-1', pvpMargin(gate),
+    );
+    assert.equal(client.state.wagered, (gate * 3n) / 10n);
+    assert.equal(client.state.bonusUnlocked, false);
+    assert.equal(client.credits.some((entry) => entry.kind === 'referral_bonus'), false);
+  });
+
+  it('opens it once PvP has earned what a house game at the gate would', async () => {
+    const settings = config();
+    const gate = settings.referralBonusWagerMinor;
+    const client = new ReferralClient();
+    // 10/3 of the gate in coinflips is the gate's worth of house-game margin.
+    const stake = (gate * 10n) / 3n + 10n;
+    await accrueReferralWager(
+      client, settings, REFEREE, stake, 'coinflip', 'flip-1', pvpMargin(stake),
+    );
+    assert.ok(client.state.wagered >= gate);
+    assert.equal(client.state.bonusUnlocked, true);
+  });
+
+  it('feeds the rain and daily-reward windows through the same rule in SQL', async () => {
+    const settlement = await readFile(settlementPath, 'utf8');
+    const daily = await readFile(
+      path.resolve(import.meta.dirname, '../src/lib/daily-rewards.ts'),
+      'utf8',
+    );
+    for (const source of [settlement, daily]) {
+      assert.match(source, /SUM\(\$\{countedWagerSql\('\$\d'\)\}\)/);
+      assert.doesNotMatch(source, /SUM\(amount_minor\)/);
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.js';
 import type { DbClient } from './db.js';
 import { AppError } from './errors.js';
+import { countedWagerSql } from './rewards.js';
 
 export interface DailyWagerProgress {
   readonly wageredMinor: bigint;
@@ -30,11 +31,13 @@ export async function dailyRewardWagerProgress(
     return { wageredMinor: 0n, requiredMinor: 0n, remainingMinor: 0n, met: true };
   }
   const result = await client.query<{ total: string }>(
-    `SELECT COALESCE(SUM(amount_minor), 0)::text AS total
+    /* A PvP stake counts as the house wager its rake is worth, so two accounts playing each other
+     * cannot clear the bar for 3% of it. See countedWagerMinor. */
+    `SELECT COALESCE(SUM(${countedWagerSql('$2')}), 0)::text AS total
        FROM wager_events
       WHERE user_id = $1
         AND created_at >= date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'`,
-    [userId],
+    [userId, config.houseEdgeBps],
   );
   const wageredMinor = BigInt(result.rows[0]?.total ?? '0');
   const requiredMinor = config.streakDailyWagerRequiredMinor;

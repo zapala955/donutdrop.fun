@@ -3,6 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { ContributionSource } from './cash-settlement.js';
 import type { DbClient } from './db.js';
 import { conflict } from './errors.js';
+import { countedWagerMinor } from './rewards.js';
 import { creditWallet } from './wallet.js';
 
 /**
@@ -90,7 +91,12 @@ export async function accrueReferralWager(
   const margin = marginMinor ?? houseMarginMinor(config, wagerMinor);
   const commission =
     (margin * BigInt(referral.revshare_bps ?? config.referralRevshareBps)) / 10_000n;
-  const wageredAfter = BigInt(referral.wagered_minor) + wagerMinor;
+  /* The milestone counts what the wager earned the house, expressed as a house-game stake, not
+   * its face value: a PvP stake earns the rake alone, and counted in full it let a referee and the
+   * referrer's own second account flip the gate open for 3% of it. See countedWagerMinor. So
+   * `wagered_minor` is the counted wager from here on, which is also what the progress bar shows. */
+  const wageredAfter =
+    BigInt(referral.wagered_minor) + countedWagerMinor(config, wagerMinor, marginMinor);
 
   if (commission > 0n) {
     /* The earnings row goes in FIRST, so its unique (kind, reference_id) index stops a replayed

@@ -4,7 +4,12 @@ import type { DbClient } from './db.js';
 import type { VipProgressEvent } from './vip.js';
 import { accrueReferralWager } from './referrals.js';
 import { accrueAndDrawJackpot, type JackpotOutcome } from './jackpot.js';
-import { accrueRakeback, houseMarginMinor, recordRaceWager } from './rewards.js';
+import {
+  accrueRakeback,
+  countedWagerSql,
+  houseMarginMinor,
+  recordRaceWager,
+} from './rewards.js';
 import { recordVipWager } from './vip.js';
 import { publishLiveSoon } from './live-events.js';
 import { reduceWagerRequirement } from './wager-requirements.js';
@@ -147,9 +152,12 @@ export async function recordWager(
    * paid a rake on the pot instead — deriving their margin from the edge would hand rakeback and
    * referral revenue-share a number the house never collected, on every duel, forever.
    *
-   * Note what it does NOT change: `amountMinor` is still the real stake, so VIP progress, the
-   * referral milestone and the faction war all keep counting genuine wagered volume. Only the
-   * two payouts that are explicitly a share of the margin read this.
+   * Note what it does NOT change: `amountMinor` is still the real stake, so VIP progress and the
+   * faction war keep counting genuine wagered volume. The two payouts that are a share of the
+   * margin read this, and so does everything that pays a FIXED reward for volume -- the referral
+   * milestone, the daily reward's bar and the lava rain's -- which counts a PvP stake as the house
+   * wager its rake is worth (countedWagerMinor). Counted at face value, two accounts playing each
+   * other bought those rewards for the rake alone.
    */
   marginMinor?: bigint,
 ): Promise<WagerOutcome> {
@@ -219,17 +227,22 @@ async function recordWagerEvent(
  * The lava rain's entry bar, and the only question `wager_events` exists to answer. Tips are not in
  * this table at all, deliberately: a tip is not a wager, and if it counted here two accounts could
  * pass the same money back and forth to qualify each other for every drop.
+ *
+ * A PvP stake counts as the house wager its rake is worth, for the same reason: two accounts
+ * flipping against each other would otherwise qualify for a share of the pool for 3% of the bar.
+ * See countedWagerMinor.
  */
 export async function wageredSince(
   client: DbClient,
+  config: AppConfig,
   userId: string,
   windowMinutes: number,
 ): Promise<bigint> {
   const result = await client.query<{ total: string }>(
-    `SELECT COALESCE(SUM(amount_minor), 0)::text AS total
+    `SELECT COALESCE(SUM(${countedWagerSql('$3')}), 0)::text AS total
        FROM wager_events
       WHERE user_id = $1 AND created_at >= now() - make_interval(mins => $2)`,
-    [userId, windowMinutes],
+    [userId, windowMinutes, config.houseEdgeBps],
   );
   return BigInt(result.rows[0]?.total ?? '0');
 }
