@@ -157,21 +157,24 @@ describe('mines duel: the money and the secrets, structurally', () => {
     assert.match(route, /WHERE user_id = \$1 AND balance_minor >= \$2/);
   });
 
-  it('counts wagers only when a game is decided, never for a draw', async () => {
+  it('rakes a draw like a decided game, and counts it once it has paid a rake', async () => {
+    /* A free draw left the edge at the share of games that were decided: 31% of games were drawn,
+     * nearly all 0-0, so a 10% rake earned under 7%. */
     const route = await read('services/api-gateway/src/routes/mines-duel.ts');
     const settle = route.slice(
       route.indexOf('async function settleLocked'),
       route.indexOf('const clockHasRunOut'),
     );
-    const decided = settle.slice(
-      settle.indexOf('if (decided && winnerUserId)'),
-      settle.indexOf('} else {'),
-    );
-    const draw = settle.slice(settle.indexOf('} else {'));
-    assert.match(decided, /recordWager\(/);
-    assert.match(decided, /duelMarginPerPlayer\(money\)/);
-    assert.doesNotMatch(draw, /recordWager\(/);
-    assert.match(draw, /'mines_duel_refund'/);
+    assert.match(settle, /const draw = decided \? null : splitDraw\(stake, row\.rake_bps\);/);
+    const refunds = settle.slice(settle.indexOf('} else if (draw) {'), settle.indexOf('if (decided ||'));
+    assert.equal(refunds.match(/draw\.refundEachMinor/g)?.length, 2);
+    assert.match(refunds, /'mines_duel_refund'/);
+    // Never the whole stake: each refund is the stake less its half of the rake.
+    assert.doesNotMatch(refunds, /\bstake,\s*'mines_duel_refund'/);
+    // Both sides are wagers on a decided game and on a draw that paid a rake, never a free one.
+    const wagers = settle.slice(settle.indexOf('if (decided || money.rakeMinor > 0n)'));
+    assert.match(wagers, /duelMarginPerPlayer\(money\)/);
+    assert.match(wagers, /recordWager\(/);
   });
 
   it('keeps games already in play running and paying when the switch is off', async () => {
@@ -274,7 +277,7 @@ describe('mines duel: the schema and the wiring', () => {
     const config = await read('services/api-gateway/src/config.ts');
     assert.match(
       config,
-      /MINES_DUEL_RAKE_BPS: z\.coerce\.number\(\)\.int\(\)\.min\(0\)\.max\(1_000\)\.default\(300\)/,
+      /MINES_DUEL_RAKE_BPS: z\.coerce\.number\(\)\.int\(\)\.min\(0\)\.max\(1_000\)\.default\(1000\)/,
     );
     assert.match(
       config,

@@ -171,7 +171,7 @@ describe('the coinflip routes', () => {
       const response = await app.inject({ method: 'GET', url: '/v1/coinflip' });
       assert.equal(response.statusCode, 200);
       const body = response.json();
-      assert.equal(body.rakeBps, 300);
+      assert.equal(body.rakeBps, 1000);
       assert.equal(body.minStakeMinor, '100000');
       assert.deepEqual(body.games, []);
       assert.deepEqual(body.recent, []);

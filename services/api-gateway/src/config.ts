@@ -466,15 +466,16 @@ const environmentSchema = z
     RAKEBACK_INSTANT_BPS: z.coerce.number().int().min(0).max(10_000).default(1_000),
     /* 1v1 skill duels. The only mode on the platform with NO house edge on the outcome: the
      * house does not hold a side, so it takes 0% of the result and is paid a rake on the pot of
-     * a duel it actually decided. That rake is the whole revenue of the mode, which is why it is
+     * every duel played, a draw included. That rake is the whole revenue of the mode, which is why it is
      * bounded so tightly here — an operator who could set it to 40% would have turned a skill
      * contest into a worse crate.
      *
-     * The ceiling is 1000 bps and the default is 300 (3%). Both are also enforced by the database
+     * The ceiling and the default are both 1000 bps (10%): the rake is the mode's whole edge, and
+     * 10% is the edge every house game takes. The ceiling is also enforced by the database
      * on duel_lobbies.rake_bps, because the fee is snapshot onto the row at creation and a value
      * that got past config would otherwise be permanent on that duel. */
     SKILL_DUEL_ENABLED: booleanString,
-    SKILL_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    SKILL_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(1000),
     /* The most a single upgrade may risk.
      *
      * Previously there was no ceiling at all: a stake was clamped to the player's balance and
@@ -556,7 +557,7 @@ const environmentSchema = z
       .enum(['true', 'false'])
       .default('true')
       .transform((value) => value === 'true'),
-    COINFLIP_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    COINFLIP_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(1000),
     COINFLIP_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     COINFLIP_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     COINFLIP_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
@@ -567,7 +568,7 @@ const environmentSchema = z
       .enum(['true', 'false'])
       .default('true')
       .transform((value) => value === 'true'),
-    MINES_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(300),
+    MINES_DUEL_RAKE_BPS: z.coerce.number().int().min(0).max(1_000).default(1000),
     MINES_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     MINES_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     MINES_DUEL_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),

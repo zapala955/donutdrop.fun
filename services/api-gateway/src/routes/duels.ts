@@ -17,6 +17,7 @@ import {
   judge,
   resolveDuel,
   scheduleFor,
+  splitDraw,
   splitPot,
   type DuelVariant,
   type RoundResult,
@@ -42,12 +43,13 @@ import { LOBBY_SOCKET_BUDGET, createSocketBudget } from '../lib/socket-limit.js'
  *      cost anyone anything that has not already been staked.
  *   4. Settlement. The pot is split exactly once:
  *        decided  → winner is credited pot - rake, house keeps rake.
- *        draw     → both stakes returned whole, house keeps NOTHING.
+ *        draw     → both stakes returned, each less its half of the rake.
  *        forfeit  → the player who stayed is credited pot - rake.
  *        expired  → both stakes returned whole, house keeps NOTHING.
  *
- * The house is paid for producing a winner. When it does not produce one it is not paid, which is
- * why 'draw' and 'expired' refund at face value rather than refunding net of a fee.
+ * The house is paid for every duel that is played, drawn or not: a free draw made the edge only
+ * the share of duels that were decided, short of the 10% every house game takes. A duel that
+ * expired was never played to the end, and refunds at face value.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * WHY THE STAKE IS NOT A WAGER UNTIL THE DUEL STARTS
@@ -266,12 +268,13 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
     const stake = BigInt(row.stake_minor);
     const money = splitPot(stake, row.rake_bps);
     const paysRake = outcome === 'decided' || outcome === 'forfeit';
-
-    /* A duel that produced no winner returns both stakes at face value and the house takes
-     * nothing. Recording a zero rake rather than skipping the columns keeps the row's settlement
-     * block complete, which is what `duel_settled_is_complete` requires. */
-    const rakeMinor = paysRake ? money.rakeMinor : 0n;
-    const payoutMinor = paysRake ? money.payoutMinor : money.potMinor;
+    /* A draw is raked too, each stake going back less its half (see splitDraw). An expired duel
+     * returns both stakes at face value and the house takes nothing; recording a zero rake rather
+     * than skipping the columns keeps the row's settlement block complete, which is what
+     * `duel_settled_is_complete` requires. */
+    const draw = outcome === 'draw' ? splitDraw(stake, row.rake_bps) : null;
+    const rakeMinor = paysRake ? money.rakeMinor : draw ? draw.rakeMinor : 0n;
+    const payoutMinor = paysRake ? money.payoutMinor : draw ? draw.payoutMinor : money.potMinor;
 
     const claimed = await client.query(
       `UPDATE duel_lobbies
@@ -292,15 +295,16 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
         deterministicUuid('duel_win', row.id, winnerUserId),
       );
     } else {
-      /* Refund both sides their own stake. Two rows rather than one, because a refund belongs in
-       * each player's own history at the amount they actually put in. */
+      /* Refund both sides their own stake, less its half of the rake on a draw. Two rows rather
+       * than one, because a refund belongs in each player's own history. */
+      const refund = draw ? draw.refundEachMinor : stake;
       for (const [userId, role] of [
         [row.host_user_id, 'host'] as const,
         [row.opponent_user_id, 'opponent'] as const,
       ]) {
         if (!userId) continue;
         await creditWallet(
-          client, userId, stake, 'duel_refund',
+          client, userId, refund, 'duel_refund',
           deterministicUuid('duel_refund', row.id, role),
         );
       }

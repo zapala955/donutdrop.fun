@@ -88,6 +88,18 @@ function payoutFor(stakeMinor, rakeBps) {
   return pot - (pot * BigInt(rakeBps)) / 10_000n;
 }
 
+/** The rake as players read it: "10%", or "2.5%" for a fractional one. */
+function rakeLabel(rakeBps) {
+  return `${(rakeBps / 100).toFixed(rakeBps % 100 ? 1 : 0)}%`;
+}
+
+/** What each player got back from a drawn game: the returned pot, split two ways. A draw settled
+ *  before draws were raked recorded no payout and gave each stake back whole. */
+function drawRefundFor(g) {
+  const back = bigOf(g.payoutMinor ?? 0) / 2n;
+  return back > 0n ? back : bigOf(g.stakeMinor);
+}
+
 /** The chance the next tile is safe, in whole percent: arithmetic on public numbers only. */
 function nextSafePercent(tnt, turned) {
   const hidden = TILES - turned;
@@ -214,7 +226,7 @@ function renderLobby() {
 
   const badges = el('div', 'duel__badges');
   badges.append(
-    badge(`${(board.rakeBps / 100).toFixed(board.rakeBps % 100 ? 1 : 0)}%`, 'House rake'),
+    badge(rakeLabel(board.rakeBps), 'House rake'),
     badge('Same', 'Field for both'),
     badge(`${board.playSeconds}s`, 'To play'),
     badge('Hidden', 'Scores until the end'),
@@ -391,7 +403,7 @@ function resultCard(g, personal) {
   score.textContent = `${g.host.score ?? 0} – ${g.opponent.score ?? 0}`;
   const money_ = el('span', 'mono mduel__resultmoney');
   money_.textContent = draw
-    ? 'stakes back'
+    ? `${money(Number(drawRefundFor(g)))} back`
     : personal && !g.youWon
       ? `-${money(Number(g.stakeMinor))}`
       : `+${money(Number(g.payoutMinor))}`;
@@ -515,7 +527,7 @@ function renderCreate() {
   form.append(
     Object.assign(el('p', 'mduel__fine'), {
       textContent:
-        'A draw returns both stakes and charges nothing. A duel nobody takes is refunded.',
+        `A draw returns both stakes less the ${rakeLabel(board.rakeBps)} rake. A duel nobody takes is refunded in full.`,
     }),
   );
 
@@ -524,7 +536,7 @@ function renderCreate() {
     const ok = stake !== null && stake > 0n;
     total.textContent = ok ? money(Number(payoutFor(stake, board.rakeBps))) : '—';
     split.textContent = ok
-      ? `${money(Number(stake * 2n))} pot − ${(board.rakeBps / 100).toFixed(board.rakeBps % 100 ? 1 : 0)}%`
+      ? `${money(Number(stake * 2n))} pot − ${rakeLabel(board.rakeBps)}`
       : '';
     const issue = state.authenticated ? createProblem() : '';
     go.textContent = !state.authenticated
@@ -1181,7 +1193,7 @@ function revealResult({ instant = false } = {}) {
     }),
     Object.assign(el('span', 'mduel__money mono'), {
       textContent: draw
-        ? 'Both stakes returned'
+        ? `${money(Number(drawRefundFor(g)))} back`
         : won
           ? `+${money(Number(g.payoutMinor))}`
           : `-${money(Number(g.stakeMinor))}`,

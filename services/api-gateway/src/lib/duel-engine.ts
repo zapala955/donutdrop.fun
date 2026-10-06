@@ -86,7 +86,7 @@ export const VARIANT_RULES: Readonly<Record<DuelVariant, DuelRules>> = Object.fr
 export interface DuelSettlementMoney {
   /** Both stakes. */
   readonly potMinor: bigint;
-  /** What the house keeps for producing a winner. */
+  /** What the house keeps for running the duel. */
   readonly rakeMinor: bigint;
   /** What the winner is credited. */
   readonly payoutMinor: bigint;
@@ -112,6 +112,39 @@ export function splitPot(stakeMinor: bigint, rakeBps: number): DuelSettlementMon
   const potMinor = stakeMinor * 2n;
   const rakeMinor = (potMinor * BigInt(rakeBps)) / 10_000n;
   return { potMinor, rakeMinor, payoutMinor: potMinor - rakeMinor };
+}
+
+export interface DuelDrawMoney extends DuelSettlementMoney {
+  /** What each player gets back: their own stake less their half of the rake. */
+  readonly refundEachMinor: bigint;
+}
+
+/**
+ * Splits a DRAWN duel: both stakes go back, each less its half of the rake.
+ *
+ * A draw used to be free. On Mines Duel that made the edge whatever share of games happened to be
+ * decided -- 31% of them were draws, nearly all 0-0, so a 10% rake earned the house under 7% of
+ * what was staked. Charging the same rake on a draw is what makes the edge the rake on every game
+ * the duel actually plays, like every house game's 10%.
+ *
+ * Charged per stake rather than on the pot, so both refunds are equal to the unit and the rake is
+ * exactly twice one player's half. `payoutMinor` is what goes back across both players, which keeps
+ * `pot = rake + payout`, the identity the duel tables check.
+ */
+export function splitDraw(stakeMinor: bigint, rakeBps: number): DuelDrawMoney {
+  if (stakeMinor <= 0n) throw new Error('A duel stake must be positive');
+  if (!Number.isInteger(rakeBps) || rakeBps < 0 || rakeBps > 1_000) {
+    throw new Error('Duel rake must be an integer between 0 and 1000 bps');
+  }
+  const halfRake = (stakeMinor * BigInt(rakeBps)) / 10_000n;
+  const potMinor = stakeMinor * 2n;
+  const rakeMinor = halfRake * 2n;
+  return {
+    potMinor,
+    rakeMinor,
+    payoutMinor: potMinor - rakeMinor,
+    refundEachMinor: stakeMinor - halfRake,
+  };
 }
 
 /**

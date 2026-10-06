@@ -8,7 +8,7 @@ import { battleCodeFrom, deterministicUuid } from '../lib/battle-engine.js';
 import { creditWallet, recordWager } from '../lib/cash-settlement.js';
 import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
-import { duelMarginPerPlayer, splitPot } from '../lib/duel-engine.js';
+import { duelMarginPerPlayer, splitDraw, splitPot } from '../lib/duel-engine.js';
 import { AppError } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { publishLiveSoon } from '../lib/live-events.js';
@@ -451,9 +451,11 @@ export async function registerMinesDuelRoutes(
     const stake = BigInt(row.stake_minor);
     const winnerUserId =
       outcome === 'host' ? row.host_user_id : outcome === 'opponent' ? row.opponent_user_id : null;
-    const money = decided
-      ? splitPot(stake, row.rake_bps)
-      : { potMinor: 0n, rakeMinor: 0n, payoutMinor: 0n };
+    /* A draw is raked like a decided game, each player getting their own stake back less their
+     * half. Free draws made the edge whatever share of games was decided -- under 7% at a 10% rake,
+     * with 31% of games drawn. See splitDraw. */
+    const draw = decided ? null : splitDraw(stake, row.rake_bps);
+    const money = draw ?? splitPot(stake, row.rake_bps);
     const serverSeed = decryptSecret(
       row.server_seed_ciphertext,
       config.dataEncryptionKey,
@@ -494,10 +496,30 @@ export async function registerMinesDuelRoutes(
         'mines_duel_win',
         deterministicUuid('mines_duel_win', row.id, winnerUserId),
       );
-      /* NOW both stakes are wagers. Each player's margin is half the rake, because they put in
-       * half the pot each -- the derivation a duel and a coinflip use, for the same reason: this
-       * mode charges no house edge on the result, so an edge-derived margin would be money never
-       * collected. */
+    } else if (draw) {
+      /* A draw: both stakes back, each less its half of the rake. */
+      await creditWallet(
+        client,
+        row.host_user_id,
+        draw.refundEachMinor,
+        'mines_duel_refund',
+        deterministicUuid('mines_duel_refund', row.id, 'host'),
+      );
+      await creditWallet(
+        client,
+        row.opponent_user_id,
+        draw.refundEachMinor,
+        'mines_duel_refund',
+        deterministicUuid('mines_duel_refund', row.id, 'opponent'),
+      );
+    }
+
+    /* NOW both stakes are wagers -- on a draw too, once it pays a rake, because the house earned
+     * one. Each player's margin is half the rake, because they put in half the pot each -- the
+     * derivation a duel and a coinflip use, for the same reason: this mode charges no house edge on
+     * the result, so an edge-derived margin would be money never collected. A draw at a zero rake
+     * earned nothing and counts as nothing. */
+    if (decided || money.rakeMinor > 0n) {
       const margin = duelMarginPerPlayer(money);
       for (const player of [row.host_user_id, row.opponent_user_id]) {
         await recordWager(
@@ -511,22 +533,6 @@ export async function registerMinesDuelRoutes(
           margin,
         );
       }
-    } else {
-      /* A draw: both stakes back whole. Nothing is charged and nothing is counted as wagered. */
-      await creditWallet(
-        client,
-        row.host_user_id,
-        stake,
-        'mines_duel_refund',
-        deterministicUuid('mines_duel_refund', row.id, 'host'),
-      );
-      await creditWallet(
-        client,
-        row.opponent_user_id,
-        stake,
-        'mines_duel_refund',
-        deterministicUuid('mines_duel_refund', row.id, 'opponent'),
-      );
     }
     return true;
   }

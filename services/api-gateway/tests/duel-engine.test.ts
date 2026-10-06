@@ -11,8 +11,10 @@ import {
   resolveDuel,
   scheduleFor,
   sequenceLength,
+  splitDraw,
   splitPot,
 } from '../src/lib/duel-engine.js';
+import { loadConfig } from '../src/config.js';
 
 /* ═════════════════════════ the fee ═════════════════════════ */
 
@@ -65,6 +67,61 @@ test('each player generates half the rake as margin', () => {
   // Both sides contributed the pot equally, so neither may be credited for all of it.
   const money = splitPot(50_000_000n, 300);
   assert.equal(duelMarginPerPlayer(money), 1_500_000n);
+});
+
+test('a 10% rake is a 10% edge: each player expects 90% of the stake back', () => {
+  /* The house games all take 10%, and a duel's rake is its whole edge. Two equal players each win
+   * half the time: half of a winner's 1.8x is 0.9x per stake. */
+  const money = splitPot(50_000_000n, 1000);
+  assert.equal(money.payoutMinor, 90_000_000n);
+  assert.equal(money.payoutMinor / 2n, (50_000_000n * 9n) / 10n);
+});
+
+test('the duels default to that 10% rake', () => {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+    APP_ORIGIN: 'http://localhost:3000',
+    COOKIE_SECRET: 'c'.repeat(32),
+    DATA_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+    BOT_CREDENTIALS_JSON: JSON.stringify({
+      '10000000-0000-4000-8000-000000000001': {
+        secret: Buffer.alloc(32, 2).toString('base64'),
+        serverHost: 'donutsmp.net',
+        username: 'DonutBot',
+      },
+    }),
+    AUDIT_LOG_HMAC_KEY: 'a'.repeat(32),
+    IP_HASH_KEY: 'i'.repeat(32),
+  });
+  assert.equal(config.coinflipRakeBps, 1000);
+  assert.equal(config.minesDuelRakeBps, 1000);
+  assert.equal(config.skillDuelRakeBps, 1000);
+});
+
+test('a draw is raked too: both stakes back, each less its half', () => {
+  /* Free draws made the edge the share of games that were decided. On Mines Duel 31% were drawn,
+   * which cut a 10% rake to under 7%. */
+  const draw = splitDraw(50_000_000n, 1000);
+  assert.equal(draw.refundEachMinor, 45_000_000n);
+  assert.equal(draw.rakeMinor, 10_000_000n);
+  assert.equal(draw.payoutMinor, 90_000_000n);
+  assert.equal(duelMarginPerPlayer(draw), 5_000_000n);
+});
+
+test('a raked draw balances, refunds equally and never refunds more than the stake', () => {
+  for (const stake of [1n, 3n, 7n, 999n, 1_000_001n, 123_456_789n, 10n ** 18n]) {
+    for (const bps of [0, 1, 37, 300, 999, 1000]) {
+      const draw = splitDraw(stake, bps);
+      assert.equal(draw.payoutMinor + draw.rakeMinor, draw.potMinor, `stake=${stake} bps=${bps}`);
+      assert.equal(draw.refundEachMinor * 2n, draw.payoutMinor, `stake=${stake} bps=${bps}`);
+      assert.ok(draw.refundEachMinor <= stake && draw.refundEachMinor > 0n);
+    }
+  }
+  // At a zero rake a draw is the old free draw.
+  assert.equal(splitDraw(1_000_000n, 0).refundEachMinor, 1_000_000n);
+  assert.throws(() => splitDraw(0n, 1000), /positive/);
+  assert.throws(() => splitDraw(100n, 1001), /between 0 and 1000/);
 });
 
 /* ═════════════════════════ the schedule ═════════════════════════ */

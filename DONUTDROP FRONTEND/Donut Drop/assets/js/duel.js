@@ -36,7 +36,7 @@ let pingTimer = 0;
 let clockSkewMs = 0;
 
 /** Lobby list plus the platform's duel configuration, as last read. */
-let board = { duels: [], rakeBps: 300, minStakeMinor: '0', maxStakeMinor: '0', variants: [] };
+let board = { duels: [], rakeBps: 1000, minStakeMinor: '0', maxStakeMinor: '0', variants: [] };
 
 /** The duel this client is currently inside, or null when we are looking at the lobby. */
 let active = null;
@@ -711,21 +711,22 @@ function settle(duel) {
   kicker.textContent = drew ? 'DRAW' : won ? 'VICTORY' : 'DEFEAT';
 
   const figure = el('b', 'duelend__fig mono');
+  /* A draw's payout is what went back across both players, so each got half of it: their stake
+   * less their half of the fee. A draw settled before draws were raked paid no fee. */
+  const raked = Number(duel.rakeMinor) > 0;
   figure.textContent = drew
-    ? money(Number(duel.stakeMinor))
+    ? money(Number(duel.payoutMinor) / 2)
     : money(Number(won ? duel.payoutMinor : duel.stakeMinor));
 
   const caption = el('span', 'duelend__cap');
-  caption.textContent = drew ? 'STAKE RETURNED'
+  caption.textContent = drew ? (raked ? 'STAKE BACK, LESS FEE' : 'STAKE RETURNED')
     : won ? 'TOTAL POT WIN' : 'STAKE LOST';
 
   const chips = el('div', 'duelend__chips');
   for (const [value, label] of [
     [money(Number(duel.potMinor)), 'POT'],
     [`${(duel.rakeBps / 100).toFixed(1)}%`, 'HOUSE FEE'],
-    /* On a draw the house took nothing, and the chip says so rather than quoting a fee that was
-     * never charged. */
-    [drew ? money(0) : money(Number(duel.rakeMinor)), 'FEE PAID'],
+    [money(Number(duel.rakeMinor)), 'FEE PAID'],
   ]) {
     const chip = el('span', 'duelend__chip');
     chip.append(Object.assign(el('b', 'mono'), { textContent: value }),

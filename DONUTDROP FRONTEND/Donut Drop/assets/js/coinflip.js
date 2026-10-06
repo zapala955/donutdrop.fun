@@ -22,7 +22,7 @@ import { api, clientSeed } from './api.js';
 let root = null;
 
 /** The board plus the platform's coinflip configuration, as last read. */
-let board = { games: [], recent: [], rakeBps: 300, minStakeMinor: '0', maxStakeMinor: '0' };
+let board = { games: [], recent: [], rakeBps: 1000, minStakeMinor: '0', maxStakeMinor: '0' };
 
 /** Codes of games this player is hosting and has not seen land yet. */
 const watching = new Set();
