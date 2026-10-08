@@ -31,10 +31,12 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  *   join    once per site account and once per Discord account, paid when the link is made.
  *   tag     once per account per UTC day, for wearing the server's tag; the bot reports the tag.
- *   invite  to the member whose invite brought somebody in, once per invited Discord account,
- *           when that person links -- or, if the inviter links later, when the inviter does.
  *
- * Join and invite rewards need a Discord account older than the configured age. The age is read
+ * There was an invite reward too, paid to whoever's invite brought a member in. It was removed on
+ * 2026-10-08 at the operator's request; the rows it would have written stay readable in
+ * discord_rewards and the ledger, and invite TRACKING (the leaderboard) is untouched.
+ *
+ * The join reward needs a Discord account older than the configured age. The age is read
  * from the snowflake itself, which encodes its creation time, so it does not rest on the bot's
  * word. Every reward adds to the wager requirement at the sign-up bonus's multiplier: playable at
  * once, withdrawable after it has been wagered, so farming them with alts pays nothing out.
@@ -85,9 +87,9 @@ export async function createLinkCode(
 }
 
 export interface RewardLine {
-  readonly kind: 'join' | 'tag' | 'invite';
+  readonly kind: 'join' | 'tag';
   readonly amountMinor: string;
-  readonly to: 'you' | 'inviter';
+  readonly to: 'you';
 }
 
 export interface LinkOutcome {
@@ -165,28 +167,6 @@ export async function linkWithCode(
       rewards.push({ kind: 'join', amountMinor: join.paid.toString(), to: 'you' });
       credited.push(userId);
     }
-    /* The member's own inviter, now that the member is somebody the site can see. */
-    const inviter = await payInviteReward(client, config, input.guildId, input.discordUserId);
-    if (inviter) {
-      rewards.push({ kind: 'invite', amountMinor: inviter.amount.toString(), to: 'inviter' });
-      credited.push(inviter.userId);
-    }
-    /* And the people this member invited before linking, who have been waiting on them. */
-    const owed = await client.query<{ member_id: string }>(
-      `SELECT m.member_id FROM discord_invited_members m
-         JOIN users u ON u.discord_user_id = m.member_id
-        WHERE m.guild_id = $1 AND m.inviter_id = $2 AND m.source = 'invite'
-          AND NOT EXISTS (SELECT 1 FROM discord_rewards r
-                           WHERE r.kind = 'invite' AND r.invitee_discord_id = m.member_id)
-        ORDER BY m.first_joined_at`,
-      [input.guildId, input.discordUserId],
-    );
-    for (const member of owed.rows) {
-      const paid = await payInviteReward(client, config, input.guildId, member.member_id);
-      if (!paid) continue;
-      rewards.push({ kind: 'invite', amountMinor: paid.amount.toString(), to: 'you' });
-      credited.push(paid.userId);
-    }
     return { username: row.minecraft_username, rewards, joinSkipped: join.skipped, credited };
   });
   if (outcome.credited.length) liveEvents.publish('balance', [...new Set(outcome.credited)]);
@@ -198,7 +178,7 @@ async function credit(
   config: AppConfig,
   userId: string,
   amount: bigint,
-  kind: 'discord_join_reward' | 'discord_tag_reward' | 'discord_invite_reward',
+  kind: 'discord_join_reward' | 'discord_tag_reward',
   rewardId: string,
 ): Promise<void> {
   await creditWallet(client, userId, amount, kind, rewardId);
@@ -233,60 +213,6 @@ async function payJoinReward(
   if (!inserted.rowCount) return { paid: null, skipped: 'The join reward was already paid' };
   await credit(client, config, userId, amount, 'discord_join_reward', id);
   return { paid: amount, skipped: null };
-}
-
-/**
- * Pays the inviter of `inviteeDiscordId`, if there is one the site knows and every rule holds.
- * Returns who was paid, or null.
- */
-async function payInviteReward(
-  client: DbClient,
-  config: AppConfig,
-  guildId: string,
-  inviteeDiscordId: string,
-): Promise<{ userId: string; amount: bigint } | null> {
-  const amount = config.discordInviteRewardMinor;
-  if (!config.discordRewardsEnabled || amount <= 0n) return null;
-  if (!oldEnough(config, inviteeDiscordId)) return null;
-
-  const found = await client.query<{
-    inviter_id: string;
-    inviter_user: string;
-    invitee_user: string;
-  }>(
-    `SELECT m.inviter_id, inviter.id AS inviter_user, invitee.id AS invitee_user
-       FROM discord_invited_members m
-       JOIN users inviter ON inviter.discord_user_id = m.inviter_id AND inviter.status = 'active'
-       JOIN users invitee ON invitee.discord_user_id = m.member_id
-      WHERE m.guild_id = $1 AND m.member_id = $2 AND m.source = 'invite'`,
-    [guildId, inviteeDiscordId],
-  );
-  const row = found.rows[0];
-  // Nobody to pay, or somebody who would be paying themselves.
-  if (!row || row.inviter_user === row.invitee_user || row.inviter_id === inviteeDiscordId) {
-    return null;
-  }
-
-  const cap = config.discordInviteRewardDailyCap;
-  if (cap <= 0) return null;
-  const today = await client.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM discord_rewards
-      WHERE kind = 'invite' AND user_id = $1 AND created_at >= date_trunc('day', now())`,
-    [row.inviter_user],
-  );
-  if (Number(today.rows[0]?.n ?? '0') >= cap) return null;
-
-  const id = randomUUID();
-  const inserted = await client.query(
-    `INSERT INTO discord_rewards
-       (id, user_id, discord_user_id, kind, invitee_discord_id, amount_minor)
-     VALUES ($1, $2, $3, 'invite', $4, $5)
-     ON CONFLICT DO NOTHING`,
-    [id, row.inviter_user, row.inviter_id, inviteeDiscordId, amount.toString()],
-  );
-  if (!inserted.rowCount) return null;
-  await credit(client, config, row.inviter_user, amount, 'discord_invite_reward', id);
-  return { userId: row.inviter_user, amount };
 }
 
 /**
@@ -367,15 +293,9 @@ export async function rewardStatus(db: Database, config: AppConfig, userId: stri
     amounts: {
       joinMinor: config.discordJoinRewardMinor.toString(),
       tagMinor: config.discordTagRewardMinor.toString(),
-      inviteMinor: config.discordInviteRewardMinor.toString(),
     },
     minAccountAgeDays: config.discordRewardMinAccountAgeDays,
-    inviteDailyCap: config.discordInviteRewardDailyCap,
     join: { claimed: by.has('join') },
     tag: { claimedToday: by.get('tag')?.today === true, days: Number(by.get('tag')?.n ?? 0) },
-    invites: {
-      rewarded: Number(by.get('invite')?.n ?? 0),
-      totalMinor: by.get('invite')?.total ?? '0',
-    },
   };
 }

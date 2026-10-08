@@ -320,20 +320,24 @@ describe('frontend/backend contract', () => {
     assert.match(flow, /paintWithdrawLocked\(host, owed\)/);
   });
 
-  it('sends the Discord menu row straight to the same invite as the nav pill', async () => {
+  /* Both used to go straight to the invite, which left the in-app page -- the only place a player
+   * can get the code for /link -- with nothing pointing at it, and nobody could link. */
+  it('opens the in-app Discord page from the nav pill and the menu row', async () => {
     const html = await source('index.html');
     const discordRows = [...html.matchAll(/<a class="menu__row"[^>]*>[\s\S]*?<\/a>/g)]
       .filter((match) => match[0].includes('<span>Discord</span>'));
 
     assert.equal(discordRows.length, 1);
     const row = discordRows[0]?.[0] ?? '';
-    // Two links to one server must not drift onto two invites when somebody rotates one of them.
-    const invite = html.match(/<a class="navdc" href="([^"]+)"/)?.[1];
-    assert.ok(invite, 'the nav Discord pill is missing');
-    assert.ok(row.includes(`href="${invite}"`), 'the menu row and the nav pill use different invites');
-    assert.match(row, /target="_blank" rel="noopener noreferrer"/);
-    assert.match(row, /aria-label="Discord \(opens in a new tab\)"/);
+    assert.match(row, /href="\/discord" data-route="discord"/);
+    assert.doesNotMatch(row, /target="_blank"/);
     assert.match(row, /<svg class="menu__ico menu__ico--brand"/);
+    assert.match(html, /<a class="navdc" href="\/discord" data-route="discord"/);
+
+    // The page itself still carries the invite, and the link code.
+    const page = await source('assets/js/discord.js');
+    assert.match(page, /const INVITE_URL = 'https:\/\/discord\.gg\/[A-Za-z0-9]+';/);
+    assert.match(page, /api\.post\('\/v1\/discord\/link-code'/);
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {

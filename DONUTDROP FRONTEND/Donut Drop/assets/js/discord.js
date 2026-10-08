@@ -1,9 +1,9 @@
 /* discord.js — the invite, and what the server pays.
  *
  * Two cards. The invite is public and static: it renders the same for a signed-out visitor as for
- * a player mid-session. The rewards card is the player's: what joining, wearing the server tag and
- * inviting people pays, what they have collected, and -- until their Discord is linked -- a one-time
- * code to type into `/link` in the server.
+ * a player mid-session. The rewards card is the player's: what joining and wearing the server tag
+ * pay, what they have collected, and -- until their Discord is linked -- a one-time code to paste
+ * into the pop-up `/link` opens in the server.
  *
  * The code is minted for this session by the site, never by the bot, so the bot can only report
  * who typed it, not choose which account it lands on. It lives ten minutes and works once. While
@@ -156,21 +156,12 @@ function paintRewards() {
         : 'off',
       Boolean(status.tag?.claimedToday),
     ),
-    row(
-      'Invite people to the server',
-      Number(amounts.inviteMinor) > 0
-        ? `${money(Number(amounts.inviteMinor))} each, when they link${
-            status.invites?.rewarded ? ` · ${status.invites.rewarded} paid` : ''
-          }`
-        : 'off',
-      Boolean(status.invites?.rewarded),
-    ),
   );
   rewards.appendChild(list);
 
   const small = el('p', 'dsync__fine');
   small.textContent =
-    `Join and invite rewards need a Discord account at least ${status.minAccountAgeDays} days old. ` +
+    `The join reward needs a Discord account at least ${status.minAccountAgeDays} days old. ` +
     'Rewards are playable at once and withdrawable once wagered, like the sign-up bonus.';
   rewards.appendChild(small);
 
@@ -192,16 +183,18 @@ function paintRewards() {
 
   if (pendingCode) {
     const box = el('div', 'dsync__code');
+    /* `/link` opens a pop-up in Discord asking for this code, so the code alone is what gets
+     * copied: nobody has to type the command's option syntax. */
     const label = el('span', 'dsync__codelabel');
-    label.textContent = 'In the Discord server, run';
+    label.textContent = 'In the Discord server, run /link and paste this code';
     const command = el('code', 'dsync__codecmd mono');
-    command.textContent = `/link code:${pendingCode.code}`;
+    command.textContent = pendingCode.code;
     const copy = el('button', 'btn btn--tiny dsync__copy');
     copy.type = 'button';
     copy.textContent = 'COPY';
     copy.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(`/link code:${pendingCode.code}`);
+        await navigator.clipboard.writeText(pendingCode.code);
         copy.textContent = 'COPIED';
       } catch {
         copy.textContent = 'SELECT IT';

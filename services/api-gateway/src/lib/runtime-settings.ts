@@ -430,26 +430,12 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: BIGINT_MAX,
   },
-  discordInviteRewardMinor: {
-    kind: 'bigint',
-    group: 'discord',
-    label: 'Discord invite reward (to the inviter, per new member who links, 0 = off)',
-    min: 0n,
-    max: BIGINT_MAX,
-  },
   discordRewardMinAccountAgeDays: {
     kind: 'integer',
     group: 'discord',
-    label: 'Minimum Discord account age for join and invite rewards (days)',
+    label: 'Minimum Discord account age for the join reward (days)',
     min: 0n,
     max: 3650n,
-  },
-  discordInviteRewardDailyCap: {
-    kind: 'integer',
-    group: 'discord',
-    label: 'Invite rewards one inviter can earn per UTC day',
-    min: 0n,
-    max: 1000n,
   },
 
   /* ── 1v1 skill duels ── */

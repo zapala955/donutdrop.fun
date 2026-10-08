@@ -50,9 +50,9 @@ describe('discord rewards', () => {
     assert.match(lib, /'DISCORD_ALREADY_LINKED'/);
     // Every reward is withdrawable only once wagered, like the sign-up bonus.
     assert.match(lib, /requirementFor\(amount, config\.signupBonusWagerMultiplier\)/);
-    // Nobody is paid for inviting themselves, and an inviter's day is capped.
-    assert.match(lib, /row\.inviter_user === row\.invitee_user/);
-    assert.match(lib, /config\.discordInviteRewardDailyCap/);
+    // The invite reward was removed (2026-10-08): linking pays the join reward and nothing else.
+    assert.doesNotMatch(lib, /payInviteReward|discord_invite_reward|kind: 'invite'/);
+    assert.doesNotMatch(lib, /INSERT INTO discord_rewards[\s\S]{0,120}'invite'/);
   });
 
   it('lets the community bot reach the rewards only over its signed channel', async () => {

@@ -54,9 +54,9 @@ export class ApiRefused extends Error {
 }
 
 export interface RewardLine {
-  readonly kind: 'join' | 'tag' | 'invite';
+  readonly kind: 'join' | 'tag';
   readonly amountMinor: string;
-  readonly to: 'you' | 'inviter';
+  readonly to: 'you';
 }
 
 export interface LinkResult {
@@ -73,11 +73,10 @@ export interface RewardStatus {
   readonly linked: boolean;
   readonly username: string | null;
   readonly enabled: boolean;
-  readonly amounts: { joinMinor: string; tagMinor: string; inviteMinor: string };
+  readonly amounts: { joinMinor: string; tagMinor: string };
   readonly minAccountAgeDays: number;
   readonly join: { claimed: boolean } | null;
   readonly tag: { claimedToday: boolean; days: number } | null;
-  readonly invites: { rewarded: number; totalMinor: string } | null;
 }
 
 export class PlatformApi {

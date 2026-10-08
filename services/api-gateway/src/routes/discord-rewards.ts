@@ -35,7 +35,6 @@ export async function registerDiscordRewardRoutes(
         amounts: {
           joinMinor: config.discordJoinRewardMinor.toString(),
           tagMinor: config.discordTagRewardMinor.toString(),
-          inviteMinor: config.discordInviteRewardMinor.toString(),
         },
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
       };

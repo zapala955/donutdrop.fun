@@ -1,6 +1,15 @@
-import { MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
+import {
+  ActionRowBuilder,
+  MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
+} from 'discord.js';
 import { ApiUnavailable, type PlatformApi } from '../api-client.js';
 import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
+import { linkWithCode } from './rewards.js';
 
 /**
  * link.ts — the bridge to donutwin.fun, such as it is.
@@ -8,11 +17,38 @@ import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
  * The bot does not decide who owns what. The site mints a one-time code for a signed-in browser
  * (the session proves the account), the member types it into `/link code:` here (Discord proves the
  * snowflake), and the gateway joins the two. The code never comes from this bot, so the bot cannot
- * choose which account a Discord account lands on. Without a code, `/link` is a signpost; the
- * linking itself is in features/rewards.ts. `/profile` is a read.
+ * choose which account a Discord account lands on. `/link` on its own opens a pop-up asking for the
+ * code; `/link code:` still takes it directly. The linking itself is in features/rewards.ts.
+ * `/profile` is a read.
  */
 
-const LINK_PAGE = 'https://donutwin.fun/discord';
+/** The pop-up `/link` opens, and its one field. */
+export const LINK_MODAL_ID = 'link:code';
+export const LINK_CODE_FIELD = 'code';
+
+/**
+ * How long `/link` waits to learn whether the member is already linked before opening the pop-up
+ * anyway. Discord gives an interaction three seconds to answer, and a pop-up has to BE the answer:
+ * it cannot follow a deferred reply. A slow site therefore costs a pop-up that the submit then
+ * explains, never a command that times out.
+ */
+const LINKED_CHECK_MS = 1_500;
+
+export function buildLinkModal(): ModalBuilder {
+  const code = new TextInputBuilder()
+    .setCustomId(LINK_CODE_FIELD)
+    .setLabel('Your link code')
+    .setPlaceholder('From donutwin.fun/discord: sign in, press Get link code')
+    .setStyle(TextInputStyle.Short)
+    // The site's codes are eight characters; spaces and dashes in a paste are forgiven.
+    .setMinLength(4)
+    .setMaxLength(16)
+    .setRequired(true);
+  return new ModalBuilder()
+    .setCustomId(LINK_MODAL_ID)
+    .setTitle('Link your DonutWin account')
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(code));
+}
 
 export async function showLink(api: PlatformApi | null, interaction: ChatInputCommandInteraction) {
   if (!api) {
@@ -23,18 +59,16 @@ export async function showLink(api: PlatformApi | null, interaction: ChatInputCo
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const profile = await Promise.race([
+    api.profile(interaction.user.id).catch(() => null),
+    new Promise<null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), LINKED_CHECK_MS);
+      timer.unref();
+    }),
+  ]);
 
-  let profile;
-  try {
-    profile = await api.profile(interaction.user.id);
-  } catch (error) {
-    await interaction.editReply({ embeds: [lookupFailed(error)] });
-    return;
-  }
-
-  if (profile.linked) {
-    await interaction.editReply({
+  if (profile?.linked) {
+    await interaction.reply({
       embeds: [
         embed(
           'Already linked',
@@ -43,25 +77,22 @@ export async function showLink(api: PlatformApi | null, interaction: ChatInputCo
           COLOR.good,
         ),
       ],
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      embed(
-        'Link your account',
-        [
-          `1. Sign in at **${LINK_PAGE}**`,
-          '2. Press **Get link code**',
-          '3. Run `/link code:<the code>` here',
-          '',
-          'The code is shown to you on the site and works once, for ten minutes. Never paste ' +
-            'somebody else’s code, and never give yours away: anyone who asks for it is not staff.',
-        ].join('\n'),
-      ),
-    ],
-  });
+  await interaction.showModal(buildLinkModal());
+}
+
+/** The pop-up's answer: the code, handed to the same linking `/link code:` uses. */
+export async function submitLinkCode(api: PlatformApi | null, interaction: ModalSubmitInteraction) {
+  if (!api) {
+    await interaction.reply({ embeds: [unavailable()], flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const code = interaction.fields.getTextInputValue(LINK_CODE_FIELD).trim();
+  await linkWithCode(api, interaction, code);
 }
 
 /**

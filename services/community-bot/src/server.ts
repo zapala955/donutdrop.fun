@@ -62,7 +62,7 @@ import {
   syncInvites,
   whoInvited,
 } from './features/invites.js';
-import { showLink, showProfile } from './features/link.js';
+import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import {
   avatar,
@@ -381,6 +381,7 @@ async function main(): Promise<void> {
     const id = rest.join(':');
     if (prefix === 'ticket' && action === 'create') return createTicket(db, interaction, id);
     if (prefix === 'ticket' && action === 'closing') return closeTicket(db, interaction, id);
+    if (prefix === 'link' && action === 'code') return submitLinkCode(api, interaction);
   }
 
   const stopGiveaways = startGiveawaySweeper(db, client);

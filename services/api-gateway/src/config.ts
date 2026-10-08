@@ -739,9 +739,7 @@ const environmentSchema = z
       .transform((value) => value === 'true'),
     DISCORD_JOIN_REWARD_MINOR: nonNegativeBigintString.default('2000000'),
     DISCORD_TAG_REWARD_MINOR: nonNegativeBigintString.default('500000'),
-    DISCORD_INVITE_REWARD_MINOR: nonNegativeBigintString.default('3000000'),
     DISCORD_REWARD_MIN_ACCOUNT_AGE_DAYS: z.coerce.number().int().min(0).max(3650).default(14),
-    DISCORD_INVITE_REWARD_DAILY_CAP: z.coerce.number().int().min(0).max(1000).default(10),
     /* Where operational alerts are posted. Outbound only; the bot never reads it. */
     DISCORD_ALERT_CHANNEL_ID: z
       .string()
@@ -1393,9 +1391,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordRewardsEnabled: env.DISCORD_REWARDS_ENABLED,
     discordJoinRewardMinor: BigInt(env.DISCORD_JOIN_REWARD_MINOR),
     discordTagRewardMinor: BigInt(env.DISCORD_TAG_REWARD_MINOR),
-    discordInviteRewardMinor: BigInt(env.DISCORD_INVITE_REWARD_MINOR),
     discordRewardMinAccountAgeDays: env.DISCORD_REWARD_MIN_ACCOUNT_AGE_DAYS,
-    discordInviteRewardDailyCap: env.DISCORD_INVITE_REWARD_DAILY_CAP,
     discordOperators,
     discordAlertChannelId: env.DISCORD_ALERT_CHANNEL_ID,
     discordAdminLinkTtlSeconds: env.DISCORD_ADMIN_LINK_TTL_SECONDS,

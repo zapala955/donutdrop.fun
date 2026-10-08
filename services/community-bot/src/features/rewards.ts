@@ -1,19 +1,23 @@
-import { MessageFlags, type ChatInputCommandInteraction, type User } from 'discord.js';
+import {
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
+  type User,
+} from 'discord.js';
 import { ApiRefused, ApiUnavailable, type PlatformApi } from '../api-client.js';
 import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
 
 /**
  * rewards.ts — what this server pays, and the commands that collect it.
  *
- *   /link <code>  ties this Discord account to the DonutWin account that showed the code, and
- *                 pays the join reward (and the inviter's reward) that the link unlocks.
+ *   /link         ties this Discord account to the DonutWin account that showed the code (typed
+ *                 into the pop-up, or as `code:`), and pays the join reward the link unlocks.
  *   /tag          today's reward for wearing the server's tag.
  *   /rewards      where you stand.
  *
  * The bot decides nothing about money. It reports who typed what, and whether they wear the tag;
- * the gateway holds every rule (once per account, once per day, the account-age floor, the
- * inviter's daily cap) and is the only thing that can pay. See
- * services/api-gateway/src/lib/discord-rewards.ts.
+ * the gateway holds every rule (once per account, once per day, the account-age floor) and is the
+ * only thing that can pay. See services/api-gateway/src/lib/discord-rewards.ts.
  */
 
 const SITE = 'https://donutwin.fun/discord';
@@ -36,10 +40,10 @@ export async function wearsServerTag(user: User, guildId: string): Promise<boole
   return matches(fresh);
 }
 
-/** `/link` with a code: the link and its rewards. Without one, `showLink` explains the steps. */
+/** The link and its reward, for a code typed as `/link code:` or into the pop-up `/link` opens. */
 export async function linkWithCode(
   api: PlatformApi,
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
   code: string,
 ) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -56,12 +60,8 @@ export async function linkWithCode(
     });
     const lines = [`This Discord account is now linked to **${result.username}**.`];
     for (const reward of result.rewards) {
-      const amount = formatMoney(BigInt(reward.amountMinor));
-      if (reward.kind === 'join')
-        lines.push(`🎁 Join reward: **${amount}** added to your balance.`);
-      else if (reward.to === 'you')
-        lines.push(`📨 Invite reward: **${amount}** for someone you invited.`);
-      else lines.push(`📨 Whoever invited you just earned **${amount}**.`);
+      if (reward.kind !== 'join') continue;
+      lines.push(`🎁 Join reward: **${formatMoney(BigInt(reward.amountMinor))}** added to your balance.`);
     }
     if (result.joinSkipped) lines.push(`_${result.joinSkipped}._`);
     lines.push('', 'Wear the server tag and run `/tag` every day for a daily reward.');
@@ -131,7 +131,7 @@ export async function showRewards(
       'Server rewards',
       status.linked
         ? `Linked to **${status.username}**.`
-        : `Not linked yet. Get a code at **${SITE}** and run \`/link code:<your code>\`.`,
+        : `Not linked yet. Get a code at **${SITE}**, then run \`/link\` and paste it in.`,
     ).addFields(
       {
         name: `Join · ${money(status.amounts.joinMinor)}`,
@@ -145,16 +145,9 @@ export async function showRewards(
           : 'Wear the tag, then `/tag`',
         inline: true,
       },
-      {
-        name: `Invites · ${money(status.amounts.inviteMinor)} each`,
-        value: status.invites
-          ? `${status.invites.rewarded} rewarded · ${money(status.invites.totalMinor)}`
-          : 'Paid when someone you invited links',
-        inline: true,
-      },
     );
     card.setFooter({
-      text: `Join and invite rewards need a Discord account at least ${status.minAccountAgeDays} days old.`,
+      text: `The join reward needs a Discord account at least ${status.minAccountAgeDays} days old.`,
     });
     await interaction.editReply({ embeds: [card] });
   } catch (error) {
