@@ -40,6 +40,11 @@ type WorkerHarness = {
       }
     | undefined;
   payoutConfirmMs: number;
+  polling: boolean;
+  relogDue: boolean;
+  relogging: boolean;
+  relogRetryMs: number;
+  relogWhenIdle(): void;
   snapshot(): Promise<void>;
   invalidateSnapshotState(): void;
   finishTransferReconciliation(): Promise<void>;
@@ -684,5 +689,107 @@ describe('cash payout worker', () => {
     // Only this code refunds on the gateway side, so it must mean "the server never saw it".
     assert.equal(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
     assert.equal(completed?.options?.retryable, false);
+  });
+});
+
+/* The bot logs out and back in every 10-30 minutes. The one thing that must never happen is the
+ * logout landing between a /pay and its confirmation: an unconfirmed payout goes to a human. */
+describe('scheduled relog', () => {
+  function relogHarness(api: ApiClient): { harness: WorkerHarness; quits: string[] } {
+    const { harness } = payoutHarness(api);
+    const quits: string[] = [];
+    (harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) =>
+      quits.push(reason);
+    harness.relogRetryMs = 5;
+    return { harness, quits };
+  }
+
+  const idleApi = {
+    claimJob: async () => null,
+    completeJob: async () => undefined,
+  } as unknown as ApiClient;
+
+  it('logs out at once when nothing is in flight', () => {
+    const { harness, quits } = relogHarness(idleApi);
+    harness.relogDue = true;
+    harness.relogWhenIdle();
+    assert.deepEqual(quits, ['relog']);
+    assert.equal(harness.relogging, true);
+    // Asked twice, it still logs out once.
+    harness.relogWhenIdle();
+    assert.deepEqual(quits, ['relog']);
+  });
+
+  it('waits for a payout awaiting its confirmation, then logs out', async () => {
+    const { harness, quits } = relogHarness(idleApi);
+    harness.pendingPayout = { payee: 'q9w', settle: () => undefined, refuse: () => undefined };
+    harness.relogDue = true;
+    // The retry timer is unref'd, as it is in production, so the test holds the loop open itself.
+    const keepAlive = setInterval(() => undefined, 5);
+    try {
+      harness.relogWhenIdle();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      assert.deepEqual(quits, [], 'logged out under a payout waiting on its confirmation');
+      harness.pendingPayout = undefined;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      assert.deepEqual(quits, ['relog']);
+    } finally {
+      clearInterval(keepAlive);
+    }
+  });
+
+  it('waits for a job being worked', async () => {
+    const { harness, quits } = relogHarness(idleApi);
+    harness.polling = true;
+    harness.relogDue = true;
+    const keepAlive = setInterval(() => undefined, 5);
+    try {
+      harness.relogWhenIdle();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      assert.deepEqual(quits, []);
+      harness.polling = false;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      assert.deepEqual(quits, ['relog']);
+    } finally {
+      clearInterval(keepAlive);
+    }
+  });
+
+  it('claims no new job once a relog is due', async () => {
+    let claims = 0;
+    const api = {
+      claimJob: async () => {
+        claims += 1;
+        return null;
+      },
+      completeJob: async () => undefined,
+    } as unknown as ApiClient;
+    const { harness } = relogHarness(api);
+    harness.relogDue = true;
+    await harness.pollJobs();
+    assert.equal(claims, 0);
+    harness.relogDue = false;
+    await harness.pollJobs();
+    assert.equal(claims, 1);
+  });
+
+  it('is armed on every login at a random 10-30 minutes and comes back on its own', async () => {
+    const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
+    assert.match(source, /const RELOG_MIN_MS = 10 \* 60_000;/);
+    assert.match(source, /const RELOG_MAX_MS = 30 \* 60_000;/);
+    assert.match(source, /randomBetween\(RELOG_MIN_MS, RELOG_MAX_MS\)/);
+    const spawn = source.slice(
+      source.indexOf("'Mineflayer bot spawned'"),
+      source.indexOf("bot.on('windowOpen'"),
+    );
+    assert.match(spawn, /this\.scheduleRelog\(\);/);
+    /* Back inside the gateway's 45 seconds, and not unref'd: an idle process would exit and leave
+     * the comeback to Docker. */
+    assert.match(source, /const RELOG_OFFLINE_MAX_MS = 15_000;/);
+    const branch = source.slice(source.indexOf('} else if (!this.stopped && relogging) {'));
+    const body = branch.slice(0, branch.indexOf('} else if (!this.stopped) {'));
+    assert.match(body, /randomBetween\(RELOG_OFFLINE_MIN_MS, RELOG_OFFLINE_MAX_MS\)/);
+    assert.match(body, /this\.connect\(\);/);
+    assert.doesNotMatch(body, /timer\.unref\(\)/);
   });
 });

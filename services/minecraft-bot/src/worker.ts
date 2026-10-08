@@ -48,6 +48,27 @@ const BALANCE_IDLE_MAX_MS = 40 * 60_000;
 const BALANCE_REPLY_MS = 5_000;
 /** After money moves, read the balance again this long after the last movement. */
 const BALANCE_AFTER_MOVE_MS = 4_000;
+/**
+ * How long the bot stays logged in before it logs out and back in: a random stretch between these
+ * two, drawn afresh on every login. A session that never ends, on an account that only ever pays
+ * and gets paid, is one more thing about it that looks like a machine.
+ */
+const RELOG_MIN_MS = 10 * 60_000;
+const RELOG_MAX_MS = 30 * 60_000;
+/**
+ * How long a relog stays logged out. The gateway counts a bot as gone after 45 seconds without a
+ * heartbeat; beats go every fifteen, so up to fifteen seconds out plus the login stays inside it
+ * and the deposit and login pages never flicker to "no bot online".
+ */
+const RELOG_OFFLINE_MIN_MS = 6_000;
+const RELOG_OFFLINE_MAX_MS = 15_000;
+/** While a relog waits for a payout, job or /bal already in flight, how often it looks again. */
+const RELOG_RETRY_MS = 2_000;
+
+/** A whole number of milliseconds in [min, max), drawn uniformly. */
+function randomBetween(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min));
+}
 
 interface JobClaimState {
   readonly bot: Bot;
@@ -148,6 +169,12 @@ export class MinecraftWorker {
   private stopped = false;
   /** Set when the server kicked this account as banned; the next attempt waits BANNED_RETRY_MS. */
   private banned = false;
+  /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
+  private relogDue = false;
+  /** The current logout is a relog, so the bot comes back after RELOG_OFFLINE_*, not ten seconds. */
+  private relogging = false;
+  /* A field rather than the bare constant so tests can wait milliseconds, not seconds. */
+  private relogRetryMs = RELOG_RETRY_MS;
   private timers = new Set<NodeJS.Timeout>();
   private polling = false;
   private snapshottingBot: Bot | undefined;
@@ -264,6 +291,7 @@ export class MinecraftWorker {
       // straight away), again after every movement of money, and otherwise only now and then.
       this.balanceSoon(8_000);
       this.scheduleIdleBalance();
+      this.scheduleRelog();
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
       /* Polled whatever the transfer flag says. BOT_TRANSFERS_ENABLED governs what the bot may do
        * with an ITEM, not whether it may ask for work: cash payouts share this queue and move a
@@ -385,6 +413,11 @@ export class MinecraftWorker {
       if (this.connectionController === connectionController) {
         this.connectionController = undefined;
       }
+      /* Whatever ended the session, a relog that was waiting is moot: the next login is a fresh
+       * session and arms its own. */
+      const relogging = this.relogging;
+      this.relogDue = false;
+      this.relogging = false;
       if (!this.stopped && this.banned) {
         /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
          * straight away, which is exactly the reconnect loop this is here to stop. */
@@ -394,6 +427,17 @@ export class MinecraftWorker {
         );
         this.banned = false;
         setTimeout(() => this.connect(), BANNED_RETRY_MS);
+      } else if (!this.stopped && relogging) {
+        /* Held open (no unref) like the ban wait, so the process does not exit and leave the gap
+         * to Docker's restart; tracked in `timers`, so a shutdown inside the gap clears it rather
+         * than waiting for it. */
+        const gap = randomBetween(RELOG_OFFLINE_MIN_MS, RELOG_OFFLINE_MAX_MS);
+        this.log.info({ backInSeconds: Math.round(gap / 1000) }, 'Logged out for a relog');
+        const timer = setTimeout(() => {
+          this.timers.delete(timer);
+          this.connect();
+        }, gap);
+        this.timers.add(timer);
       } else if (!this.stopped) {
         const timer = setTimeout(() => this.connect(), 10_000);
         timer.unref();
@@ -727,6 +771,47 @@ export class MinecraftWorker {
     this.timers.add(timer);
   }
 
+  /** Arms the relog for a random 10-30 minutes after this login. */
+  private scheduleRelog(): void {
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      this.relogDue = true;
+      this.relogWhenIdle();
+    }, randomBetween(RELOG_MIN_MS, RELOG_MAX_MS));
+    timer.unref();
+    this.timers.add(timer);
+  }
+
+  /**
+   * Logs out for the relog once nothing is in flight.
+   *
+   * A /pay waiting on its confirmation, a job being worked or a /bal waiting on its answer would
+   * each lose that answer to the logout, and a payout whose confirmation is lost goes to a human.
+   * While a relog is due no new job is claimed (see captureJobClaimState), so this only ever waits
+   * for what was already running.
+   */
+  private relogWhenIdle(): void {
+    if (this.stopped || !this.relogDue || this.relogging || !this.bot) return;
+    if (
+      this.polling ||
+      this.pendingPayout ||
+      this.transferring ||
+      Date.now() < this.balanceReplyUntil
+    ) {
+      const timer = setTimeout(() => {
+        this.timers.delete(timer);
+        this.relogWhenIdle();
+      }, this.relogRetryMs);
+      timer.unref();
+      this.timers.add(timer);
+      return;
+    }
+    this.relogging = true;
+    this.log.info('relogging');
+    this.cycleConnection('relog');
+  }
+
   /** Reads the balance after a short delay; several calls inside the delay make one /bal. */
   private balanceSoon(delayMs: number): void {
     if (this.balanceTimer || this.stopped) return;
@@ -876,7 +961,9 @@ export class MinecraftWorker {
           ? 'connection_closing'
           : this.transferring
             ? 'transfer_in_progress'
-            : undefined;
+            : this.relogDue
+              ? 'relog_pending'
+              : undefined;
 
     /* Logged on change. A gate that refuses silently is why a queued payout looked identical to a
      * bot with nothing to do, through several rounds of looking in the wrong place. */
