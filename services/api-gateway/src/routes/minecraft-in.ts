@@ -13,6 +13,7 @@ import { canonicalJson, safeEqualBuffer, sha256, sha256Hex } from '../lib/crypto
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { queueVaultSweep, recordBotTransfer } from '../lib/bots.js';
+import { proxyForBot, type BotProxyColumns } from '../lib/bot-proxy.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
 import { MINECRAFT_USERNAME_PATTERN, platformIdentityFor } from '../lib/minecraft-username.js';
 import { queueWithdrawalPayoutAfterRelease, refundWithdrawal } from './cash-withdrawals.js';
@@ -41,6 +42,10 @@ const heartbeatEvent = eventBase.extend({
     })
     .strict()
     .optional(),
+  /* The proxy assignment this session connected with (bot_accounts.proxy_revision when it asked),
+   * absent for a direct connection. The console compares it with the current assignment to show
+   * whether a proxy is in use or still waiting for the bot's next login. */
+  proxyRevision: normalizedUuid.optional(),
 });
 const linkEvent = eventBase.extend({
   type: z.literal('link_confirmation'),
@@ -140,6 +145,7 @@ const botEventSchema = z.discriminatedUnion('type', [
   cashPaymentEvent,
 ]);
 const claimSchema = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
+const connectionRouteSchema = z.object({ eventId: normalizedUuid, botId: normalizedUuid }).strict();
 const depositAuthorizationSchema = eventBase.extend({
   depositCode: z.string().regex(/^[A-Z2-9]{12}$/),
   username: z.string().regex(MINECRAFT_USERNAME_PATTERN),
@@ -444,6 +450,39 @@ export async function registerMinecraftInternalRoutes(
     },
   );
 
+  /* How this bot should reach the server: through its assigned proxy, or directly.
+   *
+   * Asked before every login. Read-only and not journaled: it changes nothing, and anybody placed
+   * to replay a captured request inside the signature window could read the reply off the same
+   * wire. A bot with no row yet (it has never sent a heartbeat) has no proxy and connects directly. */
+  app.post(
+    '/internal/v1/minecraft/connection-route',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const authenticated = verifyBotSignature(request, config);
+      const body = parseWith(connectionRouteSchema, request.body);
+      requireMatchingBotId(authenticated.botId, body.botId);
+      const result = await db.query<BotProxyColumns>(
+        `SELECT proxy_type, proxy_host, proxy_port, proxy_username, proxy_password_encrypted,
+                proxy_revision, proxy_updated_at
+           FROM bot_accounts WHERE id = $1`,
+        [body.botId],
+      );
+      const row = result.rows[0];
+      let proxy: ReturnType<typeof proxyForBot> = null;
+      if (row) {
+        try {
+          proxy = proxyForBot(row, config.dataEncryptionKey, body.botId);
+        } catch {
+          /* A password that no longer decrypts (the key was rotated) must not turn into a direct
+           * connection: the bot refuses to log in without a route and keeps asking. */
+          throw new AppError(500, 'BOT_PROXY_UNREADABLE', 'The saved proxy password cannot be read');
+        }
+      }
+      return sendAuthenticatedBotResponse(reply, authenticated, request.body, { proxy });
+    },
+  );
+
   app.post('/internal/v1/minecraft/jobs/claim', async (request, reply) => {
     const authenticated = verifyBotSignature(request, config);
     const body = parseWith(claimSchema, request.body);
@@ -678,6 +717,7 @@ async function processHeartbeat(
        transfer_capable = bot_accounts.status <> 'quarantined' AND $5 AND $6 AND $7
          AND bot_accounts.last_snapshot_at > now() - interval '90 seconds'
          AND bot_accounts.reconciliation_status = 'matched',
+       connected_proxy_revision = $8,
        last_heartbeat_at = now(), updated_at = now()`,
     [
       event.botId,
@@ -687,6 +727,8 @@ async function processHeartbeat(
       event.online,
       event.snapshotHealthy,
       transfersEnabled && event.transferCapable,
+      // A bot that is offline is connected through nothing.
+      event.online ? (event.proxyRevision ?? null) : null,
     ],
   );
   /* The reading keeps the time it was TAKEN, not the time this heartbeat arrived: the same reading

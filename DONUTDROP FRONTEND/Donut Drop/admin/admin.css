@@ -1166,6 +1166,12 @@ body {
   font-size: 0.75rem;
   color: var(--faint);
 }
+/* A bot's proxy, under its in-use pill: an address, so it is set like one. */
+.grid td .faint.route {
+  min-width: 0;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
 .grid td[data-sign='up'] {
   color: var(--ok);
 }

@@ -66,6 +66,21 @@ const adminPayoutPayloadSchema = z
   })
   .strict();
 
+/* The proxy the gateway has assigned this bot (migration 060). The password arrives decrypted,
+ * inside a signed reply, and is held only in memory. */
+const botProxySchema = z
+  .object({
+    revision: z.uuid(),
+    type: z.enum(['socks5', 'http']),
+    host: z.string().min(1).max(253),
+    port: z.number().int().min(1).max(65_535),
+    username: z.string().min(1).max(255).nullable(),
+    password: z.string().min(1).max(255).nullable(),
+  })
+  .strict();
+const connectionRouteResponseSchema = z.object({ proxy: botProxySchema.nullable() }).strict();
+export type BotProxy = z.infer<typeof botProxySchema>;
+
 const botJobSchema = z
   .object({
     id: z.uuid(),
@@ -332,6 +347,15 @@ export class ApiClient {
       leaseToken: validatedLease.leaseToken,
       items: validatedItems,
     });
+  }
+
+  /** The proxy this bot is assigned, or null to connect directly. Asked before every login. */
+  async connectionRoute(): Promise<BotProxy | null> {
+    const response = await this.post('/connection-route', {
+      eventId: randomUUID(),
+      botId: this.config.botId,
+    });
+    return connectionRouteResponseSchema.parse(response).proxy;
   }
 
   async claimJob(): Promise<BotJob | null> {

@@ -1602,7 +1602,7 @@ async function loadBots() {
   botLedgerState.bots = data.bots ?? [];
   table(
     $('botTable'),
-    ['Bot', 'Role', 'Holding', 'Status', 'Reconciliation', 'Transfers', 'Heartbeat', 'Open jobs', ''],
+    ['Bot', 'Role', 'Holding', 'Status', 'Reconciliation', 'Transfers', 'Heartbeat', 'Open jobs', 'Proxy', ''],
     data.bots ?? [],
     (bot) => {
       const tr = document.createElement('tr');
@@ -1726,7 +1726,25 @@ async function loadBots() {
       reconcile.title = "Correct the tracked balance to what the account is really holding";
       reconcile.addEventListener('click', () => void reconcileBot(bot));
 
-      actions.append(rejoin, pay, roleButton, reconcile);
+      const proxyButton = document.createElement('button');
+      proxyButton.type = 'button';
+      proxyButton.className = 'btn';
+      proxyButton.textContent = 'Proxy';
+      proxyButton.title = bot.proxy
+        ? 'Change or remove the proxy this bot connects through'
+        : 'Send this bot through a proxy instead of straight from the VPS';
+      proxyButton.addEventListener('click', async () => {
+        proxyButton.disabled = true;
+        try {
+          await editBotProxy(bot);
+        } catch (error) {
+          toast(`${error.code}: ${error.message}`, 'bad');
+        } finally {
+          proxyButton.disabled = false;
+        }
+      });
+
+      actions.append(rejoin, pay, roleButton, reconcile, proxyButton);
 
       const quarantining = bot.status !== 'quarantined';
       const button = document.createElement('button');
@@ -1755,10 +1773,196 @@ async function loadBots() {
         }
       });
       actions.append(button);
-      tr.append(actions);
+      tr.append(proxyCell(bot, live), actions);
       return tr;
     },
   );
+}
+
+/**
+ * How a bot reaches DonutSMP: straight from the VPS, or through the proxy assigned here.
+ *
+ * "Assigned" and "in use" are different things -- a bot reads its route when it logs in -- so the
+ * cell says which, in words, by comparing the assignment with the one the bot reports on its
+ * heartbeat. A proxied bot that has stopped checking in is flagged, because a proxy refusing it is
+ * the likeliest reason.
+ */
+function proxyCell(bot, live) {
+  const td = document.createElement('td');
+  const proxy = bot.proxy ?? null;
+  const inUse = (bot.connected_proxy_revision ?? null) === (proxy?.revision ?? null);
+  let state;
+  if (!live) {
+    state = proxy
+      ? ['not connected', 'bad', 'Not checking in. If this lasts past a minute, the proxy may be refusing the bot: check its details and the bot log.']
+      : ['direct', undefined, 'Connects straight from the VPS.'];
+  } else if (inUse) {
+    state = proxy
+      ? ['in use', 'ok', 'Connected through this proxy.']
+      : ['direct', undefined, 'Connected straight from the VPS.'];
+  } else {
+    state = [
+      'next login',
+      'warn',
+      proxy
+        ? 'Saved. The bot switches to it when it next logs in.'
+        : 'Removed. The bot connects directly from its next login.',
+    ];
+  }
+  const [label, tone, hint] = state;
+  td.append(pill(label, tone));
+  if (proxy) {
+    const route = document.createElement('div');
+    route.className = 'faint route';
+    route.textContent =
+      `${proxy.type} ${proxy.host}:${proxy.port}` + (proxy.username ? ` · ${proxy.username}` : '');
+    td.append(route);
+  }
+  td.title =
+    hint +
+    (proxy
+      ? `\nSaved ${new Date(proxy.updatedAt).toLocaleString()}.` +
+        ` Password: ${proxy.hasPassword ? 'saved (never shown)' : 'none'}.`
+      : '');
+  return td;
+}
+
+/* The shapes proxy providers hand them out in: host:port, host:port:user:pass and
+ * scheme://user:pass@host:port. Pasted into Host, they fill every field at once. */
+function parseProxyPaste(text) {
+  const decode = (value) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+  const url =
+    /^(socks5h?|socks|https?):\/\/(?:([^:@\s]+)(?::([^@\s]*))?@)?([^:@\s/[\]]+|\[[0-9a-f:]+\]):(\d{1,5})\/?$/i.exec(
+      text,
+    );
+  if (url) {
+    return {
+      type: /^http/i.test(url[1]) ? 'http' : 'socks5',
+      host: url[4].replace(/^\[|\]$/g, ''),
+      port: url[5],
+      username: url[2] ? decode(url[2]) : '',
+      password: url[3] ? decode(url[3]) : '',
+    };
+  }
+  const plain = /^([^:\s]+):(\d{1,5})(?::([^:\s]+):(\S+))?$/.exec(text);
+  if (plain) {
+    return { host: plain[1], port: plain[2], username: plain[3] ?? '', password: plain[4] ?? '' };
+  }
+  return null;
+}
+
+/**
+ * Sets or removes the proxy a bot connects through.
+ *
+ * The password is never sent back to the console, so changing anything about a proxy that has one
+ * means entering it again; it cannot be quietly inherited by a different host. A mistake reopens
+ * the form with what was typed, rather than losing it.
+ */
+async function editBotProxy(bot) {
+  const current = bot.proxy ?? null;
+  let draft = {
+    type: current?.type ?? 'socks5',
+    host: current?.host ?? '',
+    port: current?.port ?? '',
+    username: current?.username ?? '',
+    secret: '',
+    reason: '',
+  };
+  for (;;) {
+    const values = await editRecord({
+      title: `Proxy for ${bot.username}`,
+      description:
+        'How this bot reaches DonutSMP. A proxy can only be assigned to one bot. Paste ' +
+        'host:port:user:pass into Host to fill every field at once.' +
+        (current?.hasPassword ? ' The saved password is never shown: enter it again to keep it.' : '') +
+        ' An online bot rejoins through the new route straight away.',
+      fields: [
+        {
+          name: 'type',
+          label: 'Route',
+          type: 'select',
+          value: draft.type,
+          options: [
+            { value: 'socks5', label: 'SOCKS5 proxy' },
+            { value: 'http', label: 'HTTP proxy (CONNECT)' },
+            { value: 'direct', label: 'No proxy: connect directly' },
+          ],
+        },
+        {
+          name: 'host',
+          label: 'Host',
+          value: draft.host,
+          required: false,
+          maxlength: 600,
+          placeholder: 'proxy.example.net, or host:port:user:pass',
+        },
+        { name: 'port', label: 'Port', type: 'number', value: draft.port, required: false, min: 1, max: 65535 },
+        { name: 'username', label: 'Username (optional)', value: draft.username, required: false, maxlength: 255 },
+        /* Plain text, and not named "password": a password field invites the browser to fill in
+         * the operator's own login here, or to offer to save this one as it. */
+        {
+          name: 'secret',
+          label: 'Password (optional)',
+          value: draft.secret,
+          required: false,
+          maxlength: 255,
+          placeholder: current?.hasPassword ? 'Saved. Enter it again to keep it' : '',
+        },
+        { name: 'reason', label: 'Audit reason', value: draft.reason, wide: true },
+      ],
+      submitLabel: 'Save route',
+    });
+    if (!values) return;
+    draft = values;
+
+    let proxy = null;
+    if (values.type !== 'direct') {
+      const pasted = values.port ? null : parseProxyPaste(values.host);
+      const host = (pasted?.host ?? values.host).trim();
+      const port = Number(pasted?.port ?? values.port);
+      const username = pasted?.username || values.username || null;
+      const password = pasted?.password || values.secret || null;
+      const problem = !host
+        ? 'Enter the proxy host.'
+        : !Number.isInteger(port) || port < 1 || port > 65535
+          ? 'Enter a port between 1 and 65535.'
+          : password && !username
+            ? 'A password needs a username.'
+            : username && !password
+              ? 'Enter the password for this username too.'
+              : null;
+      if (problem) {
+        toast(problem, 'bad');
+        continue;
+      }
+      proxy = { type: pasted?.type ?? values.type, host, port, username, password };
+    }
+
+    try {
+      const result = await api.patch(`/v1/admin/bots/${bot.id}/proxy`, {
+        proxy,
+        reason: values.reason,
+      });
+      const when = result.reconnecting ? ', rejoining now.' : ' from its next login.';
+      toast(
+        proxy
+          ? `${bot.username} goes through ${proxy.type} ${proxy.host}:${proxy.port}${when}`
+          : `${bot.username} connects directly${when}`,
+        'ok',
+      );
+      await loadBots();
+      return;
+    } catch (error) {
+      // Refused by the server (taken by another bot, or invalid): back to the form, nothing lost.
+      toast(`${error.code}: ${error.message}`, 'bad');
+    }
+  }
 }
 
 /**

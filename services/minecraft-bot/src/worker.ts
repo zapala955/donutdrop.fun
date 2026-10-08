@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import mineflayer, { type Bot } from 'mineflayer';
+import mineflayer, { type Bot, type BotOptions } from 'mineflayer';
 import type { Logger } from 'pino';
 import type { BotConfig } from './config.js';
 import type {
   AdminPayoutBotJob,
   ApiClient,
   BotJob,
+  BotProxy,
   CashPayoutBotJob,
   InternalTransferBotJob,
 } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
+import { describeRoute, proxiedConnect, TunnelledHttpsAgent } from './proxy.js';
 import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adapter.js';
 import {
   describeSystemChat,
@@ -65,6 +67,11 @@ const RELOG_OFFLINE_MIN_MS = 6_000;
 const RELOG_OFFLINE_MAX_MS = 15_000;
 /** While a relog waits for a payout, job or /bal already in flight, how often it looks again. */
 const RELOG_RETRY_MS = 2_000;
+
+/** With no route from the gateway yet, how long the bot waits before asking again. */
+const ROUTE_RETRY_MS = 10_000;
+/** How long a login gets, from opening the connection to spawning, before it is started again. */
+const LOGIN_TIMEOUT_MS = 90_000;
 
 /** A whole number of milliseconds in [min, max), drawn uniformly. */
 function randomBetween(min: number, max: number): number {
@@ -176,6 +183,10 @@ export class MinecraftWorker {
   private relogging = false;
   /* A field rather than the bare constant so tests can wait milliseconds, not seconds. */
   private relogRetryMs = RELOG_RETRY_MS;
+  /** The gateway's last answer on how to connect, used when it cannot be asked. */
+  private knownRoute: { proxy: BotProxy | null } | undefined;
+  /** The proxy assignment the current connection was opened with; undefined when direct. */
+  private routeRevision: string | undefined;
   private timers = new Set<NodeJS.Timeout>();
   private polling = false;
   private snapshottingBot: Bot | undefined;
@@ -250,11 +261,57 @@ export class MinecraftWorker {
     }
   }
 
+  /**
+   * Logs in, by the route the gateway has assigned: through this bot's proxy, or directly.
+   *
+   * The route is asked for before every login, so a proxy set in the console applies from the
+   * next one. If the gateway cannot be reached, the last answer it gave is used; with no answer at
+   * all the bot does not connect, because guessing "direct" could put a bot that is meant to be
+   * behind a proxy on the VPS's own address.
+   */
   private connect(): void {
     if (this.stopped) return;
     this.invalidateSnapshotState();
-    this.log.info({ host: this.config.host, port: this.config.port }, 'Connecting Mineflayer bot');
-    const bot = mineflayer.createBot({
+    void this.resolveRoute().then(
+      (proxy) => this.openConnection(proxy),
+      (error: unknown) => {
+        if (this.stopped) return;
+        this.log.error(
+          { err: error, retryInSeconds: ROUTE_RETRY_MS / 1000 },
+          'Could not ask the gateway how to reach the server; not connecting until it answers',
+        );
+        // Held open, so the process waits here rather than exiting; tracked, so a shutdown clears it.
+        const timer = setTimeout(() => {
+          this.timers.delete(timer);
+          this.connect();
+        }, ROUTE_RETRY_MS);
+        this.timers.add(timer);
+      },
+    );
+  }
+
+  private async resolveRoute(): Promise<BotProxy | null> {
+    try {
+      const proxy = await this.api.connectionRoute();
+      this.knownRoute = { proxy };
+      return proxy;
+    } catch (error) {
+      if (!this.knownRoute) throw error;
+      this.log.warn(
+        { err: error, via: describeRoute(this.knownRoute.proxy) },
+        'Could not ask the gateway for the route; using the last one it gave',
+      );
+      return this.knownRoute.proxy;
+    }
+  }
+
+  private openConnection(proxy: BotProxy | null): void {
+    if (this.stopped) return;
+    this.log.info(
+      { host: this.config.host, port: this.config.port, via: describeRoute(proxy) },
+      'Connecting Mineflayer bot',
+    );
+    const options: BotOptions = {
       host: this.config.host,
       port: this.config.port,
       username: this.config.username,
@@ -264,12 +321,41 @@ export class MinecraftWorker {
       hideErrors: true,
       checkTimeoutInterval: 30_000,
       defaultChatPatterns: false,
-    });
+    };
+    if (proxy) {
+      options.connect = proxiedConnect(proxy, options);
+      options.agent = new TunnelledHttpsAgent(proxy);
+    }
+    const bot = mineflayer.createBot(options);
+    this.routeRevision = proxy?.revision;
     const connectionController = new AbortController();
     this.connectionController = connectionController;
     this.bot = bot;
 
+    /* A login that never finishes is started again. A proxy adds ways to stall before the server is
+     * even reached, and a stalled attempt otherwise sits there with no `end` to bring it back.
+     * Unref'd: when nothing else is left the process exits and Docker restarts it, as before. */
+    const loginWatchdog = setTimeout(() => {
+      this.timers.delete(loginWatchdog);
+      if (this.bot !== bot || bot.entity) return;
+      this.log.warn(
+        { via: describeRoute(proxy), afterSeconds: LOGIN_TIMEOUT_MS / 1000 },
+        'Login did not finish; starting again',
+      );
+      closeConnection(bot, 'login timeout', () => undefined);
+      bot.emit('end', 'loginTimeout');
+    }, LOGIN_TIMEOUT_MS);
+    loginWatchdog.unref();
+    this.timers.add(loginWatchdog);
+
     bot.once('spawn', () => {
+      clearTimeout(loginWatchdog);
+      this.timers.delete(loginWatchdog);
+      // A login the watchdog already gave up on, arriving late: the bot has moved on without it.
+      if (this.bot !== bot) {
+        closeConnection(bot, 'superseded login', () => undefined);
+        return;
+      }
       if (bot.username.toLowerCase() !== this.config.expectedUsername.toLowerCase()) {
         this.log.fatal(
           { actualUsername: bot.username, expectedUsername: this.config.expectedUsername },
@@ -756,6 +842,8 @@ export class MinecraftWorker {
             },
           }
         : {}),
+      // Which proxy assignment this session is using, so the console can show it is in effect.
+      ...(online && this.routeRevision ? { proxyRevision: this.routeRevision } : {}),
     });
   }
 

@@ -15,6 +15,13 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { recordBotTransfer } from '../lib/bots.js';
+import {
+  PROXY_SUMMARY_COLUMNS,
+  describeProxy,
+  encryptProxyPassword,
+  proxyInputSchema,
+  type BotProxySummaryColumns,
+} from '../lib/bot-proxy.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
 import {
@@ -139,6 +146,14 @@ const adminPaySchema = z
   .strict();
 
 const botReconnectSchema = z.object({ reason: safeText(3, 256) }).strict();
+/* The whole proxy, or null to connect directly. Replaced as a unit: the password is never sent
+ * back to the console, so an edit re-enters it rather than inheriting one meant for another host. */
+const botProxySchema = z
+  .object({
+    proxy: proxyInputSchema.nullable(),
+    reason: safeText(3, 256),
+  })
+  .strict();
 
 const adminListSchema = z
   .object({
@@ -199,13 +214,15 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         observed_balance_step_minor: string | null;
         observed_balance_display: string | null;
         observed_balance_at: Date | null;
-      } & Record<string, unknown>
+      } & BotProxySummaryColumns &
+        Record<string, unknown>
     >(
       `SELECT b.id, b.username, b.status, b.server_host, b.last_heartbeat_at,
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
               b.role, b.tracked_balance_minor,
               b.observed_balance_low_minor, b.observed_balance_step_minor,
               b.observed_balance_display, b.observed_balance_at,
+              ${PROXY_SUMMARY_COLUMNS},
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
          FROM bot_accounts b ORDER BY b.role, b.username`,
@@ -214,12 +231,32 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     /* What each bot last read with /bal, kept on its row by the heartbeat. A reading older than ten
      * minutes is still shown, but flagged: it says what the account held then, not now. */
     return {
-      bots: result.rows.map((bot) => {
+      bots: result.rows.map((row) => {
+        // The proxy's columns are folded into one `proxy` object rather than listed loose.
+        const {
+          proxy_type,
+          proxy_host,
+          proxy_port,
+          proxy_username,
+          proxy_has_password,
+          proxy_revision,
+          proxy_updated_at,
+          ...bot
+        } = row;
         const low = bot.observed_balance_low_minor;
         const at = bot.observed_balance_at;
         const stale = at === null || Date.now() - new Date(at).getTime() > 10 * 60_000;
         return {
           ...bot,
+          proxy: describeProxy({
+            proxy_type,
+            proxy_host,
+            proxy_port,
+            proxy_username,
+            proxy_has_password,
+            proxy_revision,
+            proxy_updated_at,
+          }),
           live_balance_minor: low,
           live_balance_step_minor: bot.observed_balance_step_minor ?? null,
           live_balance_display: bot.observed_balance_display ?? null,
@@ -418,6 +455,134 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       });
     },
   );
+
+  /* Sets the proxy a bot reaches DonutSMP through, or clears it so the bot connects directly.
+   *
+   * One proxy, one bot: a proxy already assigned elsewhere is refused by name here, and by the
+   * unique index in migration 060 if two saves race. The bot reads its route before every login,
+   * so a live bot is also sent a reconnect to pick the change up now rather than at its next relog;
+   * an offline bot picks it up whenever it next connects. */
+  app.patch('/v1/admin/bots/:id/proxy', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(botProxySchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const current = await client.query<
+        {
+          username: string;
+          live: boolean;
+        } & BotProxySummaryColumns
+      >(
+        `SELECT b.username,
+                (b.status = 'online' AND b.last_heartbeat_at > now() - interval '45 seconds') AS live,
+                ${PROXY_SUMMARY_COLUMNS}
+           FROM bot_accounts b WHERE b.id = $1 FOR UPDATE`,
+        [params.id],
+      );
+      const bot = current.rows[0];
+      if (!bot) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+      const next = body.proxy;
+      if (next) {
+        const taken = await client.query<{ username: string }>(
+          `SELECT username FROM bot_accounts
+            WHERE id <> $1 AND proxy_host IS NOT NULL
+              AND lower(proxy_host) = lower($2) AND proxy_port = $3
+              AND coalesce(proxy_username, '') = coalesce($4, '')`,
+          [params.id, next.host, next.port, next.username],
+        );
+        if (taken.rows[0]) {
+          conflict('PROXY_IN_USE', `That proxy is already assigned to ${taken.rows[0].username}`);
+        }
+      }
+      const revision = next ? randomUUID() : null;
+      try {
+        await client.query(
+          `UPDATE bot_accounts
+              SET proxy_type = $2, proxy_host = $3, proxy_port = $4, proxy_username = $5,
+                  proxy_password_encrypted = $6, proxy_revision = $7,
+                  proxy_updated_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [
+            params.id,
+            next?.type ?? null,
+            next?.host ?? null,
+            next?.port ?? null,
+            next?.username ?? null,
+            next?.password
+              ? encryptProxyPassword(next.password, config.dataEncryptionKey, params.id)
+              : null,
+            revision,
+          ],
+        );
+      } catch (error) {
+        if ((error as { code?: string; constraint?: string }).code === '23505') {
+          conflict('PROXY_IN_USE', 'That proxy is already assigned to another bot');
+        }
+        throw error;
+      }
+
+      /* Only to a bot that is live: a reconnect queued for an offline bot would sit until it came
+       * back and then cycle a connection that had just read the new route anyway. */
+      let reconnecting = false;
+      if (bot.live) {
+        const pending = await client.query(
+          `SELECT 1 FROM bot_jobs
+            WHERE bot_id = $1 AND kind = 'reconnect' AND status IN ('queued', 'leased')`,
+          [params.id],
+        );
+        if (!pending.rowCount) {
+          const jobId = randomUUID();
+          await client.query(
+            `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload)
+             VALUES ($1, $2, 'reconnect', $3, '{}'::jsonb)`,
+            [jobId, params.id, jobId],
+          );
+        }
+        reconnecting = true;
+      }
+
+      // Everything about the change except the password, which is recorded only as present.
+      const summary = (proxy: ReturnType<typeof describeProxy>) =>
+        proxy && {
+          type: proxy.type,
+          host: proxy.host,
+          port: proxy.port,
+          username: proxy.username,
+          hasPassword: proxy.hasPassword,
+        };
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: next ? 'bot.proxy.set' : 'bot.proxy.clear',
+        targetType: 'bot_account',
+        targetId: params.id,
+        details: {
+          username: bot.username,
+          from: summary(describeProxy(bot)),
+          to: next && {
+            type: next.type,
+            host: next.host,
+            port: next.port,
+            username: next.username,
+            hasPassword: next.password !== null,
+          },
+          reason: body.reason,
+          reconnecting,
+        },
+      });
+      return {
+        bot: bot.username,
+        proxy: next && {
+          type: next.type,
+          host: next.host,
+          port: next.port,
+          username: next.username,
+          hasPassword: next.password !== null,
+          revision,
+        },
+        reconnecting,
+      };
+    });
+  });
 
   app.get('/v1/admin/users', { preHandler: requireAdminRead }, async (request) => {
     const query = parseWith(adminListSchema, request.query);
