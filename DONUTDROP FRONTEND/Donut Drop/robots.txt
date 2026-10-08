@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /v1/
+Disallow: /internal/
+
+Sitemap: https://donutwin.fun/sitemap.xml

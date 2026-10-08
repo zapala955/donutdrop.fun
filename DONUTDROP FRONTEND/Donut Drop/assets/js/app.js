@@ -33,6 +33,7 @@ import { mountVip, initVipWidget } from './vip.js';
 import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
 import { mountDiscord } from './discord.js';
+import { applyRouteMeta } from './seo.js';
 import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
@@ -1206,6 +1207,8 @@ function route() {
   const name = seg;
 
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
+  // Title, description, canonical and robots for this route: what a search result shows.
+  applyRouteMeta(name);
   /* Each disclosure reads as current whenever any route it owns is the live one. Casino owns only
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
