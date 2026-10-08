@@ -123,9 +123,11 @@ export async function registerDiscordControlRoutes(
          (SELECT count(*) FROM sessions WHERE revoked_at IS NULL AND expires_at > now())::text
            AS sessions_live,
          (SELECT COALESCE(sum(balance_minor), 0) FROM user_wallets)::text AS wallet_total_minor,
-         (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined')::text AS bots_quarantined,
+         (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined' AND id = ANY($1::uuid[]))::text
+           AS bots_quarantined,
          (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text AS jobs_dead_letter,
          (SELECT count(*) FROM bot_jobs WHERE status IN ('queued', 'leased'))::text AS jobs_open`,
+      [[...config.botCredentials.keys()]],
     );
     return { kind: 'data', title: 'Platform', fields: result.rows[0] ?? {} };
   }
@@ -156,7 +158,8 @@ export async function registerDiscordControlRoutes(
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter'))
                 AS open_jobs
-         FROM bot_accounts b ORDER BY b.username LIMIT 25`,
+         FROM bot_accounts b WHERE b.id = ANY($1::uuid[]) ORDER BY b.username LIMIT 25`,
+      [[...config.botCredentials.keys()]],
     );
     return { kind: 'rows', title: 'Bots', rows: result.rows };
   }
@@ -487,15 +490,16 @@ export async function registerDiscordControlRoutes(
     async () => {
       const result = await db.query<Record<string, string>>(
         `SELECT
-           (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined')::text
+           (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined' AND id = ANY($1::uuid[]))::text
              AS bots_quarantined,
            (SELECT count(*) FROM bot_accounts
-             WHERE last_heartbeat_at IS NULL
-                OR last_heartbeat_at < now() - interval '2 minutes')::text AS bots_stale,
+             WHERE id = ANY($1::uuid[]) AND (last_heartbeat_at IS NULL
+                OR last_heartbeat_at < now() - interval '2 minutes'))::text AS bots_stale,
            (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text
              AS jobs_dead_letter,
            (SELECT count(*) FROM withdrawals WHERE status = 'manual_review')::text
              AS withdrawals_manual_review`,
+        [[...config.botCredentials.keys()]],
       );
       return result.rows[0] ?? {};
     },

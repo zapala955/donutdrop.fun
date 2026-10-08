@@ -121,7 +121,8 @@ export async function registerAdminPayoutRoutes(
         }>(
           `SELECT id, username, role, status, tracked_balance_minor::text AS balance,
                   last_heartbeat_at
-             FROM bot_accounts ORDER BY role, username`,
+             FROM bot_accounts WHERE id = ANY($1::uuid[]) ORDER BY role, username`,
+          [[...config.botCredentials.keys()]],
         ),
         db.query<{
           id: string;

@@ -225,7 +225,12 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
               ${PROXY_SUMMARY_COLUMNS},
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
-         FROM bot_accounts b ORDER BY b.role, b.username`,
+         FROM bot_accounts b
+        /* Only the bots the gateway holds credentials for. A retired account keeps its row and
+         * its history, but it is not one of the bots any more and is not listed as one. */
+        WHERE b.id = ANY($1::uuid[])
+        ORDER BY b.role, b.username`,
+      [provisionedBotIds],
     );
 
     /* What each bot last read with /bal, kept on its row by the heartbeat. A reading older than ten

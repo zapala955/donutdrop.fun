@@ -311,27 +311,6 @@ export class MinecraftWorker {
       { host: this.config.host, port: this.config.port, via: describeRoute(proxy) },
       'Connecting Mineflayer bot',
     );
-    const options: BotOptions = {
-      host: this.config.host,
-      port: this.config.port,
-      username: this.config.username,
-      auth: this.config.auth,
-      ...(this.config.version ? { version: this.config.version } : {}),
-      profilesFolder: this.config.profilesFolder,
-      hideErrors: true,
-      checkTimeoutInterval: 30_000,
-      defaultChatPatterns: false,
-    };
-    if (proxy) {
-      options.connect = proxiedConnect(proxy, options);
-      options.agent = new TunnelledHttpsAgent(proxy);
-    }
-    const bot = mineflayer.createBot(options);
-    this.routeRevision = proxy?.revision;
-    const connectionController = new AbortController();
-    this.connectionController = connectionController;
-    this.bot = bot;
-
     /* A login that never finishes is started again. A proxy adds ways to stall before the server is
      * even reached, and a stalled attempt otherwise sits there with no `end` to bring it back.
      * Unref'd: when nothing else is left the process exits and Docker restarts it, as before. */
@@ -347,6 +326,42 @@ export class MinecraftWorker {
     }, LOGIN_TIMEOUT_MS);
     loginWatchdog.unref();
     this.timers.add(loginWatchdog);
+
+    const options: BotOptions = {
+      host: this.config.host,
+      port: this.config.port,
+      username: this.config.username,
+      auth: this.config.auth,
+      ...(this.config.version ? { version: this.config.version } : {}),
+      profilesFolder: this.config.profilesFolder,
+      hideErrors: true,
+      checkTimeoutInterval: 30_000,
+      defaultChatPatterns: false,
+      /* An account's first sign-in: a person has to open the link and enter the code, which takes
+       * as long as it takes, so the watchdog stands down rather than starting over with a new code
+       * every ninety seconds. */
+      onMsaCode: (code) => {
+        clearTimeout(loginWatchdog);
+        this.timers.delete(loginWatchdog);
+        this.log.warn(
+          {
+            verificationUri: code.verification_uri,
+            userCode: code.user_code,
+            expiresInMinutes: Math.round(code.expires_in / 60),
+          },
+          'Microsoft sign-in needed: open the link and enter the code, signed in as the bot account',
+        );
+      },
+    };
+    if (proxy) {
+      options.connect = proxiedConnect(proxy, options);
+      options.agent = new TunnelledHttpsAgent(proxy);
+    }
+    const bot = mineflayer.createBot(options);
+    this.routeRevision = proxy?.revision;
+    const connectionController = new AbortController();
+    this.connectionController = connectionController;
+    this.bot = bot;
 
     bot.once('spawn', () => {
       clearTimeout(loginWatchdog);
@@ -513,7 +528,9 @@ export class MinecraftWorker {
           'This account is banned from the server; not reconnecting until the retry',
         );
         this.banned = false;
-        setTimeout(() => this.connect(), BANNED_RETRY_MS);
+        const banWait = setTimeout(() => this.connect(), BANNED_RETRY_MS);
+        // Tracked, so stopping the container clears it rather than waiting to be killed.
+        this.timers.add(banWait);
       } else if (!this.stopped && relogging) {
         /* Held open (no unref) like the ban wait, so the process does not exit and leave the gap
          * to Docker's restart; tracked in `timers`, so a shutdown inside the gap clears it rather

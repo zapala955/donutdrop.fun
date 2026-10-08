@@ -206,6 +206,8 @@ export async function registerAdminOperationRoutes(
   runtimeSettings = new RuntimeSettings(config),
 ) {
   const guards = createAuthGuards(db, config);
+  // A retired bot (no credentials any more) is not counted among the bots.
+  const provisionedBotIds = [...config.botCredentials.keys()];
 
   /* Which live topics a settings change has to wake.
    *
@@ -306,7 +308,7 @@ export async function registerAdminOperationRoutes(
          (SELECT coalesce(sum(e.amount_minor), 0) FROM wager_events e JOIN users u ON u.id = e.user_id
            WHERE e.created_at >= date_trunc('day', now()) AND ${NOT_STAFF})::text
            AS wagered_today_minor,
-         (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined')::text
+         (SELECT count(*) FROM bot_accounts WHERE status = 'quarantined' AND id = ANY($1::uuid[]))::text
            AS bots_quarantined,
          (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text
            AS jobs_dead_letter,
@@ -337,6 +339,7 @@ export async function registerAdminOperationRoutes(
          (SELECT coalesce(sum(b.stake_minor), 0) FROM roulette_bets b JOIN users u ON u.id = b.user_id
            WHERE b.created_at >= date_trunc('day', now()) AND ${NOT_STAFF})::text
            AS roulette_wagered_today_minor`,
+      [provisionedBotIds],
     );
     /* Bots the server has refused a payment for lack of funds, and what is waiting on them. This
      * is the whole of what an operator needs to act: which account to pay in game, and how much
@@ -350,8 +353,10 @@ export async function registerAdminOperationRoutes(
         WHERE j.last_error_code = 'PAYOUT_INSUFFICIENT_FUNDS'
           AND j.status IN ('queued', 'leased', 'dead_letter')
           AND j.updated_at > now() - interval '1 day'
+          AND b.id = ANY($1::uuid[])
         GROUP BY b.username, b.role, b.tracked_balance_minor
         ORDER BY b.role`,
+      [provisionedBotIds],
     );
     return { metrics: result.rows[0] ?? {}, shortBots: short.rows };
   });
