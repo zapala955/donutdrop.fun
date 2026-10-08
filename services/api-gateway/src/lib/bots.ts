@@ -76,27 +76,43 @@ export async function pickBot(
     : null;
 }
 
+/** A vault that has been heard from inside this long may still be asked to pay a withdrawal. */
+export const VAULT_RELEASE_SILENCE_SECONDS = 15 * 60;
+/** Money is only sent TO a vault heard from inside this long: two minutes of 15s heartbeats. */
+export const VAULT_SWEEP_SILENCE_SECONDS = 2 * 60;
+
 /**
- * The vault, online or not.
+ * The vault, if it has been heard from recently enough for what the caller wants of it.
  *
- * A withdrawal that needs the vault queues its job whatever the vault is currently doing: the row
- * sits in `bot_jobs` until the vault reconnects and claims it, which is what a job queue is for.
- * Requiring the vault to be online at the moment somebody presses withdraw would turn a delay
- * into a refusal, and the player's money is already debited by then.
+ * A withdrawal that needs the vault queues its job through a short outage: the row sits in
+ * `bot_jobs` until the vault reconnects and claims it, which is what a job queue is for, and
+ * requiring it to be online at that instant would turn a reconnect into a detour. But a vault that
+ * has gone quiet for good is a queue nobody drains. On 2026-10-07 the vault account was banned
+ * from DonutSMP, and a withdrawal routed to it the next day sat untouched, while the teller's own
+ * funds queue -- the path a single-bot deployment always uses -- would have paid it as deposits came
+ * in. So past `VAULT_RELEASE_SILENCE_SECONDS` of silence there is no vault, and the caller falls
+ * back to the teller.
+ *
+ * A sweep sends money TO the vault, which is a /pay to an account that may not be there. That
+ * waits for a vault heard from in the last couple of minutes: `VAULT_SWEEP_SILENCE_SECONDS`.
+ *
+ * A vault an operator has taken out of service (quarantined) is never returned at all.
  */
 export async function findVaultBot(
   client: DbClient,
   config: AppConfig,
+  silenceSeconds: number = VAULT_RELEASE_SILENCE_SECONDS,
 ): Promise<SelectedBot | null> {
   const provisioned = [...config.botCredentials.keys()];
   if (!provisioned.length) return null;
   const result = await client.query<BotRow>(
     `SELECT id, username, server_host, tracked_balance_minor
        FROM bot_accounts
-      WHERE id = ANY($1::uuid[]) AND role = 'vault'
+      WHERE id = ANY($1::uuid[]) AND role = 'vault' AND status <> 'quarantined'
+        AND last_heartbeat_at > now() - make_interval(secs => $2)
       ORDER BY last_heartbeat_at DESC NULLS LAST
       LIMIT 1`,
-    [provisioned],
+    [provisioned, silenceSeconds],
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -218,7 +234,7 @@ export async function queueVaultSweep(
    * direction -- it under-sweeps rather than asking for money that is not there. */
   availableMinor?: bigint,
 ): Promise<void> {
-  const vault = await findVaultBot(client, config);
+  const vault = await findVaultBot(client, config, VAULT_SWEEP_SILENCE_SECONDS);
   // No vault provisioned: this is a teller-only deployment and there is nowhere to sweep to.
   if (!vault) return;
 

@@ -1,6 +1,32 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { describeKick } from '../src/worker.js';
+import { describeKick, isBanKick } from '../src/worker.js';
+
+/* The vault account was banned on 2026-10-07 and reconnected once a minute for a day afterwards,
+ * from the same address the teller uses. A ban now parks the bot for hours instead. */
+describe('a ban kick', () => {
+  it('is told apart from an ordinary disconnect', () => {
+    assert.equal(
+      isBanKick('§cYou are permanently banned for botting.\n\n§7Date: §f07/10/2026'),
+      true,
+    );
+    assert.equal(isBanKick('You are banned from this server'), true);
+    assert.equal(isBanKick('multiplayer.disconnect.duplicate_login'), false);
+    assert.equal(isBanKick('Server restarting'), false);
+    assert.equal(isBanKick('Check out our banner shop'), false);
+  });
+
+  it('parks the bot instead of reconnecting, and keeps the process alive while it waits', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
+    assert.match(source, /const BANNED_RETRY_MS = 6 \* 60 \* 60_000;/);
+    assert.match(source, /if \(isBanKick\(text\)\) this\.banned = true;/);
+    const end = source.slice(source.indexOf('if (!this.stopped && this.banned) {'));
+    // Not unref'd: an idle process that exits is restarted by Docker straight away.
+    assert.match(end.slice(0, 700), /setTimeout\(\(\) => this\.connect\(\), BANNED_RETRY_MS\);\r?\n/);
+    assert.doesNotMatch(end.slice(0, end.indexOf('} else if')), /unref\(\)/);
+  });
+});
 
 /**
  * Every kick in the log read `reason: "[object Object]"`.

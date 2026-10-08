@@ -32,8 +32,19 @@ const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
 const PAYOUT_CHAT_CAPTURE_MS = 8_000;
 /** How long to wait for the server to confirm a payout before giving up on knowing. */
 const PAYOUT_CONFIRM_MS = 8_000;
-/** How often the bot reads its own balance with /bal, and how long it listens for the answer. */
-const BALANCE_CHECK_MS = 120_000;
+/**
+ * With no money moving, how long the bot waits before reading its balance again: a random gap
+ * between these two, drawn afresh each time.
+ *
+ * It was a fixed two minutes. On 2026-10-07 the vault account was permanently banned "for
+ * botting" after two days of sitting idle and sending /bal every 120.000 seconds around the clock,
+ * which is about as mechanical as an account can look. A reading only matters once money has
+ * moved, and every movement already triggers its own read a few seconds later; this is the
+ * occasional check in between, spread out and irregular.
+ */
+const BALANCE_IDLE_MIN_MS = 20 * 60_000;
+const BALANCE_IDLE_MAX_MS = 40 * 60_000;
+/** How long the bot listens for the answer to /bal. */
 const BALANCE_REPLY_MS = 5_000;
 /** After money moves, read the balance again this long after the last movement. */
 const BALANCE_AFTER_MOVE_MS = 4_000;
@@ -42,6 +53,21 @@ interface JobClaimState {
   readonly bot: Bot;
   readonly connectionController: AbortController;
   readonly inventoryRevision: number;
+}
+
+/**
+ * How long a banned account waits before trying the server again.
+ *
+ * A banned account is kicked within two seconds of every attempt. It used to try again ten seconds
+ * later, the process then exited with nothing left to keep it alive, Docker restarted it, and the
+ * vault account hammered DonutSMP once a minute for a day after it was banned -- from the same
+ * address the teller connects from. Once every six hours still notices a lifted ban.
+ */
+const BANNED_RETRY_MS = 6 * 60 * 60_000;
+
+/** Whether a kick says the account is banned, rather than being an ordinary disconnect. */
+export function isBanKick(text: string): boolean {
+  return /\bbanned\b/i.test(text);
 }
 
 /**
@@ -120,6 +146,8 @@ function closeConnection(bot: Bot, reason: string, onError: (error: unknown) => 
 export class MinecraftWorker {
   private bot: Bot | undefined;
   private stopped = false;
+  /** Set when the server kicked this account as banned; the next attempt waits BANNED_RETRY_MS. */
+  private banned = false;
   private timers = new Set<NodeJS.Timeout>();
   private polling = false;
   private snapshottingBot: Bot | undefined;
@@ -233,9 +261,9 @@ export class MinecraftWorker {
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
       // The balance: once shortly after joining (the server is still sending its join messages
-      // straight away), then every couple of minutes, and again after every movement of money.
+      // straight away), again after every movement of money, and otherwise only now and then.
       this.balanceSoon(8_000);
-      this.schedule(() => this.requestBalance(), BALANCE_CHECK_MS);
+      this.scheduleIdleBalance();
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
       /* Polled whatever the transfer flag says. BOT_TRANSFERS_ENABLED governs what the bot may do
        * with an ITEM, not whether it may ask for work: cash payouts share this queue and move a
@@ -334,9 +362,11 @@ export class MinecraftWorker {
       this.balanceSoon(BALANCE_AFTER_MOVE_MS);
     });
     bot.on('windowClose', () => this.markInventoryDirty());
-    bot.on('kicked', (reason) =>
-      this.log.warn({ reason: describeKick(reason) }, 'Bot kicked'),
-    );
+    bot.on('kicked', (reason) => {
+      const text = describeKick(reason);
+      this.log.warn({ reason: text }, 'Bot kicked');
+      if (isBanKick(text)) this.banned = true;
+    });
     bot.on('error', (error) => this.log.error({ err: error }, 'Mineflayer error'));
     bot.once('end', (reason) => {
       connectionController.abort();
@@ -355,7 +385,16 @@ export class MinecraftWorker {
       if (this.connectionController === connectionController) {
         this.connectionController = undefined;
       }
-      if (!this.stopped) {
+      if (!this.stopped && this.banned) {
+        /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
+         * straight away, which is exactly the reconnect loop this is here to stop. */
+        this.log.error(
+          { retryInMinutes: BANNED_RETRY_MS / 60_000 },
+          'This account is banned from the server; not reconnecting until the retry',
+        );
+        this.banned = false;
+        setTimeout(() => this.connect(), BANNED_RETRY_MS);
+      } else if (!this.stopped) {
         const timer = setTimeout(() => this.connect(), 10_000);
         timer.unref();
       }
@@ -675,6 +714,19 @@ export class MinecraftWorker {
     });
   }
 
+  /** The occasional read while nothing moves, at an irregular gap; re-arms itself each time. */
+  private scheduleIdleBalance(): void {
+    if (this.stopped) return;
+    const gap = BALANCE_IDLE_MIN_MS + Math.floor(Math.random() * (BALANCE_IDLE_MAX_MS - BALANCE_IDLE_MIN_MS));
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      this.requestBalance();
+      this.scheduleIdleBalance();
+    }, gap);
+    timer.unref();
+    this.timers.add(timer);
+  }
+
   /** Reads the balance after a short delay; several calls inside the delay make one /bal. */
   private balanceSoon(delayMs: number): void {
     if (this.balanceTimer || this.stopped) return;
@@ -692,8 +744,8 @@ export class MinecraftWorker {
    * Asks the server what this bot holds, with /bal.
    *
    * Not while a /pay is waiting for its answer: the two replies would share the window, and a
-   * payout's confirmation is the one that must not be confused with anything. The next scheduled
-   * read picks it up.
+   * payout's confirmation is the one that must not be confused with anything. It is retried a
+   * few seconds later instead.
    */
   private requestBalance(): void {
     const bot = this.bot;

@@ -737,11 +737,16 @@ test('reads the balance from the reply to /bal, and refuses anything ambiguous',
   assert.equal(parseBalanceReply(null), undefined);
 });
 
-test('reads its balance on join, on a timer and after money moves, and reports it on the heartbeat', async () => {
+test('reads its balance on join, after money moves and only now and then otherwise, and reports it on the heartbeat', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
   assert.match(source, /bot\.chat\('\/bal'\);/);
-  assert.match(source, /this\.schedule\(\(\) => this\.requestBalance\(\), BALANCE_CHECK_MS\);/);
+  /* Never on a fixed clock. The vault account was banned for botting after two days of /bal every
+   * 120 seconds exactly; the idle read is a fresh random gap of at least twenty minutes. */
+  assert.doesNotMatch(source, /this\.schedule\(\(\) => this\.requestBalance\(\)/);
+  assert.match(source, /const BALANCE_IDLE_MIN_MS = 20 \* 60_000;/);
+  assert.match(source, /BALANCE_IDLE_MIN_MS \+ Math\.floor\(Math\.random\(\) \* \(BALANCE_IDLE_MAX_MS - BALANCE_IDLE_MIN_MS\)\)/);
+  assert.match(source, /this\.scheduleIdleBalance\(\);/);
   // Never while a /pay waits for its answer.
   const request = source.slice(source.indexOf('private requestBalance(): void {'));
   assert.match(request.slice(0, 600), /if \(this\.pendingPayout \|\| this\.transferring\)/);

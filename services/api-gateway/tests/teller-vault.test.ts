@@ -178,3 +178,24 @@ describe('managing the two bots', () => {
     assert.match(migration, /role varchar\(8\) NOT NULL DEFAULT 'teller'/);
   });
 });
+
+describe('a vault that has gone quiet', () => {
+  /* The vault account was banned from DonutSMP on 2026-10-07. A withdrawal routed to it the next
+   * day sat untouched in a queue nothing drained, and every sweep would have sent money to an
+   * account that was no longer there. */
+  it('is not a vault: withdrawals fall back to the teller, sweeps wait for a live one', async () => {
+    const bots = await read('services/api-gateway/src/lib/bots.ts');
+    const lookup = bots.slice(bots.indexOf('export async function findVaultBot'));
+    assert.match(lookup, /AND last_heartbeat_at > now\(\) - make_interval\(secs => \$2\)/);
+    // An operator who takes the vault out of service takes it out for good.
+    assert.match(lookup, /role = 'vault' AND status <> 'quarantined'/);
+    assert.match(bots, /export const VAULT_RELEASE_SILENCE_SECONDS = 15 \* 60;/);
+    assert.match(bots, /export const VAULT_SWEEP_SILENCE_SECONDS = 2 \* 60;/);
+    // Sending money to the vault demands the stricter window.
+    const sweep = bots.slice(bots.indexOf('export async function queueVaultSweep'));
+    assert.match(sweep, /findVaultBot\(client, config, VAULT_SWEEP_SILENCE_SECONDS\)/);
+    // With no vault, a withdrawal is paid by the teller and waits in its funds queue.
+    const route = await read('services/api-gateway/src/routes/cash-withdrawals.ts');
+    assert.match(route, /if \(!vault\) \{\s*await payPlayerDirectly\(\);/);
+  });
+});
