@@ -50,8 +50,9 @@ const BALANCE_REPLY_MS = 5_000;
 const BALANCE_AFTER_MOVE_MS = 4_000;
 /**
  * How long the bot stays logged in before it logs out and back in: a random stretch between these
- * two, drawn afresh on every login. A session that never ends, on an account that only ever pays
- * and gets paid, is one more thing about it that looks like a machine.
+ * two, drawn afresh on every login. A session can go deaf while its socket stays open -- the vault
+ * once heard nothing from the server for hours until an operator reconnected it by hand -- and a
+ * regular fresh login bounds how long that can last without waiting for a payout to go unanswered.
  */
 const RELOG_MIN_MS = 10 * 60_000;
 const RELOG_MAX_MS = 30 * 60_000;
