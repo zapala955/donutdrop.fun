@@ -199,7 +199,7 @@ describe('frontend/backend contract', () => {
     const invite = /<a class="pban" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
     assert.ok(invite, 'the home invite banner is missing');
     assert.doesNotMatch(invite, /\$\d/);
-    const lead = /<a class="pban pban--lead" id="pbanLead"[\s\S]*?<\/a>/.exec(html)?.[0];
+    const lead = /<div class="pban pban--lead" id="pbanLead">[\s\S]*?<\/div>/.exec(html)?.[0];
     assert.ok(lead, 'the home lead banner is missing');
     assert.doesNotMatch(lead, /\$\d/);
     assert.match(app, /state\.promotions\?\.referral/);

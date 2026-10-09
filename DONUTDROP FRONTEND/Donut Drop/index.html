@@ -409,15 +409,24 @@
            the signed-in version, so without script it is still a working link. -->
       <section class="pbans" aria-label="Offers">
         <div class="pbans__grid">
-          <a class="pban pban--lead" id="pbanLead" href="/mines-duel">
+          <!-- Two actions, so the lead is a card rather than one link: its main action, and
+               "Explore games", which drops to the full games row. The cover link behind the text
+               makes the rest of the card do the main action, as the other two banners do; it is
+               out of the tab order and hidden from screen readers because the button is the same
+               link. -->
+          <div class="pban pban--lead" id="pbanLead">
+            <a class="pban__cover" id="pbanLeadCover" href="/mines-duel" tabindex="-1" aria-hidden="true"></a>
             <span class="pban__copy">
               <span class="pban__eyebrow" id="pbanLeadEyebrow">Try a game</span>
               <span class="pban__h" id="pbanLeadH">Mines Duel</span>
               <span class="pban__p" id="pbanLeadP">1v1 on one hidden field. Most safe tiles takes the pot.</span>
-              <span class="pban__btn btn btn--go" id="pbanLeadGo">Play now</span>
+              <span class="pban__acts">
+                <a class="pban__btn btn btn--go" id="pbanLeadGo" href="/mines-duel">Play now</a>
+                <button class="pban__btn btn pban__more" type="button" id="pbanExplore">Explore games</button>
+              </span>
             </span>
             <img class="pban__art" id="pbanLeadArt" src="assets/img/items/diamond_pickaxe.svg" alt="" width="112" height="112" />
-          </a>
+          </div>
           <!-- Signed out, this opens the signup form rather than the referrals page's dead end. -->
           <a class="pban" id="pbanInvite" href="/referrals">
             <span class="pban__copy">
@@ -452,7 +461,7 @@
 
            Community Cases is off the board, here and in the Cases menu; its /studio route still
            works for the crates already built there. -->
-      <section class="lobby" aria-labelledby="lobbyH">
+      <section class="lobby" id="lobby" aria-labelledby="lobbyH" tabindex="-1">
         <label class="lobby__search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
           <input type="search" id="lobbySearch" placeholder="Search your game" aria-label="Search games"

@@ -142,14 +142,18 @@ function mountHome(view) {
 
   /* The lead banner. Signed out it is the signup bonus and opens the login form, because that is
    * the step between a visitor and every game below it. Signed in it is a game to try, one of the
-   * new ones while any is new. Picked once per visit, so it does not change under the pointer. */
+   * new ones while any is new. Picked once per visit, so it does not change under the pointer.
+   * Its main action is a button and, behind the text, a cover link; both go to the same place. */
   const lead = $('#pbanLead', view);
+  const leadGo = $('#pbanLeadGo', lead);
+  const leadCover = $('#pbanLeadCover', lead);
   const spotlight = pickSpotlight();
   const paintLead = () => {
     const bonus = Number(state.promotions?.signupBonus?.amountMinor ?? 0);
     const signedOut = !state.authenticated;
     lead.dataset.kind = signedOut ? 'login' : 'game';
-    lead.href = spotlight.route;
+    leadGo.href = spotlight.route;
+    leadCover.href = spotlight.route;
     $('#pbanLeadEyebrow', lead).textContent = signedOut
       ? 'New players'
       : isNewGame(spotlight) ? 'New game' : 'Try a game';
@@ -161,13 +165,34 @@ function mountHome(view) {
         ? 'Added the moment your account is created. Log in with your Minecraft name.'
         : 'Log in with your Minecraft name, deposit in game and play.'
       : spotlight.line;
-    $('#pbanLeadGo', lead).textContent = signedOut ? 'Log in' : `Play ${spotlight.name}`;
+    leadGo.textContent = signedOut ? 'Log in' : `Play ${spotlight.name}`;
     $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : spotlight.art}`;
   };
-  lead.addEventListener('click', (event) => {
+  const leadAction = (event) => {
     if (lead.dataset.kind !== 'login') return;
     event.preventDefault();
     openLoginModal();
+  };
+  leadGo.addEventListener('click', leadAction);
+  leadCover.addEventListener('click', leadAction);
+
+  /* "Explore games": down to the games row, with every game showing. The scroll stops under the
+   * sticky header, and under the jackpot bar when that is up, rather than behind them. Focus moves
+   * to the lobby so a keyboard carries on from there; the search box is left alone, because
+   * focusing it would throw a phone's keyboard over the row. */
+  const lobby = $('#lobby', view);
+  $('#pbanExplore', lead).addEventListener('click', () => {
+    search.value = '';
+    pickCategory('all');
+    const covered = ['.top', '#vaultJackpot']
+      .map((selector) => document.querySelector(selector))
+      .filter((node) => node && !node.hidden)
+      .reduce((bottom, node) => Math.max(bottom, node.getBoundingClientRect().bottom), 0);
+    window.scrollTo({
+      top: window.scrollY + lobby.getBoundingClientRect().top - covered - 12,
+      behavior: reduceMotion() ? 'auto' : 'smooth',
+    });
+    lobby.focus({ preventScroll: true });
   });
 
   /* The invite offer. With the bonus switched off it still invites, because the revenue share on

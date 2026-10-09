@@ -18,6 +18,8 @@
   --home-dc-glow: rgba(88, 101, 242, .5);
   --home-on-dc:   #fff;                     /* 4.61:1 on --discord, measured in app.css          */
   --home-shade:   rgba(0, 0, 0, .55);       /* drop shadows, and the shade under a card's name   */
+  --home-smoke:   rgba(0, 0, 0, .35);       /* the "Explore games" button, at rest and lit       */
+  --home-smoke-hi: rgba(0, 0, 0, .5);
 }
 
 /* ── the page head ── the slogan, one line */
@@ -122,6 +124,32 @@
 .pban:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .pban:active { transform: translateY(-1px) scale(.995); transition-duration: .06s; }
 
+/* The lead carries two actions, so it is laid out differently from the other two banners: the
+ * art moves to the top corner and the buttons take a full-width row along the bottom.
+ *
+ * The cover link sits over the card (z 1) and under the buttons (z 2), so a click anywhere but
+ * "Explore games" does the main action. The copy is positioned without a z-index on purpose: a
+ * z-index there would make it a stacking context, and the buttons inside it could not rise
+ * above the cover. */
+.pban__cover { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.pban--lead .pban__copy { z-index: auto; max-width: none; width: 100%; }
+.pban--lead .pban__eyebrow,
+.pban--lead .pban__h,
+.pban--lead .pban__p { max-width: 64%; }
+.pban--lead .pban__art { top: 18px; width: 100px; height: 100px; transform: rotate(-8deg); }
+.pban--lead:hover .pban__art { transform: translateY(-4px) rotate(-3deg) scale(1.06); }
+
+.pban__acts { margin-top: auto; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
+.pban__acts .pban__btn { position: relative; z-index: 2; margin-top: 0; }
+.pban__acts .pban__btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.pban__more {
+  background: var(--home-smoke);
+  border-color: var(--gold-edge);
+  color: var(--text);
+  font-weight: 700;
+}
+.pban__more:hover { background: var(--home-smoke-hi); border-color: var(--gold-edge-hi); }
+
 /* A phone: the lead keeps everything at a smaller size; the other two become a pair of compact
    cards, eyebrow, heading and button, with their art and their line left to the pages they open. */
 @container (max-width: 559px) {
@@ -130,9 +158,12 @@
   .pban__h { font-size: 1.0625rem; }
   .pban__btn { min-height: 44px; }
   .pban--lead { grid-column: 1 / -1; padding: 16px; }
-  .pban--lead .pban__copy { max-width: 72%; }
+  .pban--lead .pban__eyebrow,
+  .pban--lead .pban__h,
+  .pban--lead .pban__p { max-width: 70%; }
   .pban--lead .pban__h { font-size: 1.375rem; }
-  .pban--lead .pban__art { width: 76px; height: 76px; right: 12px; }
+  .pban--lead .pban__art { top: 14px; width: 72px; height: 72px; right: 12px; }
+  .pban__acts .pban__btn { flex: 1 1 auto; }
   .pban:not(.pban--lead) .pban__copy { max-width: none; width: 100%; }
   .pban:not(.pban--lead) .pban__p,
   .pban:not(.pban--lead) .pban__art { display: none; }
@@ -158,6 +189,8 @@
  * Search, one tab strip, then the row: the order the big lobbies use, because it is the order a
  * player looks for a game in — by name if they know it, by kind if they do not, by eye otherwise. */
 .lobby { margin-top: 24px; container-type: inline-size; }
+/* Focused by "Explore games" so a keyboard carries on from the lobby; it is not a control. */
+.lobby:focus { outline: none; }
 
 .lobby__search { position: relative; display: flex; min-width: 0; margin-bottom: 12px; }
 .lobby__search svg {
@@ -249,6 +282,10 @@
 }
 .lobby__track::-webkit-scrollbar { display: none; }
 .lobby__track[hidden] { display: none; }
+/* The narrowest phones: two and a half cards, so a name like UPGRADER still fits on one line. */
+@container (max-width: 339px) {
+  .lobby__track { grid-auto-columns: calc((100% - 2 * 10px) / 2.6); }
+}
 @container (min-width: 480px) {
   .lobby__track { gap: 12px; grid-auto-columns: calc((100% - 4 * 12px) / 4.3); }
 }
@@ -258,7 +295,9 @@
 @container (min-width: 960px) {
   .lobby__track { grid-auto-columns: calc((100% - 6 * 12px) / 6.4); }
 }
-.lobby__track > li { display: flex; min-width: 0; scroll-snap-align: start; }
+/* Each slot is a size container, so a card's name is set from the card's own width: a long name
+ * like COINFLIP fits an 81px phone card on one line instead of breaking mid-word. */
+.lobby__track > li { display: flex; min-width: 0; scroll-snap-align: start; container-type: inline-size; }
 .lobby__track > li[hidden] { display: none; }
 
 /* The card. Portrait, the item large in the upper half, the name set big at the foot. One
@@ -297,7 +336,7 @@
 }
 .gcard__name {
   font-family: var(--pixel); font-weight: 900;
-  font-size: 1.0625rem; line-height: 1.05; letter-spacing: .01em;
+  font-size: clamp(.6875rem, 11cqi, 1.0625rem); line-height: 1.05; letter-spacing: .01em;
   text-transform: uppercase;
   text-shadow: 0 2px 0 var(--home-shade);
   overflow-wrap: anywhere;
@@ -337,7 +376,6 @@
   .lobby__tab { min-height: 44px; padding: 0 6px; gap: 6px; font-size: .8125rem; }
   .lobby__tab svg { width: 16px; height: 16px; }
   .gcard { padding: 8px 6px 12px; }
-  .gcard__name { font-size: .875rem; }
   .gcard__brand { font-size: .5625rem; letter-spacing: .18em; }
 }
 @container (max-width: 399px) {
@@ -402,5 +440,6 @@
   .gcard:hover .gcard__art { transform: translateX(-50%); }
   .perk:hover .perk__go { transform: none; }
   .pban:hover .pban__art { transform: translateY(-50%) rotate(-8deg); }
+  .pban--lead:hover .pban__art { transform: rotate(-8deg); }
   .pban:hover .pban__art--dc { transform: translateY(-50%); }
 }
