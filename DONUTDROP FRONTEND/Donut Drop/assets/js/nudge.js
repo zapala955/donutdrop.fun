@@ -114,7 +114,7 @@ async function pickOffer() {
     return {
       kind: 'invite',
       eyebrow: 'Invite & earn',
-      title: ['', money(bonus), ' per friend'],
+      title: ['', money(bonus), ' per invite'],
       line: 'Share your link with your friends on DonutSMP.',
       cta: 'Get your link',
       href: '/referrals',

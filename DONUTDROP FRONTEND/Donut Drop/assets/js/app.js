@@ -211,7 +211,7 @@ function mountHome(view) {
     const bonus = Number(referral?.bonusMinor ?? 0);
     const heading = $('#pbanInviteH', invite);
     // The wager condition is left to the referrals page, which states it as "Unlocks at".
-    if (bonus > 0) amountLine(heading, '', bonus, ' per friend');
+    if (bonus > 0) amountLine(heading, '', bonus, ' per invite');
     else heading.textContent = 'Invite your friends';
     $('#pbanInviteGo', invite).textContent = state.authenticated ? 'Get your link' : 'Sign up';
   };
