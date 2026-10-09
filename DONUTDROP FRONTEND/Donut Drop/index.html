@@ -94,6 +94,8 @@
 <link rel="stylesheet" href="assets/css/battles.css" />
 <!-- the home view: banner, game lobby, rewards. After the game sheets, before the phone layer. -->
 <link rel="stylesheet" href="assets/css/home.css" />
+<!-- the header above each game: icon, name, "How it works" -->
+<link rel="stylesheet" href="assets/css/gamehead.css" />
 <!-- the offer card in the corner, on every page (assets/js/nudge.js) -->
 <link rel="stylesheet" href="assets/css/nudge.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
@@ -608,9 +610,15 @@
 
     <!-- ─────── CRATES ─────── -->
     <section class="view" data-view="crates" hidden>
-      <header class="phead">
-        <h1>Crates <button class="ihint" type="button" aria-label="Every crate shows its full drop table, odds and house edge before you pay."
-          data-tip="Every crate shows its full drop table, odds and house edge before you pay."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/chest.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Crates</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Every crate shows its full drop table, odds and house edge before you pay."
+          data-tip="Every crate shows its full drop table, odds and house edge before you pay."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="crates" id="crateRoot"></div>
     </section>
@@ -626,97 +634,150 @@
 
     <!-- ─────── CASE BATTLES ─────── -->
     <section class="view" data-view="battles" hidden>
-      <header class="phead">
-        <h1>Case Battles <button class="ihint" type="button" aria-label="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."
-          data-tip="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/netherite_sword.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Case Battles</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Every seat pays the same, every drop joins one pot, and the winning side takes all of it."
+          data-tip="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="battles" id="battleRoot"></div>
     </section>
 
     <!-- ─────── COMMUNITY CRATES ─────── -->
     <section class="view" data-view="studio" hidden>
-      <header class="phead">
-        <h1>Community Crates <button class="ihint" type="button" aria-label="Build a crate and earn a royalty on every open, carved from the house margin."
-          data-tip="Build a crate and earn a royalty on every open, carved from the house margin."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/ender_chest.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Community Crates</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Build a crate and earn a royalty on every open, carved from the house margin."
+          data-tip="Build a crate and earn a royalty on every open, carved from the house margin."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="studiowrap" id="studioRoot"></div>
     </section>
 
     <!-- ─────── UPGRADER ─────── -->
     <section class="view" data-view="upgrader" hidden>
-      <header class="phead">
-        <h1>Upgrader <button class="ihint" type="button" aria-label="The gold arc is your window: the pointer stops inside it and the payout is yours."
-          data-tip="The gold arc is your window: the pointer stops inside it and the payout is yours."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/xp_bottle.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Upgrader</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: The gold arc is your window: the pointer stops inside it and the payout is yours."
+          data-tip="The gold arc is your window: the pointer stops inside it and the payout is yours."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="upg" id="upgRoot"></div>
     </section>
 
     <!-- â”€â”€â”€â”€â”€â”€â”€ ROULETTE â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="view" data-view="roulette" hidden>
-      <header class="phead">
-        <h1>Roulette <button class="ihint" type="button"
-          aria-label="One server-owned European wheel is shared by every player. Bets lock every ten seconds."
-          data-tip="One server-owned European wheel is shared by every player. Bets lock every ten seconds."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/nether_star.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Roulette</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: One server-owned European wheel is shared by every player. Bets lock every ten seconds."
+          data-tip="One server-owned European wheel is shared by every player. Bets lock every ten seconds."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="roulette" id="rouletteRoot"></div>
     </section>
 
     <!-- ─────── BLACKJACK ─────── -->
     <section class="view" data-view="blackjack" hidden>
-      <header class="phead">
-        <h1>Blackjack <button class="ihint" type="button"
-          aria-label="Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. The house edge is 9.87% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."
-          data-tip="Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. The house edge is 9.87% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/enchanted_book.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Blackjack</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. The house edge is 9.87% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."
+          data-tip="Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. The house edge is 9.87% with perfect play. Every card comes from your committed fairness seed, revealed when the hand ends."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="bj" id="blackjackRoot"></div>
     </section>
 
     <!-- ─────── CRASH ─────── -->
     <section class="view" data-view="crash" hidden>
-      <header class="phead">
-        <h1>Crash <button class="ihint" type="button"
-          aria-label="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."
-          data-tip="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/elytra.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Crash</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."
+          data-tip="One shared multiplier climbs from 1.00x until it busts. Cash out before it does. Every cash-out target returns 90% of the stake on average: the house edge is 10%, whatever you aim for."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="crash" id="crashRoot"></div>
     </section>
 
     <!-- ─────── MINES ─────── -->
     <section class="view" data-view="mines" hidden>
-      <header class="phead">
-        <h1>Mines <button class="ihint" type="button"
-          aria-label="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."
-          data-tip="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/tnt.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Mines</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."
+          data-tip="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like. Every cash-out point returns 90% on average: the house edge is 10%, whatever you choose."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="mines" id="minesRoot"></div>
     </section>
 
     <!-- ─────── PLINKO ─────── -->
     <section class="view" data-view="plinko" hidden>
-      <header class="phead">
-        <h1>Plinko <button class="ihint" type="button"
-          aria-label="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."
-          data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/slime_ball.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Plinko</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."
+          data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach. Every board returns 90% on average: the house edge is 10%, whatever you choose."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="plinko" id="plinkoRoot"></div>
     </section>
 
     <!-- ─────── MINES DUEL ─────── -->
     <section class="view" data-view="mines-duel" hidden>
-      <header class="phead">
-        <h1>Mines Duel <button class="ihint" type="button"
-          aria-label="Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes. The house takes no edge on the result."
-          data-tip="Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes. The house takes no edge on the result."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/diamond_pickaxe.svg" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Mines Duel</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes. The house takes no edge on the result."
+          data-tip="Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes. The house takes no edge on the result."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="mduel" id="minesDuelRoot"></div>
     </section>
 
     <!-- ─────── COINFLIP ─────── -->
     <section class="view" data-view="coinflip" hidden>
-      <header class="phead">
-        <h1>Coinflip <button class="ihint" type="button"
-          aria-label="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."
-          data-tip="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."></button></h1>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/gold_ingot.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Coinflip</h1>
+          <span class="phead__tag">DonutWin Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."
+          data-tip="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. The house takes no edge on the result: it is an exact 50/50 you can verify from the revealed seeds."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="duelwrap" id="coinflipRoot"></div>
     </section>
