@@ -34,7 +34,6 @@ import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
 import { mountDiscord } from './discord.js';
 import { applyRouteMeta } from './seo.js';
-import { initPremium } from './premium.js';
 import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
@@ -1253,8 +1252,6 @@ initHints();
 initTabDrop('casesDrop', 'casesBtn', 'casesMenu');
 initTabDrop('casinoDrop', 'casinoBtn', 'casinoMenu');
 initWallet();
-// The premium design preview's chrome. A no-op unless this browser opted in at /test.
-initPremium();
 $('#skipToMain')?.addEventListener('click', () => {
   const main = $('#main');
   main?.focus();
