@@ -163,9 +163,9 @@ export const UPGRADER = {
 
 
 /* ─────────── games put forward ───────────
- * The games the home page's lead banner and the corner offer (nudge.js) suggest to a signed-in
- * player. `shipped` is the day a game went live: for thirty days after it the label reads
- * "New game", then "Try a game", so the word never outlives the fact. */
+ * The games the corner offer (nudge.js) suggests to a signed-in player, and the source of the
+ * home lobby's "New" tags. `shipped` is the day a game went live: for thirty days after it the
+ * label reads "New game", then "Try a game", so the word never outlives the fact. */
 export const SPOTLIGHT_GAMES = [
   { route: '/mines-duel', name: 'Mines Duel', art: 'diamond_pickaxe.svg', shipped: '2026-10-04',
     line: '1v1 on one hidden field. Most safe tiles takes the pot.' },

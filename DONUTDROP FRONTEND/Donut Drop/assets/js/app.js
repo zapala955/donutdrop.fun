@@ -1,6 +1,6 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
 import {
-  RARITY, IMG, SPOTLIGHT_GAMES, pickSpotlight, isNewGame,
+  RARITY, IMG, SPOTLIGHT_GAMES, isNewGame,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -142,9 +142,9 @@ function mountHome(view) {
 
   /* The lead banner. Signed out it is the signup bonus, with a Log in button beside "Explore
    * games", because logging in is the step between a visitor and every game below it. Signed in
-   * it names a game worth a look (one of the new ones while any is new, picked once per visit so
-   * it does not change under the pointer), and its one button is "Explore games": the operator
-   * asked for that rather than a button straight into the named game (2026-10-09).
+   * it is an invitation to the whole lobby, and "Explore games" is its one button. It used to name
+   * a single game (Coinflip, Mines Duel...) to try; the operator wanted the lobby, not one game,
+   * put forward there (2026-10-09). The count is the cards actually on the page.
    *
    * Behind the text sits a cover link, so the rest of the card does what the main button does:
    * log in when signed out, explore when signed in. */
@@ -152,7 +152,6 @@ function mountHome(view) {
   const leadGo = $('#pbanLeadGo', lead);
   const leadCover = $('#pbanLeadCover', lead);
   const leadExplore = $('#pbanExplore', lead);
-  const spotlight = pickSpotlight();
   const paintLead = () => {
     const bonus = Number(state.promotions?.signupBonus?.amountMinor ?? 0);
     const signedOut = !state.authenticated;
@@ -161,18 +160,16 @@ function mountHome(view) {
     // The gold one is the main action: Log in when it is there, otherwise Explore games.
     leadExplore.classList.toggle('btn--go', !signedOut);
     leadExplore.classList.toggle('pban__more', signedOut);
-    $('#pbanLeadEyebrow', lead).textContent = signedOut
-      ? 'New players'
-      : isNewGame(spotlight) ? 'New game' : 'Try a game';
+    $('#pbanLeadEyebrow', lead).textContent = signedOut ? 'New players' : 'DonutWin Originals';
     const heading = $('#pbanLeadH', lead);
     if (signedOut && bonus > 0) amountLine(heading, 'Get ', bonus, ' free');
-    else heading.textContent = signedOut ? 'Log in to play' : spotlight.name;
+    else heading.textContent = signedOut ? 'Log in to play' : `Explore ${cards.length} games`;
     $('#pbanLeadP', lead).textContent = signedOut
       ? bonus > 0
         ? 'Added the moment your account is created. Log in with your Minecraft name.'
         : 'Log in with your Minecraft name, deposit in game and play.'
-      : spotlight.line;
-    $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : spotlight.art}`;
+      : 'Crash, Mines, Coinflip, Plinko, Blackjack and more, all played with your DonutSMP money.';
+    $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : 'ender_chest.png'}`;
   };
 
   /* "Explore games": down to the games row, with every game showing. The scroll stops under the
