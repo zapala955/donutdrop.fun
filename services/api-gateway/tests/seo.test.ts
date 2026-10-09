@@ -83,6 +83,47 @@ describe('what search engines are given', () => {
     }
   });
 
+  /* A link to /discord previewed in Discord as the home page: previews read the HTML as served and
+   * never run seo.js. nginx rewrites the home values to the route's own from generated maps. */
+  it('serves each route its own title in the HTML itself, for link previews', async () => {
+    const seoModule = await seo();
+    const generator = (await import(
+      pathToFileURL(path.join(repo, 'infra/nginx/seo-map.mjs')).href
+    )) as {
+      expectedConf(conf: string, seo: unknown): string;
+      homeStrings(seo: unknown): Record<string, string>;
+      htmlText(text: string): string;
+    };
+    const conf = (await read('infra/nginx/nginx.conf')).replace(/\r\n/g, '\n');
+    assert.equal(
+      conf,
+      generator.expectedConf(conf, seoModule),
+      'nginx.conf is out of date with seo.js: run node infra/nginx/seo-map.mjs',
+    );
+
+    // Every string nginx looks for is really in the page, as many times as it has to be replaced.
+    const html = await readFrontend('index.html');
+    const home = generator.homeStrings(seoModule);
+    const count = (needle: string) => html.split(needle).length - 1;
+    assert.equal(count(home['title']!), 3, 'the home title: <title>, og:title, twitter:title');
+    assert.equal(count(home['description']!), 3, 'the home description: meta, og, twitter');
+    for (const key of ['canonical', 'ogUrl', 'robots']) {
+      assert.equal(count(home[key]!), 1, `${key} must appear exactly once`);
+    }
+
+    // What a preview of /discord now reads, doing what nginx does.
+    const discord = seoModule.ROUTE_META['discord']!;
+    const served = html
+      .split(home['title']!).join(generator.htmlText(discord.title))
+      .split(home['description']!).join(generator.htmlText(discord.description))
+      .split(home['canonical']!).join('<link rel="canonical" href="https://donutwin.fun/discord" />');
+    assert.match(served, /<title>DonutWin Discord — Join &amp; Link Your Account<\/title>/);
+    assert.match(served, /<meta property="og:title" content="DonutWin Discord — /);
+    assert.match(served, /<meta name="twitter:description" content="Join the DonutWin Discord/);
+    assert.match(served, /<link rel="canonical" href="https:\/\/donutwin\.fun\/discord" \/>/);
+    assert.match(conf, /map \$uri \$seo_robots \{[\s\S]*?\/wallet "noindex, follow";/);
+  });
+
   it('says what the site is, by name, on the home page', async () => {
     const html = await readFrontend('index.html');
     const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('class="promos"'));
