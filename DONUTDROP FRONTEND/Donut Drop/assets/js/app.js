@@ -168,7 +168,7 @@ function mountHome(view) {
       ? bonus > 0
         ? 'Added the moment your account is created. Log in with your Minecraft name.'
         : 'Log in with your Minecraft name, deposit in game and play.'
-      : 'Crash, Mines, Coinflip, Plinko, Blackjack and more, all played with your DonutSMP money.';
+      : 'Crash, Mines, Coinflip, Plinko, Blackjack and more.';
     $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : 'ender_chest.png'}`;
   };
 
