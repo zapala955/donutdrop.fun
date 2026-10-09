@@ -141,6 +141,8 @@
 
 .pban__acts { margin-top: auto; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
 .pban__acts .pban__btn { position: relative; z-index: 2; margin-top: 0; }
+/* .btn sets display, which would otherwise beat the hidden attribute on the signed-in Log in. */
+.pban__acts .pban__btn[hidden] { display: none; }
 .pban__acts .pban__btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .pban__more {
   background: var(--home-smoke);

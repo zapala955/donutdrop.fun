@@ -140,20 +140,27 @@ function mountHome(view) {
     target.replaceChildren(before, amount, after);
   };
 
-  /* The lead banner. Signed out it is the signup bonus and opens the login form, because that is
-   * the step between a visitor and every game below it. Signed in it is a game to try, one of the
-   * new ones while any is new. Picked once per visit, so it does not change under the pointer.
-   * Its main action is a button and, behind the text, a cover link; both go to the same place. */
+  /* The lead banner. Signed out it is the signup bonus, with a Log in button beside "Explore
+   * games", because logging in is the step between a visitor and every game below it. Signed in
+   * it names a game worth a look (one of the new ones while any is new, picked once per visit so
+   * it does not change under the pointer), and its one button is "Explore games": the operator
+   * asked for that rather than a button straight into the named game (2026-10-09).
+   *
+   * Behind the text sits a cover link, so the rest of the card does what the main button does:
+   * log in when signed out, explore when signed in. */
   const lead = $('#pbanLead', view);
   const leadGo = $('#pbanLeadGo', lead);
   const leadCover = $('#pbanLeadCover', lead);
+  const leadExplore = $('#pbanExplore', lead);
   const spotlight = pickSpotlight();
   const paintLead = () => {
     const bonus = Number(state.promotions?.signupBonus?.amountMinor ?? 0);
     const signedOut = !state.authenticated;
-    lead.dataset.kind = signedOut ? 'login' : 'game';
-    leadGo.href = spotlight.route;
-    leadCover.href = spotlight.route;
+    lead.dataset.kind = signedOut ? 'login' : 'explore';
+    leadGo.hidden = !signedOut;
+    // The gold one is the main action: Log in when it is there, otherwise Explore games.
+    leadExplore.classList.toggle('btn--go', !signedOut);
+    leadExplore.classList.toggle('pban__more', signedOut);
     $('#pbanLeadEyebrow', lead).textContent = signedOut
       ? 'New players'
       : isNewGame(spotlight) ? 'New game' : 'Try a game';
@@ -165,23 +172,15 @@ function mountHome(view) {
         ? 'Added the moment your account is created. Log in with your Minecraft name.'
         : 'Log in with your Minecraft name, deposit in game and play.'
       : spotlight.line;
-    leadGo.textContent = signedOut ? 'Log in' : `Play ${spotlight.name}`;
     $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : spotlight.art}`;
   };
-  const leadAction = (event) => {
-    if (lead.dataset.kind !== 'login') return;
-    event.preventDefault();
-    openLoginModal();
-  };
-  leadGo.addEventListener('click', leadAction);
-  leadCover.addEventListener('click', leadAction);
 
   /* "Explore games": down to the games row, with every game showing. The scroll stops under the
    * sticky header, and under the jackpot bar when that is up, rather than behind them. Focus moves
    * to the lobby so a keyboard carries on from there; the search box is left alone, because
    * focusing it would throw a phone's keyboard over the row. */
   const lobby = $('#lobby', view);
-  $('#pbanExplore', lead).addEventListener('click', () => {
+  const exploreGames = () => {
     search.value = '';
     pickCategory('all');
     const covered = ['.top', '#vaultJackpot']
@@ -193,7 +192,16 @@ function mountHome(view) {
       behavior: reduceMotion() ? 'auto' : 'smooth',
     });
     lobby.focus({ preventScroll: true });
-  });
+  };
+  leadExplore.addEventListener('click', exploreGames);
+
+  const leadAction = (event) => {
+    event.preventDefault();
+    if (lead.dataset.kind === 'login') openLoginModal();
+    else exploreGames();
+  };
+  leadGo.addEventListener('click', leadAction);
+  leadCover.addEventListener('click', leadAction);
 
   /* The invite offer. With the bonus switched off it still invites, because the revenue share on
    * invited players is paid either way; the referrals page states both terms.
