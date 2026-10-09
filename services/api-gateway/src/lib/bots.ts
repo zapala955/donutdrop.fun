@@ -254,11 +254,32 @@ export async function queueVaultSweep(
     held = BigInt(balance.rows[0]?.tracked_balance_minor ?? '0');
   }
 
+  /* Money the teller already owes stays on the teller.
+   *
+   * A vault-funded withdrawal moves its money onto the teller first and pays the player in a
+   * second job a few seconds later (the hop delay). A sweep sized in that gap saw the release as
+   * surplus and sent it straight back: on 2026-10-09 a $85.8M release landed at 17:01:42, a $86.8M
+   * sweep left at 17:01:43, and the payout was refused for funds -- and, the payout queue being
+   * first come first served, every payout queued on the teller after it waited too. So everything
+   * the teller is due to pay, queued or in flight, is held back before anything counts as excess.
+   *
+   * Only well-formed amounts are summed: this runs inside the transaction that credits a player's
+   * deposit, and a malformed payload must not be able to fail that. */
+  const owing = await client.query<{ owed: string }>(
+    `SELECT COALESCE(SUM((payload->>'amountMinor')::numeric), 0)::text AS owed
+       FROM bot_jobs
+      WHERE bot_id = $1 AND kind IN ('cash_payout', 'admin_payout')
+        AND status IN ('queued', 'leased')
+        AND payload->>'amountMinor' ~ '^[0-9]{1,19}$'`,
+    [teller.id],
+  );
+  const free = held - BigInt(owing.rows[0]?.owed ?? '0');
+
   /* A threshold, not a trickle. Below it nothing moves, so an in-game transfer does not ride
    * behind every single deposit; above it the account is emptied in one go. */
-  if (held < config.tellerSweepThresholdMinor) return;
+  if (free < config.tellerSweepThresholdMinor) return;
 
-  const excess = held - config.tellerFloatTargetMinor;
+  const excess = free - config.tellerFloatTargetMinor;
   /* Nothing above the float, nothing to do. Also the guard against a negative balance producing
    * a "sweep" that would ask the teller to pay a negative amount. */
   if (excess <= 0n) return;

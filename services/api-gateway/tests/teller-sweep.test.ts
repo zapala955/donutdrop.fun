@@ -53,9 +53,11 @@ describe('emptying the teller into the vault', () => {
   it('does nothing until the teller is holding the threshold', async () => {
     const bots = await read('services/api-gateway/src/lib/bots.ts');
     const fn = bots.slice(bots.indexOf('export async function queueVaultSweep'));
-    assert.ok(fn.includes('if (held < config.tellerSweepThresholdMinor) return;'));
+    /* Measured on what the teller holds FREE of the payouts it still owes; see
+     * teller-sweep-owed.test.ts for why, and for the sweep run against today's figures. */
+    assert.ok(fn.includes('if (free < config.tellerSweepThresholdMinor) return;'));
     // And then empties down to the float, rather than to the threshold.
-    assert.ok(fn.includes('const excess = held - config.tellerFloatTargetMinor;'));
+    assert.ok(fn.includes('const excess = free - config.tellerFloatTargetMinor;'));
   });
 
   it('defaults the threshold to $50M and keeps it runtime-manageable', async () => {
