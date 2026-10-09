@@ -1,0 +1,244 @@
+/* home.css — the lobby: a short banner, every game as a tile, the rewards, the day's pulls.
+ *
+ * Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V3
+ *
+ * Built on the house tokens (app.css, obsidian.css, polish.css). No new hue and no new face: the
+ * two values below are the house gold at lower alphas, named so nothing further down is a raw
+ * colour.
+ *
+ * Linked after every game sheet and before mobile.css: it settles the home view's own pieces,
+ * and mobile.css still settles the shell (header, tab bar, chat drawer) around them. */
+
+:root {
+  --home-wash: rgba(255, 170, 0, .14);   /* the light behind a tile's item, and a perk's icon   */
+  --home-ring: rgba(255, 170, 0, .2);    /* the search field's focus halo                        */
+}
+
+/* ── the banner, at half its old height ──
+ *
+ * Same hero, same headline, same sentence; less of it. The art drops from 300px to 200px and the
+ * headline from 3.5rem to 2.6rem, so on a laptop the first row of games is on the first screen. */
+.hero--home {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr);
+  gap: 20px;
+  padding: clamp(18px, 2.4vw, 28px) clamp(18px, 3vw, 32px);
+}
+.hero--home h1 { font-size: clamp(1.8rem, 3.2vw, 2.6rem); margin: 0 0 10px; }
+.hero--home .hero__copy p { margin-bottom: 16px; }
+.hero--home .hero__cta { margin-top: 0; }
+.hero--home .hero__art { height: 200px; order: 0; }
+
+/* ── section heads ── the same gold tick as the "Biggest pulls today" card head */
+.lobby__h {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1.125rem; letter-spacing: -.01em;
+  margin: 0;
+}
+.lobby__h::before {
+  content: ""; width: 3px; height: 16px; border-radius: 4px; flex: none;
+  background: linear-gradient(180deg, var(--gold-body), transparent);
+}
+
+/* ── the lobby ── */
+.lobby { margin-top: 20px; }
+.lobby__bar {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.lobby__chips { display: flex; gap: 6px; }
+.lobby__chip {
+  min-height: 40px; padding: 0 16px;
+  border: 1px solid var(--ob-line); border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 700 .8125rem/1 var(--body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--ob-quick), border-color var(--ob-quick), background var(--ob-quick);
+}
+.lobby__chip:hover { color: var(--text); border-color: var(--ob-line-hi); }
+.lobby__chip:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.lobby__chip:active { transform: translateY(1px); }
+.lobby__chip[aria-pressed="true"] {
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-body));
+  border-color: transparent;
+}
+
+.lobby__search { position: relative; display: flex; flex: 0 1 260px; min-width: 0; margin-left: auto; }
+.lobby__search svg {
+  position: absolute; left: 14px; top: 50%;
+  width: 16px; height: 16px; transform: translateY(-50%);
+  fill: none; stroke: var(--faint); stroke-width: 2; stroke-linecap: round;
+  pointer-events: none;
+}
+.lobby__search input {
+  width: 100%; min-width: 0; min-height: 40px;
+  padding: 0 14px 0 38px;
+  border: 1px solid var(--ob-line); border-radius: 999px;
+  background: var(--bg2);
+  color: var(--text);
+  font: 500 .9375rem var(--body);
+  outline: none;
+  transition: border-color var(--ob-quick), box-shadow var(--ob-quick);
+}
+.lobby__search input::placeholder { color: var(--faint); }
+.lobby__search input:hover { border-color: var(--ob-line-hi); }
+.lobby__search input:focus-visible { border-color: var(--gold-body); box-shadow: 0 0 0 3px var(--home-ring); }
+
+/* The tiles. One material for all eleven: a game's own colour would say it is featured over the
+ * others, and none is. What tells them apart is the item, the name and the line under it. */
+/* Column counts picked for eleven tiles rather than auto-filled: an auto-fill grid put five across
+ * on a laptop and left Mines Duel alone on a third row. Six, four and three all end on a fuller
+ * last row. Sized off the lobby's own width, since the chat rail takes a share of the window. */
+.lobby { container-type: inline-size; }
+.lobby__grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container (min-width: 480px) { .lobby__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 620px) { .lobby__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (min-width: 980px) { .lobby__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.lobby__grid > li { display: flex; min-width: 0; }
+.lobby__grid > li[hidden] { display: none; }
+
+.gtile {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 10px 14px;
+  border: 1px solid var(--ob-line); border-radius: var(--r-panel);
+  background: linear-gradient(160deg, var(--panel2), var(--panel));
+  color: var(--text);
+  transition:
+    transform .18s var(--ob-ease),
+    border-color .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease);
+}
+.gtile__art {
+  display: grid; place-items: center;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--r-soft);
+  background: radial-gradient(60% 70% at 50% 55%, var(--home-wash), transparent 72%), var(--bg2);
+}
+.gtile__art img {
+  width: 60px; height: 60px; object-fit: contain;
+  image-rendering: pixelated;
+  transition: transform .22s var(--ob-ease);
+}
+.gtile__name {
+  padding: 0 4px;
+  font-family: var(--pixel); font-weight: 800; font-size: 1rem; line-height: 1.2;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.gtile__desc {
+  padding: 0 4px;
+  font-size: .8125rem; line-height: 1.4; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.gtile:hover { transform: var(--ob-lift); border-color: var(--ob-line-hi); box-shadow: var(--ob-glow); }
+.gtile:hover .gtile__art img { transform: translateY(-2px) scale(1.08); }
+.gtile:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.gtile:active { transform: translateY(-1px) scale(.99); transition-duration: .06s; }
+
+/* Nothing matched: say so where the tiles were, and give the way back. */
+.lobby__none {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 28px 16px;
+  border: 1px dashed var(--ob-line); border-radius: var(--r-panel);
+  color: var(--muted); text-align: center;
+}
+.lobby__none[hidden] { display: none; }
+.lobby__none p { margin: 0; }
+
+/* ── rewards ── */
+.perks { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+.perks .invitebar { margin-top: 0; }
+.perks__row {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+}
+.perks__row > li { display: flex; min-width: 0; }
+.perk {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 64px; padding: 12px 14px;
+  border: 1px solid var(--ob-line); border-radius: var(--r-panel);
+  background: linear-gradient(140deg, var(--panel2), var(--panel));
+  color: var(--text);
+  transition:
+    transform .18s var(--ob-ease),
+    border-color .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease);
+}
+.perk__ico {
+  flex: none; width: 40px; height: 40px; padding: 9px;
+  border-radius: var(--r-soft);
+  background: var(--home-wash);
+  fill: none; stroke: var(--gold-body); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.perk__copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.perk__copy b { font-family: var(--pixel); font-weight: 800; font-size: .9375rem; color: var(--text); }
+.perk__copy span { font-size: .8125rem; line-height: 1.4; color: var(--muted); }
+.perk__go {
+  flex: none; margin-left: auto; width: 18px; height: 18px;
+  fill: none; stroke: var(--faint); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform var(--ob-quick), stroke var(--ob-quick);
+}
+.perk:hover { transform: var(--ob-lift); border-color: var(--ob-line-hi); box-shadow: var(--ob-glow); }
+.perk:hover .perk__go { stroke: var(--gold-body); transform: translateX(2px); }
+.perk:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.perk:active { transform: translateY(-1px) scale(.995); transition-duration: .06s; }
+
+/* The empty "Biggest pulls" row is a list item, so it took the three-column row grid and set its
+   sentence in the 34px icon column, one word per line. */
+.drops li.drops__empty { display: block; }
+
+/* ── narrower ── */
+@media (max-width: 900px) {
+  .perks__row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+
+/* A phone: the banner loses its art (and app.js never starts the 3D scene), so the first screen
+   is the headline, the button and the first games. The bar stacks as heading, search, then the
+   four filters at equal width. */
+@media (max-width: 640px) {
+  .hero--home { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; }
+  .hero--home .hero__art { display: none; }
+  .hero--home h1 { font-size: 1.75rem; }
+  .hero--home .hero__copy p { font-size: .875rem; }
+
+  .lobby { margin-top: 16px; }
+  .lobby__h { flex: 1 0 100%; }
+  .lobby__search { order: 2; flex: 1 1 100%; margin-left: 0; }
+  /* 16px or iOS zooms the page in when the field takes focus */
+  .lobby__search input { min-height: 44px; font-size: 1rem; }
+  .lobby__chips {
+    order: 3; flex: 1 1 100%;
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .lobby__chip { min-height: 44px; padding: 0 6px; }
+
+  .lobby__grid { gap: 10px; }
+  .gtile { padding: 8px 8px 12px; }
+  .gtile__art img { width: 44px; height: 44px; }
+  .gtile__name { font-size: .9375rem; }
+  .gtile__desc { font-size: .75rem; }
+}
+
+/* A finger, at any width: every control at least 44px tall. */
+@media (pointer: coarse) {
+  .lobby__chip,
+  .lobby__search input { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gtile, .gtile__art img, .perk, .perk__go, .lobby__chip { transition: none; }
+  .gtile:hover, .gtile:active, .perk:hover, .perk:active { transform: none; }
+  .gtile:hover .gtile__art img, .perk:hover .perk__go { transform: none; }
+}

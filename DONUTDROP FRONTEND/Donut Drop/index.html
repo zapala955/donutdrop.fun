@@ -92,6 +92,8 @@
 <link rel="stylesheet" href="assets/css/mines-duel.css" />
 <!-- the Case Battle board: after platform.css's battle sheet and duel.css, which it refines -->
 <link rel="stylesheet" href="assets/css/battles.css" />
+<!-- the home view: banner, game lobby, rewards. After the game sheets, before the phone layer. -->
+<link rel="stylesheet" href="assets/css/home.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -393,7 +395,9 @@
 
     <!-- ─────── HOME ─────── -->
     <section class="view" data-view="home" hidden>
-      <div class="hero">
+      <!-- hero--home: the same banner at half the height. It used to fill the first screen on a
+           phone, so somebody arriving saw a slogan and a chest and had to scroll to find a game. -->
+      <div class="hero hero--home">
         <div class="hero__copy">
           <h1>Play the drop,<br />not the <em>odds</em>.</h1>
           <!-- What the site is, in one sentence, with its name in it. The headline is a slogan, so
@@ -423,31 +427,130 @@
         </div>
       </div>
 
-      <div class="promos" id="promos"></div>
+      <!-- Every game, one tile each, in the markup rather than built by script: the home page is
+           the page search engines weigh most, and these are its links into every game.
 
-      <!-- The invite offer, one row under the game cards. Its figures come from GET /v1/promotions,
-           which is to say from the admin panel, so the markup carries none: hidden until the server
-           answers, and it stays hidden with the programme switched off. The whole row is the link,
-           so a phone gets a full-width target rather than a small button inside a card. -->
-      <a class="invitebar" id="inviteBar" href="/referrals" hidden>
-        <svg class="invitebar__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h3.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
-        <span class="invitebar__copy">
-          <span class="invitebar__head"><b class="invitebar__amt" id="inviteBarAmt"></b> for every person you invite</span>
-        </span>
-        <span class="invitebar__go" id="inviteBarGo">Get your link</span>
-      </a>
+           This replaces a row of three stat cards (Upgrader, Roulette, Cases). Crash, Mines,
+           Plinko, Blackjack, Coinflip, Mines Duel, Case Battles and Community Cases were reachable
+           only through the Casino and Cases menus, so the page a new player lands on showed three
+           of the eleven games.
 
-      <!-- The account track stood here: a full-width "LIVE" bar over three slots reading server
-           balance, locked funds and account status. Every one of those figures was already on
-           screen — the balance sits in the header on every page, and the account page owns the
-           rest. A strip that restates the header directly under the promo row reads as padding,
-           and a progress bar pinned at 100% labelled LIVE measures nothing. -->
+           Every tile is the same colour on purpose: a game's colour would say one is featured
+           over another, and none is. data-cat feeds the filter chips and data-q the search box
+           (mountHome in app.js); a tile can sit in two categories, as Case Battles does. -->
+      <section class="lobby" aria-labelledby="lobbyH">
+        <div class="lobby__bar">
+          <h2 class="lobby__h" id="lobbyH">Games</h2>
+          <div class="lobby__chips" role="group" aria-label="Show games by type">
+            <button class="lobby__chip" type="button" data-cat="all" aria-pressed="true">All</button>
+            <button class="lobby__chip" type="button" data-cat="casino" aria-pressed="false">Casino</button>
+            <button class="lobby__chip" type="button" data-cat="cases" aria-pressed="false">Cases</button>
+            <button class="lobby__chip" type="button" data-cat="pvp" aria-pressed="false">PvP</button>
+          </div>
+          <label class="lobby__search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+            <input type="search" id="lobbySearch" placeholder="Search games" aria-label="Search games"
+                   autocomplete="off" spellcheck="false" enterkeyhint="search" />
+          </label>
+        </div>
+        <ul class="lobby__grid" id="lobbyGrid">
+          <li><a class="gtile" href="/crash" data-cat="casino" data-q="crash elytra cash out multiplier">
+            <span class="gtile__art"><img src="assets/img/items/elytra.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Crash</span>
+            <span class="gtile__desc">Cash out before it crashes</span>
+          </a></li>
+          <li><a class="gtile" href="/mines" data-cat="casino" data-q="mines tnt grid multiplier">
+            <span class="gtile__art"><img src="assets/img/items/tnt.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Mines</span>
+            <span class="gtile__desc">Dodge the TNT, grow the multiplier</span>
+          </a></li>
+          <li><a class="gtile" href="/plinko" data-cat="casino" data-q="plinko ball pegs drop">
+            <span class="gtile__art"><img src="assets/img/items/slime_ball.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Plinko</span>
+            <span class="gtile__desc">Drop a ball down the pegs</span>
+          </a></li>
+          <li><a class="gtile" href="/upgrader" data-cat="casino" data-q="upgrader upgrade item arc">
+            <span class="gtile__art"><img src="assets/img/items/xp_bottle.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Upgrader</span>
+            <span class="gtile__desc">Pick a prize, set your odds, spin</span>
+          </a></li>
+          <li><a class="gtile" href="/roulette" data-cat="casino" data-q="roulette wheel red black">
+            <span class="gtile__art"><img src="assets/img/items/nether_star.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Roulette</span>
+            <span class="gtile__desc">One shared wheel, every player on it</span>
+          </a></li>
+          <li><a class="gtile" href="/blackjack" data-cat="casino" data-q="blackjack 21 cards dealer">
+            <span class="gtile__art"><img src="assets/img/items/enchanted_book.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Blackjack</span>
+            <span class="gtile__desc">Beat the dealer to 21</span>
+          </a></li>
+          <li><a class="gtile" href="/crates" data-cat="cases" data-q="cases crates open case odds">
+            <span class="gtile__art"><img src="assets/img/items/chest.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Cases</span>
+            <span class="gtile__desc">Open crates with published odds</span>
+          </a></li>
+          <li><a class="gtile" href="/battles" data-cat="cases pvp" data-q="case battles battle versus pot">
+            <span class="gtile__art"><img src="assets/img/items/netherite_sword.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Case Battles</span>
+            <span class="gtile__desc">Same crates, one pot, winner takes it</span>
+          </a></li>
+          <li><a class="gtile" href="/studio" data-cat="cases" data-q="community cases crates studio build">
+            <span class="gtile__art"><img src="assets/img/items/ender_chest.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Community Cases</span>
+            <span class="gtile__desc">Crates built by players</span>
+          </a></li>
+          <li><a class="gtile" href="/coinflip" data-cat="pvp" data-q="coinflip coin flip heads tails 1v1">
+            <span class="gtile__art"><img src="assets/img/items/gold_ingot.png" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Coinflip</span>
+            <span class="gtile__desc">1v1, heads or tails, winner takes the pot</span>
+          </a></li>
+          <li><a class="gtile" href="/mines-duel" data-cat="pvp" data-q="mines duel 1v1 tnt versus">
+            <span class="gtile__art"><img src="assets/img/items/diamond_pickaxe.svg" alt="" width="56" height="56" /></span>
+            <span class="gtile__name">Mines Duel</span>
+            <span class="gtile__desc">1v1 on one field, most safe tiles wins</span>
+          </a></li>
+        </ul>
+        <div class="lobby__none" id="lobbyNone" hidden>
+          <p>No game matches that search.</p>
+          <button class="btn btn--glass" type="button" id="lobbyReset">Show every game</button>
+        </div>
+      </section>
 
-      <!-- The game grid stood here: Cases / Upgrader / Faction War, as icon cards.
-           The promo row above it is the same four products with the same four icons, roughly 600px
-           apart, and a reader hitting them twice concludes the page is padded rather than full.
-           The promo row survives because its stat strip answers "how many / how long / how much",
-           which an icon and a label cannot. -->
+      <!-- Rewards: the invite offer, then the three things that pay a player back for playing.
+           None of the three quotes a figure; each page states its own terms from the server. -->
+      <section class="perks" aria-labelledby="perksH">
+        <h2 class="lobby__h" id="perksH">Rewards</h2>
+
+        <!-- The invite offer. Its figures come from GET /v1/promotions, which is to say from the
+             admin panel, so the markup carries none: hidden until the server answers, and it stays
+             hidden with the programme switched off. The whole row is the link, so a phone gets a
+             full-width target rather than a small button inside a card. -->
+        <a class="invitebar" id="inviteBar" href="/referrals" hidden>
+          <svg class="invitebar__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h3.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
+          <span class="invitebar__copy">
+            <span class="invitebar__head"><b class="invitebar__amt" id="inviteBarAmt"></b> for every person you invite</span>
+          </span>
+          <span class="invitebar__go" id="inviteBarGo">Get your link</span>
+        </a>
+
+        <ul class="perks__row">
+          <li><a class="perk" href="/daily-rewards">
+            <svg class="perk__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/></svg>
+            <span class="perk__copy"><b>Daily Rewards</b><span>Play each day, claim each day</span></span>
+            <svg class="perk__go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a></li>
+          <li><a class="perk" href="/race">
+            <svg class="perk__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 5h11l-1.6 3L16 11H5z"/></svg>
+            <span class="perk__copy"><b>Wager Race</b><span>Every wager counts toward the prizes</span></span>
+            <svg class="perk__go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a></li>
+          <li><a class="perk" href="/vip">
+            <svg class="perk__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M4 18l-1.5-9 5 3.5L12 5l4.5 7.5 5-3.5L20 18"/></svg>
+            <span class="perk__copy"><b>VIP</b><span>Level up as you play, earn rakeback</span></span>
+            <svg class="perk__go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a></li>
+        </ul>
+      </section>
 
       <!-- One column, because the second one held a four-card explanation of HMAC commitments,
            weight-over-pool odds and append-only ledgers. That is the answer to a question nobody

@@ -132,7 +132,7 @@ describe('what search engines are given', () => {
 
   it('says what the site is, by name, on the home page', async () => {
     const html = await readFrontend('index.html');
-    const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('class="promos"'));
+    const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('class="lobby"'));
     assert.match(home, /<p>DonutWin is a DonutSMP minigame site:/);
   });
 

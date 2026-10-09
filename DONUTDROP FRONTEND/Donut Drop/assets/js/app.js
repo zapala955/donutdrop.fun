@@ -1,13 +1,13 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
 import {
-  RARITY, IMG,
+  RARITY,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
-  refreshRouletteConfig, refreshUpgradeConfig, refreshPromotions,
+  refreshUpgradeConfig, refreshPromotions,
 } from './store.js';
 import {
   $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
@@ -56,97 +56,52 @@ import {
   currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
 
-/** The biggest multiplier the server will quote, as a player would say it. */
-function topMultiplierLabel() {
-  const bps = Number(state.upgradeConfig?.maxMultiplierBps ?? 0);
-  return Number.isFinite(bps) && bps > 10_000 ? `${Math.floor(bps / 10_000)}×` : '—';
-}
-
-/** The upgrader's published stake ceiling, or an em dash before the server has said. */
-function maxStakeLabel() {
-  const published = Number(state.upgradeConfig?.maxStakeMinor ?? 0);
-  return Number.isFinite(published) && published > 0 ? money(published) : '—';
-}
-
-/** The roulette table's published ceiling on a single chip. */
-function rouletteMaxBetLabel() {
-  const published = Number(state.rouletteConfig?.maxStakeMinor ?? 0);
-  return Number.isFinite(published) && published > 0 ? money(published) : '—';
-}
-
-/* The straight-up return, which is the biggest number the wheel pays.
- *
- * Read from the server's own payout table rather than written as 36x here. The multiplier is
- * derived from the configured house edge, so a hard-coded figure would be a promise this site
- * stopped keeping the first time somebody edited a setting -- and it would be quoting odds, which
- * is the one kind of copy that must never drift. */
-function rouletteTopPayoutLabel() {
-  const bps = Number(state.rouletteConfig?.payoutBps?.straight ?? 0);
-  if (!Number.isFinite(bps) || bps <= 10_000) return '—';
-  const times = bps / 10_000;
-  // Whole numbers at this magnitude -- "35×" is what a player would say. The decimal branch is
-  // for a table configured down into single digits, where a tenth genuinely changes the offer.
-  return `${times >= 10 ? Math.round(times) : times.toFixed(1).replace(/\.0$/, '')}×`;
-}
-
-/** A countable thing's size, or an em dash while it is still unknown. */
-function count(collection) {
-  const size = Array.isArray(collection)
-    ? collection.length
-    : collection && typeof collection === 'object'
-      ? Object.keys(collection).length
-      : 0;
-  return size > 0 ? String(size) : '—';
-}
-
 /* ═════════ home ═════════ */
 function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
 
-  // the hero runs as a live scene; the static art underneath is the fallback
-  // and only stands down once WebGL is actually running
+  /* The live chest belongs to the wide banner only. Below 641px home.css hides the art so the
+   * games start on the first screen, and a WebGL scene nobody can see would still draw every
+   * frame. The static art underneath is the fallback and only stands down once WebGL runs. */
   const art = $('.hero__art', view);
-  if (art) mountHero3d(art).catch(() => { delete art.dataset.mode; });
+  if (art && matchMedia('(min-width: 641px)').matches) {
+    mountHero3d(art).catch(() => { delete art.dataset.mode; });
+  }
 
-  /* Three routes, two figures each.
-   *
-   * The strip stays, because a player scanning a lobby is comparing games and a sentence is the
-   * slowest way to answer "how much, how long". What changed is what the figures say. Half of them
-   * described the machinery rather than the game — SERVER ROLL, LIVE QUOTE, PUBLISHED ODDS — which
-   * answers a question nobody standing in a lobby is asking, in words they would have to look up.
-   *
-   * Two cells rather than three is also what stops them clipping: the cells divide the card width
-   * evenly and ellipsise the overflow, so PUBLISHED ODDS rendered as "PUBLI…".
-   *
-   * Every figure is read from something that knows the answer rather than typed here. The crate
-   * count was hard-coded as 50 and nothing on the page had ever checked; it now counts the
-   * catalogue the server actually sent, and reads "—" until that arrives instead of asserting a
-   * number before it could possibly be known. Roulette's two figures follow the same rule: the
-   * table limit and the straight-up return both come off the server's own config, because a
-   * payout quoted from memory is the one number on this page nobody may ever get wrong. */
-  const promos = () => [
-    { ac: '#ffd700', h: 'Upgrader', art: 'ender_chest.png', href: '/upgrader',
-      stats: [[maxStakeLabel(), 'MAX STAKE'], [topMultiplierLabel(), 'TOP PAYOUT']] },
-    { ac: '#ffaa00', h: 'Roulette', art: 'nether_star.png', href: '/roulette',
-      stats: [[rouletteMaxBetLabel(), 'MAX BET'], [rouletteTopPayoutLabel(), 'TOP PAYOUT']] },
-    { ac: '#ffaa00', h: 'Cases',    art: 'chest.png',       href: '/crates',
-      stats: [[count(state.cases), 'CASES'], [count(RARITY), 'RARITIES']] },
-  ];
+  /* The lobby. Every tile is in the markup; this only filters it. A tile shows when it is in the
+   * chosen category and its name, its line or its keywords contain every word typed. */
+  const search = $('#lobbySearch', view);
+  const none = $('#lobbyNone', view);
+  const chips = $$('.lobby__chip', view);
+  const tiles = $$('.gtile', view);
+  let category = 'all';
 
-  const paintPromos = () => {
-    const row = $('#promos', view);
-    if (!row) return;
-    row.innerHTML = promos().map((p) => `
-    <a class="promo" href="${p.href}" style="--ac:${p.ac}">
-      <img class="promo__art" src="${IMG}${p.art}" alt="">
-      <h3>${p.h}</h3>
-      <dl class="statstrip">${p.stats.map(([v, k]) => `
-        <div><dt class="statstrip__v mono">${escapeText(v)}</dt><dd class="statstrip__k">${k}</dd></div>`).join('')}
-      </dl>
-    </a>`).join('');
+  const filterLobby = () => {
+    const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const tile of tiles) {
+      const inCategory = category === 'all' || tile.dataset.cat.split(' ').includes(category);
+      const text = `${tile.textContent} ${tile.dataset.q}`.toLowerCase();
+      const match = inCategory && words.every((word) => text.includes(word));
+      tile.parentElement.hidden = !match;
+      if (match) shown += 1;
+    }
+    none.hidden = shown > 0;
   };
-  paintPromos();
+  const pickCategory = (code) => {
+    category = code;
+    for (const chip of chips) chip.setAttribute('aria-pressed', String(chip.dataset.cat === code));
+    filterLobby();
+  };
+
+  for (const chip of chips) chip.addEventListener('click', () => pickCategory(chip.dataset.cat));
+  search.addEventListener('input', filterLobby);
+  $('#lobbyReset', view).addEventListener('click', () => {
+    search.value = '';
+    pickCategory('all');
+    search.focus();
+  });
 
   /* The invite offer. Both figures are the server's; with the programme off, or before the
    * promotions arrive, the row stays hidden rather than quoting a number it cannot back.
@@ -171,19 +126,10 @@ function mountHome(view) {
   });
   paintInviteBar();
 
-  /* Fetched once per visit to the lobby, not subscribed to. The cards quote the games' limits,
-   * which change when somebody edits a setting -- not every round -- so a second live feed would
-   * buy nothing. They repaint through the `change` listener at the bottom of this view.
-   *
-   * The upgrader's figures used to arrive only with a session, so a signed-out visitor saw two
-   * em dashes on the first card in the row. Its config is public now; ask for it here too. */
-  void refreshRouletteConfig();
+  /* The upgrader page reads its limits from state.upgradeConfig and never asks for them itself:
+   * signed in they come with the session, signed out only from here. The stat cards that also
+   * quoted them are gone; the request stays for the upgrader's sake. */
   void refreshUpgradeConfig();
-
-  /* The game grid that used to be built here is gone, and so is its markup. It rendered the same
-   * four products the promo row above it already renders, which made the homepage read as padded.
-   * See the comment where the grid stood in index.html. */
-
 
   /* Big Drops.
    *
@@ -259,7 +205,6 @@ function mountHome(view) {
   paintActivity();
   bus.addEventListener('change', () => {
     if (!view.isConnected) return;
-    paintPromos();
     paintInviteBar();
     paintActivity();
   });
