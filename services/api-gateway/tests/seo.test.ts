@@ -68,6 +68,27 @@ describe('what search engines are given', () => {
     }
   });
 
+  /* Another DonutSMP site uses the same name on a .com and outranked this one for it. Every page
+   * leads with the name, so the account pages read "DonutWin Wallet" in the tab too. */
+  it('titles every route the router knows, each one leading with DonutWin', async () => {
+    const { ROUTE_META } = await seo();
+    const app = await readFrontend('assets/js/app.js');
+    const table = app.slice(app.indexOf('const VIEWS = {'), app.indexOf('};', app.indexOf('const VIEWS = {')));
+    const routes = [...table.matchAll(/^\s+'?([a-z-]+)'?: mount/gm)].map((match) => match[1]!);
+    assert.ok(routes.length > 20, 'could not read the route table');
+    for (const route of routes) {
+      const meta = ROUTE_META[route];
+      assert.ok(meta, `${route} has no title`);
+      assert.match(meta.title, /^DonutWin[ .]/, `${route}: ${meta.title}`);
+    }
+  });
+
+  it('says what the site is, by name, on the home page', async () => {
+    const html = await readFrontend('index.html');
+    const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('class="promos"'));
+    assert.match(home, /<p>DonutWin is a DonutSMP minigame site:/);
+  });
+
   it('gives each route its own title, canonical URL and robots rule', async () => {
     const { applyRouteMeta, ROUTE_META } = await seo();
     const nodes = new Map<string, Record<string, string>>();
