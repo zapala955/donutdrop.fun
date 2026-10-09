@@ -1,32 +1,155 @@
-/* home.css — the lobby: a short banner, every game as a tile, the rewards, the day's pulls.
+/* home.css — the lobby: the page head, three offers, every game as a tile, the rewards, the day's
+ * pulls.
  *
- * Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V3
+ * Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
  *
- * Built on the house tokens (app.css, obsidian.css, polish.css). No new hue and no new face: the
- * two values below are the house gold at lower alphas, named so nothing further down is a raw
- * colour.
+ * Built on the house tokens (app.css, obsidian.css, polish.css, surface.css). The values below
+ * are the house gold at other alphas, plus Discord's own blue at low alpha for the one banner
+ * that opens Discord: the same exception app.css makes for the Discord button. Named here so
+ * nothing further down is a raw colour.
  *
  * Linked after every game sheet and before mobile.css: it settles the home view's own pieces,
  * and mobile.css still settles the shell (header, tab bar, chat drawer) around them. */
 
 :root {
-  --home-wash: rgba(255, 170, 0, .14);   /* the light behind a tile's item, and a perk's icon   */
-  --home-ring: rgba(255, 170, 0, .2);    /* the search field's focus halo                        */
+  --home-wash:    rgba(255, 170, 0, .14);   /* behind a tile's item, and a perk's icon           */
+  --home-wash-hi: rgba(255, 190, 40, .30);  /* behind the lead banner's art                      */
+  --home-ring:    rgba(255, 170, 0, .2);    /* the search field's focus halo                     */
+  --home-dc-wash: rgba(88, 101, 242, .22);  /* --discord, faint, behind the Discord banner's art */
+  --home-dc-glow: rgba(88, 101, 242, .5);
+  --home-on-dc:   #fff;                     /* 4.61:1 on --discord, measured in app.css          */
+  --home-shade:   rgba(0, 0, 0, .55);       /* the drop shadow under banner art                  */
 }
 
-/* ── the banner, at half its old height ──
+/* ── the page head ──
  *
- * Same hero, same headline, same sentence; less of it. The art drops from 300px to 200px and the
- * headline from 3.5rem to 2.6rem, so on a laptop the first row of games is on the first screen. */
-.hero--home {
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr);
-  gap: 20px;
-  padding: clamp(18px, 2.4vw, 28px) clamp(18px, 3vw, 32px);
+ * A title line, not a banner: the slogan and the one sentence saying what the site is. It takes
+ * one row on a laptop, so the offers and the games sit on the first screen. */
+.hintro {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 4px 18px;
+  margin: 2px 2px 14px;
 }
-.hero--home h1 { font-size: clamp(1.8rem, 3.2vw, 2.6rem); margin: 0 0 10px; }
-.hero--home .hero__copy p { margin-bottom: 16px; }
-.hero--home .hero__cta { margin-top: 0; }
-.hero--home .hero__art { height: 200px; order: 0; }
+.hintro__h {
+  margin: 0; min-width: 0;
+  font-size: clamp(1.35rem, 2.2vw, 1.75rem); line-height: 1.15; letter-spacing: -.03em;
+  overflow-wrap: anywhere;
+}
+.hintro__h em { font-style: normal; color: var(--gold-bright); }
+.hintro p {
+  flex: 1 1 380px; margin: 0; max-width: 72ch;
+  font-size: .875rem; line-height: 1.5; color: var(--muted);
+}
+
+/* ── the offers ──
+ *
+ * Three banners, sized off their own width rather than the window's, since the chat rail takes a
+ * share of a laptop screen: three across when there is room, the lead over the other two when
+ * there is not, and on a phone the two small ones drop their art and their line. */
+.pbans { container-type: inline-size; }
+.pbans__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@container (min-width: 560px) {
+  .pbans__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pban--lead { grid-column: 1 / -1; }
+}
+@container (min-width: 860px) {
+  .pbans__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pban--lead { grid-column: auto; }
+}
+
+.pban {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; min-width: 0; min-height: 184px;
+  padding: 20px 22px;
+  border: 1px solid var(--ob-line); border-radius: var(--r-panel);
+  background:
+    radial-gradient(60% 85% at 86% 50%, var(--home-wash), transparent 70%),
+    linear-gradient(150deg, var(--panel2), var(--panel) 62%, var(--bg2));
+  color: var(--text);
+  transition:
+    transform .18s var(--ob-ease),
+    border-color .18s var(--ob-ease),
+    box-shadow .18s var(--ob-ease);
+}
+/* The lead is lit in lava: the one banner meant to be seen first. */
+.pban--lead {
+  border-color: var(--gold-edge);
+  background:
+    radial-gradient(60% 90% at 84% 50%, var(--home-wash-hi), transparent 70%),
+    var(--mat-lava);
+}
+.pban--discord {
+  background:
+    radial-gradient(55% 85% at 86% 50%, var(--home-dc-wash), transparent 70%),
+    linear-gradient(150deg, var(--panel2), var(--panel) 62%, var(--bg2));
+}
+
+.pban__copy {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  min-width: 0; max-width: 64%;
+}
+.pban__eyebrow {
+  font: 700 .6875rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--gold-body);
+}
+.pban__h {
+  font-family: var(--pixel); font-weight: 900;
+  font-size: 1.5rem; line-height: 1.1; letter-spacing: -.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.pban__h b { color: var(--gold-bright); }
+.pban__p { font-size: .8125rem; line-height: 1.45; color: var(--muted); }
+/* The buttons are part of the banner's one link, so they light with the banner, not on their own. */
+.pban__btn { margin-top: auto; min-height: 40px; }
+.pban__btn--dc {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 9px 16px; border-radius: var(--r-s);
+  background: var(--discord); color: var(--home-on-dc);
+  font: 700 .875rem/1 var(--body); white-space: nowrap;
+  transition: background var(--ob-quick);
+}
+.pban:hover .pban__btn--dc { background: var(--discord-hi); }
+
+.pban__art {
+  position: absolute; z-index: 0;
+  right: 16px; top: 50%;
+  width: 112px; height: 112px;
+  object-fit: contain; image-rendering: pixelated;
+  transform: translateY(-50%) rotate(-8deg);
+  filter: drop-shadow(0 14px 18px var(--home-shade));
+  transition: transform .3s var(--ob-ease);
+}
+.pban__art--dc {
+  width: 92px; height: 92px; right: 22px;
+  fill: var(--discord);
+  transform: translateY(-50%);
+  filter: drop-shadow(0 0 22px var(--home-dc-glow));
+}
+
+.pban:hover { transform: var(--ob-lift); border-color: var(--ob-line-hi); box-shadow: var(--ob-glow); }
+.pban:hover .pban__art { transform: translateY(-54%) rotate(-3deg) scale(1.06); }
+.pban:hover .pban__art--dc { transform: translateY(-54%) scale(1.06); }
+.pban:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.pban:active { transform: translateY(-1px) scale(.995); transition-duration: .06s; }
+
+/* A phone: the lead keeps everything at a smaller size; the other two become a pair of compact
+   cards, eyebrow, heading and button, with their art and their line left to the pages they open. */
+@container (max-width: 559px) {
+  .pbans__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pban { min-height: 0; padding: 14px 12px; }
+  .pban__h { font-size: 1.0625rem; }
+  .pban__btn { min-height: 44px; }
+  .pban--lead { grid-column: 1 / -1; padding: 16px; }
+  .pban--lead .pban__copy { max-width: 72%; }
+  .pban--lead .pban__h { font-size: 1.375rem; }
+  .pban--lead .pban__art { width: 76px; height: 76px; right: 12px; }
+  .pban:not(.pban--lead) .pban__copy { max-width: none; width: 100%; }
+  .pban:not(.pban--lead) .pban__p,
+  .pban:not(.pban--lead) .pban__art { display: none; }
+  .pban:not(.pban--lead) .pban__btn { width: 100%; padding-inline: 8px; font-size: .8125rem; }
+}
 
 /* ── section heads ── the same gold tick as the "Biggest pulls today" card head */
 .lobby__h {
@@ -40,7 +163,7 @@
 }
 
 /* ── the lobby ── */
-.lobby { margin-top: 20px; }
+.lobby { margin-top: 22px; container-type: inline-size; }
 .lobby__bar {
   display: flex; flex-wrap: wrap; align-items: center;
   gap: 10px 14px;
@@ -88,21 +211,19 @@
 .lobby__search input:hover { border-color: var(--ob-line-hi); }
 .lobby__search input:focus-visible { border-color: var(--gold-body); box-shadow: 0 0 0 3px var(--home-ring); }
 
-/* The tiles. One material for all eleven: a game's own colour would say it is featured over the
- * others, and none is. What tells them apart is the item, the name and the line under it. */
-/* Column counts picked for eleven tiles rather than auto-filled: an auto-fill grid put five across
- * on a laptop and left Mines Duel alone on a third row. Six, four and three all end on a fuller
- * last row. Sized off the lobby's own width, since the chat rail takes a share of the window. */
-.lobby { container-type: inline-size; }
+/* The tiles. One material for all ten: a game's own colour would say it is featured over the
+ * others, and none is. What tells them apart is the item, the name and the line under it.
+ *
+ * Column counts picked for ten tiles rather than auto-filled, so every row is full: two across on
+ * a phone, five once there is room. Sized off the lobby's own width, since the chat rail takes a
+ * share of the window. */
 .lobby__grid {
   list-style: none; margin: 0; padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-@container (min-width: 480px) { .lobby__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container (min-width: 620px) { .lobby__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@container (min-width: 980px) { .lobby__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@container (min-width: 700px) { .lobby__grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .lobby__grid > li { display: flex; min-width: 0; }
 .lobby__grid > li[hidden] { display: none; }
 
@@ -158,7 +279,6 @@
 
 /* ── rewards ── */
 .perks { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
-.perks .invitebar { margin-top: 0; }
 .perks__row {
   list-style: none; margin: 0; padding: 0;
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
@@ -204,16 +324,11 @@
   .perks__row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
 
-/* A phone: the banner loses its art (and app.js never starts the 3D scene), so the first screen
-   is the headline, the button and the first games. The bar stacks as heading, search, then the
-   four filters at equal width. */
+/* A phone: the lobby bar stacks as heading, search, then the four filters at equal width. */
 @media (max-width: 640px) {
-  .hero--home { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; }
-  .hero--home .hero__art { display: none; }
-  .hero--home h1 { font-size: 1.75rem; }
-  .hero--home .hero__copy p { font-size: .875rem; }
+  .hintro p { font-size: .8125rem; }
 
-  .lobby { margin-top: 16px; }
+  .lobby { margin-top: 18px; }
   .lobby__h { flex: 1 0 100%; }
   .lobby__search { order: 2; flex: 1 1 100%; margin-left: 0; }
   /* 16px or iOS zooms the page in when the field takes focus */
@@ -234,11 +349,14 @@
 /* A finger, at any width: every control at least 44px tall. */
 @media (pointer: coarse) {
   .lobby__chip,
-  .lobby__search input { min-height: 44px; }
+  .lobby__search input,
+  .pban__btn { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gtile, .gtile__art img, .perk, .perk__go, .lobby__chip { transition: none; }
-  .gtile:hover, .gtile:active, .perk:hover, .perk:active { transform: none; }
+  .gtile, .gtile__art img, .perk, .perk__go, .lobby__chip, .pban, .pban__art { transition: none; }
+  .gtile:hover, .gtile:active, .perk:hover, .perk:active, .pban:hover, .pban:active { transform: none; }
   .gtile:hover .gtile__art img, .perk:hover .perk__go { transform: none; }
+  .pban:hover .pban__art { transform: translateY(-50%) rotate(-8deg); }
+  .pban:hover .pban__art--dc { transform: translateY(-50%); }
 }

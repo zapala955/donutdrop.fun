@@ -195,11 +195,15 @@ describe('frontend/backend contract', () => {
     const store = await source('assets/js/store.js');
     assert.match(store, /api\.get\('\/v1\/promotions'\)/);
 
-    const bar = /<a class="invitebar" id="inviteBar" href="\/referrals" hidden>[\s\S]*?<\/a>/.exec(html)?.[0];
-    assert.ok(bar, 'the lobby invite strip is missing or not hidden by default');
-    assert.doesNotMatch(bar, /\$\d/);
+    // The home page's offer banners: the figures arrive from the server, never in the markup.
+    const invite = /<a class="pban" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
+    assert.ok(invite, 'the home invite banner is missing');
+    assert.doesNotMatch(invite, /\$\d/);
+    const lead = /<a class="pban pban--lead" id="pbanLead"[\s\S]*?<\/a>/.exec(html)?.[0];
+    assert.ok(lead, 'the home lead banner is missing');
+    assert.doesNotMatch(lead, /\$\d/);
     assert.match(app, /state\.promotions\?\.referral/);
-    // Signed out, the strip opens the signup form rather than the referrals page's dead end.
+    // Signed out, the invite banner opens the signup form rather than the referrals page's dead end.
     assert.match(app, /if \(state\.authenticated\) return;\s*event\.preventDefault\(\);\s*openLoginModal\(\);/);
 
     assert.match(app, /<div class="auth__bonus" id="linkBonus" hidden>/);

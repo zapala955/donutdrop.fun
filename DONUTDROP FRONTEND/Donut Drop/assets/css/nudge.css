@@ -1,0 +1,94 @@
+/* nudge.css — the offer card in the bottom corner (assets/js/nudge.js).
+ *
+ * Hallmark · component: offer card · genre: atmospheric · theme: house (obsidian and lava gold)
+ * states: default · hover · focus · active · entering · leaving
+ *
+ * Above the phone tab bar and below the header and its menus, so it never covers navigation. No
+ * backdrop: the page under it stays usable. House tokens only; the two named below are the house
+ * gold and Discord's blue at low alpha. */
+
+:root {
+  --nudge-wash:    rgba(255, 170, 0, .16);
+  --nudge-dc-wash: rgba(88, 101, 242, .22);
+  --nudge-on-dc:   #fff;   /* 4.61:1 on --discord, measured in app.css */
+  --z-nudge:       90;     /* over the tab bar (75), under the header (100) */
+}
+
+.nudge {
+  position: fixed; z-index: var(--z-nudge);
+  right: 20px; bottom: 20px;
+  width: min(360px, calc(100vw - 24px));
+  display: grid; grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center; gap: 12px 14px;
+  padding: 16px;
+  border: 1px solid var(--ob-line-hi); border-radius: var(--r-panel);
+  background:
+    radial-gradient(80% 90% at 0% 0%, var(--nudge-wash), transparent 60%),
+    linear-gradient(160deg, var(--panel2), var(--panel));
+  box-shadow: var(--el-3), var(--ob-glow);
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .24s var(--ob-ease), transform .24s var(--ob-ease);
+}
+.nudge.is-in { opacity: 1; transform: none; }
+
+.nudge__x {
+  position: absolute; top: 2px; right: 2px;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--r-soft);
+  background: none; color: var(--faint);
+  cursor: pointer;
+  transition: color var(--ob-quick), background var(--ob-quick);
+}
+.nudge__x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.nudge__x:hover { color: var(--text); background: var(--panel3); }
+.nudge__x:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+.nudge__x:active { transform: scale(.94); }
+
+.nudge__art {
+  width: 56px; height: 56px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: var(--r-soft);
+  background: radial-gradient(70% 70% at 50% 55%, var(--nudge-wash), transparent 75%), var(--bg2);
+}
+.nudge__art img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+.nudge__art svg { width: 30px; height: 30px; fill: var(--discord); }
+.nudge[data-kind="discord"] .nudge__art {
+  background: radial-gradient(70% 70% at 50% 55%, var(--nudge-dc-wash), transparent 75%), var(--bg2);
+}
+
+.nudge__copy { min-width: 0; padding-right: 30px; }
+.nudge__copy p { margin: 0; }
+.nudge__eyebrow {
+  font: 700 .6875rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--gold-body);
+  margin-bottom: 5px !important;
+}
+.nudge__h {
+  font-family: var(--pixel); font-weight: 900; font-size: 1.125rem; line-height: 1.15;
+  letter-spacing: -.01em;
+}
+.nudge__h b { color: var(--gold-bright); }
+.nudge__p { margin-top: 3px !important; font-size: .8125rem; line-height: 1.4; color: var(--muted); }
+
+.nudge__go { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+.nudge[data-kind="discord"] .nudge__go {
+  background: var(--discord); border-color: transparent; color: var(--nudge-on-dc);
+}
+.nudge[data-kind="discord"] .nudge__go:hover { background: var(--discord-hi); }
+.nudge__go:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+/* Below 1080px the phone tab bar is on screen: sit above it, with the same 12px either side. */
+@media (max-width: 1080px) {
+  .nudge { right: 12px; bottom: calc(var(--tabbar-reach, 0px) + 12px); }
+}
+/* A phone: the full width between the gutters, not a 360px card pushed against one side. */
+@media (max-width: 480px) {
+  .nudge { left: 12px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nudge { transform: none; transition: opacity .2s linear; }
+}

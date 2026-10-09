@@ -1,6 +1,6 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
 import {
-  RARITY,
+  RARITY, IMG, pickSpotlight, isNewGame,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -47,11 +47,11 @@ import { initTicker } from './ticker.js';
 import { initChat } from './chat.js';
 import { initVaultJackpot } from './vault-jackpot.js';
 import { initAudioEngine, setMuted, isMuted, playSound } from './audio-engine.js';
-import { mountHero3d } from './hero3d.js';
 import { playCutscene, warmCutscene, isJackpot } from './cutscene.js';
 import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
 import { initLiveEvents } from './live.js';
+import { initNudge } from './nudge.js';
 import {
   currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -60,14 +60,6 @@ import {
 function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
-
-  /* The live chest belongs to the wide banner only. Below 641px home.css hides the art so the
-   * games start on the first screen, and a WebGL scene nobody can see would still draw every
-   * frame. The static art underneath is the fallback and only stands down once WebGL runs. */
-  const art = $('.hero__art', view);
-  if (art && matchMedia('(min-width: 641px)').matches) {
-    mountHero3d(art).catch(() => { delete art.dataset.mode; });
-  }
 
   /* The lobby. Every tile is in the markup; this only filters it. A tile shows when it is in the
    * chosen category and its name, its line or its keywords contain every word typed. */
@@ -103,28 +95,69 @@ function mountHome(view) {
     search.focus();
   });
 
-  /* The invite offer. Both figures are the server's; with the programme off, or before the
-   * promotions arrive, the row stays hidden rather than quoting a number it cannot back.
+  /* The three offers at the top. Every figure is the server's: before /v1/promotions answers, and
+   * with an offer switched off, each one says what it can say without a number. */
+
+  // "Get $2M free" with the amount in gold: built from nodes, never from an HTML string.
+  const amountLine = (target, before, minor, after) => {
+    const amount = el('b');
+    amount.textContent = money(minor);
+    target.replaceChildren(before, amount, after);
+  };
+
+  /* The lead banner. Signed out it is the signup bonus and opens the login form, because that is
+   * the step between a visitor and every game below it. Signed in it is a game to try, one of the
+   * new ones while any is new. Picked once per visit, so it does not change under the pointer. */
+  const lead = $('#pbanLead', view);
+  const spotlight = pickSpotlight();
+  const paintLead = () => {
+    const bonus = Number(state.promotions?.signupBonus?.amountMinor ?? 0);
+    const signedOut = !state.authenticated;
+    lead.dataset.kind = signedOut ? 'login' : 'game';
+    lead.href = spotlight.route;
+    $('#pbanLeadEyebrow', lead).textContent = signedOut
+      ? 'New players'
+      : isNewGame(spotlight) ? 'New game' : 'Try a game';
+    const heading = $('#pbanLeadH', lead);
+    if (signedOut && bonus > 0) amountLine(heading, 'Get ', bonus, ' free');
+    else heading.textContent = signedOut ? 'Log in to play' : spotlight.name;
+    $('#pbanLeadP', lead).textContent = signedOut
+      ? bonus > 0
+        ? 'Added the moment your account is created. Log in with your Minecraft name.'
+        : 'Log in with your Minecraft name, deposit in game and play.'
+      : spotlight.line;
+    $('#pbanLeadGo', lead).textContent = signedOut ? 'Log in' : `Play ${spotlight.name}`;
+    $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : spotlight.art}`;
+  };
+  lead.addEventListener('click', (event) => {
+    if (lead.dataset.kind !== 'login') return;
+    event.preventDefault();
+    openLoginModal();
+  });
+
+  /* The invite offer. With the bonus switched off it still invites, because the revenue share on
+   * invited players is paid either way; the referrals page states both terms.
    *
-   * Signed out, the referrals page is a dead end (it can only say "sign in"), so the row opens the
-   * signup form instead and says so on its button. */
-  const inviteBar = $('#inviteBar', view);
-  const paintInviteBar = () => {
-    if (!inviteBar) return;
+   * Signed out, the referrals page is a dead end (it can only say "sign in"), so the banner opens
+   * the signup form instead and says so on its button. */
+  const invite = $('#pbanInvite', view);
+  const paintInvite = () => {
     const referral = state.promotions?.referral;
     const bonus = Number(referral?.bonusMinor ?? 0);
-    inviteBar.hidden = !(bonus > 0);
-    if (inviteBar.hidden) return;
+    const heading = $('#pbanInviteH', invite);
     // The wager condition is left to the referrals page, which states it as "Unlocks at".
-    $('#inviteBarAmt', inviteBar).textContent = money(bonus);
-    $('#inviteBarGo', inviteBar).textContent = state.authenticated ? 'Get your link' : 'Sign up to invite';
+    if (bonus > 0) amountLine(heading, '', bonus, ' per friend');
+    else heading.textContent = 'Invite your friends';
+    $('#pbanInviteGo', invite).textContent = state.authenticated ? 'Get your link' : 'Sign up';
   };
-  inviteBar?.addEventListener('click', (event) => {
+  invite.addEventListener('click', (event) => {
     if (state.authenticated) return;
     event.preventDefault();
     openLoginModal();
   });
-  paintInviteBar();
+
+  paintLead();
+  paintInvite();
 
   /* The upgrader page reads its limits from state.upgradeConfig and never asks for them itself:
    * signed in they come with the session, signed out only from here. The stat cards that also
@@ -205,7 +238,8 @@ function mountHome(view) {
   paintActivity();
   bus.addEventListener('change', () => {
     if (!view.isConnected) return;
-    paintInviteBar();
+    paintLead();
+    paintInvite();
     paintActivity();
   });
 }
@@ -1297,6 +1331,7 @@ if (pendingReferralCode() && !state.authenticated) {
   openLoginModal();
 }
 initLiveEvents();
+initNudge({ openLogin: openLoginModal });
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;

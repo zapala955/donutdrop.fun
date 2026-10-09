@@ -161,3 +161,29 @@ export const UPGRADER = {
   stakes: [10_000, 50_000, 250_000, 1_000_000, 5_000_000],
 };
 
+
+/* ─────────── games put forward ───────────
+ * The games the home page's lead banner and the corner offer (nudge.js) suggest to a signed-in
+ * player. `shipped` is the day a game went live: for thirty days after it the label reads
+ * "New game", then "Try a game", so the word never outlives the fact. */
+export const SPOTLIGHT_GAMES = [
+  { route: '/mines-duel', name: 'Mines Duel', art: 'diamond_pickaxe.svg', shipped: '2026-10-04',
+    line: '1v1 on one hidden field. Most safe tiles takes the pot.' },
+  { route: '/coinflip', name: 'Coinflip', art: 'gold_ingot.png', shipped: '2026-10-04',
+    line: '1v1, heads or tails. The winner takes the pot.' },
+  { route: '/crash', name: 'Crash', art: 'elytra.png', line: 'Cash out before it crashes.' },
+  { route: '/mines', name: 'Mines', art: 'tnt.png', line: 'Dodge the TNT, grow the multiplier.' },
+  { route: '/plinko', name: 'Plinko', art: 'slime_ball.png', line: 'Drop a ball down the pegs.' },
+  { route: '/blackjack', name: 'Blackjack', art: 'enchanted_book.png', line: 'Beat the dealer to 21.' },
+];
+const NEW_FOR_MS = 30 * 86_400_000;
+export const isNewGame = (game) =>
+  Boolean(game.shipped) && Date.now() - Date.parse(game.shipped) < NEW_FOR_MS;
+
+/** A game to suggest: a new one while any is new, never the page already open. */
+export function pickSpotlight(exceptRoute = '') {
+  const pool = SPOTLIGHT_GAMES.filter((game) => game.route !== exceptRoute);
+  const fresh = pool.filter(isNewGame);
+  const from = fresh.length ? fresh : pool;
+  return from[Math.floor(Math.random() * from.length)];
+}

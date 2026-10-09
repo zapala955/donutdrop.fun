@@ -94,6 +94,8 @@
 <link rel="stylesheet" href="assets/css/battles.css" />
 <!-- the home view: banner, game lobby, rewards. After the game sheets, before the phone layer. -->
 <link rel="stylesheet" href="assets/css/home.css" />
+<!-- the offer card in the corner, on every page (assets/js/nudge.js) -->
+<link rel="stylesheet" href="assets/css/nudge.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -185,10 +187,6 @@
         <a class="tabdrop__row" href="/battles" data-route="battles" role="menuitem">
           <img src="assets/img/items/netherite_sword.png" alt="" />
           <span><b>Case Battles</b><i>Stake the same crates, one pot</i></span>
-        </a>
-        <a class="tabdrop__row" href="/studio" data-route="studio" role="menuitem">
-          <img src="assets/img/items/ender_chest.png" alt="" />
-          <span><b>Community Cases</b><i>Player-built crates and the studio</i></span>
         </a>
       </div>
     </div>
@@ -395,45 +393,66 @@
 
     <!-- ─────── HOME ─────── -->
     <section class="view" data-view="home" hidden>
-      <!-- hero--home: the same banner at half the height. It used to fill the first screen on a
-           phone, so somebody arriving saw a slogan and a chest and had to scroll to find a game. -->
-      <div class="hero hero--home">
-        <div class="hero__copy">
-          <h1>Play the drop,<br />not the <em>odds</em>.</h1>
-          <!-- What the site is, in one sentence, with its name in it. The headline is a slogan, so
-               without this the home page never said "DonutWin" or "DonutSMP" in visible text --
-               and a search for the name found another site's page that did. Styled by
-               .hero__copy p, which already sets its measure and colour. -->
-          <p>DonutWin is a DonutSMP minigame site: cases, case battles, crash, mines, plinko and
-            coinflip, played with your DonutSMP money and withdrawn in game.</p>
-          <!-- Three chips stood here claiming who settles a roll, that any roll can be checked,
-               and that the currency is in-game only. All three were true and none of them were
-               what somebody arriving is deciding. They are the answer to "should I trust this",
-               which is a question asked on the fairness page and in the terms, both linked from
-               the menu — not in the space between a headline and the button that starts a game. -->
-          <div class="hero__cta">
-            <a class="btn btn--go btn--lg" href="/crates">Open a crate</a>
-          </div>
+      <!-- The page head: the slogan and what the site is, in one sentence, with its name in it.
+           The slogan alone never said "DonutWin" or "DonutSMP" in visible text, and a search for
+           the name found another site's page that did.
+
+           This replaces a banner the height of the first screen: the slogan, one "Open a crate"
+           button and a 3D chest in a box. It sold nothing a player could act on; the three offers
+           under it now do that job. -->
+      <header class="hintro">
+        <h1 class="hintro__h">Play the drop, not the <em>odds</em>.</h1>
+        <p>DonutWin is a DonutSMP minigame site: cases, case battles, crash, mines, plinko and
+          coinflip, played with your DonutSMP money and withdrawn in game.</p>
+      </header>
+
+      <!-- Three offers. Every figure in them is the server's (GET /v1/promotions), so the markup
+           carries none; mountHome in app.js fills them and repaints when the answer changes.
+
+           The first one changes with who is looking: signed out it is the signup bonus and opens
+           the login form; signed in it is a game to try (data.js SPOTLIGHT_GAMES). Its markup is
+           the signed-in version, so without script it is still a working link. -->
+      <section class="pbans" aria-label="Offers">
+        <div class="pbans__grid">
+          <a class="pban pban--lead" id="pbanLead" href="/mines-duel">
+            <span class="pban__copy">
+              <span class="pban__eyebrow" id="pbanLeadEyebrow">Try a game</span>
+              <span class="pban__h" id="pbanLeadH">Mines Duel</span>
+              <span class="pban__p" id="pbanLeadP">1v1 on one hidden field. Most safe tiles takes the pot.</span>
+              <span class="pban__btn btn btn--go" id="pbanLeadGo">Play now</span>
+            </span>
+            <img class="pban__art" id="pbanLeadArt" src="assets/img/items/diamond_pickaxe.svg" alt="" width="112" height="112" />
+          </a>
+          <!-- Signed out, this opens the signup form rather than the referrals page's dead end. -->
+          <a class="pban" id="pbanInvite" href="/referrals">
+            <span class="pban__copy">
+              <span class="pban__eyebrow">Invite &amp; earn</span>
+              <span class="pban__h" id="pbanInviteH">Invite your friends</span>
+              <span class="pban__p">Share your link. You earn from every player you bring in.</span>
+              <span class="pban__btn btn btn--go" id="pbanInviteGo">Get your link</span>
+            </span>
+            <img class="pban__art" src="assets/img/items/totem.png" alt="" width="112" height="112" />
+          </a>
+          <a class="pban pban--discord" href="/discord">
+            <span class="pban__copy">
+              <span class="pban__eyebrow">Community</span>
+              <span class="pban__h">Join the Discord</span>
+              <span class="pban__p">Chat with other players and link your account with /link.</span>
+              <span class="pban__btn pban__btn--dc">Join Discord</span>
+            </span>
+            <svg class="pban__art pban__art--dc" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg>
+          </a>
         </div>
-        <div class="hero__art" aria-hidden="true">
-          <img class="hero__chest" src="assets/img/items/ender_chest.png" alt="" />
-          <span class="hero__glow"></span>
-          <img class="hero__f hero__f--1" src="assets/img/items/nether_star.png" alt="" />
-          <img class="hero__f hero__f--2" src="assets/img/items/diamond.png" alt="" />
-          <img class="hero__f hero__f--3" src="assets/img/items/totem.png" alt="" />
-          <img class="hero__f hero__f--4" src="assets/img/items/elytra.png" alt="" />
-          <img class="hero__f hero__f--5" src="assets/img/items/gold_ingot.png" alt="" />
-          <img class="hero__f hero__f--6" src="assets/img/items/god_apple.png" alt="" />
-        </div>
-      </div>
+      </section>
 
       <!-- Every game, one tile each, in the markup rather than built by script: the home page is
            the page search engines weigh most, and these are its links into every game.
 
            This replaces a row of three stat cards (Upgrader, Roulette, Cases). Crash, Mines,
-           Plinko, Blackjack, Coinflip, Mines Duel, Case Battles and Community Cases were reachable
-           only through the Casino and Cases menus, so the page a new player lands on showed three
-           of the eleven games.
+           Plinko, Blackjack, Coinflip, Mines Duel and Case Battles were reachable only through the
+           Casino and Cases menus, so the page a new player lands on showed three of the ten games.
+           Community Cases is off the board, here and in the Cases menu; its /studio route still
+           works for the crates already built there.
 
            Every tile is the same colour on purpose: a game's colour would say one is featured
            over another, and none is. data-cat feeds the filter chips and data-q the search box
@@ -494,11 +513,6 @@
             <span class="gtile__name">Case Battles</span>
             <span class="gtile__desc">Same crates, one pot, winner takes it</span>
           </a></li>
-          <li><a class="gtile" href="/studio" data-cat="cases" data-q="community cases crates studio build">
-            <span class="gtile__art"><img src="assets/img/items/ender_chest.png" alt="" width="56" height="56" /></span>
-            <span class="gtile__name">Community Cases</span>
-            <span class="gtile__desc">Crates built by players</span>
-          </a></li>
           <li><a class="gtile" href="/coinflip" data-cat="pvp" data-q="coinflip coin flip heads tails 1v1">
             <span class="gtile__art"><img src="assets/img/items/gold_ingot.png" alt="" width="56" height="56" /></span>
             <span class="gtile__name">Coinflip</span>
@@ -516,23 +530,10 @@
         </div>
       </section>
 
-      <!-- Rewards: the invite offer, then the three things that pay a player back for playing.
-           None of the three quotes a figure; each page states its own terms from the server. -->
+      <!-- Rewards: the three things that pay a player back for playing (the invite offer is the
+           second banner at the top). None quotes a figure; each page states its own terms. -->
       <section class="perks" aria-labelledby="perksH">
         <h2 class="lobby__h" id="perksH">Rewards</h2>
-
-        <!-- The invite offer. Its figures come from GET /v1/promotions, which is to say from the
-             admin panel, so the markup carries none: hidden until the server answers, and it stays
-             hidden with the programme switched off. The whole row is the link, so a phone gets a
-             full-width target rather than a small button inside a card. -->
-        <a class="invitebar" id="inviteBar" href="/referrals" hidden>
-          <svg class="invitebar__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h3.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
-          <span class="invitebar__copy">
-            <span class="invitebar__head"><b class="invitebar__amt" id="inviteBarAmt"></b> for every person you invite</span>
-          </span>
-          <span class="invitebar__go" id="inviteBarGo">Get your link</span>
-        </a>
-
         <ul class="perks__row">
           <li><a class="perk" href="/daily-rewards">
             <svg class="perk__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/></svg>
