@@ -131,9 +131,13 @@ describe('what search engines are given', () => {
   });
 
   it('says what the site is, by name, on the home page', async () => {
+    /* The one-sentence description that stood under the slogan came off at the operator's
+     * request (2026-10-09). The name stays in visible text on the home view, as the games row's
+     * heading, and the head still describes the site to search engines. */
     const html = await readFrontend('index.html');
-    const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('class="lobby"'));
-    assert.match(home, /<p>DonutWin is a DonutSMP minigame site:/);
+    const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('<!-- ─────── CRATES'));
+    assert.match(home, /<span id="lobbyTitle">DonutWin Originals<\/span>/);
+    assert.match(html, /<meta name="description" content="[^"]*DonutSMP[^"]*"/);
   });
 
   it('gives each route its own title, canonical URL and robots rule', async () => {

@@ -1,6 +1,6 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
 import {
-  RARITY, IMG, pickSpotlight, isNewGame,
+  RARITY, IMG, SPOTLIGHT_GAMES, pickSpotlight, isNewGame,
 } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -61,39 +61,74 @@ function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
 
-  /* The lobby. Every tile is in the markup; this only filters it. A tile shows when it is in the
-   * chosen category and its name, its line or its keywords contain every word typed. */
+  /* The lobby. Every card is in the markup; this filters the row, names it after the tab, drives
+   * the arrows and sets the "New" tags. A card shows when it is in the chosen category and its
+   * name or its keywords contain every word typed. */
   const search = $('#lobbySearch', view);
   const none = $('#lobbyNone', view);
-  const chips = $$('.lobby__chip', view);
-  const tiles = $$('.gtile', view);
+  const tabs = $$('.lobby__tab', view);
+  const cards = $$('.gcard', view);
+  const track = $('#lobbyTrack', view);
+  const title = $('#lobbyTitle', view);
+  const prev = $('#lobbyPrev', view);
+  const next = $('#lobbyNext', view);
   let category = 'all';
+
+  for (const card of cards) {
+    const game = SPOTLIGHT_GAMES.find((entry) => entry.route === card.getAttribute('href'));
+    $('.gcard__badge', card).hidden = !(game && isNewGame(game));
+  }
+
+  // Each arrow is live only while there is more row to see on its side.
+  const paintArrows = () => {
+    const end = track.scrollWidth - track.clientWidth;
+    prev.disabled = track.scrollLeft <= 2;
+    next.disabled = track.scrollLeft >= end - 2;
+  };
+  const scrollRow = (direction) => {
+    track.scrollBy({
+      left: direction * track.clientWidth * 0.85,
+      behavior: reduceMotion() ? 'auto' : 'smooth',
+    });
+  };
+  prev.addEventListener('click', () => scrollRow(-1));
+  next.addEventListener('click', () => scrollRow(1));
+  track.addEventListener('scroll', paintArrows, { passive: true });
+  new ResizeObserver(paintArrows).observe(track);
 
   const filterLobby = () => {
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
-    for (const tile of tiles) {
-      const inCategory = category === 'all' || tile.dataset.cat.split(' ').includes(category);
-      const text = `${tile.textContent} ${tile.dataset.q}`.toLowerCase();
+    for (const card of cards) {
+      const inCategory = category === 'all' || card.dataset.cat.split(' ').includes(category);
+      const text = `${$('.gcard__name', card).textContent} ${card.dataset.q}`.toLowerCase();
       const match = inCategory && words.every((word) => text.includes(word));
-      tile.parentElement.hidden = !match;
+      card.parentElement.hidden = !match;
       if (match) shown += 1;
     }
     none.hidden = shown > 0;
+    track.hidden = shown === 0;
+    track.scrollLeft = 0;
+    paintArrows();
   };
   const pickCategory = (code) => {
     category = code;
-    for (const chip of chips) chip.setAttribute('aria-pressed', String(chip.dataset.cat === code));
+    for (const tab of tabs) {
+      const on = tab.dataset.cat === code;
+      tab.setAttribute('aria-pressed', String(on));
+      if (on) title.textContent = tab.dataset.title;
+    }
     filterLobby();
   };
 
-  for (const chip of chips) chip.addEventListener('click', () => pickCategory(chip.dataset.cat));
+  for (const tab of tabs) tab.addEventListener('click', () => pickCategory(tab.dataset.cat));
   search.addEventListener('input', filterLobby);
   $('#lobbyReset', view).addEventListener('click', () => {
     search.value = '';
     pickCategory('all');
     search.focus();
   });
+  paintArrows();
 
   /* The three offers at the top. Every figure is the server's: before /v1/promotions answers, and
    * with an offer switched off, each one says what it can say without a number. */
