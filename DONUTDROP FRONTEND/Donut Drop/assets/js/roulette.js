@@ -1,6 +1,7 @@
 /* roulette.js — one server-owned European wheel shared by every browser. */
 import { api, idempotencyKey } from './api.js';
-import { state, refreshBalance, holdLiveFigures } from './store.js';
+import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
+import { onNavigate } from './routing.js';
 import { tableAvatar } from './table-avatar.js';
 import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
@@ -60,6 +61,9 @@ let lastSuccessfulSyncMs = 0;
 let lastLivePulseMs = 0;
 let deadlineTimer = null;
 let spinHold = null;
+/* The round this page put chips on. A refresh that left before the chip did comes back without
+ * it in `yourBets`; this keeps such a snapshot from letting the hold go a moment too early. */
+let chipsRoundId = null;
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -73,6 +77,15 @@ export function mountRoulette(view) {
     window.setInterval(paintClock, 100);
     window.addEventListener('donut:roulette', () => {
       if (!view.hidden) void refresh();
+    });
+    /* Views are hidden, not removed, on navigation, and a hidden table stops refreshing, so it
+     * would never see its spin to release the hold. Kept past this point, the hold would freeze
+     * the wallet on every other page. */
+    onNavigate(() => {
+      if (view.hidden && spinHold) {
+        releaseSpinHold();
+        refreshBalance().catch(() => undefined);
+      }
     });
     window.addEventListener('donut:live-status', (event) => {
       if (event.detail?.connected) lastLivePulseMs = Number(event.detail.at) || Date.now();
@@ -439,6 +452,7 @@ async function refresh() {
       spinTo(newest.result, next.yourPreviousBets || [], spinEndsAt);
     }
     else if (newest?.result != null && wheelRotation === 0) setWheel(newest.result);
+    syncBetHold();
     scheduleDeadlineRefresh();
   } catch (error) {
     root.dataset.error = '1';
@@ -624,17 +638,31 @@ async function place(selection) {
   const placedAmount = amountMinor;
   placing = true;
   paintControls();
+  /* Held from before the bet leaves (see takeSpinHold): a chip placed in the last moment of the
+   * betting window can be followed at once by the spin's settlement. The stake leaves the pill
+   * locally, from the balance this page already had, because a refresh is what the hold stops. */
+  const hadHold = Boolean(spinHold);
+  const before = BigInt(state.balanceMinor || '0');
+  const roundId = snapshot.round.id;
+  takeSpinHold();
   try {
-    await api.post(
-      '/v1/roulette/bets',
-      {
-        roundId: snapshot.round.id,
-        selection: placedSelection,
-        stakeMinor: placedAmount.toString(),
-      },
-      { idempotencyKey: idempotencyKey() },
-    );
-    await Promise.all([refreshBalance(), refresh()]);
+    try {
+      await api.post(
+        '/v1/roulette/bets',
+        {
+          roundId,
+          selection: placedSelection,
+          stakeMinor: placedAmount.toString(),
+        },
+        { idempotencyKey: idempotencyKey() },
+      );
+    } catch (error) {
+      if (!hadHold) releaseSpinHold();
+      throw error;
+    }
+    chipsRoundId = roundId;
+    showBalance((before - placedAmount).toString());
+    await refresh();
     toast({
       kind: 'win',
       title: 'Bet placed',
@@ -649,6 +677,7 @@ async function place(selection) {
     await refresh();
   } finally {
     placing = false;
+    syncBetHold();
     paintControls();
   }
 }
@@ -677,6 +706,29 @@ function setWheel(result) {
 function takeSpinHold() {
   if (spinHold) return;
   spinHold = holdLiveFigures();
+}
+
+/* The hold starts when the player has chips on the table, not when the wheel starts.
+ *
+ * Waiting for the spin was too late. The server settles a round, credits the winners and publishes
+ * their balance events BEFORE the round's own event reaches this page, and the page only learns of
+ * the spin from the refetch that event triggers. A winner's pill had already moved by the time the
+ * wheel began to turn. So the hold is taken with the first chip (place) or as soon as a refresh
+ * finds chips of theirs on the open round (a reload mid-round), and kept through the spin.
+ *
+ * It is let go when there is nothing left to wait for: no chips on the open round and no spin on
+ * screen. Normally that is the spin's own finish, which releases it and refreshes. */
+function syncBetHold() {
+  // A chip on its way decides for itself, in place().
+  if (placing || !root?.isConnected || root.closest('.view')?.hidden) return;
+  const spinning = $('#rouletteWheel', root)?.classList.contains('is-spinning');
+  const chipsDown = (snapshot?.yourBets || []).length > 0
+    || (chipsRoundId !== null && snapshot?.round?.id === chipsRoundId);
+  if (chipsDown || spinning) takeSpinHold();
+  else if (spinHold) {
+    releaseSpinHold();
+    refreshBalance().catch(() => undefined);
+  }
 }
 
 function releaseSpinHold() {

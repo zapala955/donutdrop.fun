@@ -343,7 +343,9 @@ export async function refreshActivity(notify = true) {
    * arriving mid-spin announces the result the wheel has not reached. Other players' wins pausing
    * for a few seconds is not something anybody can see. */
   if (liveHolds > 0) return state.activities;
+  const epoch = holdEpoch;
   const result = await api.get('/v1/activity/recent?limit=40');
+  if (!stillFresh(epoch)) return state.activities;
   state.activities = (result.activities || []).map(normalizeActivity);
   if (notify) emit('activity');
   // A settled round is also the only thing that can change today's top pulls.
@@ -371,7 +373,12 @@ export async function refreshTopPulls(notify = true) {
     return state.topPulls;
   }
   topPullsAt = Date.now();
+  const epoch = holdEpoch;
   const result = await api.get('/v1/activity/top-today?limit=7');
+  if (!stillFresh(epoch)) {
+    topPullsAt = 0; // not counted against the fifteen seconds; the release refresh asks again
+    return state.topPulls;
+  }
   state.topPulls = (result.activities || []).map(normalizeActivity);
   if (notify) emit('toppulls');
   return state.topPulls;
@@ -594,22 +601,29 @@ export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {
 export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false } = {}) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before upgrading');
   if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
-  const result = await api.post(
-    '/v1/upgrades',
-    {
-      clientSeed: clientSeed(),
-      serverSeedHash: state.fairness.serverSeedHash,
-      targetCatalogItemId: targetItem.catalogItemId,
-      targetQuantity: 1,
-      expectedTargetUnitValueMinor: targetItem.unitValueMinor,
-      balanceStake: { balanceMinor: String(stakeMinor) },
-    },
-    { idempotencyKey: idempotencyKey() },
-  );
-
-  /* Taken the instant the server answers, because that is the instant the outcome exists and the
-   * polls become capable of leaking it. */
+  /* Taken BEFORE the request, as openCase does. It used to be taken when the answer came back,
+   * but the server publishes its balance event while it settles the round, and that event can
+   * outrun its own HTTP answer: the wallet pill then moved to the result before the wheel had
+   * started. Released at once if the request fails, since no round exists to wait for. */
   const release = defer ? holdLiveFigures() : () => {};
+  let result;
+  try {
+    result = await api.post(
+      '/v1/upgrades',
+      {
+        clientSeed: clientSeed(),
+        serverSeedHash: state.fairness.serverSeedHash,
+        targetCatalogItemId: targetItem.catalogItemId,
+        targetQuantity: 1,
+        expectedTargetUnitValueMinor: targetItem.unitValueMinor,
+        balanceStake: { balanceMinor: String(stakeMinor) },
+      },
+      { idempotencyKey: idempotencyKey() },
+    );
+  } catch (error) {
+    release();
+    throw error;
+  }
 
   let done = false;
   const settle = async () => {
@@ -745,8 +759,33 @@ export async function caseHistory(limit = 25) {
  */
 let liveHolds = 0;
 
+/* Bumped each time a hold begins.
+ *
+ * Checking `liveHolds` before a request leaves is not enough on its own: a poll that left a moment
+ * BEFORE the bet can be answered a moment AFTER the round settled — the server is free to run the
+ * two in either order — and its answer would then print the outcome mid-spin. So each refresh
+ * notes this number as its request leaves and throws the answer away if a hold began, or is still
+ * on, by the time the answer is back. The release path refreshes again, so a discarded answer only
+ * ever costs one stale moment. */
+let holdEpoch = 0;
+
+/** Whether an answer to a request that left at `epoch` may be shown. */
+function stillFresh(epoch) {
+  return liveHolds === 0 && epoch === holdEpoch;
+}
+
+/* For pollers outside this module (the vault jackpot bar): note the epoch as a request leaves,
+ * and show its answer only if it is still fresh when it comes back. */
+export function liveFiguresEpoch() {
+  return holdEpoch;
+}
+export function liveFiguresFresh(epoch) {
+  return stillFresh(epoch);
+}
+
 export function holdLiveFigures() {
   liveHolds += 1;
+  holdEpoch += 1;
   let released = false;
   return () => {
     if (released) return;
@@ -768,7 +807,9 @@ export async function refreshBalance(notify = true) {
   /* Not fetched at all while held. Fetching and discarding would be the same outcome at the cost
    * of a request, and the request is the thing the rate limiter counts. */
   if (liveHolds > 0) return state.balanceMinor;
+  const epoch = holdEpoch;
   const balance = await api.get('/v1/balance');
+  if (!stillFresh(epoch)) return state.balanceMinor;
   state.balanceMinor = String(balance.balanceMinor || '0');
   state.balance = toSafeNumber(state.balanceMinor);
   /* The VIP standing rides in on this response, because it changes at exactly the moment the
@@ -819,7 +860,10 @@ export async function pollDeposits() {
    * the animation has not reached. Returning early leaves the watermark where it was, so the next
    * tick reports any real deposit that landed during the spin rather than swallowing it. */
   if (liveHolds > 0) return [];
+  const epoch = holdEpoch;
   const result = await api.get('/v1/balance/transactions?limit=25');
+  // A round started while this was out: leave the watermark alone, the next tick reports it.
+  if (!stillFresh(epoch)) return [];
   const rows = result.transactions || [];
   if (!rows.length) return [];
 

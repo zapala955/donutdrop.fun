@@ -24,7 +24,7 @@
 import { money } from './util.js';
 import { playSound } from './audio-engine.js';
 import { api } from './api.js';
-import { bus } from './store.js';
+import { bus, liveFiguresEpoch, liveFiguresFresh } from './store.js';
 
 const POLL_MS = 12_000;
 /** Wins already celebrated on this device, so a reload does not re-fire the flare. */
@@ -79,6 +79,15 @@ function build() {
 
 async function poll() {
   window.clearTimeout(timer);
+  /* Not while a round is playing. The draw happens inside the transaction that settles a round,
+   * so mid-spin this answer can carry the player's own win -- the flare would fire, and the pot
+   * would drop, before their wheel or reel had shown them anything. The release refreshes the
+   * wallet, and the wallet change polls this again. */
+  const epoch = liveFiguresEpoch();
+  if (!liveFiguresFresh(epoch)) {
+    timer = window.setTimeout(() => void poll(), POLL_MS);
+    return;
+  }
   let board;
   try {
     board = await api.get('/v1/social/jackpot');
@@ -90,6 +99,11 @@ async function poll() {
       return;
     }
     timer = window.setTimeout(() => void poll(), POLL_MS * 2);
+    return;
+  }
+  // A round started while this was out: its answer may already hold that round's draw.
+  if (!liveFiguresFresh(epoch)) {
+    timer = window.setTimeout(() => void poll(), POLL_MS);
     return;
   }
 
