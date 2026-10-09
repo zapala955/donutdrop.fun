@@ -121,7 +121,13 @@ describe('what search engines are given', () => {
     assert.match(served, /<meta property="og:title" content="DonutWin Discord — /);
     assert.match(served, /<meta name="twitter:description" content="Join the DonutWin Discord/);
     assert.match(served, /<link rel="canonical" href="https:\/\/donutwin\.fun\/discord" \/>/);
-    assert.match(conf, /map \$uri \$seo_robots \{[\s\S]*?\/wallet "noindex, follow";/);
+    assert.match(conf, /map \$seo_path \$seo_robots \{[\s\S]*?\/wallet "noindex, follow";/);
+    /* Keyed on the path captured before try_files, never on $uri: try_files rewrites $uri to
+     * /index.html, and the first deploy of this served every route the home page's values. */
+    assert.doesNotMatch(conf, /map \$uri \$seo_/);
+    const routes = conf.slice(conf.indexOf('location ~ ^/(?:home|crates'));
+    const block = routes.slice(0, routes.indexOf('try_files'));
+    assert.match(block, /set \$seo_path \$uri;/);
   });
 
   it('says what the site is, by name, on the home page', async () => {

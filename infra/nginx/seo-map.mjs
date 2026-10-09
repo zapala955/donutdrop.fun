@@ -62,9 +62,13 @@ export function homeStrings(seo) {
 
 export function renderMaps(seo) {
   const routes = Object.keys(seo.ROUTE_META);
+  /* Keyed on $seo_path, not $uri. The page routes serve index.html through try_files, and a
+   * try_files that finds its file rewrites $uri to that file -- so by the time sub_filter asks,
+   * $uri is "/index.html" for every route and every map answered with the home page's values.
+   * $seo_path is set from $uri in the rewrite phase, before try_files runs. */
   const map = (variable, value) =>
     [
-      `  map $uri ${variable} {`,
+      `  map $seo_path ${variable} {`,
       `    default ${quoted(value('home'))};`,
       ...routes.flatMap((route) => pathsFor(route).map((p) => `    ${p} ${quoted(value(route))};`)),
       '  }',
@@ -87,6 +91,8 @@ export function renderSubstitutions(seo) {
   };
   return [
     SUBS_BEGIN,
+    // The path as requested, captured before try_files rewrites $uri to /index.html.
+    '      set $seo_path $uri;',
     '      sub_filter_once off;',
     sub(home.title, '$seo_title'),
     sub(home.description, '$seo_description'),
