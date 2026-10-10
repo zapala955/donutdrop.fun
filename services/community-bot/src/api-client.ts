@@ -91,8 +91,16 @@ export class PlatformApi {
     private readonly secret: string,
   ) {}
 
-  async profile(discordUserId: string): Promise<ProfileLookup> {
-    return this.post<ProfileLookup>('/internal/v1/community/profile', { discordUserId });
+  /**
+   * Whose profile, and who is asking. The site names the player in full only to the player
+   * themselves; anybody else gets the mask the site's public pages use (`x********`). The asker
+   * travels inside the signed body for the same reason the subject does.
+   */
+  async profile(discordUserId: string, viewerDiscordUserId: string): Promise<ProfileLookup> {
+    return this.post<ProfileLookup>('/internal/v1/community/profile', {
+      discordUserId,
+      viewerDiscordUserId,
+    });
   }
 
   /** `/link <code>`: the code the site showed a signed-in player. */

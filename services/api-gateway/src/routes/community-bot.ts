@@ -4,6 +4,7 @@ import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
 import { claimTagReward, linkWithCode, rewardStatus } from '../lib/discord-rewards.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 import { vipStandingFor } from '../lib/vip.js';
 
@@ -26,7 +27,9 @@ import { vipStandingFor } from '../lib/vip.js';
  *     money somebody is holding on a gambling site is a targeting list;
  *   * anything from the compliance columns — kyc status, date of birth, country;
  *   * the platform user id — it is the handle every other internal route keys off, and a profile
- *     card has no use for it.
+ *     card has no use for it;
+ *   * somebody else's Minecraft name in full — the profile read returns it masked, as the site's
+ *     public pages do, unless the person asking is the person asked about.
  *
  * Wagered total and VIP level ARE returned: the site already shows both on public leaderboards,
  * so they are public facts about the account rather than a disclosure this route invents.
@@ -59,6 +62,14 @@ const lookupSchema = z.object({
   discordUserId: snowflake,
 });
 
+/* `/profile` also says who is asking, because that decides how the name is shown: in full to the
+ * player themselves, masked the way the site masks it to anybody else. Optional, and a request
+ * without it is answered as if a stranger asked -- the safe side to fail on. */
+const profileSchema = z.object({
+  discordUserId: snowflake,
+  viewerDiscordUserId: snowflake.optional(),
+});
+
 const linkSchema = z
   .object({
     discordUserId: snowflake,
@@ -84,17 +95,23 @@ export async function registerCommunityBotRoutes(
     { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     async (request) => {
       verifyCommunityBotSignature(request, config);
-      const body = parseWith(lookupSchema, request.body);
+      const body = parseWith(profileSchema, request.body);
+      /* The full name only to its owner. Anybody else looking somebody up -- in a public channel,
+       * where the card lands -- gets the mask every public surface of the site uses (lib/
+       * masked-name.ts), so the bot cannot be used to undo it. Before this the card's title was
+       * the name in full for whoever asked. */
+      const own = body.viewerDiscordUserId === body.discordUserId;
 
       const found = await db.query<{
         minecraft_username: string;
+        masked_username: string;
         status: string;
         created_at: Date;
         discord_verified_at: Date | null;
         wagered_minor: string | null;
       }>(
-        `SELECT u.minecraft_username, u.status, u.created_at, u.discord_verified_at,
-                t.wagered_minor
+        `SELECT u.minecraft_username, ${maskedName('u.minecraft_username')} AS masked_username,
+                u.status, u.created_at, u.discord_verified_at, t.wagered_minor
            FROM users u
            LEFT JOIN user_wager_totals t ON t.user_id = u.id
           WHERE u.discord_user_id = $1`,
@@ -112,7 +129,7 @@ export async function registerCommunityBotRoutes(
       const wagered = BigInt(row.wagered_minor ?? '0');
       return {
         linked: true as const,
-        username: row.minecraft_username,
+        username: own ? row.minecraft_username : row.masked_username,
         memberSince: row.created_at.toISOString(),
         linkedAt: row.discord_verified_at?.toISOString() ?? null,
         wageredMinor: wagered.toString(),

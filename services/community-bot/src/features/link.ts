@@ -60,7 +60,7 @@ export async function showLink(api: PlatformApi | null, interaction: ChatInputCo
   }
 
   const profile = await Promise.race([
-    api.profile(interaction.user.id).catch(() => null),
+    api.profile(interaction.user.id, interaction.user.id).catch(() => null),
     new Promise<null>((resolve) => {
       const timer = setTimeout(() => resolve(null), LINKED_CHECK_MS);
       timer.unref();
@@ -100,6 +100,9 @@ export async function submitLinkCode(api: PlatformApi | null, interaction: Modal
  *
  * The balance is not here and is not one option away: the gateway does not return it. A bot that
  * announces how much money somebody is holding on a gambling site is writing a targeting list.
+ *
+ * Nor is somebody else's Minecraft name. The gateway masks it (`x********`, as on the site) unless
+ * the member asking is the member asked about, so a public lookup cannot undo the site's masking.
  */
 export async function showProfile(
   api: PlatformApi | null,
@@ -119,7 +122,7 @@ export async function showProfile(
 
   let profile;
   try {
-    profile = await api.profile(target.id);
+    profile = await api.profile(target.id, interaction.user.id);
   } catch (error) {
     await interaction.editReply({ embeds: [lookupFailed(error)] });
     return;
