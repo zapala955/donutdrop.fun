@@ -114,6 +114,31 @@ export type PayoutRefusal = 'insufficient_funds';
  * shape. Only consulted in the seconds after the bot's own /pay.
  */
 export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
+  return serverErrorText(packet) === INSUFFICIENT_FUNDS_TEXT ? 'insufficient_funds' : undefined;
+}
+
+/* What DonutSMP answers, in red, to a command sent too soon after the bot's previous one. Logged
+ * from the live server on 2026-10-10 as red:"You need to wait another 0.25 seconds to execute a
+ * command", a moment after a /pay that the idle /bal had just preceded. The command did not run. */
+const COMMAND_COOLDOWN_PATTERN = /^you need to wait another \d+(?:\.\d+)? seconds? to execute a command$/;
+
+/**
+ * Recognizes the server refusing a command for the cooldown between commands. Matched exactly as
+ * strictly as a refusal for funds -- the whole message, all of it in the server's red -- and only
+ * consulted while the bot's own /pay is waiting for its answer.
+ */
+export function parseCommandCooldown(packet: unknown): boolean {
+  const text = serverErrorText(packet);
+  return text !== undefined && COMMAND_COOLDOWN_PATTERN.test(text);
+}
+
+/**
+ * The text of a message the server itself sent as an error: every visible part red, nothing in
+ * front of it. Normalised (curly apostrophes, runs of spaces, case, one trailing full stop) so the
+ * callers can compare it with a single literal. Player chat cannot take this shape, because it
+ * arrives with the chat plugin's formatting and a name in front of it.
+ */
+function serverErrorText(packet: unknown): string | undefined {
   if (packet === null || typeof packet !== 'object') return undefined;
   const record = packet as Record<string, unknown>;
   const content = unwrap(record['content'] ?? record['message']);
@@ -122,7 +147,7 @@ export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
     (part) => (textOf(part) ?? '') !== '',
   );
   if (parts.length === 0 || parts.some((part) => colorOf(part) !== 'red')) return undefined;
-  const text = parts
+  return parts
     .map((part) => textOf(part) ?? '')
     .join('')
     .replace(/[‘’]/g, "'")
@@ -130,7 +155,6 @@ export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
     .trim()
     .toLowerCase()
     .replace(/[.!]$/, '');
-  return text === INSUFFICIENT_FUNDS_TEXT ? 'insufficient_funds' : undefined;
 }
 
 /** What the bot's own /bal said: the figure as shown, and the interval of balances it stands for. */

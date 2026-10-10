@@ -21,6 +21,7 @@ import {
   parsePaymentNotice,
   parsePayoutRefusal,
   parseBalanceReply,
+  parseCommandCooldown,
   type BalanceReading,
   type OutgoingPayment,
   type PayoutRefusal,
@@ -50,6 +51,16 @@ const BALANCE_IDLE_MAX_MS = 40 * 60_000;
 const BALANCE_REPLY_MS = 5_000;
 /** After money moves, read the balance again this long after the last movement. */
 const BALANCE_AFTER_MOVE_MS = 4_000;
+/**
+ * The least time between two commands this bot sends.
+ *
+ * DonutSMP refuses a command sent too soon after the previous one ("You need to wait another 0.25
+ * seconds to execute a command") and does not run it. On 2026-10-10 that refusal landed on a $24M
+ * /pay sent a moment after the bot's own /bal: nothing was paid, nothing confirmed it, and the
+ * withdrawal went to an operator as an unknown outcome. A /pay now waits this long after the last
+ * command, and after any /bal answer still due.
+ */
+const COMMAND_GAP_MS = 1_500;
 /**
  * How long the bot stays logged in before it logs out and back in: a random stretch between these
  * two, drawn afresh on every login. A session can go deaf while its socket stays open -- the vault
@@ -214,6 +225,12 @@ export class MinecraftWorker {
   private observedBalance: (BalanceReading & { observedAt: string }) | undefined;
   private balanceReplyUntil = 0;
   private balanceTimer: NodeJS.Timeout | undefined;
+  /** When this bot last sent a command; see COMMAND_GAP_MS. */
+  private lastCommandAt = 0;
+  /** A /pay is waiting out the gap before it is sent: no /bal may slip in front of it. */
+  private payoutPreparing = false;
+  /** The server answered the /pay in flight with its command cooldown: that /pay did not run. */
+  private payoutCooldownSeen = false;
   /** The payout waiting on the server's confirmation, if one is in flight. */
   private pendingPayout:
     | {
@@ -460,6 +477,14 @@ export class MinecraftWorker {
         const refusal = parsePayoutRefusal(data);
         if (refusal) {
           awaitingAnswer.refuse(refusal);
+          return;
+        }
+        /* The server's command cooldown, which means the /pay did not run. Noted rather than acted
+         * on at once: the payout still waits out its window, and only if no confirmation arrives
+         * in it is the payment reported as not sent. A confirmation always wins. */
+        if (parseCommandCooldown(data)) {
+          this.payoutCooldownSeen = true;
+          this.log.warn({ payee: awaitingAnswer.payee }, 'server refused the /pay for its command cooldown');
           return;
         }
       }
@@ -935,19 +960,41 @@ export class MinecraftWorker {
    * Asks the server what this bot holds, with /bal.
    *
    * Not while a /pay is waiting for its answer: the two replies would share the window, and a
-   * payout's confirmation is the one that must not be confused with anything. It is retried a
-   * few seconds later instead.
+   * payout's confirmation is the one that must not be confused with anything. Nor while a /pay is
+   * about to go: a /bal sent then would land inside the server's command cooldown and get the /pay
+   * refused (see COMMAND_GAP_MS). It is retried a few seconds later instead.
    */
   private requestBalance(): void {
     const bot = this.bot;
     const connectionController = this.connectionController;
     if (!bot?.entity || !connectionController || connectionController.signal.aborted) return;
-    if (this.pendingPayout || this.transferring) {
+    if (this.pendingPayout || this.payoutPreparing || this.transferring) {
       this.balanceSoon(BALANCE_AFTER_MOVE_MS);
       return;
     }
     this.balanceReplyUntil = Date.now() + BALANCE_REPLY_MS;
-    bot.chat('/bal');
+    this.sendCommand(bot, '/bal');
+  }
+
+  /** Every command this bot sends goes through here, so the gap before a /pay can be measured. */
+  private sendCommand(bot: Bot, command: string): void {
+    this.lastCommandAt = Date.now();
+    bot.chat(command);
+  }
+
+  /**
+   * Resolves once a /pay can go without meeting the server's command cooldown: COMMAND_GAP_MS after
+   * the last command, and after a /bal answer that is still due. Bounded, so a reply that never
+   * comes cannot hold a payout for longer than the /bal window itself.
+   */
+  private async waitForCommandGap(): Promise<void> {
+    const now = Date.now();
+    const clearAt = Math.min(
+      Math.max(this.lastCommandAt + COMMAND_GAP_MS, this.balanceReplyUntil),
+      now + BALANCE_REPLY_MS + COMMAND_GAP_MS,
+    );
+    if (clearAt <= now) return;
+    await new Promise((resolve) => setTimeout(resolve, clearAt - now));
   }
 
   private async snapshot(): Promise<void> {
@@ -1138,6 +1185,11 @@ export class MinecraftWorker {
      * out, or one refused for funds, both say something about what the bot holds. */
     this.balanceSoon(BALANCE_AFTER_MOVE_MS + PAYOUT_CONFIRM_MS);
     try {
+      /* Spaced from the last command so the server's cooldown cannot refuse it (COMMAND_GAP_MS).
+       * Flagged for the length of the wait, so a /bal cannot be sent in front of it meanwhile. The
+       * connection checks below run after the wait, against the connection as it is now. */
+      this.payoutPreparing = true;
+      await this.waitForCommandGap();
       if (!this.isConnectionLive(claimState)) throw new Error('PAYOUT_NOT_SENT');
       // Re-checked immediately before the write: a disconnect between the guard above and this
       // line would otherwise send the command into a dead socket and call it delivered.
@@ -1146,11 +1198,14 @@ export class MinecraftWorker {
 
       /* Armed before the command, because the server can answer within the same tick. */
       const confirmation = this.awaitPayoutReceipt(payee);
+      this.payoutPreparing = false;
+      this.payoutCooldownSeen = false;
       this.payoutChatCaptureUntil = Date.now() + PAYOUT_CHAT_CAPTURE_MS;
-      bot.chat(`/pay ${payee} ${amountMinor}`);
+      this.sendCommand(bot, `/pay ${payee} ${amountMinor}`);
       this.log.info({ jobId: job.id, payee, amountMinor }, 'cash payout sent');
       receipt = await confirmation;
     } catch (error) {
+      this.payoutPreparing = false;
       const code =
         error instanceof Error && error.message === 'PAYOUT_NOT_SENT'
           ? 'PAYOUT_NOT_SENT'
@@ -1172,6 +1227,20 @@ export class MinecraftWorker {
         retryable: false,
         errorCode: 'PAYOUT_INSUFFICIENT_FUNDS',
       });
+      return;
+    }
+
+    /* No confirmation, and the server said the command did not run (its cooldown). That is an
+     * answer, like a refusal for funds: no money moved. Reported as not sent and retryable, so the
+     * gateway sends it again in a moment rather than parking a payment that never happened in
+     * front of an operator. No reconnect -- the connection plainly answered. */
+    if (!receipt && this.payoutCooldownSeen) {
+      this.payoutCooldownSeen = false;
+      this.log.warn(
+        { jobId: job.id, payee, amountMinor },
+        'cash payout not sent: the server refused it for its command cooldown; it will be retried',
+      );
+      await this.api.completeJob(job, 'failed', { retryable: true, errorCode: 'PAYOUT_NOT_SENT' });
       return;
     }
 
