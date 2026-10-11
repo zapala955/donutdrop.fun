@@ -35,7 +35,7 @@ describe('/link', () => {
     assert.equal(input['required'], true);
     assert.equal(input['min_length'], 4);
     assert.equal(input['max_length'], 16);
-    assert.match(String(input['placeholder']), /donutwin\.fun\/discord/);
+    assert.match(String(input['placeholder']), /donutluxe\.com\/discord/);
   });
 
   it('shows the pop-up to somebody who is not linked', async () => {

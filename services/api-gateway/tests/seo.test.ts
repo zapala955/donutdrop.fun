@@ -20,7 +20,7 @@ const seo = async () =>
   (await import(pathToFileURL(path.join(frontend, 'assets/js/seo.js')).href)) as Seo;
 
 function sitemapPaths(xml: string): string[] {
-  return [...xml.matchAll(/<loc>https:\/\/donutwin\.fun(\/[^<]*)<\/loc>/g)].map((m) => m[1]!);
+  return [...xml.matchAll(/<loc>https:\/\/donutluxe\.com(\/[^<]*)<\/loc>/g)].map((m) => m[1]!);
 }
 
 /**
@@ -55,7 +55,7 @@ describe('what search engines are given', () => {
 
   it('points crawlers at the sitemap and away from the console and the API', async () => {
     const robots = await readFrontend('robots.txt');
-    assert.match(robots, /^Sitemap: https:\/\/donutwin\.fun\/sitemap\.xml$/m);
+    assert.match(robots, /^Sitemap: https:\/\/donutluxe\.com\/sitemap\.xml$/m);
     assert.match(robots, /^Disallow: \/admin\/$/m);
     assert.match(robots, /^Disallow: \/v1\/$/m);
   });
@@ -69,8 +69,8 @@ describe('what search engines are given', () => {
   });
 
   /* Another DonutSMP site uses the same name on a .com and outranked this one for it. Every page
-   * leads with the name, so the account pages read "DonutWin Wallet" in the tab too. */
-  it('titles every route the router knows, each one leading with DonutWin', async () => {
+   * leads with the name, so the account pages read "DonutLuxe Wallet" in the tab too. */
+  it('titles every route the router knows, each one leading with DonutLuxe', async () => {
     const { ROUTE_META } = await seo();
     const app = await readFrontend('assets/js/app.js');
     const table = app.slice(app.indexOf('const VIEWS = {'), app.indexOf('};', app.indexOf('const VIEWS = {')));
@@ -79,7 +79,7 @@ describe('what search engines are given', () => {
     for (const route of routes) {
       const meta = ROUTE_META[route];
       assert.ok(meta, `${route} has no title`);
-      assert.match(meta.title, /^DonutWin[ .]/, `${route}: ${meta.title}`);
+      assert.match(meta.title, /^DonutLuxe[ .]/, `${route}: ${meta.title}`);
     }
   });
 
@@ -116,11 +116,11 @@ describe('what search engines are given', () => {
     const served = html
       .split(home['title']!).join(generator.htmlText(discord.title))
       .split(home['description']!).join(generator.htmlText(discord.description))
-      .split(home['canonical']!).join('<link rel="canonical" href="https://donutwin.fun/discord" />');
-    assert.match(served, /<title>DonutWin Discord — Join &amp; Link Your Account<\/title>/);
-    assert.match(served, /<meta property="og:title" content="DonutWin Discord — /);
-    assert.match(served, /<meta name="twitter:description" content="Join the DonutWin Discord/);
-    assert.match(served, /<link rel="canonical" href="https:\/\/donutwin\.fun\/discord" \/>/);
+      .split(home['canonical']!).join('<link rel="canonical" href="https://donutluxe.com/discord" />');
+    assert.match(served, /<title>DonutLuxe Discord — Join &amp; Link Your Account<\/title>/);
+    assert.match(served, /<meta property="og:title" content="DonutLuxe Discord — /);
+    assert.match(served, /<meta name="twitter:description" content="Join the DonutLuxe Discord/);
+    assert.match(served, /<link rel="canonical" href="https:\/\/donutluxe\.com\/discord" \/>/);
     assert.match(conf, /map \$seo_path \$seo_robots \{[\s\S]*?\/wallet "noindex, follow";/);
     /* Keyed on the path captured before try_files, never on $uri: try_files rewrites $uri to
      * /index.html, and the first deploy of this served every route the home page's values. */
@@ -136,7 +136,7 @@ describe('what search engines are given', () => {
      * heading, and the head still describes the site to search engines. */
     const html = await readFrontend('index.html');
     const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('<!-- ─────── CRATES'));
-    assert.match(home, /<span id="lobbyTitle">DonutWin Originals<\/span>/);
+    assert.match(home, /<span id="lobbyTitle">DonutLuxe Originals<\/span>/);
     assert.match(html, /<meta name="description" content="[^"]*DonutSMP[^"]*"/);
   });
 
@@ -171,11 +171,11 @@ describe('what search engines are given', () => {
     try {
       applyRouteMeta('crash');
       assert.equal(fakeDocument.title, ROUTE_META['crash']!.title);
-      assert.equal(nodes.get('link[rel="canonical"]')!['href'], 'https://donutwin.fun/crash');
+      assert.equal(nodes.get('link[rel="canonical"]')!['href'], 'https://donutluxe.com/crash');
       assert.equal(nodes.get('meta[name="robots"]')!['content'], 'index, follow');
 
       applyRouteMeta('home');
-      assert.equal(nodes.get('link[rel="canonical"]')!['href'], 'https://donutwin.fun/');
+      assert.equal(nodes.get('link[rel="canonical"]')!['href'], 'https://donutluxe.com/');
 
       applyRouteMeta('wallet');
       assert.equal(nodes.get('meta[name="robots"]')!['content'], 'noindex, follow');
@@ -190,8 +190,8 @@ describe('what search engines are given', () => {
   it('ships the home page head with a canonical, previews and structured data', async () => {
     const html = await readFrontend('index.html');
     const head = html.slice(0, html.indexOf('</head>'));
-    assert.match(head, /<link rel="canonical" href="https:\/\/donutwin\.fun\/" \/>/);
-    assert.match(head, /<meta property="og:image" content="https:\/\/donutwin\.fun\/assets\/img\//);
+    assert.match(head, /<link rel="canonical" href="https:\/\/donutluxe\.com\/" \/>/);
+    assert.match(head, /<meta property="og:image" content="https:\/\/donutluxe\.com\/assets\/img\//);
     for (const tag of ['og:title', 'og:description', 'og:url']) {
       assert.match(head, new RegExp(`<meta property="${tag}" content="[^"]+" />`));
     }

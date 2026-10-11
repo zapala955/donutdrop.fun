@@ -10,7 +10,7 @@ import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
 /**
  * rewards.ts — what this server pays, and the commands that collect it.
  *
- *   /link         ties this Discord account to the DonutWin account that showed the code (typed
+ *   /link         ties this Discord account to the DonutLuxe account that showed the code (typed
  *                 into the pop-up, or as `code:`), and pays the join reward the link unlocks.
  *   /tag          today's reward for wearing the server's tag.
  *   /rewards      where you stand.
@@ -20,7 +20,7 @@ import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
  * only thing that can pay. See services/api-gateway/src/lib/discord-rewards.ts.
  */
 
-const SITE = 'https://donutwin.fun/discord';
+const SITE = 'https://donutluxe.com/discord';
 
 /**
  * Whether somebody wears THIS server's tag right now.

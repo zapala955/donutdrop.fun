@@ -12,7 +12,7 @@ import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
 import { linkWithCode } from './rewards.js';
 
 /**
- * link.ts — the bridge to donutwin.fun, such as it is.
+ * link.ts — the bridge to donutluxe.com, such as it is.
  *
  * The bot does not decide who owns what. The site mints a one-time code for a signed-in browser
  * (the session proves the account), the member types it into `/link code:` here (Discord proves the
@@ -38,7 +38,7 @@ export function buildLinkModal(): ModalBuilder {
   const code = new TextInputBuilder()
     .setCustomId(LINK_CODE_FIELD)
     .setLabel('Your link code')
-    .setPlaceholder('From donutwin.fun/discord: sign in, press Get link code')
+    .setPlaceholder('From donutluxe.com/discord: sign in, press Get link code')
     .setStyle(TextInputStyle.Short)
     // The site's codes are eight characters; spaces and dashes in a paste are forgiven.
     .setMinLength(4)
@@ -46,7 +46,7 @@ export function buildLinkModal(): ModalBuilder {
     .setRequired(true);
   return new ModalBuilder()
     .setCustomId(LINK_MODAL_ID)
-    .setTitle('Link your DonutWin account')
+    .setTitle('Link your DonutLuxe account')
     .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(code));
 }
 
@@ -134,8 +134,8 @@ export async function showProfile(
         embed(
           'Not linked',
           self
-            ? `You have not linked a DonutWin account yet. Run \`/link\`.`
-            : `**${target.tag}** has not linked a DonutWin account.`,
+            ? `You have not linked a DonutLuxe account yet. Run \`/link\`.`
+            : `**${target.tag}** has not linked a DonutLuxe account.`,
           COLOR.quiet,
         ),
       ],

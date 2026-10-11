@@ -6,7 +6,7 @@
  * The game pages opened on the site-wide page title: the name at 2.7rem with a 15px "i" beside
  * it. Above a game that is the loudest thing on the screen and says the least; the game is what a
  * player came for. This is the lobby card in miniature instead: the item, the name, the
- * DonutWin Originals line, and "How it works" as a button you can find. The text it opens is the
+ * DonutLuxe Originals line, and "How it works" as a button you can find. The text it opens is the
  * same hint the "i" carried (ui.js opens it on touch, the bubble below on hover and focus).
  *
  * Linked after matte.css, which owns .ihint, so the overrides here win on equal specificity.

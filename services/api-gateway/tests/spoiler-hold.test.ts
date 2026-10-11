@@ -79,7 +79,7 @@ after(clearLeftovers);
 
 before(async () => {
   Object.assign(globalThis, {
-    window: { location: { protocol: 'https:', origin: 'https://donutwin.fun' } },
+    window: { location: { protocol: 'https:', origin: 'https://donutluxe.com' } },
     document: { querySelector: () => null, cookie: '' },
     fetch: handFetch,
   });

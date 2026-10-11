@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily DonutWin encrypted backup
+Description=Daily DonutLuxe encrypted backup
 
 [Timer]
 OnCalendar=*-*-* 03:15:00 UTC

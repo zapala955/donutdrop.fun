@@ -160,7 +160,7 @@ function mountHome(view) {
     // The gold one is the main action: Log in when it is there, otherwise Explore games.
     leadExplore.classList.toggle('btn--go', !signedOut);
     leadExplore.classList.toggle('pban__more', signedOut);
-    $('#pbanLeadEyebrow', lead).textContent = signedOut ? 'New players' : 'DonutWin Originals';
+    $('#pbanLeadEyebrow', lead).textContent = signedOut ? 'New players' : 'DonutLuxe Originals';
     const heading = $('#pbanLeadH', lead);
     if (signedOut && bonus > 0) amountLine(heading, 'Get ', bonus, ' free');
     else heading.textContent = signedOut ? 'Log in to play' : `Explore ${cards.length} games`;

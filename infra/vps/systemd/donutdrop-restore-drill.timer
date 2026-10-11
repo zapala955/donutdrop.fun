@@ -1,5 +1,5 @@
 [Unit]
-Description=Monthly DonutWin restore drill
+Description=Monthly DonutLuxe restore drill
 
 [Timer]
 OnCalendar=Sun *-*-01..07 05:15:00 UTC

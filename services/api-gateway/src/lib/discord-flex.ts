@@ -111,7 +111,7 @@ export async function announceWin(
   }
 
   const body = {
-    username: 'DonutWin',
+    username: 'DonutLuxe',
     embeds: [
       {
         title: `${payload.username} just hit ${money(payload.amountMinor)}`,
@@ -122,7 +122,7 @@ export async function announceWin(
          * URL is handed over in the embed and their CDN fetches it. */
         thumbnail: { url: `https://mc-heads.net/head/${payload.username}/128` },
         fields,
-        footer: { text: 'DonutWin' },
+        footer: { text: 'DonutLuxe' },
         timestamp: new Date().toISOString(),
       },
     ],
