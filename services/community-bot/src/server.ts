@@ -64,7 +64,7 @@ import {
 } from './features/invites.js';
 import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
-import { previewWelcomeDm, sendWelcomeDm } from './features/welcome-dm.js';
+import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import {
   avatar,
   castPollVote,
@@ -300,10 +300,11 @@ async function main(): Promise<void> {
         if (code && api) return linkWithCode(api, interaction, code);
         return showLink(api, interaction);
       }
-      case 'welcome-preview':
-        return previewWelcomeDm(api, interaction, {
+      case 'test':
+        return testWelcomeDm(api, interaction, {
           enabled: config.welcomeDmEnabled,
           siteUrl: config.siteUrl,
+          extraOwnerIds: config.ownerIds,
         });
       case 'tag':
         return claimTag(api, interaction);

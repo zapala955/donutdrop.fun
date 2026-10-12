@@ -9,9 +9,11 @@ import type { PlatformApi, Promotions, RewardStatus } from '../src/api-client.js
 import { loadConfig } from '../src/config.js';
 import type { Database } from '../src/db.js';
 import {
+  applicationOwnerIds,
   buildWelcomeDm,
-  previewWelcomeDm,
+  resolveOwners,
   sendWelcomeDm,
+  testWelcomeDm,
   type WelcomeFacts,
 } from '../src/features/welcome-dm.js';
 
@@ -195,62 +197,166 @@ describe('sending it', () => {
   });
 });
 
-describe('/welcome-preview', () => {
-  function interaction(sendError?: unknown) {
-    const calls: { kind: string; payload: unknown }[] = [];
-    const dm: unknown[] = [];
-    const value = {
-      guild: { name: 'DonutLuxe' },
-      user: {
-        id: '123456789012345678',
-        displayName: 'Manager',
-        send: async (payload: unknown) => {
-          if (sendError) throw sendError;
-          dm.push(payload);
-        },
-      },
-      deferReply: async (payload: unknown) => void calls.push({ kind: 'defer', payload }),
-      editReply: async (payload: unknown) => void calls.push({ kind: 'edit', payload }),
-    } as unknown as ChatInputCommandInteraction;
-    return { value, calls, dm };
-  }
-
-  it('sends the manager their own copy and says so, privately', async () => {
-    const { value, calls, dm } = interaction();
-    await previewWelcomeDm(null, value, on);
-    assert.equal(dm.length, 1);
+describe('who the owners are', () => {
+  it('is the server owner, the application owner and any listed extras, once each', () => {
     assert.deepEqual(
-      calls.map((call) => call.kind),
-      ['defer', 'edit'],
+      resolveOwners({
+        guildOwnerId: '111111111111111111',
+        applicationOwnerIds: ['222222222222222222', '111111111111111111'],
+        extra: ['333333333333333333', '222222222222222222'],
+      }),
+      ['111111111111111111', '222222222222222222', '333333333333333333'],
     );
   });
 
-  it('shows it in the reply instead when the manager’s DMs are closed', async () => {
-    const { value, calls, dm } = interaction(Object.assign(new Error('x'), { code: 50007 }));
-    await previewWelcomeDm(null, value, on);
-    assert.equal(dm.length, 0);
-    const edit = calls[1]!.payload as { content: string; embeds: unknown[] };
-    assert.match(edit.content, /DMs are closed/);
-    assert.equal(edit.embeds.length, 1);
+  it('ignores anything that is not a Discord id, and a missing server owner', () => {
+    assert.deepEqual(
+      resolveOwners({ guildOwnerId: null, applicationOwnerIds: ['not-an-id'], extra: ['', '4'] }),
+      [],
+    );
+  });
+
+  it('reads the person behind an application, or the owner of its team', () => {
+    assert.deepEqual(applicationOwnerIds({ id: '222222222222222222', username: 'person' }), [
+      '222222222222222222',
+    ]);
+    // A team has its own id; the person is its ownerId.
+    assert.deepEqual(
+      applicationOwnerIds({ id: '999999999999999999', ownerId: '222222222222222222' }),
+      ['222222222222222222'],
+    );
+    assert.deepEqual(applicationOwnerIds({ id: '999999999999999999', ownerId: null }), []);
+    assert.deepEqual(applicationOwnerIds(null), []);
+  });
+});
+
+describe('/test', () => {
+  const SERVER_OWNER = '111111111111111111';
+  const APP_OWNER = '222222222222222222';
+  const EXTRA_OWNER = '333333333333333333';
+  const MEMBER = '444444444444444444';
+
+  function run(options: {
+    userId: string;
+    appOwner?: unknown;
+    closed?: string[];
+    broken?: string;
+    extra?: string[];
+  }) {
+    const sent: { to: string; payload: { content?: string; embeds: unknown[] } }[] = [];
+    const replies: {
+      kind: string;
+      payload: { embeds?: { toJSON(): { title?: string; description?: string } }[] };
+    }[] = [];
+    const interaction = {
+      guild: { name: 'DonutLuxe', ownerId: SERVER_OWNER },
+      user: { id: options.userId, displayName: 'Owner' },
+      client: {
+        application: { fetch: async () => ({ owner: options.appOwner ?? null }) },
+        users: {
+          fetch: async (id: string) => ({
+            send: async (payload: { content?: string; embeds: unknown[] }) => {
+              if (options.closed?.includes(id)) {
+                throw Object.assign(new Error('Cannot send'), { code: 50007 });
+              }
+              if (options.broken === id) throw Object.assign(new Error('boom'), { code: 500 });
+              sent.push({ to: id, payload });
+            },
+          }),
+        },
+      },
+      deferReply: async (payload: unknown) =>
+        void replies.push({ kind: 'defer', payload: payload as never }),
+      editReply: async (payload: unknown) =>
+        void replies.push({ kind: 'edit', payload: payload as never }),
+    } as unknown as ChatInputCommandInteraction;
+    const result = testWelcomeDm(null, interaction, { ...on, extraOwnerIds: options.extra ?? [] });
+    return { result, sent, replies };
+  }
+  const summary = (replies: ReturnType<typeof run>['replies']) =>
+    replies.at(-1)!.payload.embeds![0]!.toJSON();
+
+  it('sends nothing, to anybody, when somebody who is not an owner runs it', async () => {
+    const { result, sent, replies } = run({ userId: MEMBER, appOwner: { id: APP_OWNER } });
+    await result;
+    assert.equal(sent.length, 0);
+    assert.equal(summary(replies).title, 'Owners only');
+  });
+
+  it('DMs the server owner, the application owner and the listed extras, and only them', async () => {
+    const { result, sent, replies } = run({
+      userId: SERVER_OWNER,
+      appOwner: { id: APP_OWNER },
+      extra: [EXTRA_OWNER],
+    });
+    await result;
+    assert.deepEqual(
+      sent.map((entry) => entry.to),
+      [SERVER_OWNER, APP_OWNER, EXTRA_OWNER],
+    );
+    for (const entry of sent) {
+      assert.match(entry.payload.content ?? '', /^\*\*Test\*\*/);
+      assert.equal(entry.payload.embeds.length, 1);
+    }
+    const reply = summary(replies);
+    assert.equal(reply.title, 'Test DM');
+    assert.match(reply.description ?? '', new RegExp(`<@${APP_OWNER}>`));
+  });
+
+  it('lets a listed extra owner run it, and the application owner too', async () => {
+    for (const userId of [EXTRA_OWNER, APP_OWNER]) {
+      const { result, sent } = run({ userId, appOwner: { id: APP_OWNER }, extra: [EXTRA_OWNER] });
+      await result;
+      assert.equal(sent.length, 3, `run by ${userId}`);
+    }
+  });
+
+  it('still reaches the others when one owner has closed DMs, and says who it could not', async () => {
+    const { result, sent, replies } = run({
+      userId: SERVER_OWNER,
+      appOwner: { id: APP_OWNER },
+      closed: [APP_OWNER],
+    });
+    await result;
+    assert.deepEqual(
+      sent.map((entry) => entry.to),
+      [SERVER_OWNER],
+    );
+    const reply = summary(replies);
+    assert.equal(reply.title, 'Test DM');
+    assert.match(reply.description ?? '', new RegExp(`DMs are closed: <@${APP_OWNER}>`));
+  });
+
+  it('says so, as a failure, when nobody could be reached', async () => {
+    const { result, replies } = run({ userId: SERVER_OWNER, closed: [SERVER_OWNER] });
+    await result;
+    assert.match(summary(replies).description ?? '', /Nobody could be reached/);
+  });
+
+  it('raises anything that is not a closed DM', async () => {
+    const { result } = run({ userId: SERVER_OWNER, broken: SERVER_OWNER });
+    await assert.rejects(() => result, /boom/);
   });
 });
 
 describe('how it is wired', () => {
   const read = (relative: string) => readFile(path.resolve(import.meta.dirname, relative), 'utf8');
 
-  it('goes out last on a join, in its own catch, and the preview needs Manage Server', async () => {
+  it('goes out last on a join, in its own catch, and /test is hidden from non-admins', async () => {
     const server = await read('../src/server.ts');
     const join = server.slice(server.indexOf('client.on(Events.GuildMemberAdd'));
     const welcomed = join.indexOf('onMemberJoin(db, member, origin)');
     const dm = join.indexOf('sendWelcomeDm(db, api, member');
     assert.ok(welcomed > 0 && dm > welcomed, 'after the role and the welcome post');
     assert.match(join.slice(dm, dm + 400), /welcome DM failed/);
-    assert.match(server, /case 'welcome-preview':/);
+    assert.match(server, /case 'test':/);
+    assert.doesNotMatch(server, /welcome-preview|previewWelcomeDm/);
     const commands = await read('../src/commands.ts');
     assert.match(
       commands,
-      /setName\('welcome-preview'\)[\s\S]{0,200}setDefaultMemberPermissions\(MANAGE_GUILD\)/,
+      /setName\('test'\)[\s\S]{0,200}setDefaultMemberPermissions\(ADMINISTRATOR\)/,
     );
+    assert.doesNotMatch(commands, /welcome-preview/);
   });
 
   it('adds one nullable column and nothing else', async () => {
@@ -281,6 +387,15 @@ describe('its settings', () => {
     const config = configFor();
     assert.equal(config.welcomeDmEnabled, true);
     assert.equal(config.siteUrl, 'https://donutluxe.com');
+  });
+
+  it('lists extra owners from the environment, and refuses a malformed list', () => {
+    assert.deepEqual(configFor().ownerIds, []);
+    assert.deepEqual(
+      configFor({ COMMUNITY_OWNER_IDS: '333333333333333333, 444444444444444444' }).ownerIds,
+      ['333333333333333333', '444444444444444444'],
+    );
+    assert.throws(() => configFor({ COMMUNITY_OWNER_IDS: 'me,you' }), /Discord user ids/);
   });
 
   it('can be switched off and pointed elsewhere from the environment', () => {

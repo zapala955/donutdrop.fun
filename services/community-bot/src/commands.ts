@@ -26,6 +26,7 @@ import {
 const MOD = PermissionFlagsBits.ModerateMembers;
 const MANAGE_MESSAGES = PermissionFlagsBits.ManageMessages;
 const MANAGE_GUILD = PermissionFlagsBits.ManageGuild;
+const ADMINISTRATOR = PermissionFlagsBits.Administrator;
 
 /** The text channel types a feature can post into. Threads and forums are deliberately excluded. */
 const POSTABLE = [ChannelType.GuildText, ChannelType.GuildAnnouncement] as const;
@@ -446,9 +447,9 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
-      .setName('welcome-preview')
-      .setDescription('Send yourself the welcome message a new member gets in their DMs')
-      .setDefaultMemberPermissions(MANAGE_GUILD),
+      .setName('test')
+      .setDescription('Owners only: DM the owners the welcome message as a test')
+      .setDefaultMemberPermissions(ADMINISTRATOR),
   );
 
   add(

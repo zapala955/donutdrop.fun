@@ -184,16 +184,41 @@ export async function sendWelcomeDm(
 }
 
 /**
- * `/welcome-preview` — shows a manager exactly what a new member receives.
+ * Who counts as an owner: the server's owner, the owner of the bot's application (or the owner of
+ * its team), and anybody listed in COMMUNITY_OWNER_IDS. De-duplicated, in that order.
  *
- * Needed because the real thing fires once per member: rejoining to look at it would not send it
- * again, by design. It goes to the manager's own DMs and falls back to an ephemeral copy in the
- * channel when those are closed.
+ * Pure, so the rule is testable without a Discord connection.
  */
-export async function previewWelcomeDm(
+export function resolveOwners(sources: {
+  readonly guildOwnerId: string | null | undefined;
+  readonly applicationOwnerIds: readonly string[];
+  readonly extra: readonly string[];
+}): string[] {
+  const all = [sources.guildOwnerId ?? '', ...sources.applicationOwnerIds, ...sources.extra];
+  return [...new Set(all.filter((id) => /^[0-9]{5,32}$/.test(id)))];
+}
+
+/** The person (or the team's owner) behind a Discord application. */
+export function applicationOwnerIds(owner: unknown): string[] {
+  if (!owner || typeof owner !== 'object') return [];
+  const candidate = owner as { id?: string; ownerId?: string | null };
+  // A Team has an `ownerId` (its own `id` is the team's, not a person's); a User only has an `id`.
+  if ('ownerId' in candidate) return candidate.ownerId ? [candidate.ownerId] : [];
+  return candidate.id ? [candidate.id] : [];
+}
+
+/**
+ * `/test` — sends the welcome message to the OWNERS, and to nobody else.
+ *
+ * It exists because the real message goes out once per member, so rejoining to look at it sends
+ * nothing. It never touches the once-only mark and never messages a member: whoever runs it, the
+ * recipients are the owners, and anybody who is not one is told so and nothing is sent. Discord's
+ * own permission (Administrator) only hides the command; this check is the lock.
+ */
+export async function testWelcomeDm(
   api: PlatformApi | null,
   interaction: ChatInputCommandInteraction,
-  options: WelcomeOptions,
+  options: WelcomeOptions & { readonly extraOwnerIds: readonly string[] },
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guild = interaction.guild;
@@ -201,6 +226,19 @@ export async function previewWelcomeDm(
     await interaction.editReply({ embeds: [bad('Server only', 'Run this inside the server.')] });
     return;
   }
+  const application = await interaction.client.application.fetch().catch(() => null);
+  const owners = resolveOwners({
+    guildOwnerId: guild.ownerId,
+    applicationOwnerIds: applicationOwnerIds(application?.owner),
+    extra: options.extraOwnerIds,
+  });
+  if (!owners.includes(interaction.user.id)) {
+    await interaction.editReply({
+      embeds: [bad('Owners only', 'Only the server owner can run this test.')],
+    });
+    return;
+  }
+
   const { rewards, promotions } = await lookups(api, interaction.user.id);
   const message = buildWelcomeDm({
     guildName: guild.name,
@@ -209,22 +247,35 @@ export async function previewWelcomeDm(
     rewards,
     promotions,
   });
-  try {
-    await interaction.user.send(message);
-    await interaction.editReply({
-      embeds: [
-        ok(
-          'Sent',
-          'The welcome message is in your DMs.' +
-            (options.enabled ? '' : ' Note: it is switched off (WELCOME_DM_ENABLED=false).'),
-        ),
-      ],
-    });
-  } catch (error) {
-    if (!dmClosed(error)) throw error;
-    await interaction.editReply({
-      content: 'Your DMs are closed, so here is the message instead:',
-      ...message,
-    });
+
+  const reached: string[] = [];
+  const closed: string[] = [];
+  for (const id of owners) {
+    try {
+      const user = await interaction.client.users.fetch(id);
+      await user.send({
+        content: '**Test** \u2014 this is the message a new member gets in their DMs.',
+        ...message,
+      });
+      reached.push(id);
+    } catch (error) {
+      if (!dmClosed(error)) throw error;
+      closed.push(id);
+    }
   }
+
+  const lines = [
+    reached.length
+      ? `Sent to ${reached.map((id) => `<@${id}>`).join(', ')}.`
+      : 'Nobody could be reached.',
+  ];
+  if (closed.length) {
+    lines.push(`Their DMs are closed: ${closed.map((id) => `<@${id}>`).join(', ')}.`);
+  }
+  if (!options.enabled) {
+    lines.push('Note: the real welcome DM is switched off (WELCOME_DM_ENABLED=false).');
+  }
+  await interaction.editReply({
+    embeds: [(reached.length ? ok : bad)('Test DM', lines.join('\n'))],
+  });
 }

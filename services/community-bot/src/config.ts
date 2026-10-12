@@ -80,6 +80,20 @@ const schema = z.object({
     .default('true')
     .transform((value) => value === 'true'),
   COMMUNITY_SITE_URL: z.string().url().default('https://donutluxe.com'),
+  /* People besides the server's owner and the bot application's owner who may run /test, which DMs
+   * the owners the welcome message. Comma-separated Discord user ids. */
+  COMMUNITY_OWNER_IDS: z
+    .string()
+    .default('')
+    .refine(
+      (value) =>
+        value
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .every((id) => /^[0-9]{5,32}$/.test(id)),
+      'must be comma-separated Discord user ids',
+    ),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -93,6 +107,7 @@ export interface CommunityConfig {
   readonly apiSecret: string | undefined;
   readonly welcomeDmEnabled: boolean;
   readonly siteUrl: string;
+  readonly ownerIds: readonly string[];
   readonly logLevel: string;
 }
 
@@ -128,6 +143,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Commun
       : undefined,
     welcomeDmEnabled: env.WELCOME_DM_ENABLED,
     siteUrl: env.COMMUNITY_SITE_URL.replace(/\/+$/, ''),
+    ownerIds: env.COMMUNITY_OWNER_IDS.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
     logLevel: env.LOG_LEVEL,
   });
 }
