@@ -2932,6 +2932,83 @@ async function liftTimeoutByName() {
   }
 }
 
+/* The community bot's dashboard settings. The bot reads the same row on every join and every /test,
+ * so a save here is live without a restart. The server's owner and the bot application's owner can
+ * always run /test; this is the list for everybody else. */
+async function loadDiscordBot() {
+  const data = await api.get('/v1/admin/discord-bot');
+  table(
+    $('discordBotTable'),
+    ['Server', 'Welcome DM', '/test also allowed for', ''],
+    data.guilds ?? [],
+    (guild) => {
+      const tr = document.createElement('tr');
+      tr.append(cell(guild.guildId, { mono: true }));
+      const dm = document.createElement('td');
+      dm.append(pill(guild.welcomeDmEnabled ? 'on' : 'off', guild.welcomeDmEnabled ? 'ok' : 'warn'));
+      const ids = cell(
+        guild.testOwnerIds.length
+          ? guild.testOwnerIds.join(', ')
+          : 'only the server owner and the bot owner',
+        { mono: guild.testOwnerIds.length > 0 },
+      );
+      ids.classList.add('wrap');
+      tr.append(dm, ids, actions(button('Edit', () => editDiscordBot(guild, data.maxTestOwners))));
+      return tr;
+    },
+  );
+}
+
+async function editDiscordBot(guild, maxIds) {
+  const values = await editRecord({
+    title: 'Discord bot',
+    description:
+      `Server ${guild.guildId}. The server owner and the bot's owner can always run /test, which ` +
+      `DMs the owners the welcome message. Add anyone else below (up to ${maxIds}). New members ` +
+      'get the welcome DM once each.',
+    fields: [
+      {
+        name: 'welcomeDmEnabled',
+        label: 'Send the welcome DM to new members',
+        type: 'checkbox',
+        value: guild.welcomeDmEnabled,
+      },
+      {
+        name: 'testOwnerIds',
+        label: 'Who else may run /test (Discord user ids, one per line)',
+        type: 'textarea',
+        rows: 5,
+        value: guild.testOwnerIds.join('\n'),
+        required: false,
+        wide: true,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: 'Save',
+  });
+  if (!values) return;
+  const ids = [
+    ...new Set(
+      values.testOwnerIds
+        .split(/[\s,;]+/)
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ];
+  const wrong = ids.find((id) => !/^[0-9]{5,32}$/.test(id));
+  if (wrong) {
+    toast(`"${wrong}" is not a Discord user id (the long number from Copy User ID).`, 'bad');
+    return;
+  }
+  await api.patch(`/v1/admin/discord-bot/${guild.guildId}`, {
+    welcomeDmEnabled: values.welcomeDmEnabled,
+    testOwnerIds: ids,
+    reason: values.reason,
+  });
+  toast('Discord bot settings saved.');
+  await loadDiscordBot();
+}
+
 async function loadPrograms() {
   const [rain, creators, races, quests] = await Promise.all([
     api.get('/v1/social/rain').catch((error) => ({ unavailable: error.message })),
@@ -4208,7 +4285,10 @@ const LOADERS = {
   },
   jobs: loadJobs,
   moderation: loadModeration,
-  programs: loadPrograms,
+  programs: async () => {
+    await loadPrograms();
+    await loadDiscordBot();
+  },
   referrals: loadReferrals,
   audit: loadAudit,
   system: loadSystem,

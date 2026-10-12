@@ -11,6 +11,7 @@ import type { Database } from '../src/db.js';
 import {
   applicationOwnerIds,
   buildWelcomeDm,
+  parseOwnerIds,
   resolveOwners,
   sendWelcomeDm,
   testWelcomeDm,
@@ -113,11 +114,21 @@ function fakeMember(options: { bot?: boolean; sendError?: unknown } = {}) {
   return { member, events, sent };
 }
 
-function fakeDb(claimRows: number, events: string[]) {
+interface FakeSettings {
+  welcome_dm_enabled: boolean;
+  test_owner_ids: string;
+}
+const defaultSettings: FakeSettings = { welcome_dm_enabled: true, test_owner_ids: '' };
+
+function fakeDb(claimRows: number, events: string[], settings: FakeSettings = defaultSettings) {
   const statements: { sql: string; values: readonly unknown[] }[] = [];
   const db = {
     query: async (sql: string, values: readonly unknown[] = []) => {
       statements.push({ sql, values });
+      if (/FROM discord_guild_settings/.test(sql)) {
+        events.push('settings');
+        return { rows: [{ guild_id: '223456789012345678', ...settings }], rowCount: 1 };
+      }
       events.push('claim');
       return { rows: [], rowCount: claimRows };
     },
@@ -147,12 +158,23 @@ describe('sending it', () => {
     const outcome = await sendWelcomeDm(db, fakeApi(events), member, on);
     assert.equal(outcome, 'sent');
     assert.equal(sent.length, 1);
-    assert.equal(events[0], 'claim', 'the once-only mark is written before anything is sent');
+    assert.deepEqual(
+      events.slice(0, 2),
+      ['settings', 'claim'],
+      'the dashboard switch, then the mark',
+    );
+    assert.ok(
+      events.indexOf('claim') < events.indexOf('send'),
+      'the mark is written before sending',
+    );
     assert.equal(events.at(-1), 'send');
-    assert.match(statements[0]!.sql, /ON CONFLICT \(guild_id, member_id\)/);
-    assert.match(statements[0]!.sql, /WHERE discord_invited_members\.welcomed_at IS NULL/);
-    assert.match(statements[0]!.sql, /RETURNING member_id/);
-    assert.deepEqual(statements[0]!.values, ['223456789012345678', '323456789012345678']);
+    const claim = statements.find((statement) =>
+      /INSERT INTO discord_invited_members/.test(statement.sql),
+    )!;
+    assert.match(claim.sql, /ON CONFLICT \(guild_id, member_id\)/);
+    assert.match(claim.sql, /WHERE discord_invited_members\.welcomed_at IS NULL/);
+    assert.match(claim.sql, /RETURNING member_id/);
+    assert.deepEqual(claim.values, ['223456789012345678', '323456789012345678']);
   });
 
   it('sends nothing to a member who has had it (a rejoin) or lost the race to another join', async () => {
@@ -160,7 +182,7 @@ describe('sending it', () => {
     const { db } = fakeDb(0, events);
     assert.equal(await sendWelcomeDm(db, fakeApi(events), member, on), 'skipped');
     assert.equal(sent.length, 0);
-    assert.deepEqual(events, ['claim'], 'and does not even look anything up');
+    assert.deepEqual(events, ['settings', 'claim'], 'and does not even look anything up');
   });
 
   it('sends nothing to a bot, or when it is switched off, and does not touch the database', async () => {
@@ -173,6 +195,14 @@ describe('sending it', () => {
       assert.equal(await sendWelcomeDm(db, fakeApi(events), member, options), 'skipped');
       assert.deepEqual(events, []);
     }
+  });
+
+  it('sends nothing, and writes no mark, while the dashboard switch is off', async () => {
+    const { member, events, sent } = fakeMember();
+    const { db } = fakeDb(1, events, { ...defaultSettings, welcome_dm_enabled: false });
+    assert.equal(await sendWelcomeDm(db, fakeApi(events), member, on), 'skipped');
+    assert.equal(sent.length, 0);
+    assert.deepEqual(events, ['settings'], 'the switch is read, and nothing is claimed');
   });
 
   it('treats closed DMs as the ordinary case, and still raises anything else', async () => {
@@ -230,6 +260,18 @@ describe('who the owners are', () => {
   });
 });
 
+describe('the dashboard list', () => {
+  it('is read as whole ids, in order, once each', () => {
+    assert.deepEqual(parseOwnerIds('1514304386589790398,333333333333333333,1514304386589790398'), [
+      '1514304386589790398',
+      '333333333333333333',
+    ]);
+    assert.deepEqual(parseOwnerIds(' 1514304386589790398 , nope,, 7 '), ['1514304386589790398']);
+    assert.deepEqual(parseOwnerIds(''), []);
+    assert.deepEqual(parseOwnerIds(null), []);
+  });
+});
+
 describe('/test', () => {
   const SERVER_OWNER = '111111111111111111';
   const APP_OWNER = '222222222222222222';
@@ -242,6 +284,7 @@ describe('/test', () => {
     closed?: string[];
     broken?: string;
     extra?: string[];
+    dashboard?: string;
   }) {
     const sent: { to: string; payload: { content?: string; embeds: unknown[] } }[] = [];
     const replies: {
@@ -270,7 +313,11 @@ describe('/test', () => {
       editReply: async (payload: unknown) =>
         void replies.push({ kind: 'edit', payload: payload as never }),
     } as unknown as ChatInputCommandInteraction;
-    const result = testWelcomeDm(null, interaction, { ...on, extraOwnerIds: options.extra ?? [] });
+    const { db } = fakeDb(1, [], { ...defaultSettings, test_owner_ids: options.dashboard ?? '' });
+    const result = testWelcomeDm(db, null, interaction, {
+      ...on,
+      extraOwnerIds: options.extra ?? [],
+    });
     return { result, sent, replies };
   }
   const summary = (replies: ReturnType<typeof run>['replies']) =>
@@ -309,6 +356,31 @@ describe('/test', () => {
       await result;
       assert.equal(sent.length, 3, `run by ${userId}`);
     }
+  });
+
+  it('lets the people added in the dashboard run it, and DMs them too', async () => {
+    const DASHBOARD = '1514304386589790398';
+    const { result, sent } = run({
+      userId: DASHBOARD,
+      appOwner: { id: APP_OWNER },
+      dashboard: DASHBOARD,
+    });
+    await result;
+    assert.deepEqual(
+      sent.map((entry) => entry.to),
+      [SERVER_OWNER, APP_OWNER, DASHBOARD],
+    );
+  });
+
+  it('does not let somebody run it just by being near the list', async () => {
+    const { result, sent, replies } = run({
+      userId: MEMBER,
+      appOwner: { id: APP_OWNER },
+      dashboard: '1514304386589790398',
+    });
+    await result;
+    assert.equal(sent.length, 0);
+    assert.equal(summary(replies).title, 'Owners only');
   });
 
   it('still reaches the others when one owner has closed DMs, and says who it could not', async () => {
@@ -350,6 +422,7 @@ describe('how it is wired', () => {
     assert.ok(welcomed > 0 && dm > welcomed, 'after the role and the welcome post');
     assert.match(join.slice(dm, dm + 400), /welcome DM failed/);
     assert.match(server, /case 'test':/);
+    assert.match(server, /testWelcomeDm\(db, api, interaction/);
     assert.doesNotMatch(server, /welcome-preview|previewWelcomeDm/);
     const commands = await read('../src/commands.ts');
     assert.match(

@@ -8,7 +8,7 @@ import {
   type GuildMember,
 } from 'discord.js';
 import type { PlatformApi, Promotions, RewardStatus } from '../api-client.js';
-import type { Database } from '../db.js';
+import { guildSettings, type Database } from '../db.js';
 import { bad, clip, embed, formatMoney, ok } from '../ui.js';
 
 /**
@@ -154,6 +154,8 @@ export async function sendWelcomeDm(
   options: WelcomeOptions,
 ): Promise<WelcomeOutcome> {
   if (!options.enabled || member.user.bot) return 'skipped';
+  // The dashboard's switch, read each time so turning it off takes effect on the very next join.
+  if (!(await guildSettings(db, member.guild.id)).welcome_dm_enabled) return 'skipped';
 
   const claimed = await db.query(
     `INSERT INTO discord_invited_members (guild_id, member_id, source, welcomed_at)
@@ -185,7 +187,8 @@ export async function sendWelcomeDm(
 
 /**
  * Who counts as an owner: the server's owner, the owner of the bot's application (or the owner of
- * its team), and anybody listed in COMMUNITY_OWNER_IDS. De-duplicated, in that order.
+ * its team), anybody listed in COMMUNITY_OWNER_IDS, and anybody added in the admin dashboard.
+ * De-duplicated, in that order.
  *
  * Pure, so the rule is testable without a Discord connection.
  */
@@ -196,6 +199,18 @@ export function resolveOwners(sources: {
 }): string[] {
   const all = [sources.guildOwnerId ?? '', ...sources.applicationOwnerIds, ...sources.extra];
   return [...new Set(all.filter((id) => /^[0-9]{5,32}$/.test(id)))];
+}
+
+/** The dashboard's list of ids, as the bot compares them: whole ids only, in order, once each. */
+export function parseOwnerIds(raw: string | null | undefined): string[] {
+  return [
+    ...new Set(
+      (raw ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => /^[0-9]{5,32}$/.test(id)),
+    ),
+  ];
 }
 
 /** The person (or the team's owner) behind a Discord application. */
@@ -216,6 +231,7 @@ export function applicationOwnerIds(owner: unknown): string[] {
  * own permission (Administrator) only hides the command; this check is the lock.
  */
 export async function testWelcomeDm(
+  db: Database,
   api: PlatformApi | null,
   interaction: ChatInputCommandInteraction,
   options: WelcomeOptions & { readonly extraOwnerIds: readonly string[] },
@@ -227,10 +243,12 @@ export async function testWelcomeDm(
     return;
   }
   const application = await interaction.client.application.fetch().catch(() => null);
+  const settings = await guildSettings(db, guild.id);
   const owners = resolveOwners({
     guildOwnerId: guild.ownerId,
     applicationOwnerIds: applicationOwnerIds(application?.owner),
-    extra: options.extraOwnerIds,
+    // From the environment, and from the admin dashboard (read now, so a change is live at once).
+    extra: [...options.extraOwnerIds, ...parseOwnerIds(settings.test_owner_ids)],
   });
   if (!owners.includes(interaction.user.id)) {
     await interaction.editReply({

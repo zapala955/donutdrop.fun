@@ -301,7 +301,7 @@ async function main(): Promise<void> {
         return showLink(api, interaction);
       }
       case 'test':
-        return testWelcomeDm(api, interaction, {
+        return testWelcomeDm(db, api, interaction, {
           enabled: config.welcomeDmEnabled,
           siteUrl: config.siteUrl,
           extraOwnerIds: config.ownerIds,

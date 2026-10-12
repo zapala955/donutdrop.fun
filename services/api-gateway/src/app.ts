@@ -21,6 +21,7 @@ import { registerBattleRoutes } from './routes/battles.js';
 import { registerCommunityRoutes } from './routes/community.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminOperationRoutes } from './routes/admin-operations.js';
+import { registerAdminDiscordRoutes } from './routes/admin-discord.js';
 import { registerAdminPayoutRoutes } from './routes/admin-payouts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
@@ -259,6 +260,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerAdminRoutes(app, db, config);
   await registerAdminOperationRoutes(app, db, config, runtimeSettings);
   await registerAdminPayoutRoutes(app, db, config);
+  await registerAdminDiscordRoutes(app, db, config);
   startAntiDrainMonitor(app, db, config);
   /* Registers nothing at all unless DISCORD_CONTROL_ENABLED is on — see the note in the module.
    * Sits next to the admin routes because that is what it is: a second, narrower door into the

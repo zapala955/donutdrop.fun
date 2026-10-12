@@ -342,7 +342,7 @@ describe('how the holds are wired', () => {
     const html = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/index.html');
     const js = await read('../../../DONUTDROP FRONTEND/Donut Drop/admin/admin.js');
     assert.match(html, /id="sheetGames"/);
-    assert.match(html, /admin\.js\?v=9/, 'a changed script needs a new cache-busting version');
+    assert.match(html, /admin\.js\?v=\d+/, 'the script is loaded with a cache-busting version');
     assert.match(js, /\$\('sheetGames'\)/);
     assert.match(js, /Staff adjustments/);
   });

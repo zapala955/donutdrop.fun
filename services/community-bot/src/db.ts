@@ -78,6 +78,10 @@ export interface GuildSettings {
   automod_spam: boolean;
   automod_caps: boolean;
   automod_exempt_role_id: string | null;
+  /** Set from the admin dashboard. The welcome DM goes out unless this is false. */
+  welcome_dm_enabled: boolean;
+  /** Set from the admin dashboard: comma-separated Discord ids that may run /test besides the owners. */
+  test_owner_ids: string;
 }
 
 /**
