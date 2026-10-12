@@ -72,6 +72,14 @@ const schema = z.object({
    * something a deployment can simply not switch on. */
   API_INTERNAL_URL: z.string().url().optional(),
   COMMUNITY_API_SECRET_FILE: z.string().optional(),
+  /* The welcome DM a new member gets (features/welcome-dm.ts). On by default; it only ever goes to
+   * people who have just joined the pinned server. SITE_URL is what its buttons and links point at,
+   * kept here rather than in the message because the address has changed before. */
+  WELCOME_DM_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  COMMUNITY_SITE_URL: z.string().url().default('https://donutluxe.com'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -83,6 +91,8 @@ export interface CommunityConfig {
   readonly databaseSsl: boolean;
   readonly apiInternalUrl: string | undefined;
   readonly apiSecret: string | undefined;
+  readonly welcomeDmEnabled: boolean;
+  readonly siteUrl: string;
   readonly logLevel: string;
 }
 
@@ -116,6 +126,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Commun
     apiSecret: env.COMMUNITY_API_SECRET_FILE
       ? readSecretFile(env.COMMUNITY_API_SECRET_FILE, 'COMMUNITY_API_SECRET_FILE')
       : undefined,
+    welcomeDmEnabled: env.WELCOME_DM_ENABLED,
+    siteUrl: env.COMMUNITY_SITE_URL.replace(/\/+$/, ''),
     logLevel: env.LOG_LEVEL,
   });
 }

@@ -446,6 +446,13 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
+      .setName('welcome-preview')
+      .setDescription('Send yourself the welcome message a new member gets in their DMs')
+      .setDefaultMemberPermissions(MANAGE_GUILD),
+  );
+
+  add(
+    new SlashCommandBuilder()
       .setName('tag')
       .setDescription('Claim today’s reward for wearing the server tag'),
   );

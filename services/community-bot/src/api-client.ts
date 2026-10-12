@@ -79,6 +79,12 @@ export interface RewardStatus {
   readonly tag: { claimedToday: boolean; days: number } | null;
 }
 
+/** The signup and invite figures the site advertises (GET /v1/promotions, which is public). */
+export interface Promotions {
+  readonly signupBonus: { readonly amountMinor: string } | null;
+  readonly referral: { readonly bonusMinor: string } | null;
+}
+
 export class PlatformApi {
   /** Null when the deployment did not configure the lookup, which is a supported way to run. */
   static from(config: CommunityConfig): PlatformApi | null {
@@ -119,6 +125,28 @@ export class PlatformApi {
       discordUserId,
       wearingTag,
     });
+  }
+
+  /**
+   * What the site is offering new players right now.
+   *
+   * A public read, so there is nothing to sign. Null on any failure: it feeds a welcome message,
+   * and a message without the figures is better than no message.
+   */
+  async promotions(): Promise<Promotions | null> {
+    try {
+      const response = await fetch(new URL('/v1/promotions', this.baseUrl), {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as Partial<Promotions>;
+      return {
+        signupBonus: body.signupBonus ?? null,
+        referral: body.referral ?? null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async rewardStatus(discordUserId: string): Promise<RewardStatus> {

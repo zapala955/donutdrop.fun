@@ -64,6 +64,7 @@ import {
 } from './features/invites.js';
 import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
+import { previewWelcomeDm, sendWelcomeDm } from './features/welcome-dm.js';
 import {
   avatar,
   castPollVote,
@@ -165,7 +166,16 @@ async function main(): Promise<void> {
         return { source: 'unknown' as const, code: null, inviterId: null };
       })
       .then((origin) => onMemberJoin(db, member, origin))
-      .catch((error) => log.error({ error }, 'member join failed'));
+      .catch((error) => log.error({ error }, 'member join failed'))
+      /* Last, and on its own: the role and the welcome post are done by now, and a DM that fails
+       * (almost always closed DMs) must cost nobody anything. */
+      .then(() =>
+        sendWelcomeDm(db, api, member, {
+          enabled: config.welcomeDmEnabled,
+          siteUrl: config.siteUrl,
+        }),
+      )
+      .catch((error) => log.error({ error }, 'welcome DM failed'));
   });
 
   client.on(Events.GuildMemberRemove, (member) => {
@@ -290,6 +300,11 @@ async function main(): Promise<void> {
         if (code && api) return linkWithCode(api, interaction, code);
         return showLink(api, interaction);
       }
+      case 'welcome-preview':
+        return previewWelcomeDm(api, interaction, {
+          enabled: config.welcomeDmEnabled,
+          siteUrl: config.siteUrl,
+        });
       case 'tag':
         return claimTag(api, interaction);
       case 'rewards':
