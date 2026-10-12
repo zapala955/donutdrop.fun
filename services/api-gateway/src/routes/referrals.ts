@@ -41,6 +41,23 @@ const attachSchema = z
   .strict();
 const DAY_MS = 86_400_000;
 
+/* An inviter can be swapped only while the relationship has produced nothing: no unlocked bonus, no
+ * revenue share paid or waiting, and not voided by an operator. After that the money is the old
+ * inviter's, and moving the row to a new one would hand it over. */
+function referralIsLocked(row: {
+  bonus_unlocked_at: Date | null;
+  revshare_paid_minor: string;
+  revshare_claimable_minor: string;
+  voided_at: Date | null;
+}): boolean {
+  return (
+    !!row.bonus_unlocked_at ||
+    !!row.voided_at ||
+    BigInt(row.revshare_paid_minor) > 0n ||
+    BigInt(row.revshare_claimable_minor) > 0n
+  );
+}
+
 /**
  * Words a player may not build a code out of.
  *
@@ -136,8 +153,12 @@ export async function registerReferralRoutes(
       referrer_username: string;
       wagered_minor: string;
       bonus_unlocked_at: Date | null;
+      revshare_paid_minor: string;
+      revshare_claimable_minor: string;
+      voided_at: Date | null;
     }>(
-      `SELECT u.minecraft_username AS referrer_username, r.wagered_minor, r.bonus_unlocked_at
+      `SELECT u.minecraft_username AS referrer_username, r.wagered_minor, r.bonus_unlocked_at,
+              r.revshare_paid_minor, r.revshare_claimable_minor, r.voided_at
          FROM referrals r JOIN users u ON u.id = r.referrer_id
         WHERE r.referee_id = $1`,
       [userId],
@@ -147,17 +168,23 @@ export async function registerReferralRoutes(
       discord_username: string | null;
       discord_verified_at: Date | null;
       created_at: Date;
+      referral_entry_used_at: Date | null;
     }>(
-      'SELECT discord_username, discord_verified_at, created_at FROM users WHERE id = $1',
+      `SELECT discord_username, discord_verified_at, created_at, referral_entry_used_at
+         FROM users WHERE id = $1`,
       [userId],
     );
 
-    /* Whether the page should offer a box for an invite code: no inviter yet, and still inside the
-     * grace the operator allows. `daysLeft` is rounded up so the last day does not read as zero. */
-    const lateWindowMs = config.referralLateEntryDays * DAY_MS;
+    /* What Settings may offer: the one invite-code entry. It is there when the entry has not been
+     * used, the account is inside the age the operator allows, and either there is no inviter yet
+     * ("enter") or the current one has not earned anything from this player ("change"). */
+    const entryUsed = !!self.rows[0]?.referral_entry_used_at;
+    const windowMs = config.referralLateEntryDays * DAY_MS;
     const accountAgeMs = Date.now() - (self.rows[0]?.created_at.getTime() ?? 0);
-    const lateEntryOpen =
-      lateWindowMs > 0 && !inbound.rows[0] && accountAgeMs >= 0 && accountAgeMs < lateWindowMs;
+    const inboundRow = inbound.rows[0];
+    const entryLocked = inboundRow ? referralIsLocked(inboundRow) : false;
+    const entryAvailable =
+      !entryUsed && windowMs > 0 && accountAgeMs >= 0 && accountAgeMs < windowMs && !entryLocked;
 
     const claims = await db.query<{ amount_minor: string; created_at: Date }>(
       `SELECT amount_minor, created_at
@@ -237,9 +264,11 @@ export async function registerReferralRoutes(
         discordVerified: !!self.rows[0]?.discord_verified_at,
         discordUsername: self.rows[0]?.discord_username ?? null,
         referredBy: inbound.rows[0]?.referrer_username ?? null,
-        lateEntry: {
-          open: lateEntryOpen,
-          daysLeft: lateEntryOpen ? Math.max(1, Math.ceil((lateWindowMs - accountAgeMs) / DAY_MS)) : 0,
+        codeEntry: {
+          available: entryAvailable,
+          mode: entryAvailable ? (inboundRow ? 'change' : 'enter') : null,
+          used: entryUsed,
+          locked: entryLocked,
         },
         ownWagerMinor: inbound.rows[0]?.wagered_minor ?? null,
         unlockedForReferrer: !!inbound.rows[0]?.bonus_unlocked_at,
@@ -322,19 +351,19 @@ export async function registerReferralRoutes(
     },
   );
 
-  /* ── entering a code after sign-up ──
+  /* ── the one invite-code entry for a registered player ──
    *
-   * POST /v1/referrals/attach used to be here with no limit, which let an account that had been
-   * playing for months paste a friend's code and turn into somebody's referral, and it was removed
-   * for that reason. It is back, bounded: the code is accepted only from an account that has no
-   * inviter yet AND is younger than REFERRAL_LATE_ENTRY_DAYS (30 by default; 0 closes it again and
-   * leaves sign-up as the only moment a code counts).
+   * An invite LINK only counts for somebody who is signing up (auth.ts spends the code in the
+   * transaction that creates the account). A player who already has an account may enter a code
+   * ONCE, here, from Settings. The entry sets the inviter they never had, or swaps one that has not
+   * earned anything yet; it is used up for good by `users.referral_entry_used_at`, written in the
+   * same transaction.
    *
-   * The window is a threshold, and a threshold has an edge. What keeps the edge cheap is that
-   * nothing is back-dated: the referral counts the invitee's wagers from the moment of entry, so
-   * the bonus still has to be earned by play that happens after it, exactly as at sign-up, and a
-   * loop (the code's owner was invited by you) is refused outright. Staff can void a referral in
-   * the console as before.
+   * The age limit (REFERRAL_LATE_ENTRY_DAYS, default any age, 0 closes the entry) is a threshold
+   * and a threshold has an edge. What keeps the entry cheap is everything else: it happens once,
+   * nothing is back-dated (the referral counts wagers from the moment of entry), an inviter that
+   * has already earned from the player is never swapped out from under the money, you cannot enter
+   * your own code or one from somebody you invited, and staff can void a referral as before.
    */
   app.post(
     '/v1/referrals/attach',
@@ -353,24 +382,49 @@ export async function registerReferralRoutes(
       }
 
       return db.transaction(async (client) => {
-        const account = await client.query<{ status: string; created_at: Date }>(
-          'SELECT status, created_at FROM users WHERE id = $1 FOR UPDATE',
+        const account = await client.query<{
+          status: string;
+          created_at: Date;
+          referral_entry_used_at: Date | null;
+        }>(
+          'SELECT status, created_at, referral_entry_used_at FROM users WHERE id = $1 FOR UPDATE',
           [userId],
         );
         const row = account.rows[0];
         if (!row || row.status !== 'active') {
           throw new AppError(403, 'ACCOUNT_RESTRICTED', 'This account cannot use an invite code');
         }
+        if (row.referral_entry_used_at) {
+          conflict('REFERRAL_ENTRY_USED', 'You have already used your one invite-code entry');
+        }
         if (Date.now() - row.created_at.getTime() >= windowDays * DAY_MS) {
           throw new AppError(
             403,
             'REFERRAL_WINDOW_PASSED',
-            `An invite code can be added within ${windowDays} days of creating your account`,
+            'This account is too old to enter an invite code',
           );
         }
-        const mine = await client.query('SELECT 1 FROM referrals WHERE referee_id = $1', [userId]);
-        if (mine.rows[0]) {
-          conflict('REFERRAL_ALREADY_SET', 'This account already has an inviter');
+
+        const current = await client.query<{
+          code: string;
+          bonus_unlocked_at: Date | null;
+          revshare_paid_minor: string;
+          revshare_claimable_minor: string;
+          voided_at: Date | null;
+        }>(
+          `SELECT code, bonus_unlocked_at, revshare_paid_minor, revshare_claimable_minor, voided_at
+             FROM referrals WHERE referee_id = $1 FOR UPDATE`,
+          [userId],
+        );
+        const existing = current.rows[0];
+        if (existing && referralIsLocked(existing)) {
+          conflict(
+            'REFERRAL_LOCKED',
+            'Your inviter has already earned from you, so the code can no longer be changed',
+          );
+        }
+        if (existing && existing.code === body.code) {
+          conflict('REFERRAL_SAME_CODE', 'That is already your inviter\u0027s code');
         }
 
         const owner = await client.query<{ user_id: string; name: string }>(
@@ -392,16 +446,31 @@ export async function registerReferralRoutes(
           conflict('REFERRAL_LOOP', 'That player was invited by you');
         }
 
-        const inserted = await client.query(
-          `INSERT INTO referrals (referee_id, referrer_id, code)
-           VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING
-           RETURNING referee_id`,
-          [userId, inviter.user_id, body.code],
-        );
-        if (!inserted.rows[0]) {
-          conflict('REFERRAL_ALREADY_SET', 'This account already has an inviter');
+        if (existing) {
+          /* Progress toward the old inviter's bonus does not carry over: the new one starts at zero,
+           * exactly as an entry made today would. */
+          await client.query(
+            `UPDATE referrals
+                SET referrer_id = $2, code = $3, wagered_minor = 0, updated_at = now()
+              WHERE referee_id = $1`,
+            [userId, inviter.user_id, body.code],
+          );
+        } else {
+          const inserted = await client.query(
+            `INSERT INTO referrals (referee_id, referrer_id, code)
+             VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING
+             RETURNING referee_id`,
+            [userId, inviter.user_id, body.code],
+          );
+          if (!inserted.rows[0]) {
+            conflict('REFERRAL_ALREADY_SET', 'This account already has an inviter');
+          }
         }
-        return { attached: true, code: body.code, inviter: inviter.name };
+        await client.query(
+          'UPDATE users SET referral_entry_used_at = now(), updated_at = now() WHERE id = $1',
+          [userId],
+        );
+        return { attached: true, changed: !!existing, code: body.code, inviter: inviter.name };
       });
     },
   );

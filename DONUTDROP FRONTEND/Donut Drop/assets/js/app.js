@@ -32,7 +32,7 @@ import {
   mountReferrals,
   captureReferralCode,
   pendingReferralCode,
-  attachPendingReferral,
+  settlePendingReferral,
 } from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
 import { mountRewards } from './rakeback.js';
@@ -1401,11 +1401,11 @@ captureReferralCode();
 if (pendingReferralCode() && !state.authenticated) {
   openLoginModal();
 }
-/* And for somebody already signed in, or who signs in next: an invite code still in hand is
- * entered by itself. The server decides whether this account still qualifies. */
+/* A link's code is only ever spent by a sign-up. Anybody signed in who still has one in hand was
+ * not signing up: it is dropped, and a registered player is told where their one entry is. */
 bus.addEventListener('change', (event) => {
   if ((event.detail === 'login' || event.detail === 'ready') && state.authenticated) {
-    void attachPendingReferral();
+    void settlePendingReferral();
   }
 });
 initLiveEvents();

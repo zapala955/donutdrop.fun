@@ -551,7 +551,7 @@ export const runtimeSettingDefinitions = {
   referralLateEntryDays: {
     kind: 'integer',
     group: 'limits',
-    label: 'Days after sign-up an invite code can still be entered (0 = sign-up only)',
+    label: 'Oldest account (days) that may use its one invite-code entry in Settings (0 = none)',
     min: 0n,
     max: 3650n,
   },

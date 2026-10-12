@@ -52,8 +52,8 @@ describe('starting a lava rain', () => {
   });
 });
 
-describe('invite codes after sign-up', () => {
-  it('ships with a thirty-day window an operator can change or close', () => {
+describe('invite codes for a registered player', () => {
+  it('ships open to any account age, and an operator can narrow or close it', () => {
     const config = loadConfig({
       NODE_ENV: 'test',
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
@@ -72,20 +72,40 @@ describe('invite codes after sign-up', () => {
       GAME_CURRENCY_ONLY: 'true',
       LOG_LEVEL: 'silent',
     });
-    assert.equal(config.referralLateEntryDays, 30);
+    assert.equal(config.referralLateEntryDays, 3650);
     assert.equal(runtimeSettingDefinitions.referralLateEntryDays.min, 0n);
   });
 
-  it('is offered on the referrals page and tried by itself when an invite link is open', async () => {
+  it('is entered from Settings, once, and never by an invite link for a registered player', async () => {
+    const account = await front('assets/js/account.js');
+    assert.match(account, /function inviteCodePanel\(\)/);
+    assert.match(account, /self\.codeEntry/);
+    assert.match(account, /attachReferralCode\(code\)/);
+    assert.match(account, /window\.confirm\(/, 'using the one entry is asked about first');
     const referrals = await front('assets/js/referrals.js');
-    assert.match(referrals, /export async function attachPendingReferral/);
-    assert.match(referrals, /id = 'referEnter'/);
-    assert.match(referrals, /self\.lateEntry\?\.open/);
+    // A link's code is spent by a sign-up only; for anybody signed in it is dropped and explained.
+    assert.match(referrals, /export async function settlePendingReferral/);
+    assert.doesNotMatch(referrals, /attachReferralCode/, 'the referrals page never enters a code');
+    assert.doesNotMatch(referrals, /attachPendingReferral/);
     const app = await front('assets/js/app.js');
-    assert.match(app, /attachPendingReferral\(\)/);
-    assert.match(app, /event\.detail === 'login' \|\| event\.detail === 'ready'/);
+    assert.match(app, /settlePendingReferral\(\)/);
+    assert.doesNotMatch(app, /attachPendingReferral|attachReferralCode/);
     const store = await front('assets/js/store.js');
     assert.match(store, /api\.post\('\/v1\/referrals\/attach'/);
+  });
+
+  it('is used up for good by a column written with the entry, and adds only that', async () => {
+    const referrals = await api('../src/routes/referrals.ts');
+    const attach = referrals.slice(referrals.indexOf("'/v1/referrals/attach'"));
+    assert.match(attach, /REFERRAL_ENTRY_USED/);
+    assert.match(attach, /SET referral_entry_used_at = now\(\)/);
+    // An inviter that has earned from the player is never swapped out from under the money.
+    assert.match(attach, /REFERRAL_LOCKED/);
+    assert.match(attach, /wagered_minor = 0/);
+    const sql = await api('../../../packages/db/migrations/061_referral_code_entry.sql');
+    assert.doesNotMatch(sql, /DROP |UPDATE |DELETE |ALTER COLUMN/i);
+    assert.match(sql, /ALTER TABLE users ADD COLUMN referral_entry_used_at timestamptz/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v61\(\) RETURNS boolean/);
   });
 
   it('reads a link in any case and keeps the code beyond one tab', async () => {
@@ -94,8 +114,6 @@ describe('invite codes after sign-up', () => {
     assert.match(capture, /cleanCode\(new URLSearchParams\(location\.search\)\.get\('ref'\)\)/);
     assert.match(referrals, /localStorage\.setItem\(REF_KEY/);
     assert.match(referrals, /REF_KEEP_MS/);
-    // A refusal that can never change is final; a network fault or a rate limit is tried again.
-    assert.match(referrals, /const transient = /);
   });
 });
 

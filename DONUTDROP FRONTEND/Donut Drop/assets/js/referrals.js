@@ -23,7 +23,7 @@
  * The bar is doing the real work. A referrer has one question about any given invite, "how far
  * along are they", and a progress row answers it faster than a sentence ever could.
  */
-import { state, bus, refreshReferrals, setReferralCode, attachReferralCode } from './store.js';
+import { state, bus, refreshReferrals, setReferralCode } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -102,43 +102,28 @@ export function captureReferralCode() {
   }
 }
 
-/* Whether a refusal means the code can never work for this account, so carrying it any further
- * is pointless. A network fault, a rate limit or a server error is not that: it is tried again. */
-const transient = (error) => !error?.status || error.status === 429 || error.status >= 500;
-
-let attaching = false;
-
 /**
- * Signed in with an invite code still in hand: enter it.
+ * A link's code, once somebody is signed in.
  *
- * This is what makes an invite link do its job for somebody who was already registered, or who
- * signed up without it. For a brand-new account the sign-up already spent the code, so the server
- * answers "already has an inviter" and nothing is shown. Runs on every sign-in and at boot; the
- * code is dropped as soon as the answer is final, so it is never tried twice.
+ * An invite link only counts for a brand-new account, and for one it is already spent: the sign-up
+ * took the code off the login challenge. So by the time anybody is signed in there is nothing left
+ * to do with it, and it is dropped here instead of being carried about. A player who was ALREADY
+ * registered and opened a link is told where their one entry lives, rather than being quietly
+ * credited, which is what an invite link used to do for them.
  */
-export async function attachPendingReferral() {
-  if (attaching || !pendingCode || !state.authenticated) return;
-  attaching = true;
-  const code = pendingCode;
-  try {
-    const result = await attachReferralCode(code);
-    forgetReferralCode();
-    toast({
-      kind: 'win',
-      title: 'Invite code applied',
-      body: `${result?.inviter ? `${result.inviter} is` : 'Your inviter is'} now credited for inviting you.`,
-    });
-    playSound('coin');
-  } catch (error) {
-    if (transient(error)) return;
-    forgetReferralCode();
-    const quiet = ['REFERRAL_ALREADY_SET', 'REFERRAL_OWN_CODE', 'REFERRALS_DISABLED'];
-    if (!quiet.includes(error?.code)) {
-      toast({ kind: 'lose', title: 'Invite code not applied', body: error?.message || '' });
-    }
-  } finally {
-    attaching = false;
-  }
+export async function settlePendingReferral() {
+  if (!pendingCode || !state.authenticated) return;
+  forgetReferralCode();
+  const data = await refreshReferrals(false).catch(() => null);
+  // Programme off, no answer, or a sign-up that used the code (it has an inviter now): nothing to say.
+  if (!data || data.self?.referredBy) return;
+  toast({
+    kind: 'gold',
+    title: 'Invite links are for new accounts',
+    body: data.self?.codeEntry?.available
+      ? 'You are already registered. You can enter one code in Settings.'
+      : 'You are already registered, so this code was not applied.',
+  });
 }
 
 /**
@@ -224,77 +209,21 @@ function paint() {
 }
 
 /**
- * Who invited this player, or a box to say so.
- *
- * Somebody who was given a code after they had already signed up can still enter it here, for as
- * long as the server says the window is open. Nothing is shown to a player who has an inviter or
- * whose window has closed beyond one line, so the page never offers a field that is certain to
- * be refused.
+ * Who invited this player. The code itself is entered in Settings, once.
  */
 function inviterCard(data) {
   const self = data.self ?? {};
-  if (self.referredBy) {
-    const card = el('div', 'refer__card');
-    const note = el('p', 'refer__note');
-    note.textContent = `You were invited by ${self.referredBy}.`;
-    card.appendChild(note);
-    return card;
-  }
-  if (!self.lateEntry?.open) return null;
-
+  if (!self.referredBy) return null;
   const card = el('div', 'refer__card');
-  const label = el('label', 'refer__label');
-  label.textContent = 'Got an invite code?';
-  label.htmlFor = 'referEnter';
-
-  const field = el('div', 'refer__field');
-  field.appendChild(icon('M15 7h2a5 5 0 0 1 0 10h-2', 'M9 17H7A5 5 0 0 1 7 7h2', 'M8 12h8'));
-  const input = document.createElement('input');
-  input.className = 'refer__input';
-  input.id = 'referEnter';
-  input.maxLength = 16;
-  input.autocomplete = 'off';
-  input.spellcheck = false;
-  input.placeholder = 'Enter a friend\u0027s code';
-  input.setAttribute('aria-describedby', 'referEnterNote');
-  const apply = el('button', 'refer__copy');
-  apply.type = 'button';
-  apply.textContent = 'Apply';
-  apply.disabled = true;
   const note = el('p', 'refer__note');
-  note.id = 'referEnterNote';
-  const days = self.lateEntry.daysLeft;
-  note.textContent = `One code per account, within ${days} more day${days === 1 ? '' : 's'} of creating it.`;
-
-  const sync = () => {
-    const value = cleanCode(input.value);
-    if (input.value !== value) input.value = value;
-    apply.disabled = !REF_SHAPE.test(value);
-  };
-  input.addEventListener('input', sync);
-  apply.addEventListener('click', async () => {
-    const value = cleanCode(input.value);
-    if (!REF_SHAPE.test(value)) return;
-    apply.disabled = true;
-    apply.textContent = 'Applying';
-    try {
-      const result = await attachReferralCode(value);
-      forgetReferralCode();
-      playSound('coin');
-      toast({
-        kind: 'win',
-        title: 'Invite code applied',
-        body: `${result?.inviter ?? 'Your inviter'} is now credited for inviting you.`,
-      });
-    } catch (error) {
-      apply.textContent = 'Apply';
-      note.textContent = error?.message || 'That code could not be applied.';
-      note.dataset.bad = '1';
-      sync();
-    }
-  });
-  field.append(input, apply);
-  card.append(label, field, note);
+  note.textContent = `You were invited by ${self.referredBy}.`;
+  card.appendChild(note);
+  if (self.codeEntry?.available) {
+    const link = el('a', 'refer__note');
+    link.href = '/settings';
+    link.textContent = 'Wrong code? You can change it once in Settings.';
+    card.appendChild(link);
+  }
   return card;
 }
 

@@ -14,9 +14,12 @@ import {
   refreshTransactions,
   refreshBalance,
   refreshWalletSummary,
+  refreshReferrals,
+  attachReferralCode,
   upgradeHistory,
 } from './store.js';
 import { $, el, money, pct } from './util.js';
+import { toast } from './ui.js';
 
 /* Wallet ledger kinds, in the words a player would use. The API returns the column value, which
  * is a schema identifier and not a label — rendering `upgrade_stake` at somebody is asking them
@@ -421,7 +424,10 @@ let settingsRoot = null;
 export function mountSettings(view) {
   settingsRoot = view;
   bindOnce(view, 'settings', () => paintSettings());
-  if (state.authenticated) refreshAccount(false).then(paintSettings).catch(() => undefined);
+  if (state.authenticated) {
+    refreshAccount(false).then(paintSettings).catch(() => undefined);
+    refreshReferrals(false).then(paintSettings).catch(() => undefined);
+  }
   paintSettings();
 }
 
@@ -456,6 +462,93 @@ function paintSettings() {
     ]),
   );
   root.appendChild(identity);
+
+  const invite = inviteCodePanel();
+  if (invite) root.appendChild(invite);
+}
+
+const INVITE_CODE = /^[A-Z0-9]{6,16}$/;
+
+/**
+ * The one invite-code entry a registered player has.
+ *
+ * An invite link only counts for a brand-new account. Anybody who is already registered gets a
+ * single entry, here: to set the inviter they never had, or to swap one that has not earned
+ * anything from them yet. The server owns every rule (once only, nothing earned, not your own code,
+ * no loops), so this card only reflects `codeEntry` and reports what the server says.
+ */
+function inviteCodePanel() {
+  const self = state.referrals?.self;
+  if (!self) return null;                       // programme off, or not loaded yet
+  const entry = self.codeEntry ?? {};
+  const inviter = self.referredBy;
+  const card = panel('Invite code');
+
+  if (!entry.available) {
+    const note = el('p', 'refer__note');
+    if (inviter) {
+      note.textContent = entry.used
+        ? `Invited by ${inviter}. You have already used your one code entry.`
+        : entry.locked
+          ? `Invited by ${inviter}. They have earned from your play, so this can no longer be changed.`
+          : `Invited by ${inviter}.`;
+    } else {
+      note.textContent = entry.used
+        ? 'You have already used your one code entry.'
+        : 'Invite codes can only be added by new accounts.';
+    }
+    card.appendChild(note);
+    return card;
+  }
+
+  const field = el('div', 'refer__field');
+  const input = document.createElement('input');
+  input.className = 'refer__input';
+  input.id = 'settingsInviteCode';
+  input.maxLength = 16;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = 'Enter a friend\u0027s code';
+  input.setAttribute('aria-label', 'Invite code');
+  const apply = el('button', 'refer__copy');
+  apply.type = 'button';
+  apply.textContent = 'Apply';
+  apply.disabled = true;
+  const note = el('p', 'refer__note');
+  note.textContent = entry.mode === 'change'
+    ? `Invited by ${inviter}. You can change this once, until they have earned from your play.`
+    : 'Got a code from a friend? You can enter one code, once.';
+
+  const clean = () => input.value.trim().toUpperCase();
+  input.addEventListener('input', () => {
+    const value = clean();
+    if (input.value !== value) input.value = value;
+    apply.disabled = !INVITE_CODE.test(value);
+  });
+  apply.addEventListener('click', async () => {
+    const code = clean();
+    if (!INVITE_CODE.test(code)) return;
+    // Irreversible: it uses up the one entry, so it is asked about first.
+    if (!window.confirm(`Use ${code} as your invite code? You can only do this once.`)) return;
+    apply.disabled = true;
+    apply.textContent = 'Applying';
+    try {
+      const result = await attachReferralCode(code);
+      toast({
+        kind: 'win',
+        title: result?.changed ? 'Invite code changed' : 'Invite code applied',
+        body: `${result?.inviter ?? 'Your inviter'} is now credited for inviting you.`,
+      });
+    } catch (error) {
+      apply.textContent = 'Apply';
+      note.textContent = error?.message || 'That code could not be applied.';
+      note.dataset.bad = '1';
+      apply.disabled = !INVITE_CODE.test(clean());
+    }
+  });
+  field.append(input, apply);
+  card.append(field, note);
+  return card;
 }
 
 /* openCooldown, openExclusion and the commit helper they shared stood here.
@@ -497,7 +590,7 @@ function bindOnce(view, key, paint) {
   view.dataset.bound = key;
   bus.addEventListener('change', (event) => {
     if (!view.isConnected) return;
-    if (['login', 'logout', 'ready', 'private', 'account', 'transactions', 'wallet', 'sync'].includes(event.detail)) {
+    if (['login', 'logout', 'ready', 'private', 'account', 'transactions', 'wallet', 'sync', 'referrals'].includes(event.detail)) {
       paint();
     }
   });

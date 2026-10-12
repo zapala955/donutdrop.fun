@@ -578,10 +578,11 @@ const environmentSchema = z
      * and a lobby is real money, so the game stays shut until it has been looked at again. The
      * engine is fixed; this is the second lock. BATTLE_BOTS_ENABLED separately allows the "fill
      * with bots" button, which is how a lobby gets filled without a second human. */
-    /* How long after creating an account a player may still enter somebody's invite code. The
-     * code is otherwise only taken at sign-up; this is the grace for a player who joined without
-     * the link and was then given one. 0 closes it: sign-up is the only moment a code counts. */
-    REFERRAL_LATE_ENTRY_DAYS: z.coerce.number().int().min(0).max(3650).default(30),
+    /* How old an account may be and still use its ONE invite-code entry from Settings. An invite
+     * link only counts for a brand-new account; a registered player gets a single entry, whenever
+     * they are ready to use it, so the default is "any age" (ten years). Lower it to keep the entry
+     * for recent accounts only; 0 closes it, leaving sign-up as the only moment a code counts. */
+    REFERRAL_LATE_ENTRY_DAYS: z.coerce.number().int().min(0).max(3650).default(3650),
     BATTLES_ENABLED: z
       .enum(['true', 'false'])
       .default('false')

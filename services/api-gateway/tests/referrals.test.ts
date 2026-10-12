@@ -560,8 +560,9 @@ describe('custom invite codes', () => {
     assert.match(referrals, /config\.referralLateEntryDays/);
     assert.match(referrals, /REFERRAL_WINDOW_PASSED/);
     assert.match(referrals, /REFERRAL_ENTRY_CLOSED/);
-    assert.match(referrals, /SELECT 1 FROM referrals WHERE referee_id = \$1'/);
+    assert.match(referrals, /FROM referrals WHERE referee_id = \$1 FOR UPDATE/);
     assert.match(referrals, /REFERRAL_OWN_CODE/);
+    assert.match(referrals, /referral_entry_used_at/);
     assert.match(referrals, /REFERRAL_LOOP/);
     assert.match(referrals, /ON CONFLICT \(referee_id\) DO NOTHING/);
     assert.doesNotMatch(referrals, /wagered_minor\)\s+VALUES/, 'a referral is never back-dated');
