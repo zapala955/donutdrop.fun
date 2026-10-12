@@ -59,12 +59,22 @@ const tipSchema = z
   })
   .strict();
 
-const rainSchema = z
+/* An operator's form hands over whatever was typed, so the schema takes the ordinary ways of
+ * writing the same thing instead of answering with a bare VALIDATION_ERROR: grouping marks in the
+ * pool ("50,000,000"), a window sent as text, and a blank note, which means "no note" rather than a
+ * note one character short. The amount itself still has to be digits by the time it is checked. */
+export const rainSchema = z
   .object({
-    poolMinor: z.string().regex(/^[1-9][0-9]{0,18}$/),
+    poolMinor: z.preprocess(
+      (value) => (typeof value === 'string' ? value.replace(/[,_\s$]/g, '') : value),
+      z.string().regex(/^[1-9][0-9]{0,18}$/),
+    ),
     /** Minutes the claim window stays open. Defaults to the configured value. */
-    claimMinutes: z.number().int().min(1).max(60).optional(),
-    reason: safePublicText(1, 240).optional(),
+    claimMinutes: z.coerce.number().int().min(1).max(60).optional(),
+    reason: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      safePublicText(1, 240).optional(),
+    ),
   })
   .strict();
 

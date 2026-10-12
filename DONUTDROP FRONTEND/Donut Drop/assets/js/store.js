@@ -1020,6 +1020,15 @@ export async function setReferralCode(code) {
   return result;
 }
 
+/* Enters somebody's invite code after sign-up. The server decides whether this account still
+ * qualifies, so a refusal is a normal outcome the caller words for the player. */
+export async function attachReferralCode(code) {
+  const result = await api.post('/v1/referrals/attach', { code });
+  await refreshReferrals(false);
+  emit('referrals');
+  return result;
+}
+
 export async function claimReferralRewards() {
   const result = await api.post('/v1/referrals/claim', {});
   state.balanceMinor = String(result.balanceMinor || state.balanceMinor);

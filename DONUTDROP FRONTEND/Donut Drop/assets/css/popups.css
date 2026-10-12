@@ -1,0 +1,120 @@
+/* popups.css — the pop-up dialog with one button (assets/js/popups.js).
+ *
+ * Hallmark · component: dialog offer · genre: atmospheric · theme: house (obsidian and lava gold)
+ * states: default · hover · focus · active · entering · leaving
+ *
+ * A real <dialog> opened with showModal(), so the page behind it is inert, Escape closes it and
+ * focus is trapped inside while it is up. House tokens only; the one value named below is the house
+ * gold at low alpha. On a phone it is a sheet from the bottom edge, clear of the tab bar. */
+
+:root {
+  --popup-wash: rgba(255, 170, 0, .2);
+  --z-popup:    120;     /* over the header (100) and its menus */
+}
+
+.popup {
+  position: fixed; inset: 0; z-index: var(--z-popup);
+  width: 100%; max-width: none; height: 100%; max-height: none;
+  margin: 0; padding: 16px;
+  border: 0; background: transparent; color: var(--text);
+  display: none; place-items: center;
+  overflow: hidden;
+}
+.popup[open] { display: grid; }
+.popup::backdrop {
+  background: rgba(4, 4, 6, .72);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity .22s var(--ob-ease);
+}
+.popup.is-in::backdrop { opacity: 1; }
+
+.popup__card {
+  position: relative;
+  width: min(420px, 100%);
+  display: grid; justify-items: center; gap: 6px;
+  padding: 30px 26px 22px;
+  border: 1px solid var(--ob-line-hi); border-radius: var(--r-panel);
+  background:
+    radial-gradient(90% 70% at 50% 0%, var(--popup-wash), transparent 65%),
+    linear-gradient(160deg, var(--panel2), var(--panel));
+  box-shadow: var(--el-3), var(--ob-glow);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(14px) scale(.98);
+  transition: opacity .22s var(--ob-ease), transform .22s var(--ob-ease);
+}
+.popup.is-in .popup__card { opacity: 1; transform: none; }
+
+.popup__x {
+  position: absolute; top: 4px; right: 4px;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--r-soft);
+  background: none; color: var(--faint);
+  cursor: pointer;
+  transition: color var(--ob-quick), background var(--ob-quick);
+}
+.popup__x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.popup__x:hover { color: var(--text); background: var(--panel3); }
+.popup__x:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+.popup__x:active { transform: scale(.94); }
+
+.popup__art {
+  width: 84px; height: 84px; margin-bottom: 8px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: var(--r-panel);
+  background: radial-gradient(70% 70% at 50% 55%, var(--popup-wash), transparent 75%), var(--bg2);
+}
+.popup__art img { width: 56px; height: 56px; object-fit: contain; image-rendering: pixelated; }
+
+.popup__eyebrow {
+  margin: 0;
+  font: 700 .6875rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--gold-body);
+}
+.popup__h {
+  margin: 4px 0 0;
+  font-family: var(--pixel); font-weight: 900; font-size: 1.625rem; line-height: 1.12;
+  letter-spacing: -.01em;
+  text-wrap: balance;
+}
+.popup__h b { color: var(--gold-bright); }
+.popup__p {
+  margin: 4px 0 0;
+  max-width: 34ch;
+  font-size: .9375rem; line-height: 1.45; color: var(--muted);
+  text-wrap: pretty;
+}
+
+.popup__acts { width: 100%; display: grid; gap: 4px; margin-top: 16px; }
+.popup__go { width: 100%; min-height: 48px; font-size: 1rem; }
+.popup__go:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.popup__later {
+  min-height: 44px;
+  border: 0; border-radius: var(--r-soft);
+  background: none; color: var(--faint);
+  font: 600 .8125rem/1 var(--mono); letter-spacing: .04em;
+  cursor: pointer;
+  transition: color var(--ob-quick);
+}
+.popup__later:hover { color: var(--text); }
+.popup__later:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+
+/* A phone: a sheet from the bottom edge instead of a card floating in the middle. */
+@media (max-width: 560px) {
+  .popup { padding: 0; align-items: end; }
+  .popup__card {
+    width: 100%;
+    border-radius: var(--r-panel) var(--r-panel) 0 0;
+    border-bottom: 0;
+    padding: 26px 20px calc(18px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(40px);
+  }
+  .popup__h { font-size: 1.4375rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup__card { transform: none; transition: opacity .2s linear; }
+  .popup::backdrop { transition: none; }
+}

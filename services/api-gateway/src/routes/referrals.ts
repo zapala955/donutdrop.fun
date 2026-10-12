@@ -10,6 +10,7 @@ import {
   ensureReferralCode,
   revshareMinor,
 } from '../lib/referrals.js';
+import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
 
@@ -34,6 +35,11 @@ import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
 /* The alphabet has to match the one auth.ts accepts on a login, or a player could set a code that
  * nobody is able to redeem. */
 const renameSchema = z.object({ code: z.string().regex(/^[A-Z0-9]{6,16}$/) }).strict();
+/* Typed or pasted, so it is trimmed and uppercased before it is judged: `abc123 ` is the code. */
+const attachSchema = z
+  .object({ code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{6,16}$/) })
+  .strict();
+const DAY_MS = 86_400_000;
 
 /**
  * Words a player may not build a code out of.
@@ -140,7 +146,18 @@ export async function registerReferralRoutes(
     const self = await db.query<{
       discord_username: string | null;
       discord_verified_at: Date | null;
-    }>('SELECT discord_username, discord_verified_at FROM users WHERE id = $1', [userId]);
+      created_at: Date;
+    }>(
+      'SELECT discord_username, discord_verified_at, created_at FROM users WHERE id = $1',
+      [userId],
+    );
+
+    /* Whether the page should offer a box for an invite code: no inviter yet, and still inside the
+     * grace the operator allows. `daysLeft` is rounded up so the last day does not read as zero. */
+    const lateWindowMs = config.referralLateEntryDays * DAY_MS;
+    const accountAgeMs = Date.now() - (self.rows[0]?.created_at.getTime() ?? 0);
+    const lateEntryOpen =
+      lateWindowMs > 0 && !inbound.rows[0] && accountAgeMs >= 0 && accountAgeMs < lateWindowMs;
 
     const claims = await db.query<{ amount_minor: string; created_at: Date }>(
       `SELECT amount_minor, created_at
@@ -220,6 +237,10 @@ export async function registerReferralRoutes(
         discordVerified: !!self.rows[0]?.discord_verified_at,
         discordUsername: self.rows[0]?.discord_username ?? null,
         referredBy: inbound.rows[0]?.referrer_username ?? null,
+        lateEntry: {
+          open: lateEntryOpen,
+          daysLeft: lateEntryOpen ? Math.max(1, Math.ceil((lateWindowMs - accountAgeMs) / DAY_MS)) : 0,
+        },
         ownWagerMinor: inbound.rows[0]?.wagered_minor ?? null,
         unlockedForReferrer: !!inbound.rows[0]?.bonus_unlocked_at,
       },
@@ -301,21 +322,89 @@ export async function registerReferralRoutes(
     },
   );
 
-  /* POST /v1/referrals/attach stood here.
+  /* ── entering a code after sign-up ──
    *
-   * It let any logged-in account without a referrer redeem a code, which included accounts that
-   * had been playing for months: paste a friend's code and a player the site had already acquired,
-   * and paid nothing for, became somebody's referral.
+   * POST /v1/referrals/attach used to be here with no limit, which let an account that had been
+   * playing for months paste a friend's code and turn into somebody's referral, and it was removed
+   * for that reason. It is back, bounded: the code is accepted only from an account that has no
+   * inviter yet AND is younger than REFERRAL_LATE_ENTRY_DAYS (30 by default; 0 closes it again and
+   * leaves sign-up as the only moment a code counts).
    *
-   * The rule is that only somebody who has not signed up yet can use a code, and the honest way to
-   * enforce it was not to add a freshness check here — every such rule is a threshold argument and
-   * every threshold has an edge somebody sits on. Redemption moved to the transaction that creates
-   * the account, in auth.ts, where `existing.rows[0]` answers the question exactly. The code rides
-   * there on the login challenge.
-   *
-   * So there is no endpoint here any more. Not a guarded one — none. Attaching a referrer to an
-   * account that already existed is now unexpressible through this API rather than merely refused.
+   * The window is a threshold, and a threshold has an edge. What keeps the edge cheap is that
+   * nothing is back-dated: the referral counts the invitee's wagers from the moment of entry, so
+   * the bonus still has to be earned by play that happens after it, exactly as at sign-up, and a
+   * loop (the code's owner was invited by you) is refused outright. Staff can void a referral in
+   * the console as before.
    */
+  app.post(
+    '/v1/referrals/attach',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 8, timeWindow: '1 minute' } } },
+    async (request) => {
+      requireProgramme();
+      const body = parseWith(attachSchema, request.body);
+      const userId = requireUserId(request.authUser?.id);
+      const windowDays = config.referralLateEntryDays;
+      if (windowDays <= 0) {
+        throw new AppError(
+          403,
+          'REFERRAL_ENTRY_CLOSED',
+          'An invite code can only be used while creating an account',
+        );
+      }
+
+      return db.transaction(async (client) => {
+        const account = await client.query<{ status: string; created_at: Date }>(
+          'SELECT status, created_at FROM users WHERE id = $1 FOR UPDATE',
+          [userId],
+        );
+        const row = account.rows[0];
+        if (!row || row.status !== 'active') {
+          throw new AppError(403, 'ACCOUNT_RESTRICTED', 'This account cannot use an invite code');
+        }
+        if (Date.now() - row.created_at.getTime() >= windowDays * DAY_MS) {
+          throw new AppError(
+            403,
+            'REFERRAL_WINDOW_PASSED',
+            `An invite code can be added within ${windowDays} days of creating your account`,
+          );
+        }
+        const mine = await client.query('SELECT 1 FROM referrals WHERE referee_id = $1', [userId]);
+        if (mine.rows[0]) {
+          conflict('REFERRAL_ALREADY_SET', 'This account already has an inviter');
+        }
+
+        const owner = await client.query<{ user_id: string; name: string }>(
+          `SELECT c.user_id, ${maskedName('u.minecraft_username')} AS name
+             FROM referral_codes c JOIN users u ON u.id = c.user_id
+            WHERE c.code = $1`,
+          [body.code],
+        );
+        const inviter = owner.rows[0];
+        if (!inviter) throw new AppError(404, 'REFERRAL_CODE_UNKNOWN', 'No invite code like that');
+        if (inviter.user_id === userId) {
+          throw new AppError(400, 'REFERRAL_OWN_CODE', 'That is your own invite code');
+        }
+        const loop = await client.query(
+          'SELECT 1 FROM referrals WHERE referee_id = $1 AND referrer_id = $2',
+          [inviter.user_id, userId],
+        );
+        if (loop.rows[0]) {
+          conflict('REFERRAL_LOOP', 'That player was invited by you');
+        }
+
+        const inserted = await client.query(
+          `INSERT INTO referrals (referee_id, referrer_id, code)
+           VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING
+           RETURNING referee_id`,
+          [userId, inviter.user_id, body.code],
+        );
+        if (!inserted.rows[0]) {
+          conflict('REFERRAL_ALREADY_SET', 'This account already has an inviter');
+        }
+        return { attached: true, code: body.code, inviter: inviter.name };
+      });
+    },
+  );
 
   // ── Discord verification ──────────────────────────────────────────────────
 

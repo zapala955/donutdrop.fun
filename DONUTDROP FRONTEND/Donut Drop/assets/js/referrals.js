@@ -23,7 +23,7 @@
  * The bar is doing the real work. A referrer has one question about any given invite, "how far
  * along are they", and a progress row answers it faster than a sentence ever could.
  */
-import { state, bus, refreshReferrals, setReferralCode } from './store.js';
+import { state, bus, refreshReferrals, setReferralCode, attachReferralCode } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -57,19 +57,87 @@ export function mountReferrals(node) {
  * Read from the ordinary query string (`/?ref=ABC123`). Called on boot, so a code survives the
  * login round trip that almost always follows it.
  */
+const REF_KEY = 'donutdrop:ref';
+const REF_SHAPE = /^[A-Z0-9]{6,16}$/;
+/* A code picked up from a link is kept this long in this browser, so signing up a few days after
+ * following the link still counts. Longer than a session, shorter than forever. */
+const REF_KEEP_MS = 30 * 86_400_000;
+const cleanCode = (raw) => String(raw ?? '').trim().toUpperCase();
+
+function rememberCode(code) {
+  try { sessionStorage.setItem(REF_KEY, code); } catch { /* private browsing */ }
+  try { localStorage.setItem(REF_KEY, JSON.stringify({ code, at: Date.now() })); } catch { /* blocked */ }
+}
+
+function recallCode() {
+  try {
+    const session = cleanCode(sessionStorage.getItem(REF_KEY));
+    if (REF_SHAPE.test(session)) return session;
+  } catch { /* fall through to the longer-lived copy */ }
+  try {
+    const kept = JSON.parse(localStorage.getItem(REF_KEY) || 'null');
+    if (kept && Date.now() - Number(kept.at) < REF_KEEP_MS && REF_SHAPE.test(cleanCode(kept.code))) {
+      return cleanCode(kept.code);
+    }
+  } catch { /* nothing readable */ }
+  return null;
+}
+
+/** The code is spent or can never be: stop carrying it. */
+export function forgetReferralCode() {
+  pendingCode = null;
+  try { sessionStorage.removeItem(REF_KEY); } catch { /* nothing to clear */ }
+  try { localStorage.removeItem(REF_KEY); } catch { /* nothing to clear */ }
+}
+
 export function captureReferralCode() {
-  const code = new URLSearchParams(location.search).get('ref');
-  if (code && /^[A-Z0-9]{6,16}$/.test(code)) {
-    pendingCode = code;
-    try {
-      // Survives a reload and the login redirect. Cleared the moment it is spent.
-      sessionStorage.setItem('donutdrop:ref', code);
-    } catch { /* private browsing; the in-memory copy still covers this session */ }
+  /* Any case: a link shared as `?ref=abc123` is the same invitation as `?ref=ABC123`. It used to
+   * be dropped because the alphabet check ran on the raw value. */
+  const fromLink = cleanCode(new URLSearchParams(location.search).get('ref'));
+  if (REF_SHAPE.test(fromLink)) {
+    pendingCode = fromLink;
+    rememberCode(fromLink);
   } else if (!pendingCode) {
-    try {
-      const stored = sessionStorage.getItem('donutdrop:ref');
-      if (stored && /^[A-Z0-9]{6,16}$/.test(stored)) pendingCode = stored;
-    } catch { /* nothing to recover */ }
+    pendingCode = recallCode();
+  }
+}
+
+/* Whether a refusal means the code can never work for this account, so carrying it any further
+ * is pointless. A network fault, a rate limit or a server error is not that: it is tried again. */
+const transient = (error) => !error?.status || error.status === 429 || error.status >= 500;
+
+let attaching = false;
+
+/**
+ * Signed in with an invite code still in hand: enter it.
+ *
+ * This is what makes an invite link do its job for somebody who was already registered, or who
+ * signed up without it. For a brand-new account the sign-up already spent the code, so the server
+ * answers "already has an inviter" and nothing is shown. Runs on every sign-in and at boot; the
+ * code is dropped as soon as the answer is final, so it is never tried twice.
+ */
+export async function attachPendingReferral() {
+  if (attaching || !pendingCode || !state.authenticated) return;
+  attaching = true;
+  const code = pendingCode;
+  try {
+    const result = await attachReferralCode(code);
+    forgetReferralCode();
+    toast({
+      kind: 'win',
+      title: 'Invite code applied',
+      body: `${result?.inviter ? `${result.inviter} is` : 'Your inviter is'} now credited for inviting you.`,
+    });
+    playSound('coin');
+  } catch (error) {
+    if (transient(error)) return;
+    forgetReferralCode();
+    const quiet = ['REFERRAL_ALREADY_SET', 'REFERRAL_OWN_CODE', 'REFERRALS_DISABLED'];
+    if (!quiet.includes(error?.code)) {
+      toast({ kind: 'lose', title: 'Invite code not applied', body: error?.message || '' });
+    }
+  } finally {
+    attaching = false;
   }
 }
 
@@ -147,10 +215,87 @@ function paint() {
   }
 
   const wrap = el('div', 'refer');
+  const inviter = inviterCard(data);
+  if (inviter) wrap.appendChild(inviter);
   wrap.appendChild(offerCard(data));
   wrap.appendChild(statGrid(data));
   wrap.appendChild(inviteList(data));
   root.appendChild(wrap);
+}
+
+/**
+ * Who invited this player, or a box to say so.
+ *
+ * Somebody who was given a code after they had already signed up can still enter it here, for as
+ * long as the server says the window is open. Nothing is shown to a player who has an inviter or
+ * whose window has closed beyond one line, so the page never offers a field that is certain to
+ * be refused.
+ */
+function inviterCard(data) {
+  const self = data.self ?? {};
+  if (self.referredBy) {
+    const card = el('div', 'refer__card');
+    const note = el('p', 'refer__note');
+    note.textContent = `You were invited by ${self.referredBy}.`;
+    card.appendChild(note);
+    return card;
+  }
+  if (!self.lateEntry?.open) return null;
+
+  const card = el('div', 'refer__card');
+  const label = el('label', 'refer__label');
+  label.textContent = 'Got an invite code?';
+  label.htmlFor = 'referEnter';
+
+  const field = el('div', 'refer__field');
+  field.appendChild(icon('M15 7h2a5 5 0 0 1 0 10h-2', 'M9 17H7A5 5 0 0 1 7 7h2', 'M8 12h8'));
+  const input = document.createElement('input');
+  input.className = 'refer__input';
+  input.id = 'referEnter';
+  input.maxLength = 16;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = 'Enter a friend\u0027s code';
+  input.setAttribute('aria-describedby', 'referEnterNote');
+  const apply = el('button', 'refer__copy');
+  apply.type = 'button';
+  apply.textContent = 'Apply';
+  apply.disabled = true;
+  const note = el('p', 'refer__note');
+  note.id = 'referEnterNote';
+  const days = self.lateEntry.daysLeft;
+  note.textContent = `One code per account, within ${days} more day${days === 1 ? '' : 's'} of creating it.`;
+
+  const sync = () => {
+    const value = cleanCode(input.value);
+    if (input.value !== value) input.value = value;
+    apply.disabled = !REF_SHAPE.test(value);
+  };
+  input.addEventListener('input', sync);
+  apply.addEventListener('click', async () => {
+    const value = cleanCode(input.value);
+    if (!REF_SHAPE.test(value)) return;
+    apply.disabled = true;
+    apply.textContent = 'Applying';
+    try {
+      const result = await attachReferralCode(value);
+      forgetReferralCode();
+      playSound('coin');
+      toast({
+        kind: 'win',
+        title: 'Invite code applied',
+        body: `${result?.inviter ?? 'Your inviter'} is now credited for inviting you.`,
+      });
+    } catch (error) {
+      apply.textContent = 'Apply';
+      note.textContent = error?.message || 'That code could not be applied.';
+      note.dataset.bad = '1';
+      sync();
+    }
+  });
+  field.append(input, apply);
+  card.append(label, field, note);
+  return card;
 }
 
 /** One icon from path data. SVG needs createElementNS; createElement puts it in the wrong namespace. */

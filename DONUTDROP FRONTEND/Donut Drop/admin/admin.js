@@ -3066,18 +3066,45 @@ async function startRain() {
     description:
       'This spends the operator-funded pool. The server enforces the configured maximum.',
     fields: [
-      { name: 'poolMinor', label: 'Pool amount', value: '' },
-      { name: 'claimMinutes', label: 'Claim window (minutes)', type: 'number', value: 5 },
-      { name: 'reason', label: 'Audit reason', wide: true },
+      {
+        name: 'poolMinor',
+        label: 'Pool amount (50m, 1.5b or 50000000)',
+        value: '',
+        placeholder: 'e.g. 50m',
+      },
+      {
+        name: 'claimMinutes',
+        label: 'Claim window (minutes, 1-60)',
+        type: 'number',
+        value: 5,
+        min: 1,
+        max: 60,
+      },
+      { name: 'reason', label: 'Note (optional)', wide: true, required: false },
     ],
     submitLabel: 'Start promotion',
   });
   if (!values) return;
+  /* The pool is read the way every other money field in this console is: `50m` and `50,000,000`
+   * both mean what they say. It used to go to the server as typed, and the server wants digits and
+   * nothing else, so the natural way to write an amount came back as `VALIDATION_ERROR: the
+   * request is invalid`, with the offending field named only in a detail the response withholds. */
+  const pool = parseAmount(values.poolMinor);
+  const minutes = Number(values.claimMinutes);
+  if (pool === null) {
+    toast('Enter the pool as an amount, like 50m or 50000000.', 'bad');
+    return;
+  }
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
+    toast('The claim window is a whole number of minutes from 1 to 60.', 'bad');
+    return;
+  }
   try {
     const result = await api.post('/v1/social/rain', {
-      poolMinor: values.poolMinor,
-      claimMinutes: Number(values.claimMinutes),
-      reason: values.reason,
+      poolMinor: pool.toString(),
+      claimMinutes: minutes,
+      // Left out when blank: an empty string is not "no note" to a schema that wants one character.
+      ...(values.reason ? { reason: values.reason } : {}),
     });
     toast(`Lava Rain started with a ${amountText(result.poolMinor)} pool.`);
     await loadPrograms();

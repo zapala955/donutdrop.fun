@@ -547,6 +547,15 @@ export const runtimeSettingDefinitions = {
     max: 600n,
   },
 
+  /* ── invite codes entered after sign-up ── */
+  referralLateEntryDays: {
+    kind: 'integer',
+    group: 'limits',
+    label: 'Days after sign-up an invite code can still be entered (0 = sign-up only)',
+    min: 0n,
+    max: 3650n,
+  },
+
   /* ── payouts and the anti-drain rules ──
    *
    * Every one is read when a withdrawal is requested or when the monitor runs, never captured at

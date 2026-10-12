@@ -28,7 +28,12 @@ import { mountMinesDuel } from './mines-duel.js';
 import { mountCrates } from './crates.js';
 import { mountBattles } from './battles.js';
 import { mountDuel } from './duel.js';
-import { mountReferrals, captureReferralCode, pendingReferralCode } from './referrals.js';
+import {
+  mountReferrals,
+  captureReferralCode,
+  pendingReferralCode,
+  attachPendingReferral,
+} from './referrals.js';
 import { mountVip, initVipWidget } from './vip.js';
 import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
@@ -52,6 +57,7 @@ import { playReel, warmReel } from './reel.js';
 import { initDevMenu } from './devmenu.js';
 import { initLiveEvents } from './live.js';
 import { initNudge } from './nudge.js';
+import { initPopups } from './popups.js';
 import {
   currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1395,8 +1401,16 @@ captureReferralCode();
 if (pendingReferralCode() && !state.authenticated) {
   openLoginModal();
 }
+/* And for somebody already signed in, or who signs in next: an invite code still in hand is
+ * entered by itself. The server decides whether this account still qualifies. */
+bus.addEventListener('change', (event) => {
+  if ((event.detail === 'login' || event.detail === 'ready') && state.authenticated) {
+    void attachPendingReferral();
+  }
+});
 initLiveEvents();
 initNudge({ openLogin: openLoginModal });
+initPopups({ openLogin: openLoginModal });
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;

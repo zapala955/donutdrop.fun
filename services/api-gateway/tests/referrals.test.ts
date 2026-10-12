@@ -540,9 +540,9 @@ describe('custom invite codes', () => {
     assert.equal(rename, login);
   });
 
-  it('is redeemed only by the transaction that creates the account', async () => {
-    /* The rule is "only somebody who has not signed up yet can use a code", and this is where it
-     * is enforced: `existing.rows[0]` is the ownership-locked lookup, so !existing is the only
+  it('is redeemed at sign-up, or later only through the bounded attach endpoint', async () => {
+    /* At sign-up the rule is "only somebody who has not signed up yet", enforced where it can be
+     * answered exactly: `existing.rows[0]` is the ownership-locked lookup, so !existing is the only
      * unambiguous "signing up right now" available. */
     const auth = await readFile(
       path.resolve(import.meta.dirname, '../src/routes/auth.ts'),
@@ -551,14 +551,19 @@ describe('custom invite codes', () => {
     assert.match(auth, /!existing\.rows\[0\] && config\.referralsEnabled && challenge\.referral_code/);
     assert.match(auth, /INSERT INTO referrals \(referee_id, referrer_id, code\)/);
 
-    /* And there is no second path. An attach endpoint is what let an account that had been
-     * playing for months redeem a code, and its absence is the enforcement — not a check inside
-     * it. */
+    /* Entering a code afterwards used to be impossible: an unlimited attach endpoint let an account
+     * that had been playing for months redeem one, so it was removed. It is back with limits, and
+     * every limit is pinned here: an operator window (0 closes it), no existing inviter, not your
+     * own code, no loops, and nothing back-dated. */
     const referrals = await route();
-    /* Matched on the REGISTRATION, not on the path string: the comment recording why the endpoint
-       was removed names it, and a test that fails on its own tombstone teaches people to delete
-       the explanation. */
-    assert.doesNotMatch(referrals, /app\.(post|put|get)\(\s*'\/v1\/referrals\/attach'/);
-    assert.doesNotMatch(referrals, /INSERT INTO referrals \(/);
+    assert.match(referrals, /'\/v1\/referrals\/attach'/);
+    assert.match(referrals, /config\.referralLateEntryDays/);
+    assert.match(referrals, /REFERRAL_WINDOW_PASSED/);
+    assert.match(referrals, /REFERRAL_ENTRY_CLOSED/);
+    assert.match(referrals, /SELECT 1 FROM referrals WHERE referee_id = \$1'/);
+    assert.match(referrals, /REFERRAL_OWN_CODE/);
+    assert.match(referrals, /REFERRAL_LOOP/);
+    assert.match(referrals, /ON CONFLICT \(referee_id\) DO NOTHING/);
+    assert.doesNotMatch(referrals, /wagered_minor\)\s+VALUES/, 'a referral is never back-dated');
   });
 });
