@@ -100,6 +100,8 @@
 <link rel="stylesheet" href="assets/css/nudge.css" />
 <!-- the pop-up dialog with one button (assets/js/popups.js) -->
 <link rel="stylesheet" href="assets/css/popups.css" />
+<!-- the 18+ and not-affiliated notice at the foot of every page -->
+<link rel="stylesheet" href="assets/css/sitefoot.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -913,6 +915,21 @@
          the foreground of every page and had to be dismissed before the page underneath could be
          read. It scrolls with the page now and carries its own internal scroller. -->
     <div id="tickerRoot" class="feedwrap"></div>
+
+    <!-- ─────── FOOTER NOTICE ───────
+         The last thing in the column, on every page: who this site is for, and who it is not. -->
+    <footer class="sitefoot" id="siteFoot">
+      <p class="sitefoot__age">
+        <span class="sitefoot__badge" aria-hidden="true">18+</span>
+        <span>You must be at least 18 years old to use this site.</span>
+      </p>
+      <p>
+        DonutLuxe is an independent site. It is not affiliated with, endorsed by or connected to
+        DonutSMP, Mojang or Microsoft. Minecraft is a trademark of Mojang; this is not an official
+        Minecraft product.
+        <a href="/terms">Terms</a>
+      </p>
+    </footer>
 
   </main>
 </div>

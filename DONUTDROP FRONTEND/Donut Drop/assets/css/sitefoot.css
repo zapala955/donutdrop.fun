@@ -1,0 +1,45 @@
+/* sitefoot.css — the notice at the very bottom of every page.
+ *
+ * Hallmark · component: footer notice · genre: quiet · theme: house (obsidian and lava gold)
+ *
+ * Says two things and stays out of the way: the site is for adults, and it has nothing to do with
+ * DonutSMP, Mojang or Microsoft. It is the last thing in the main column, under the live feed, so it
+ * scrolls with the page rather than sitting over a game, and it leaves room for the phone tab bar
+ * so nothing is hidden behind it. House tokens only. */
+
+.sitefoot {
+  margin: 28px 0 0;
+  padding: 18px 4px calc(var(--tabbar-reach, 0px) + 28px);
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: .75rem;
+  line-height: 1.55;
+  display: grid;
+  gap: 8px;
+}
+.sitefoot p { margin: 0; max-width: 78ch; text-wrap: pretty; }
+
+.sitefoot__age {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.sitefoot__badge {
+  flex: none;
+  display: inline-grid; place-items: center;
+  min-width: 38px; height: 24px; padding: 0 8px;
+  border: 1px solid var(--ob-line-hi); border-radius: var(--r-soft);
+  background: var(--panel2);
+  color: var(--gold-bright);
+  font: 800 .75rem/1 var(--mono); letter-spacing: .04em;
+}
+
+.sitefoot a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  transition: color var(--ob-quick);
+}
+.sitefoot a:hover { color: var(--text); }
+.sitefoot a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; border-radius: 2px; }
