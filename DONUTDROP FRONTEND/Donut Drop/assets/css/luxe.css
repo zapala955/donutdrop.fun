@@ -420,16 +420,16 @@ body.lx .lxtop .acct .menu {
   width: 240px; max-height: calc(100dvh - var(--lx-top) - 24px); overflow-y: auto;
   padding: var(--lx-s2);
   border: 0; border-radius: var(--lx-r);
-  background: var(--lx-ink);
-  box-shadow: var(--lx-shade-hi);
+  /* the site's own surface: a raised obsidian panel, lit by its shadow, not a white sheet */
+  background: var(--lx-2);
+  box-shadow: 0 0 0 1px var(--lx-4), 0 18px 40px -8px rgba(0, 0, 0, .85);
 }
 body.lx .lxtop .acct .menu::before, body.lx .lxtop .acct .menu::after { content: none; }
-/* A short window still has to scroll it: a thin, light bar that belongs on a white panel, not the
-   page's dark one (obsidian.css styles every scrollbar for the dark page). */
-body.lx .lxtop .acct .menu { scrollbar-width: thin; scrollbar-color: #c9cbd1 transparent; }
+/* A short window still has to scroll it: a thin bar in the panel's own greys. */
+body.lx .lxtop .acct .menu { scrollbar-width: thin; scrollbar-color: var(--lx-4) transparent; }
 body.lx .lxtop .acct .menu::-webkit-scrollbar { width: 8px; }
 body.lx .lxtop .acct .menu::-webkit-scrollbar-track { background: transparent; }
-body.lx .lxtop .acct .menu::-webkit-scrollbar-thumb { border: 2px solid var(--lx-ink); border-radius: 8px; background: #c9cbd1; }
+body.lx .lxtop .acct .menu::-webkit-scrollbar-thumb { border: 2px solid var(--lx-2); border-radius: 8px; background: var(--lx-4); }
 body.lx .lxtop .acct .menu::-webkit-scrollbar-button { display: none; height: 0; }
 /* The old account button was a chevron that turned over when its menu opened (app.css). This one is
    a person, and turned over it read as a different glyph entirely. */
@@ -441,18 +441,23 @@ body.lx .lxtop .acct .menu .menu__row {
   /* 36px, so all eighteen rows fit a laptop window without the panel having to scroll */
   min-height: 36px; padding: 0 var(--lx-s3);
   border-radius: var(--lx-r-s);
-  background: none; color: var(--lx-2);
+  background: none; color: var(--lx-text);
   font: 600 .875rem var(--lx-ui);
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
 }
-body.lx .lxtop .acct .menu .menu__row:hover, body.lx .lxtop .acct .menu .menu__row:focus-visible { background: #e8e9ec; outline-offset: -2px; }
-body.lx .lxtop .acct .menu .menu__ico { width: 18px; height: 18px; fill: none; stroke: var(--lx-3); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-body.lx .lxtop .acct .menu .menu__ico--brand { fill: var(--lx-3); stroke: none; }
-body.lx .lxtop .acct .menu .menu__row b { color: inherit; }
-body.lx .lxtop .acct .menu .menu__row--hi { color: var(--lx-2); text-decoration: none; }
-body.lx .lxtop .acct .menu .menu__row--hi .menu__ico { stroke: var(--lx-gold-lo); }
-body.lx .lxtop .acct .menu .menu__sep { height: 1px; margin: var(--lx-s2) var(--lx-s2); background: #dcdde1; }
-body.lx .lxtop .acct .menu .menu__label { padding: var(--lx-s1) var(--lx-s3); color: #6b7079; font: 700 .6875rem var(--lx-ui); letter-spacing: .06em; text-transform: uppercase; }
-body.lx .lxtop .acct .menu .menu__row--muted { color: #6b7079; }
+body.lx .lxtop .acct .menu .menu__row:hover, body.lx .lxtop .acct .menu .menu__row:focus-visible { background: var(--lx-3); color: var(--lx-ink); outline-offset: -2px; }
+body.lx .lxtop .acct .menu .menu__row:active { background: var(--lx-4); }
+body.lx .lxtop .acct .menu .menu__ico { width: 18px; height: 18px; fill: none; stroke: var(--lx-mute); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+body.lx .lxtop .acct .menu .menu__row:hover .menu__ico { stroke: var(--lx-ink); }
+body.lx .lxtop .acct .menu .menu__ico--brand { fill: var(--lx-mute); stroke: none; }
+body.lx .lxtop .acct .menu .menu__row:hover .menu__ico--brand { fill: var(--lx-ink); stroke: none; }
+body.lx .lxtop .acct .menu .menu__row b { color: var(--lx-gold); }
+body.lx .lxtop .acct .menu .menu__row--hi { color: var(--lx-text); text-decoration: none; }
+body.lx .lxtop .acct .menu .menu__row--hi .menu__ico,
+body.lx .lxtop .acct .menu .menu__row--hi:hover .menu__ico { stroke: var(--lx-gold); }
+body.lx .lxtop .acct .menu .menu__sep { height: 1px; margin: var(--lx-s2) var(--lx-s2); background: var(--lx-3); }
+body.lx .lxtop .acct .menu .menu__label { padding: var(--lx-s1) var(--lx-s3); color: var(--lx-faint); font: 700 .6875rem var(--lx-ui); letter-spacing: .06em; text-transform: uppercase; }
+body.lx .lxtop .acct .menu .menu__row--muted { color: var(--lx-mute); }
 
 /* ═════════ the column ═════════ */
 body.lx .main.lxmain {
@@ -481,7 +486,7 @@ body.lx .phead:not(.phead--game) h1 {
 /* ── the ⓘ hint ── */
 body.lx .ihint::after {
   border: 0; border-radius: var(--lx-r-s);
-  background: var(--lx-ink); color: var(--lx-2);
+  background: var(--lx-4); color: var(--lx-ink);
   font: 600 .8125rem/1.45 var(--lx-ui); letter-spacing: 0; text-transform: none;
   box-shadow: var(--lx-shade-hi);
 }
@@ -536,15 +541,15 @@ body.lx .toasts { top: calc(var(--lx-top) + 12px); right: 16px; }
 body[data-chat="open"] .toasts { right: calc(var(--lx-chat) + 16px); }
 body.lx .toast {
   border: 0; border-radius: var(--lx-r);
-  background: var(--lx-ink); color: var(--lx-2);
-  box-shadow: var(--lx-shade-hi);
+  background: var(--lx-2); color: var(--lx-text);
+  box-shadow: 0 0 0 1px var(--lx-4), var(--lx-shade-hi);
   font-family: var(--lx-ui);
 }
 body.lx .toast::before, body.lx .toast::after { content: none; }
-body.lx .toast b { color: var(--lx-2); font: 700 .9375rem var(--lx-ui); }
-body.lx .toast span { color: #5b606a; font: 500 .8125rem var(--lx-ui); }
-body.lx .toast--win { box-shadow: inset 4px 0 0 var(--lx-gold), var(--lx-shade-hi); }
-body.lx .toast--loss, body.lx .toast--err, body.lx .toast--error { box-shadow: inset 4px 0 0 var(--lx-loss), var(--lx-shade-hi); }
+body.lx .toast b { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); }
+body.lx .toast span { color: var(--lx-mute); font: 500 .8125rem var(--lx-ui); }
+body.lx .toast--win { box-shadow: inset 4px 0 0 var(--lx-gold), 0 0 0 1px var(--lx-4), var(--lx-shade-hi); }
+body.lx .toast--loss, body.lx .toast--err, body.lx .toast--error, body.lx .toast--lose { box-shadow: inset 4px 0 0 var(--lx-loss), 0 0 0 1px var(--lx-4), var(--lx-shade-hi); }
 
 /* ── the modal ── */
 body.lx .modal {
