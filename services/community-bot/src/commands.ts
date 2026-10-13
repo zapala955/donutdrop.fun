@@ -471,7 +471,9 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
       .setDescription('Owners only: send every member a first message about daily codes')
       .setDefaultMemberPermissions(ADMINISTRATOR)
       .addSubcommand((sub) =>
-        sub.setName('preview').setDescription('DM yourself the message members get'),
+        sub
+          .setName('preview')
+          .setDescription('DM the owners the message members get, and nobody else'),
       )
       .addSubcommand((sub) =>
         sub

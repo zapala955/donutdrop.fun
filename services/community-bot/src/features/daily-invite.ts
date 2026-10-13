@@ -292,19 +292,34 @@ export async function dailyInviteCommand(
   const message = buildDailyInviteDm({ siteUrl: options.siteUrl, maxPrizeMinor });
 
   if (sub === 'preview') {
-    try {
-      const user = await interaction.client.users.fetch(interaction.user.id);
-      await user.send({
-        content: '**Preview** — this is the message members get, once.',
-        ...message,
-      });
-      await interaction.editReply({ embeds: [ok('Preview sent', 'Check your DMs.')] });
-    } catch (error) {
-      if (codeOf(error) !== CANNOT_DM) throw error;
-      await interaction.editReply({
-        embeds: [bad('Could not DM you', 'Your DMs are closed, so there is nowhere to send it.')],
-      });
+    // The owners, and nobody else: the same people `/test` reaches. Nothing is recorded, so this can
+    // be run as often as you like and never counts as the one invitation a member gets.
+    const reached: string[] = [];
+    const closed: string[] = [];
+    for (const id of owners) {
+      try {
+        const user = await interaction.client.users.fetch(id);
+        await user.send({
+          content: '**Preview** — this is the message members get, once.',
+          ...message,
+        });
+        reached.push(id);
+      } catch (error) {
+        if (codeOf(error) !== CANNOT_DM && codeOf(error) !== UNKNOWN_USER) throw error;
+        closed.push(id);
+      }
     }
+    const mention = (ids: string[]) => ids.map((id) => `<@${id}>`).join(', ');
+    const lines = [reached.length ? `Sent to ${mention(reached)}.` : 'Nobody could be reached.'];
+    if (closed.length) lines.push(`Their DMs are closed: ${mention(closed)}.`);
+    await interaction.editReply({
+      embeds: [
+        (reached.length ? ok : bad)(
+          reached.length ? 'Preview sent' : 'Preview not sent',
+          lines.join('\n'),
+        ),
+      ],
+    });
     return;
   }
 

@@ -45,14 +45,17 @@ const discordError = (code: number, message = `discord ${code}`) =>
 
 interface Model {
   enabled: boolean;
+  /** The dashboard's list of extra owners, as stored: comma separated. */
+  testOwnerIds: string;
   /** invited: id -> outcome */
   invites: Map<string, string>;
   subscribers: Set<string>;
   statements: { sql: string; values: readonly unknown[] }[];
 }
-function model(initial: Partial<Pick<Model, 'enabled'>> = {}): Model {
+function model(initial: Partial<Pick<Model, 'enabled' | 'testOwnerIds'>> = {}): Model {
   return {
     enabled: initial.enabled ?? true,
+    testOwnerIds: initial.testOwnerIds ?? '',
     invites: new Map(),
     subscribers: new Set(),
     statements: [],
@@ -69,7 +72,7 @@ function dbFor(state: Model, onSettingsRead?: () => void): Database {
             {
               guild_id: GUILD,
               welcome_dm_enabled: true,
-              test_owner_ids: '',
+              test_owner_ids: state.testOwnerIds,
               daily_codes_enabled: state.enabled,
               daily_codes_hour: 16,
             },
@@ -549,6 +552,7 @@ describe('/daily-invite', () => {
       state?: Model;
       count?: number | null;
       fail?: Record<string, unknown>;
+      extra?: string[];
     } = {},
   ) {
     const state = options.state ?? model();
@@ -592,7 +596,7 @@ describe('/daily-invite', () => {
     } as unknown as PlatformApi;
     const result = dailyInviteCommand(dbFor(state), api, interaction, {
       siteUrl: SITE,
-      extraOwnerIds: [],
+      extraOwnerIds: options.extra ?? [],
       pacing: pacing(),
       onFinished: async (job) => finished(job),
     });
@@ -610,25 +614,56 @@ describe('/daily-invite', () => {
     }
   });
 
-  it('preview: DMs only the person who asked, and nobody is recorded', async () => {
+  it('preview: DMs the owners, once each, and nobody else, and records nobody', async () => {
     forgetInviteJobs();
-    const { result, replies, sent, state } = run('preview');
+    const ENV_OWNER = '333333333333333333';
+    const DASHBOARD_OWNER = '1514304386589790398';
+    const { result, replies, sent, state } = run('preview', {
+      extra: [ENV_OWNER, OWNER],
+      state: model({ testOwnerIds: `${DASHBOARD_OWNER},${ENV_OWNER}` }),
+      members: [{ id: MEMBER }, { id: '1' }, { id: '2' }],
+    });
     await result;
     assert.deepEqual(
       sent.map((entry) => entry.to),
-      [OWNER],
+      [OWNER, ENV_OWNER, DASHBOARD_OWNER],
+      'the server owner, the environment list, the dashboard list: once each',
     );
     assert.match(sent[0]!.payload.content ?? '', /Preview/);
     assert.match(JSON.stringify(sent[0]!.payload.embeds[0]!.toJSON()), /\$100m/);
     assert.equal(replies.at(-1)!.title, 'Preview sent');
-    assert.equal(state.invites.size, 0);
+    assert.match(replies.at(-1)!.description ?? '', new RegExp(`<@${DASHBOARD_OWNER}>`));
+    assert.equal(state.invites.size, 0, 'a preview never counts as the one invitation');
   });
 
-  it('preview: says so when their own DMs are closed', async () => {
+  it('preview: still reaches the others when one owner has closed DMs, and says who', async () => {
+    forgetInviteJobs();
+    const ENV_OWNER = '333333333333333333';
+    const { result, replies, sent } = run('preview', {
+      extra: [ENV_OWNER],
+      fail: { [OWNER]: discordError(50007) },
+    });
+    await result;
+    assert.deepEqual(
+      sent.map((entry) => entry.to),
+      [ENV_OWNER],
+    );
+    assert.equal(replies.at(-1)!.title, 'Preview sent');
+    assert.match(replies.at(-1)!.description ?? '', new RegExp(`closed: <@${OWNER}>`));
+  });
+
+  it('preview: says so, as a failure, when no owner can be reached', async () => {
     forgetInviteJobs();
     const { result, replies } = run('preview', { fail: { [OWNER]: discordError(50007) } });
     await result;
-    assert.equal(replies.at(-1)!.title, 'Could not DM you');
+    assert.equal(replies.at(-1)!.title, 'Preview not sent');
+    assert.match(replies.at(-1)!.description ?? '', /Nobody could be reached/);
+  });
+
+  it('preview: raises anything that is not a closed DM', async () => {
+    forgetInviteJobs();
+    const { result } = run('preview', { fail: { [OWNER]: discordError(500, 'boom') } });
+    await assert.rejects(() => result, /boom/);
   });
 
   it('send: refuses, and sends nothing, until daily codes are switched on in the dashboard', async () => {
