@@ -8,8 +8,9 @@ import {
   type GuildMember,
 } from 'discord.js';
 import type { PlatformApi, Promotions, RewardStatus } from '../api-client.js';
-import { guildSettings, type Database } from '../db.js';
+import { guildSettings, type Database, type GuildSettings } from '../db.js';
 import { bad, clip, embed, formatMoney, ok } from '../ui.js';
+import { dailyOnButton, dailyPitch } from './daily-codes.js';
 
 /**
  * welcome-dm.ts — the one message a new member gets in their DMs.
@@ -37,6 +38,20 @@ export interface WelcomeFacts {
   readonly siteUrl: string;
   readonly rewards: RewardStatus | null;
   readonly promotions: Promotions | null;
+  /** Present when daily codes are on: the message then offers them, with a button. */
+  readonly dailyCodes?: { readonly maxPrizeMinor: string | null } | null;
+}
+
+/**
+ * Whether the welcome message should offer daily codes: the dashboard's switch is on, and the
+ * platform has not said it is turned off on its side. The ceiling is the platform's own figure.
+ */
+export function dailyOffer(
+  settings: Pick<GuildSettings, 'daily_codes_enabled'>,
+  rewards: RewardStatus | null,
+): { readonly maxPrizeMinor: string | null } | null {
+  if (!settings.daily_codes_enabled || rewards?.dailyCodes?.enabled === false) return null;
+  return { maxPrizeMinor: rewards?.dailyCodes?.maxPrizeMinor ?? null };
 }
 
 /** A whole-dollar amount as the site writes it, or null for anything missing, zero or unreadable. */
@@ -99,6 +114,14 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
       { name: '🔗 Link your account', value: clip(link, 1000) },
       { name: '🏷️ Use the server tag', value: clip(tagLine, 1000) },
       { name: '🤝 Invite friends', value: clip(friends, 1000) },
+      ...(facts.dailyCodes
+        ? [
+            {
+              name: '🎁 Daily codes',
+              value: clip(dailyPitch(facts.dailyCodes.maxPrizeMinor), 1000),
+            },
+          ]
+        : []),
       {
         name: 'ℹ️ Handy',
         value:
@@ -109,6 +132,7 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
     .setFooter({ text: 'Automatic message — replies here are not read.' });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    ...(facts.dailyCodes ? [dailyOnButton()] : []),
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Play now').setURL(site),
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
@@ -155,7 +179,8 @@ export async function sendWelcomeDm(
 ): Promise<WelcomeOutcome> {
   if (!options.enabled || member.user.bot) return 'skipped';
   // The dashboard's switch, read each time so turning it off takes effect on the very next join.
-  if (!(await guildSettings(db, member.guild.id)).welcome_dm_enabled) return 'skipped';
+  const settings = await guildSettings(db, member.guild.id);
+  if (!settings.welcome_dm_enabled) return 'skipped';
 
   const claimed = await db.query(
     `INSERT INTO discord_invited_members (guild_id, member_id, source, welcomed_at)
@@ -168,6 +193,7 @@ export async function sendWelcomeDm(
   if (claimed.rowCount === 0) return 'skipped';
 
   const { rewards, promotions } = await lookups(api, member.id);
+  const dailyCodes = dailyOffer(settings, rewards);
   try {
     await member.send(
       buildWelcomeDm({
@@ -176,13 +202,38 @@ export async function sendWelcomeDm(
         siteUrl: options.siteUrl,
         rewards,
         promotions,
+        dailyCodes,
       }),
     );
+    if (dailyCodes) await markInvited(db, member.guild.id, member.id, 'sent');
     return 'sent';
   } catch (error) {
-    if (dmClosed(error)) return 'closed';
+    if (dmClosed(error)) {
+      if (dailyCodes) await markInvited(db, member.guild.id, member.id, 'closed');
+      return 'closed';
+    }
     throw error;
   }
+}
+
+/**
+ * Notes that a member has been offered daily codes (the welcome DM did it), so a later
+ * `/daily-invite send` skips them. Best effort: a failure here must never turn a delivered welcome
+ * into an error.
+ */
+async function markInvited(
+  db: Database,
+  guildId: string,
+  memberId: string,
+  outcome: 'sent' | 'closed',
+): Promise<void> {
+  await db
+    .query(
+      `INSERT INTO discord_daily_invites (guild_id, discord_user_id, outcome) VALUES ($1, $2, $3)
+       ON CONFLICT (guild_id, discord_user_id) DO NOTHING`,
+      [guildId, memberId, outcome],
+    )
+    .catch(() => undefined);
 }
 
 /**
@@ -230,6 +281,27 @@ export function applicationOwnerIds(owner: unknown): string[] {
  * recipients are the owners, and anybody who is not one is told so and nothing is sent. Discord's
  * own permission (Administrator) only hides the command; this check is the lock.
  */
+/**
+ * The owners as of this moment: the server's owner, the application's owner, the environment's
+ * list and the dashboard's list (read now, so a change there is live at once). Shared by every
+ * owners-only command, so "who is an owner" has exactly one answer.
+ */
+export async function currentOwners(
+  db: Database,
+  interaction: ChatInputCommandInteraction,
+  extraOwnerIds: readonly string[],
+): Promise<string[]> {
+  const guild = interaction.guild;
+  if (!guild) return [];
+  const application = await interaction.client.application.fetch().catch(() => null);
+  const settings = await guildSettings(db, guild.id);
+  return resolveOwners({
+    guildOwnerId: guild.ownerId,
+    applicationOwnerIds: applicationOwnerIds(application?.owner),
+    extra: [...extraOwnerIds, ...parseOwnerIds(settings.test_owner_ids)],
+  });
+}
+
 export async function testWelcomeDm(
   db: Database,
   api: PlatformApi | null,
@@ -242,14 +314,8 @@ export async function testWelcomeDm(
     await interaction.editReply({ embeds: [bad('Server only', 'Run this inside the server.')] });
     return;
   }
-  const application = await interaction.client.application.fetch().catch(() => null);
   const settings = await guildSettings(db, guild.id);
-  const owners = resolveOwners({
-    guildOwnerId: guild.ownerId,
-    applicationOwnerIds: applicationOwnerIds(application?.owner),
-    // From the environment, and from the admin dashboard (read now, so a change is live at once).
-    extra: [...options.extraOwnerIds, ...parseOwnerIds(settings.test_owner_ids)],
-  });
+  const owners = await currentOwners(db, interaction, options.extraOwnerIds);
   if (!owners.includes(interaction.user.id)) {
     await interaction.editReply({
       embeds: [bad('Owners only', 'Only the server owner can run this test.')],
@@ -264,6 +330,7 @@ export async function testWelcomeDm(
     siteUrl: options.siteUrl,
     rewards,
     promotions,
+    dailyCodes: dailyOffer(settings, rewards),
   });
 
   const reached: string[] = [];

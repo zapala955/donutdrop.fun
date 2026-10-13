@@ -467,6 +467,32 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
+      .setName('daily-invite')
+      .setDescription('Owners only: send every member a first message about daily codes')
+      .setDefaultMemberPermissions(ADMINISTRATOR)
+      .addSubcommand((sub) =>
+        sub.setName('preview').setDescription('DM yourself the message members get'),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('send')
+          .setDescription('Send it to every member who has not had it, slowly, in the background')
+          .addIntegerOption((option) =>
+            option
+              .setName('count')
+              .setDescription('Only this many this time (default: everybody left)')
+              .setMinValue(1)
+              .setMaxValue(20000),
+          ),
+      )
+      .addSubcommand((sub) => sub.setName('status').setDescription('How far it has got'))
+      .addSubcommand((sub) =>
+        sub.setName('stop').setDescription('Stop sending before the next message'),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
       .setName('redeem')
       .setDescription('Redeem your daily code (or just reply to the DM with it)')
       .addStringOption((option) =>

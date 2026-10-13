@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type EmbedBuilder,
@@ -71,15 +72,18 @@ export interface DailyCodeFacts {
   readonly maxPrizeMinor: string | null;
 }
 
-export function buildCodeDm(facts: DailyCodeFacts) {
-  let ceiling = 'a big prize';
+/** The ceiling as a figure, or plain words when the platform could not say. Never a guess. */
+function ceilingText(maxPrizeMinor: string | null): string {
   try {
-    if (facts.maxPrizeMinor && BigInt(facts.maxPrizeMinor) > 0n) {
-      ceiling = formatMoney(BigInt(facts.maxPrizeMinor));
-    }
+    if (maxPrizeMinor && BigInt(maxPrizeMinor) > 0n) return formatMoney(BigInt(maxPrizeMinor));
   } catch {
     /* an unreadable figure is left out, not guessed */
   }
+  return 'a big prize';
+}
+
+export function buildCodeDm(facts: DailyCodeFacts) {
+  const ceiling = ceilingText(facts.maxPrizeMinor);
   const message = embed(
     'Your daily code',
     `Redeem it for a prize from nothing up to **${ceiling}**. Reply to this message with the code, ` +
@@ -97,6 +101,65 @@ export function buildCodeDm(facts: DailyCodeFacts) {
     )
     .setFooter({ text: 'One code a day. Replies that are not a code are ignored.' });
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setLabel('Open the site')
+      .setURL(facts.siteUrl.replace(/\/+$/, '')),
+  );
+  return { embeds: [message], components: [row] };
+}
+
+// ── the invitation ─────────────────────────────────────────────────────────
+
+/** The custom id of the "Get my daily code" button on the welcome DM and the invitation. */
+export const DAILY_ON_BUTTON = 'daily:on';
+
+export const dailyOnButton = () =>
+  new ButtonBuilder()
+    .setCustomId(DAILY_ON_BUTTON)
+    .setStyle(ButtonStyle.Success)
+    .setLabel('Get my daily code');
+
+/** The one-line offer, shared by the welcome DM and the invitation so they never disagree. */
+export function dailyPitch(maxPrizeMinor: string | null): string {
+  return (
+    'A personal code in your DMs every day, worth anything from nothing up to ' +
+    `**${ceilingText(maxPrizeMinor)}**. Tap **Get my daily code** or run \`/daily on\`.`
+  );
+}
+
+export interface DailyInviteFacts {
+  readonly siteUrl: string;
+  /** The ceiling the operator has set, or null when the platform could not be asked. */
+  readonly maxPrizeMinor: string | null;
+}
+
+/** The first message a member gets about daily codes: what it is, and a button that turns it on. */
+export function buildDailyInviteDm(facts: DailyInviteFacts) {
+  const message = embed(
+    'A free code in your DMs, every day',
+    'Turn on daily codes and I will send you one personal code a day. Redeem it for a prize from ' +
+      `nothing up to **${ceilingText(facts.maxPrizeMinor)}**, playable on the site straight away.`,
+  )
+    .addFields(
+      {
+        name: 'How it works',
+        value:
+          '1. Tap **Get my daily code** below, or run `/daily on` in the server.\n' +
+          '2. Your first code arrives here at once.\n' +
+          '3. Reply to it with the code, or run `/redeem`.',
+      },
+      {
+        name: 'Good to know',
+        value:
+          'Link your Discord to your site account with `/link` before a code can pay out. A prize ' +
+          'can be withdrawn once it has been wagered. One code a day, and you can stop any time ' +
+          'with `/daily off`.',
+      },
+    )
+    .setFooter({ text: 'You only get this message once.' });
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    dailyOnButton(),
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
       .setLabel('Open the site')
@@ -373,41 +436,79 @@ export async function dailyCommand(
   }
 
   // `on`
+  await interaction.editReply({
+    embeds: [await enableDaily(db, client, api, siteUrl, guildId, userId)],
+  });
+}
+
+/**
+ * Turns daily codes on for one member and sends their first code at once. The same thing whether
+ * they typed `/daily on` or tapped the button on the welcome DM or the invitation, so the two can
+ * never drift apart. Returns the reply to show them.
+ */
+export async function enableDaily(
+  db: Database,
+  client: Client,
+  api: PlatformApi | null,
+  siteUrl: string,
+  guildId: string,
+  userId: string,
+): Promise<EmbedBuilder> {
+  const settings = await guildSettings(db, guildId);
   if (!settings.daily_codes_enabled) {
-    await interaction.editReply({
-      embeds: [
-        embed('Not yet', 'Daily codes are not switched on yet. Check back soon.', COLOR.quiet),
-      ],
-    });
-    return;
+    return embed('Not yet', 'Daily codes are not switched on yet. Check back soon.', COLOR.quiet);
   }
   const outcome = await subscribe(db, guildId, userId);
   const delivery = await deliverDailyCode(db, client, api, siteUrl, guildId, userId);
   if (delivery === 'closed' || delivery === 'unreachable') {
     // A subscription nobody can read is not kept: they would only fail three days running.
     await unsubscribe(db, guildId, userId);
+    return bad(
+      'Could not DM you',
+      'Open your DMs for this server (Server menu → Privacy Settings → Direct Messages), ' +
+        'then try again.',
+    );
+  }
+  return ok(
+    outcome === 'subscribed' ? 'Daily codes on' : 'Daily codes already on',
+    (delivery === 'sent'
+      ? 'Your first code is in your DMs now. '
+      : 'You already had today’s code. ') +
+      `A new one comes at ${String(settings.daily_codes_hour).padStart(2, '0')}:00 UTC. ` +
+      'Redeem it by replying to the DM, or with `/redeem`.',
+  );
+}
+
+/**
+ * The "Get my daily code" button. It lives in a DM, so there is no guild on the interaction: the
+ * bot's own server is used, and only somebody who is still a member of it can turn codes on.
+ */
+export async function onDailyButton(
+  db: Database,
+  client: Client,
+  api: PlatformApi | null,
+  siteUrl: string,
+  guildId: string,
+  interaction: ButtonInteraction,
+): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const member = await client.guilds.cache
+    .get(guildId)
+    ?.members.fetch(interaction.user.id)
+    .catch(() => null);
+  if (!member) {
     await interaction.editReply({
       embeds: [
         bad(
-          'Could not DM you',
-          'Open your DMs for this server (Server menu → Privacy Settings → Direct Messages), ' +
-            'then run `/daily on` again.',
+          'Join the server first',
+          'Daily codes are for members. Join the server, then tap again.',
         ),
       ],
     });
     return;
   }
   await interaction.editReply({
-    embeds: [
-      ok(
-        outcome === 'subscribed' ? 'Daily codes on' : 'Daily codes already on',
-        (delivery === 'sent'
-          ? 'Your first code is in your DMs now. '
-          : 'You already had today’s code. ') +
-          `A new one comes at ${String(settings.daily_codes_hour).padStart(2, '0')}:00 UTC. ` +
-          'Redeem it by replying to the DM, or with `/redeem`.',
-      ),
-    ],
+    embeds: [await enableDaily(db, client, api, siteUrl, guildId, interaction.user.id)],
   });
 }
 

@@ -66,11 +66,14 @@ import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import {
+  DAILY_ON_BUTTON,
   dailyCommand,
+  onDailyButton,
   onDirectMessage,
   redeemCommand,
   startDailySender,
 } from './features/daily-codes.js';
+import { dailyInviteCommand } from './features/daily-invite.js';
 import {
   avatar,
   castPollVote,
@@ -255,6 +258,12 @@ async function main(): Promise<void> {
       return;
     }
     if (interaction.isButton()) {
+      /* The "Get my daily code" button lives in a DM (the welcome message and the invitation), so
+       * it has no guild: it is answered before the guild check, against the bot's own server. */
+      if (interaction.customId === DAILY_ON_BUTTON) {
+        await onDailyButton(db, client, api, config.siteUrl, config.guildId, interaction);
+        return;
+      }
       if (wrongGuild(interaction.guildId)) return;
       await onButton(interaction);
       return;
@@ -328,6 +337,11 @@ async function main(): Promise<void> {
         });
       case 'daily':
         return dailyCommand(db, client, api, config.siteUrl, interaction);
+      case 'daily-invite':
+        return dailyInviteCommand(db, api, interaction, {
+          siteUrl: config.siteUrl,
+          extraOwnerIds: config.ownerIds,
+        });
       case 'redeem':
         return redeemCommand(api, interaction);
       case 'tag':
