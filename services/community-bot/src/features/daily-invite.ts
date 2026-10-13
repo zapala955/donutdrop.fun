@@ -286,10 +286,12 @@ export async function dailyInviteCommand(
     return;
   }
 
-  const maxPrizeMinor =
-    (await api?.rewardStatus(interaction.user.id).catch(() => null))?.dailyCodes?.maxPrizeMinor ??
-    null;
-  const message = buildDailyInviteDm({ siteUrl: options.siteUrl, maxPrizeMinor });
+  const daily = (await api?.rewardStatus(interaction.user.id).catch(() => null))?.dailyCodes;
+  const message = buildDailyInviteDm({
+    siteUrl: options.siteUrl,
+    maxPrizeMinor: daily?.maxPrizeMinor ?? null,
+    minWagerMinor: daily?.minWagerMinor ?? null,
+  });
 
   if (sub === 'preview') {
     // The owners, and nobody else: the same people `/test` reaches. Nothing is recorded, so this can

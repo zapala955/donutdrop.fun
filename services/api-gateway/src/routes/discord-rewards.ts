@@ -3,7 +3,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { z } from 'zod';
-import { redeemDailyCode, type RedeemResult } from '../lib/daily-codes.js';
+import { dailyCodeProgress, redeemDailyCode, type RedeemResult } from '../lib/daily-codes.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
@@ -38,6 +38,7 @@ export async function registerDiscordRewardRoutes(
   const dailyCodes = {
     enabled: config.dailyCodesEnabled,
     maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
+    minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
   };
 
   app.get('/v1/discord/rewards', { preHandler: softAuth }, async (request) => {
@@ -55,7 +56,24 @@ export async function registerDiscordRewardRoutes(
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
       };
     }
-    return { signedIn: true, ...(await rewardStatus(db, config, userId)), dailyCodes };
+    const linkedTo = await db.query<{ discord_user_id: string | null }>(
+      'SELECT discord_user_id FROM users WHERE id = $1',
+      [userId],
+    );
+    return {
+      signedIn: true,
+      ...(await rewardStatus(db, config, userId)),
+      // How far this player is towards the day's wagering bar, so the window can show it.
+      dailyCodes: {
+        ...dailyCodes,
+        progress: await dailyCodeProgress(
+          db,
+          config,
+          userId,
+          linkedTo.rows[0]?.discord_user_id ?? null,
+        ),
+      },
+    };
   });
 
   /* Redeeming a daily code. It happens HERE, by a signed-in player, and nowhere else: the bot only

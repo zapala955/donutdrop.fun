@@ -571,6 +571,13 @@ export const runtimeSettingDefinitions = {
     min: 1n,
     max: BIGINT_MAX,
   },
+  dailyCodeMinWagerMinor: {
+    kind: 'bigint',
+    group: 'dailycodes',
+    label: 'Wagered on the site that UTC day before a daily code can be redeemed (0 = no bar)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
 
   /* ── invite codes entered after sign-up ── */
   referralLateEntryDays: {

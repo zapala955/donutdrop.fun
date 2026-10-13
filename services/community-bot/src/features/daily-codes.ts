@@ -71,6 +71,22 @@ export interface DailyCodeFacts {
   readonly siteUrl: string;
   /** The ceiling the operator has set, or null when the platform could not be asked. */
   readonly maxPrizeMinor: string | null;
+  /** The day's wagering bar, or null/absent when there is none or it could not be read. */
+  readonly minWagerMinor?: string | null | undefined;
+}
+
+/**
+ * The day's wagering bar as a figure, or null when there is none. Nothing is said about a bar the
+ * platform did not report: a message that promises "wager $0" or a made-up number is worse than one
+ * that stays silent.
+ */
+function barText(minWagerMinor: string | null | undefined): string | null {
+  try {
+    if (minWagerMinor && BigInt(minWagerMinor) > 0n) return formatMoney(BigInt(minWagerMinor));
+  } catch {
+    /* an unreadable figure is left out, not guessed */
+  }
+  return null;
 }
 
 /** The ceiling as a figure, or plain words when the platform could not say. Never a guess. */
@@ -91,11 +107,23 @@ function ceilingText(maxPrizeMinor: string | null): string {
 export const redeemUrl = (siteUrl: string, code?: string) =>
   `${siteUrl.replace(/\/+$/, '')}/${code ? `#redeem=${code}` : ''}`;
 
-export const REDEEM_STEPS =
-  '1. Tap **Redeem on the site** below. The code is already filled in.\n' +
-  '2. Log in with your Minecraft name if you are not already.\n' +
-  '3. Press **Redeem**.\n' +
-  'No button? Open the site, open the account menu and choose **Daily code**.';
+/** How to redeem, step by step. With a bar, the first step is meeting it. */
+export function redeemSteps(minWagerMinor?: string | null): string {
+  const bar = barText(minWagerMinor);
+  const steps = [
+    ...(bar
+      ? [
+          `Wager **${bar}** on the site today. That unlocks the code; the window shows your progress.`,
+        ]
+      : []),
+    'Tap **Redeem on the site** below. The code is already filled in.',
+    'Log in with your Minecraft name if you are not already, then press **Redeem**.',
+  ];
+  return (
+    steps.map((step, index) => `${index + 1}. ${step}`).join('\n') +
+    '\nNo button? Open the site, open the account menu and choose **Daily code**.'
+  );
+}
 
 export function buildCodeDm(facts: DailyCodeFacts) {
   const ceiling = ceilingText(facts.maxPrizeMinor);
@@ -105,12 +133,17 @@ export function buildCodeDm(facts: DailyCodeFacts) {
   )
     .addFields(
       { name: 'Code', value: `\`\`\`${formatCode(facts.code)}\`\`\`` },
-      { name: 'How to redeem', value: REDEEM_STEPS },
+      { name: 'How to redeem', value: redeemSteps(facts.minWagerMinor) },
       {
         name: 'Good to know',
         value:
           'It works once and for 24 hours, and only on the site account linked to this Discord ' +
-          '(`/link`). A prize is playable at once and can be withdrawn after it has been wagered. ' +
+          '(`/link`). ' +
+          (barText(facts.minWagerMinor)
+            ? 'Wagering counts from 00:00 UTC on the day the code arrives, so play from earlier ' +
+              'today counts too. '
+            : '') +
+          'A prize is playable at once and can be withdrawn after it has been wagered. ' +
           'Stop these any time with `/daily off`.',
       },
     )
@@ -136,10 +169,13 @@ export const dailyOnButton = () =>
     .setLabel('Get my daily code');
 
 /** The one-line offer, shared by the welcome DM and the invitation so they never disagree. */
-export function dailyPitch(maxPrizeMinor: string | null): string {
+export function dailyPitch(maxPrizeMinor: string | null, minWagerMinor?: string | null): string {
+  const bar = barText(minWagerMinor);
   return (
     'A personal code in your DMs every day, worth anything from nothing up to ' +
-    `**${ceilingText(maxPrizeMinor)}**. Tap **Get my daily code** or run \`/daily on\`.`
+    `**${ceilingText(maxPrizeMinor)}**. ` +
+    (bar ? `Wager **${bar}** on the site that day to unlock it. ` : '') +
+    'Tap **Get my daily code** or run `/daily on`.'
   );
 }
 
@@ -147,6 +183,8 @@ export interface DailyInviteFacts {
   readonly siteUrl: string;
   /** The ceiling the operator has set, or null when the platform could not be asked. */
   readonly maxPrizeMinor: string | null;
+  /** The day's wagering bar, or null/absent when there is none or it could not be read. */
+  readonly minWagerMinor?: string | null | undefined;
 }
 
 /** The first message a member gets about daily codes: what it is, and a button that turns it on. */
@@ -162,7 +200,10 @@ export function buildDailyInviteDm(facts: DailyInviteFacts) {
         value:
           '1. Tap **Get my daily code** below, or run `/daily on` in the server.\n' +
           '2. Your first code arrives here at once.\n' +
-          '3. Redeem it on the site: tap **Redeem on the site** on that message.',
+          (barText(facts.minWagerMinor)
+            ? `3. Wager **${barText(facts.minWagerMinor)}** on the site that day: that unlocks it.\n` +
+              '4. Redeem it on the site: tap **Redeem on the site** on that message.'
+            : '3. Redeem it on the site: tap **Redeem on the site** on that message.'),
       },
       {
         name: 'Good to know',
@@ -273,6 +314,7 @@ export async function deliverDailyCode(
     code,
     siteUrl,
     maxPrizeMinor: status?.dailyCodes?.maxPrizeMinor ?? null,
+    minWagerMinor: status?.dailyCodes?.minWagerMinor ?? null,
   });
 
   try {

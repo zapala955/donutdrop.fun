@@ -220,6 +220,55 @@ describe('the invitation', () => {
     assert.doesNotMatch(text, /\$\d/);
     assert.match(dailyPitch(null), /a big prize/);
   });
+
+  describe('and the day’s wagering bar', () => {
+    const withBar = (minWagerMinor: string | null) =>
+      JSON.stringify(
+        buildDailyInviteDm({
+          siteUrl: SITE,
+          maxPrizeMinor: '100000000',
+          minWagerMinor,
+        }).embeds[0]!.toJSON(),
+      );
+
+    it('says to wager it, as the step between getting a code and redeeming it', () => {
+      const text = withBar('2000000');
+      assert.match(text, /3\. Wager \*\*\$2m\*\* on the site that day: that unlocks it/);
+      assert.match(text, /4\. Redeem it on the site/);
+    });
+
+    it('says nothing about a bar there is not, or that it could not read', () => {
+      for (const none of [null, '0', 'not a number']) {
+        const text = withBar(none);
+        assert.doesNotMatch(text, /Wager \*\*/, String(none));
+        assert.match(text, /3\. Redeem it on the site/, String(none));
+      }
+    });
+
+    it('is in the one-line offer too, when there is one', () => {
+      assert.match(
+        dailyPitch('100000000', '2000000'),
+        /Wager \*\*\$2m\*\* on the site that day to unlock it/,
+      );
+      assert.doesNotMatch(dailyPitch('100000000', null), /Wager/);
+      assert.doesNotMatch(dailyPitch('100000000', '0'), /Wager/);
+    });
+
+    it('is in the welcome message’s daily codes section', () => {
+      const built = buildWelcomeDm({
+        guildName: 'DonutLuxe',
+        displayName: 'Steve',
+        siteUrl: SITE,
+        rewards: null,
+        promotions: null,
+        dailyCodes: { maxPrizeMinor: '100000000', minWagerMinor: '2000000' },
+      });
+      const field = (built.embeds[0]!.toJSON().fields ?? []).find((entry) =>
+        /Daily codes/.test(entry.name),
+      );
+      assert.match(field!.value, /Wager \*\*\$2m\*\* on the site that day/);
+    });
+  });
 });
 
 describe('the welcome message and daily codes', () => {
@@ -228,7 +277,7 @@ describe('the welcome message and daily codes', () => {
     username: null,
     enabled: true,
     amounts: { joinMinor: '5000000', tagMinor: '1000000' },
-    dailyCodes: { enabled: true, maxPrizeMinor: '100000000' },
+    dailyCodes: { enabled: true, maxPrizeMinor: '100000000', minWagerMinor: '2000000' },
     minAccountAgeDays: 7,
     join: null,
     tag: null,
@@ -271,6 +320,7 @@ describe('the welcome message and daily codes', () => {
   it('offers them only when the dashboard switch is on and the platform has not said otherwise', () => {
     assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, rewards), {
       maxPrizeMinor: '100000000',
+      minWagerMinor: '2000000',
     });
     assert.equal(dailyOffer({ daily_codes_enabled: false }, rewards), null);
     assert.equal(
@@ -280,9 +330,15 @@ describe('the welcome message and daily codes', () => {
       ),
       null,
     );
-    assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, null), { maxPrizeMinor: null });
+    assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, null), {
+      maxPrizeMinor: null,
+      minWagerMinor: null,
+    });
     const { dailyCodes: _omitted, ...older } = rewards; // a gateway too old to report daily codes
-    assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, older), { maxPrizeMinor: null });
+    assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, older), {
+      maxPrizeMinor: null,
+      minWagerMinor: null,
+    });
   });
 
   describe('when sent to a new member', () => {

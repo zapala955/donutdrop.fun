@@ -248,6 +248,27 @@ export async function wageredSince(
 }
 
 /**
+ * How much a player has staked since a given moment, counted exactly the way `wageredSince` counts
+ * it (tips are not in the table; a PvP stake counts as the house wager its rake is worth).
+ *
+ * The daily code's bar: "wagered that UTC day" is "since 00:00 UTC of the day the code was sent".
+ */
+export async function wageredFrom(
+  client: DbClient,
+  config: AppConfig,
+  userId: string,
+  since: Date,
+): Promise<bigint> {
+  const result = await client.query<{ total: string }>(
+    `SELECT COALESCE(SUM(${countedWagerSql('$3')}), 0)::text AS total
+       FROM wager_events
+      WHERE user_id = $1 AND created_at >= $2::timestamptz`,
+    [userId, since.toISOString(), config.houseEdgeBps],
+  );
+  return BigInt(result.rows[0]?.total ?? '0');
+}
+
+/**
  * The reward for claiming a streak of a given length.
  *
  * Linear in the streak and capped, rather than exponential. An exponential ladder makes day 30

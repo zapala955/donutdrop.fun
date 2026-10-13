@@ -186,6 +186,7 @@ export async function registerCommunityBotRoutes(
         dailyCodes: {
           enabled: config.dailyCodesEnabled,
           maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
+          minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
         },
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
         join: status?.join ?? null,

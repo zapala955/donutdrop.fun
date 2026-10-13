@@ -55,6 +55,26 @@
 .dcode__form .popup__acts { margin-top: 6px; }
 .popup__go:disabled { opacity: .5; cursor: not-allowed; }
 
+/* How far the player is towards the day's wagering bar. */
+.dcode__meter { width: 100%; display: grid; gap: 8px; margin-top: 14px; text-align: left; }
+.dcode__meterlabel {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  font: 700 .6875rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted);
+}
+.dcode__meterlabel b { font-size: .875rem; letter-spacing: .02em; color: var(--gold-bright); }
+.dcode__track {
+  height: 10px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg2);
+}
+.dcode__fill {
+  display: block; height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-bright));
+  transition: width .4s var(--ob-ease);
+}
+
 /* The menu row is a <button> (it opens a window, it does not go anywhere), dressed as its sibling
    links. */
 button.menu__row {
@@ -67,6 +87,10 @@ button.menu__row:focus-visible { outline: 2px solid var(--gold-bright); outline-
 
 /* The Discord page's button for it. */
 .dsync__redeem { margin-top: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcode__fill { transition: none; }
+}
 
 @media (max-width: 560px) {
   .dcode__card { width: 100%; }

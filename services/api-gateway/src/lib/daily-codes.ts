@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { AppConfig } from '../config.js';
 import type { Database } from './db.js';
 import { oldEnough } from './discord-rewards.js';
+import { wageredFrom } from './cash-settlement.js';
 import { liveEvents } from './live-events.js';
 import { creditWallet } from './wallet.js';
 import { addWagerRequirement, requirementFor } from './wager-requirements.js';
@@ -19,7 +20,10 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * linked Discord it was sent to.
  *
  * A code is personal (only the Discord account it was sent to can redeem it), single-use, and good
- * for a day. A site account can redeem one code a UTC day however many Discord accounts it has, and
+ * for a day. It opens once the player has WAGERED a day's bar on the site (2M by default, counted
+ * from 00:00 UTC of the day the code was sent): the code is the reason to come and play, not a
+ * balance to collect. Below the bar the answer is `locked`, with how far they have got, and the
+ * code is not touched. A site account can redeem one code a UTC day however many Discord accounts it has, and
  * the Discord account has to be old enough, like every other reward the server pays.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -87,6 +91,7 @@ export function normalizeDailyCode(raw: string): string | null {
 export type RedeemResult =
   | { status: 'paid'; prizeMinor: string; username: string; wagerMinor: string }
   | { status: 'nothing'; username: string }
+  | { status: 'locked'; wageredMinor: string; requiredMinor: string }
   | { status: 'refused'; reason: string; keepCode: boolean };
 
 const refused = (reason: string, keepCode = false): RedeemResult => ({
@@ -135,8 +140,10 @@ export async function redeemDailyCode(
       discord_user_id: string;
       redeemed_at: Date | null;
       expired: boolean;
+      day_start: Date;
     }>(
-      `SELECT id, discord_user_id, redeemed_at, (expires_at <= now()) AS expired
+      `SELECT id, discord_user_id, redeemed_at, (expires_at <= now()) AS expired,
+              (issued_on::timestamp AT TIME ZONE 'UTC') AS day_start
          FROM discord_daily_codes WHERE code = $1 FOR UPDATE`,
       [code],
     );
@@ -184,6 +191,18 @@ export async function redeemDailyCode(
       );
     }
 
+    /* The bar. Below it nothing is drawn and the code is not touched: it waits, still valid. */
+    if (config.dailyCodeMinWagerMinor > 0n) {
+      const wagered = await wageredFrom(client, config, user.id, row.day_start);
+      if (wagered < config.dailyCodeMinWagerMinor) {
+        return settled({
+          status: 'locked',
+          wageredMinor: wagered.toString(),
+          requiredMinor: config.dailyCodeMinWagerMinor.toString(),
+        });
+      }
+    }
+
     const spent = await client.query<{ spent: string }>(
       `SELECT COALESCE(SUM(prize_minor), 0)::text AS spent
          FROM discord_daily_codes WHERE redeemed_at >= ${UTC_DAY_START}`,
@@ -227,4 +246,39 @@ export async function redeemDailyCode(
   // After the commit, so a card that refetches its balance sees the prize.
   if (result.status === 'paid' && userId) liveEvents.publish('balance', [userId]);
   return result;
+}
+
+/**
+ * How far a player is towards the bar, for the redeem window to show before they try.
+ *
+ * Counted from 00:00 UTC of the day of their oldest code that is still good, or of today when they
+ * have none: the same starting point `redeemDailyCode` uses for that code, so the window and the
+ * answer cannot disagree.
+ */
+export async function dailyCodeProgress(
+  client: Pick<Database, 'query'>,
+  config: AppConfig,
+  userId: string,
+  discordUserId: string | null,
+): Promise<{ requiredMinor: string; wageredMinor: string; hasCode: boolean }> {
+  const required = config.dailyCodeMinWagerMinor;
+  const code = discordUserId
+    ? await client.query<{ day_start: Date }>(
+        `SELECT (issued_on::timestamp AT TIME ZONE 'UTC') AS day_start
+           FROM discord_daily_codes
+          WHERE discord_user_id = $1 AND redeemed_at IS NULL AND expires_at > now()
+          ORDER BY issued_on LIMIT 1`,
+        [discordUserId],
+      )
+    : null;
+  const now = new Date();
+  const since =
+    code?.rows[0]?.day_start ??
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const wagered = required > 0n ? await wageredFrom(client, config, userId, since) : 0n;
+  return {
+    requiredMinor: required.toString(),
+    wageredMinor: wagered.toString(),
+    hasCode: Boolean(code?.rows[0]),
+  };
 }

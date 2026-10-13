@@ -75,7 +75,12 @@ export interface RewardStatus {
   readonly enabled: boolean;
   readonly amounts: { joinMinor: string; tagMinor: string };
   /** Present when the gateway is new enough to say; the DM falls back to plain words without it. */
-  readonly dailyCodes?: { readonly enabled: boolean; readonly maxPrizeMinor: string };
+  readonly dailyCodes?: {
+    readonly enabled: boolean;
+    readonly maxPrizeMinor: string;
+    /** What must be wagered on the site that day before a code opens. Absent on an older gateway. */
+    readonly minWagerMinor?: string;
+  };
   readonly minAccountAgeDays: number;
   readonly join: { claimed: boolean } | null;
   readonly tag: { claimedToday: boolean; days: number } | null;

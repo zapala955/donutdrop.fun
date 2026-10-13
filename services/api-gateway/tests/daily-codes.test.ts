@@ -110,6 +110,21 @@ describe('the daily code settings', () => {
     assert.equal(config.dailyCodeBudgetMinor, 150_000_000n);
   });
 
+  it('ask for 2M wagered a day before a code opens, and 0 turns the bar off', () => {
+    assert.equal(loadConfig(baseEnv).dailyCodeMinWagerMinor, 2_000_000n);
+    assert.equal(
+      loadConfig({ ...baseEnv, DAILY_CODE_MIN_WAGER_MINOR: '0' }).dailyCodeMinWagerMinor,
+      0n,
+    );
+    for (const bad of ['-1', '1.5', 'two million', '']) {
+      assert.throws(
+        () => loadConfig({ ...baseEnv, DAILY_CODE_MIN_WAGER_MINOR: bad }),
+        /DAILY_CODE_MIN_WAGER_MINOR/,
+        bad,
+      );
+    }
+  });
+
   it('refuse a budget smaller than the top prize', () => {
     assert.throws(
       () =>
@@ -127,6 +142,7 @@ describe('the daily code settings', () => {
       'dailyCodesEnabled',
       'dailyCodeMaxPrizeMinor',
       'dailyCodeBudgetMinor',
+      'dailyCodeMinWagerMinor',
     ] as const) {
       assert.ok(key in runtimeSettingDefinitions, key);
       assert.equal(runtimeSettingDefinitions[key].group, 'dailycodes');
@@ -159,6 +175,22 @@ describe('how it is wired', () => {
       /const redeemSchema = z\.object\(\{ code: z\.string\(\)\.min\(1\)\.max\(40\) \}\)\.strict\(\)/,
     );
     assert.match(source, /dailyCodes,/, 'the rewards read says what a code can be worth');
+  });
+
+  it('holds a code below the day’s wagering bar, before anything is drawn or marked', async () => {
+    const source = await read('../src/lib/daily-codes.ts');
+    const gate = source.indexOf('wageredFrom(client, config, user.id, row.day_start)');
+    assert.ok(gate > 0, 'the bar is measured from the start of the code’s own day');
+    assert.ok(gate < source.indexOf('pickPrize(config.dailyCodeMaxPrizeMinor'), 'before the draw');
+    assert.ok(gate < source.indexOf('UPDATE discord_daily_codes'), 'before the code is marked');
+    assert.match(source, /status: 'locked',/);
+    const route = await read('../src/routes/discord-rewards.ts');
+    assert.match(
+      route,
+      /progress: await dailyCodeProgress\(/,
+      'the window can show how far they are',
+    );
+    assert.match(route, /minWagerMinor: config\.dailyCodeMinWagerMinor\.toString\(\)/);
   });
 
   it('gives the bot no way to redeem a code', async () => {

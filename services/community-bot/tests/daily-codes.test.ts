@@ -157,6 +157,33 @@ describe('the code message', () => {
     assert.match(text, /up to \*\*a big prize\*\*/);
     assert.doesNotMatch(text, /\$\d/);
   });
+
+  it('puts the day’s wagering bar first among the steps, when there is one', () => {
+    const text = JSON.stringify(
+      json({
+        code: 'ABCD2345',
+        siteUrl: SITE,
+        maxPrizeMinor: '100000000',
+        minWagerMinor: '2000000',
+      }).embed,
+    );
+    assert.match(text, /1\. Wager \*\*\$2m\*\* on the site today\. That unlocks the code/);
+    assert.match(text, /2\. Tap \*\*Redeem on the site\*\*/);
+    assert.match(text, /3\. Log in with your Minecraft name/);
+    assert.match(text, /Wagering counts from 00:00 UTC on the day the code arrives/);
+  });
+
+  it('keeps the two plain steps, and says nothing of a bar, when there is none', () => {
+    for (const none of [undefined, null, '0']) {
+      const text = JSON.stringify(
+        json({ code: 'ABCD2345', siteUrl: SITE, maxPrizeMinor: '100000000', minWagerMinor: none })
+          .embed,
+      );
+      assert.doesNotMatch(text, /Wager \*\*|Wagering counts/, String(none));
+      assert.match(text, /1\. Tap \*\*Redeem on the site\*\*/, String(none));
+      assert.match(text, /2\. Log in with your Minecraft name/, String(none));
+    }
+  });
 });
 
 describe('where a code is redeemed', () => {
@@ -270,6 +297,23 @@ describe('delivering a code', () => {
     } as unknown as PlatformApi;
     await deliverDailyCode(db, client, api, SITE, GUILD, USER, NOW);
     assert.match(JSON.stringify(sent[0]!.payload.embeds[0]!.toJSON()), /\$100m/);
+  });
+
+  it('puts the day’s wagering bar in the message when the site reports one, and no bar when not', async () => {
+    const withBar = fakeDb([claimOnce(), codeInsert]);
+    const first = fakeClient();
+    const api = {
+      rewardStatus: async () => ({
+        dailyCodes: { enabled: true, maxPrizeMinor: '100000000', minWagerMinor: '2000000' },
+      }),
+    } as unknown as PlatformApi;
+    await deliverDailyCode(withBar.db, first.client, api, SITE, GUILD, USER, NOW);
+    assert.match(JSON.stringify(first.sent[0]!.payload.embeds[0]!.toJSON()), /Wager \*\*\$2m\*\*/);
+
+    const without = fakeDb([claimOnce(), codeInsert]);
+    const second = fakeClient();
+    await deliverDailyCode(without.db, second.client, null, SITE, GUILD, USER, NOW);
+    assert.doesNotMatch(JSON.stringify(second.sent[0]!.payload.embeds[0]!.toJSON()), /Wager \*\*/);
   });
 });
 

@@ -39,7 +39,10 @@ export interface WelcomeFacts {
   readonly rewards: RewardStatus | null;
   readonly promotions: Promotions | null;
   /** Present when daily codes are on: the message then offers them, with a button. */
-  readonly dailyCodes?: { readonly maxPrizeMinor: string | null } | null;
+  readonly dailyCodes?: {
+    readonly maxPrizeMinor: string | null;
+    readonly minWagerMinor?: string | null | undefined;
+  } | null;
 }
 
 /**
@@ -49,9 +52,12 @@ export interface WelcomeFacts {
 export function dailyOffer(
   settings: Pick<GuildSettings, 'daily_codes_enabled'>,
   rewards: RewardStatus | null,
-): { readonly maxPrizeMinor: string | null } | null {
+): { readonly maxPrizeMinor: string | null; readonly minWagerMinor: string | null } | null {
   if (!settings.daily_codes_enabled || rewards?.dailyCodes?.enabled === false) return null;
-  return { maxPrizeMinor: rewards?.dailyCodes?.maxPrizeMinor ?? null };
+  return {
+    maxPrizeMinor: rewards?.dailyCodes?.maxPrizeMinor ?? null,
+    minWagerMinor: rewards?.dailyCodes?.minWagerMinor ?? null,
+  };
 }
 
 /** A whole-dollar amount as the site writes it, or null for anything missing, zero or unreadable. */
@@ -118,7 +124,10 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
         ? [
             {
               name: '🎁 Daily codes',
-              value: clip(dailyPitch(facts.dailyCodes.maxPrizeMinor), 1000),
+              value: clip(
+                dailyPitch(facts.dailyCodes.maxPrizeMinor, facts.dailyCodes.minWagerMinor),
+                1000,
+              ),
             },
           ]
         : []),

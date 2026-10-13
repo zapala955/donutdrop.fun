@@ -17,6 +17,9 @@
  *   signed out       → log in (the window comes back, code kept, once they have)
  *   not linked       → the Discord page, where the link code is
  *   switched off     → that, plainly
+ *   below the day's wagering bar (2M by default) → how far they are, with a bar, a button to go and
+ *                      play, and a quiet re-check every few seconds, so the field appears by itself
+ *                      the moment the bar is met
  *   ready            → the field, which formats as it is typed (ABCD-2345) and takes a paste
  *   after redeeming  → the prize and the wagering that unlocks it, nothing, or the server's own
  *                      words for why not (and whether the code is kept for another try)
@@ -31,6 +34,9 @@ import { el, money } from './util.js';
 /* A code in a link: letters and digits, the dash optional. The server judges whether it is one. */
 const FRAGMENT = /^#(?:redeem|daily)=([A-Za-z0-9-]{8,12})$/;
 const CODE_LENGTH = 8;
+/* While the bar is not met, how often the window asks again. The player is off playing a game in
+ * another tab; the field is waiting for them when they come back. */
+const RECHECK_MS = 12_000;
 
 let openLogin = () => {};
 let dialog = null;
@@ -41,6 +47,12 @@ let result = null; // what the server said about the last attempt
 let typed = ''; // the field, formatted; kept across a login and a "try again"
 let busy = false;
 let resumeAfterLogin = false;
+let recheck = 0;
+
+/* The day's wagering bar and how far the player is, from the server's own figures. */
+const bar = () => Number(status?.dailyCodes?.minWagerMinor ?? 0);
+const wagered = () => Number(status?.dailyCodes?.progress?.wageredMinor ?? 0);
+const locked = () => bar() > 0 && wagered() < bar();
 
 /** What was typed, reduced to its characters and shown with the dash: `abcd2345` → `ABCD-2345`. */
 export function formatCode(raw) {
@@ -122,6 +134,7 @@ export function openDailyCode({ code = '' } = {}) {
 
 function close() {
   if (!dialog) return;
+  window.clearTimeout(recheck);
   const leaving = dialog;
   dialog = null;
   leaving.classList.remove('is-in');
@@ -136,17 +149,26 @@ function close() {
   opener = null;
 }
 
-async function load() {
-  phase = 'loading';
-  paint();
+/** Reads who is looking and how they stand. `quiet` re-reads without blanking the window. */
+async function load({ quiet = false } = {}) {
+  window.clearTimeout(recheck);
+  if (!quiet) {
+    phase = 'loading';
+    paint();
+  }
   try {
     status = await api.get('/v1/discord/rewards');
-    phase = 'ready';
+    if (!quiet || phase === 'ready') phase = 'ready';
   } catch {
+    if (quiet) return; // a failed re-check changes nothing on screen
     status = null;
     phase = 'error';
   }
   paint();
+  // Below the bar, keep asking: the field appears by itself when they have played enough.
+  if (dialog && phase === 'ready' && status?.signedIn && status.linked && locked()) {
+    recheck = window.setTimeout(() => void load({ quiet: true }), RECHECK_MS);
+  }
 }
 
 /* ─────────── painting ─────────── */
@@ -273,7 +295,7 @@ function paint() {
     card.appendChild(actions(go, secondary('Not now', close)));
     focus = go;
   } else {
-    focus = paintForm(card);
+    focus = locked() ? paintLocked(card) : paintForm(card);
   }
 
   dialog.replaceChildren(card);
@@ -309,7 +331,9 @@ function paintForm(card) {
 
   const hint = el('p', 'dcode__hint');
   hint.id = 'dcodeHint';
-  hint.textContent = 'It works once, for 24 hours, and only on this account.';
+  hint.textContent =
+    (bar() > 0 ? `You have wagered the ${money(bar())} for today. ` : '') +
+    'It works once, for 24 hours, and only on this account.';
 
   const error = el('p', 'dcode__err');
   error.id = 'dcodeError';
@@ -345,6 +369,22 @@ async function redeem(submit, error, field) {
   submit.textContent = 'Redeeming…';
   try {
     result = await api.post('/v1/discord/daily-code/redeem', { code: typed });
+    if (result.status === 'locked') {
+      // Below the bar: show how far they are, as the window does on opening, and keep the code.
+      status.dailyCodes.minWagerMinor = result.requiredMinor;
+      status.dailyCodes.progress = {
+        ...(status.dailyCodes.progress ?? {}),
+        requiredMinor: result.requiredMinor,
+        wageredMinor: result.wageredMinor,
+        hasCode: true,
+      };
+      result = null;
+      phase = 'ready';
+      paint();
+      window.clearTimeout(recheck);
+      recheck = window.setTimeout(() => void load({ quiet: true }), RECHECK_MS);
+      return;
+    }
     phase = 'result';
     if (result.status === 'paid') void refreshBalance();
     paint();
@@ -361,6 +401,48 @@ async function redeem(submit, error, field) {
   } finally {
     busy = false;
   }
+}
+
+/** Below the day's bar: how far they are, and the way to go and play. Returns the focus target. */
+function paintLocked(card) {
+  const need = bar();
+  const have = Math.min(wagered(), need);
+  card.append(
+    art('ender_chest_shut.png'),
+    ...heading('Daily code', ['Wager ', money(need - have), ' to unlock']),
+  );
+  card.appendChild(
+    paragraph(
+      `Your code opens once you have wagered ${money(need)} today. Play any game on the site; ` +
+        'this window updates by itself.',
+    ),
+  );
+
+  const meter = el('div', 'dcode__meter');
+  meter.setAttribute('role', 'progressbar');
+  meter.setAttribute('aria-label', 'Wagered today');
+  meter.setAttribute('aria-valuemin', '0');
+  meter.setAttribute('aria-valuemax', String(need));
+  meter.setAttribute('aria-valuenow', String(have));
+  const label = el('div', 'dcode__meterlabel');
+  const name = el('span');
+  name.textContent = 'Wagered today (UTC)';
+  const figures = el('b');
+  figures.textContent = `${money(have)} / ${money(need)}`;
+  label.append(name, figures);
+  const track = el('div', 'dcode__track');
+  const fill = el('i', 'dcode__fill');
+  fill.style.width = `${Math.max(2, Math.min(100, Math.round((have / need) * 100)))}%`;
+  track.appendChild(fill);
+  meter.append(label, track);
+  card.appendChild(meter);
+
+  const play = el('a', 'btn btn--go popup__go');
+  play.href = '/'; // the router's link handler takes it from here
+  play.textContent = 'Play now';
+  play.addEventListener('click', close);
+  card.appendChild(actions(play, secondary('Check again', () => void load())));
+  return play;
 }
 
 /** The answer. Returns the element that should have focus. */

@@ -593,6 +593,10 @@ const environmentSchema = z
       .transform((value) => value === 'true'),
     DAILY_CODE_MAX_PRIZE_MINOR: positiveBigintString.default('100000000'),
     DAILY_CODE_DAILY_BUDGET_MINOR: positiveBigintString.default('150000000'),
+    /* What a player must have wagered on the site, that UTC day, before a daily code opens. It ties
+     * the code to playing, and is why a code costs the house less than its average prize looks like.
+     * 0 turns the bar off. */
+    DAILY_CODE_MIN_WAGER_MINOR: nonNegativeBigintString.default('2000000'),
     BATTLES_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -1363,6 +1367,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     dailyCodesEnabled: env.DAILY_CODES_ENABLED,
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
+    dailyCodeMinWagerMinor: BigInt(env.DAILY_CODE_MIN_WAGER_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,
     battleBotsEnabled: env.BATTLE_BOTS_ENABLED,
     cashPayoutsHold: env.CASH_PAYOUTS_HOLD,
