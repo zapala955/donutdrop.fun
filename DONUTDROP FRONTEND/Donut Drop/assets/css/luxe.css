@@ -640,6 +640,21 @@ body.lx :is(.popup__x, .nudge__x):hover { color: var(--lx-ink); background: var(
 @media (max-width: 1023px) {
   body.lx .nudge { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
+/* the daily code window (daily-code.js), which is built on the pop-up above */
+body.lx .dcode__label { color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .dcode__field {
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0); box-shadow: none;
+}
+body.lx .dcode__field:hover { border-color: var(--lx-5); }
+body.lx .dcode__field:focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx .dcode__field.is-error { border-color: var(--lx-loss); }
+body.lx .dcode__input { color: var(--lx-ink); font-family: var(--lx-ui); font-weight: 700; letter-spacing: .08em; }
+body.lx .dcode__track { border: 0; border-radius: var(--lx-r-pill); background: var(--lx-0); }
+body.lx .dcode__fill { border-radius: var(--lx-r-pill); background: var(--lx-gold); box-shadow: none; }
+body.lx .dcode__meterlabel, body.lx .dcode__hint { color: var(--lx-mute); font-family: var(--lx-ui); letter-spacing: 0; }
+body.lx .dcode__meterlabel b { color: var(--lx-ink); }
+body.lx .popup__go:disabled { background: var(--lx-4); color: var(--lx-mute); opacity: 1; }
 
 /* ═════════ the chat panel ═════════
    Down the right edge, under the top bar. Wide screens keep it beside the page (data-chat="open",

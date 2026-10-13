@@ -114,7 +114,16 @@ describe('the /test redesign preview', () => {
     assert.equal(cards.length, 10);
     for (const [, route, game] of cards) assert.equal(route, game);
     // The scripts are the live ones, plus the shell's own.
-    assert.match(html, /<script type="module" src="assets\/js\/app\.js"><\/script>/);
+    // The same app.js URL the live page asks for, cache-busting version and all.
+    const live = /<script type="module" src="(assets\/js\/app\.js[^"]*)"><\/script>/.exec(index)?.[1];
+    assert.ok(live, 'index.html no longer loads app.js');
+    assert.ok(html.includes(`<script type="module" src="${live}"></script>`), `test.html must load ${live}`);
+    // And every stylesheet the live page has, except the home sheet the preview replaces.
+    const sheets = (doc: string) => [...doc.matchAll(/<link rel="stylesheet" href="(assets\/css\/[^"]+)"/g)].map((m) => m[1]);
+    for (const sheet of sheets(index)) {
+      if (sheet === 'assets/css/home.css') continue;
+      assert.ok(sheets(html).includes(sheet), `test.html is missing ${sheet}`);
+    }
     assert.match(html, /<script type="module" src="assets\/js\/luxe\.js"><\/script>/);
     // The live page loads none of the skin.
     assert.doesNotMatch(index, /assets\/css\/luxe|assets\/js\/luxe\.js/);
