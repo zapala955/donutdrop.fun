@@ -21,6 +21,7 @@ type SettingGroup =
   | 'coinflip'
   | 'minesduel'
   | 'payouts'
+  | 'dailycodes'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -545,6 +546,30 @@ export const runtimeSettingDefinitions = {
     label: 'Mines Duel play time (seconds both players share)',
     min: 15n,
     max: 600n,
+  },
+
+  /* ── daily codes ──
+   *
+   * Read on every redemption. The ceiling scales every prize; the budget is what the day's prizes
+   * together can never pass, and a prize that would pass it is clipped to what is left. */
+  dailyCodesEnabled: {
+    kind: 'boolean',
+    group: 'dailycodes',
+    label: 'Daily codes can be redeemed',
+  },
+  dailyCodeMaxPrizeMinor: {
+    kind: 'bigint',
+    group: 'dailycodes',
+    label: 'Top daily-code prize (every prize is a fraction of this)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  dailyCodeBudgetMinor: {
+    kind: 'bigint',
+    group: 'dailycodes',
+    label: 'Most daily codes may pay out in one UTC day, all together',
+    min: 1n,
+    max: BIGINT_MAX,
   },
 
   /* ── invite codes entered after sign-up ── */

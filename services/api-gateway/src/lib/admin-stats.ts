@@ -141,6 +141,7 @@ export const PROMO_KINDS: Readonly<Record<string, string>> = Object.freeze({
   discord_join_reward: 'Discord join',
   discord_tag_reward: 'Discord tag',
   discord_invite_reward: 'Discord invites',
+  daily_code_reward: 'Daily codes',
 });
 
 export const ITEM_BUYBACK_KINDS = ['item_sale'] as const;

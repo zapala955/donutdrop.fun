@@ -53,7 +53,7 @@ export function snowflakeCreatedAt(snowflake: string): Date {
   return new Date(Number((BigInt(snowflake) >> 22n) + DISCORD_EPOCH_MS));
 }
 
-function oldEnough(config: AppConfig, discordUserId: string, now = Date.now()): boolean {
+export function oldEnough(config: AppConfig, discordUserId: string, now = Date.now()): boolean {
   const ageMs = now - snowflakeCreatedAt(discordUserId).getTime();
   return ageMs >= config.discordRewardMinAccountAgeDays * 86_400_000;
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
+import { redeemDailyCode } from '../lib/daily-codes.js';
 import { claimTagReward, linkWithCode, rewardStatus } from '../lib/discord-rewards.js';
 import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
@@ -80,6 +81,12 @@ const linkSchema = z
   .strict();
 
 const tagSchema = z.object({ discordUserId: snowflake, wearingTag: z.boolean() }).strict();
+
+/* The code is whatever was typed or pasted, so it is judged (and refused politely) by the redeem
+ * function rather than rejected here with a bare validation error. */
+const redeemSchema = z
+  .object({ discordUserId: snowflake, code: z.string().min(1).max(40) })
+  .strict();
 
 export async function registerCommunityBotRoutes(
   app: FastifyInstance,
@@ -161,6 +168,19 @@ export async function registerCommunityBotRoutes(
     },
   );
 
+  /* `/redeem`, or a code sent back in a DM: the prize behind a daily code. The bot says which
+   * Discord account typed which code; the gateway decides whether it is valid, draws the prize and
+   * pays it, within the day's budget (lib/daily-codes.ts). */
+  app.post(
+    '/internal/v1/community/daily-code/redeem',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(redeemSchema, request.body);
+      return redeemDailyCode(db, config, body);
+    },
+  );
+
   /* `/rewards`: where a member stands. Amounts and counts only; no balance, for the same reason the
    * profile read above leaves it out. */
   app.post(
@@ -182,6 +202,10 @@ export async function registerCommunityBotRoutes(
         amounts: {
           joinMinor: config.discordJoinRewardMinor.toString(),
           tagMinor: config.discordTagRewardMinor.toString(),
+        },
+        dailyCodes: {
+          enabled: config.dailyCodesEnabled,
+          maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
         },
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
         join: status?.join ?? null,

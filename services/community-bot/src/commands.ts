@@ -454,6 +454,33 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
+      .setName('daily')
+      .setDescription(
+        'A personal code in your DMs every day, for a prize from nothing up to a jackpot',
+      )
+      .addSubcommand((sub) => sub.setName('on').setDescription('Send me a daily code in my DMs'))
+      .addSubcommand((sub) => sub.setName('off').setDescription('Stop sending me daily codes'))
+      .addSubcommand((sub) =>
+        sub.setName('status').setDescription('Am I subscribed, and is today\u2019s code used?'),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
+      .setName('redeem')
+      .setDescription('Redeem your daily code (or just reply to the DM with it)')
+      .addStringOption((option) =>
+        option
+          .setName('code')
+          .setDescription('The code from your DM, like ABCD-EFGH')
+          .setRequired(true)
+          .setMinLength(8)
+          .setMaxLength(12),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
       .setName('tag')
       .setDescription('Claim today’s reward for wearing the server tag'),
   );

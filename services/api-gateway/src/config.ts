@@ -583,6 +583,16 @@ const environmentSchema = z
      * they are ready to use it, so the default is "any age" (ten years). Lower it to keep the entry
      * for recent accounts only; 0 closes it, leaving sign-up as the only moment a code counts. */
     REFERRAL_LATE_ENTRY_DAYS: z.coerce.number().int().min(0).max(3650).default(3650),
+    /* Daily codes: a personal one-use code the community bot DMs to members who opted in, redeemed
+     * for a random prize from nothing up to the ceiling (lib/daily-codes.ts). Whether the bot SENDS
+     * them is a dashboard switch (default off); this is whether the gateway will PAY them. The day's
+     * prizes together never pass the budget, which is what bounds the cost whatever the luck. */
+    DAILY_CODES_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    DAILY_CODE_MAX_PRIZE_MINOR: positiveBigintString.default('100000000'),
+    DAILY_CODE_DAILY_BUDGET_MINOR: positiveBigintString.default('150000000'),
     BATTLES_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -916,6 +926,14 @@ const environmentSchema = z
         path: ['COINFLIP_RAKE_BPS'],
         message:
           'must exceed the 200 bps VIP rakeback ceiling: a coinflip rake at or below it pays out more than the game collected',
+      });
+    }
+    if (BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR) < BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DAILY_CODE_DAILY_BUDGET_MINOR'],
+        message:
+          'must be at least DAILY_CODE_MAX_PRIZE_MINOR: a budget smaller than the top prize clips every big win',
       });
     }
     if (env.MINES_DUEL_ENABLED && env.VIP_ENABLED && env.MINES_DUEL_RAKE_BPS <= 200) {
@@ -1342,6 +1360,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     minesDuelLobbyTtlMinutes: env.MINES_DUEL_LOBBY_TTL_MINUTES,
     minesDuelPlaySeconds: env.MINES_DUEL_PLAY_SECONDS,
     referralLateEntryDays: env.REFERRAL_LATE_ENTRY_DAYS,
+    dailyCodesEnabled: env.DAILY_CODES_ENABLED,
+    dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
+    dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,
     battleBotsEnabled: env.BATTLE_BOTS_ENABLED,
     cashPayoutsHold: env.CASH_PAYOUTS_HOLD,

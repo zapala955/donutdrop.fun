@@ -92,7 +92,10 @@ export type WalletKind =
    * Each is referenced so the ledger's unique index is what makes a second payment impossible. */
   | 'discord_join_reward'
   | 'discord_tag_reward'
-  | 'discord_invite_reward';
+  | 'discord_invite_reward'
+  /* Daily codes: the prize of a code redeemed from the community bot's DM. Referenced by the code's
+   * own id, so the ledger's unique index is what makes a second payment impossible. */
+  | 'daily_code_reward';
 
 /**
  * Credits the wallet and writes the matching ledger row.

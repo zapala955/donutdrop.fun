@@ -2939,7 +2939,7 @@ async function loadDiscordBot() {
   const data = await api.get('/v1/admin/discord-bot');
   table(
     $('discordBotTable'),
-    ['Server', 'Welcome DM', '/test also allowed for', ''],
+    ['Server', 'Welcome DM', 'Daily codes', '/test also allowed for', ''],
     data.guilds ?? [],
     (guild) => {
       const tr = document.createElement('tr');
@@ -2953,7 +2953,25 @@ async function loadDiscordBot() {
         { mono: guild.testOwnerIds.length > 0 },
       );
       ids.classList.add('wrap');
-      tr.append(dm, ids, actions(button('Edit', () => editDiscordBot(guild, data.maxTestOwners))));
+      const daily = document.createElement('td');
+      daily.append(
+        pill(
+          guild.dailyCodesEnabled
+            ? `on · ${String(guild.dailyCodesHour).padStart(2, '0')}:00 UTC`
+            : 'off',
+          guild.dailyCodesEnabled ? 'ok' : 'warn',
+        ),
+      );
+      const subscribers = document.createElement('div');
+      subscribers.className = 'faint';
+      subscribers.textContent = `${guild.dailyCodeSubscribers} subscribed`;
+      daily.append(subscribers);
+      tr.append(
+        dm,
+        daily,
+        ids,
+        actions(button('Edit', () => editDiscordBot(guild, data.maxTestOwners))),
+      );
       return tr;
     },
   );
@@ -2965,13 +2983,29 @@ async function editDiscordBot(guild, maxIds) {
     description:
       `Server ${guild.guildId}. The server owner and the bot's owner can always run /test, which ` +
       `DMs the owners the welcome message. Add anyone else below (up to ${maxIds}). New members ` +
-      'get the welcome DM once each.',
+      'get the welcome DM once each. Daily codes are a personal one-use code, DMed once a day to ' +
+      'members who ran /daily on; what they can win and the day\u0027s budget are set in System, ' +
+      'under Daily codes.',
     fields: [
       {
         name: 'welcomeDmEnabled',
         label: 'Send the welcome DM to new members',
         type: 'checkbox',
         value: guild.welcomeDmEnabled,
+      },
+      {
+        name: 'dailyCodesEnabled',
+        label: 'Send daily codes to members who opted in',
+        type: 'checkbox',
+        value: guild.dailyCodesEnabled,
+      },
+      {
+        name: 'dailyCodesHour',
+        label: 'Send them from this UTC hour (0-23; most players are on at 15-19)',
+        type: 'number',
+        min: 0,
+        max: 23,
+        value: guild.dailyCodesHour,
       },
       {
         name: 'testOwnerIds',
@@ -2995,6 +3029,11 @@ async function editDiscordBot(guild, maxIds) {
         .filter(Boolean),
     ),
   ];
+  const hour = Number(values.dailyCodesHour);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    toast('The hour is a whole number from 0 to 23 (UTC).', 'bad');
+    return;
+  }
   const wrong = ids.find((id) => !/^[0-9]{5,32}$/.test(id));
   if (wrong) {
     toast(`"${wrong}" is not a Discord user id (the long number from Copy User ID).`, 'bad');
@@ -3002,6 +3041,8 @@ async function editDiscordBot(guild, maxIds) {
   }
   await api.patch(`/v1/admin/discord-bot/${guild.guildId}`, {
     welcomeDmEnabled: values.welcomeDmEnabled,
+    dailyCodesEnabled: values.dailyCodesEnabled,
+    dailyCodesHour: hour,
     testOwnerIds: ids,
     reason: values.reason,
   });
@@ -3531,6 +3572,7 @@ const GROUP_LABELS = {
   discord: 'Discord rewards',
   minesduel: 'Mines Duel',
   payouts: 'Payouts & anti-drain',
+  dailycodes: 'Daily codes',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',

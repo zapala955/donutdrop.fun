@@ -23,6 +23,10 @@ const guildSchema = z.object({ guildId: z.string().regex(SNOWFLAKE) }).strict();
 const updateSchema = z
   .object({
     welcomeDmEnabled: z.boolean().optional(),
+    /* Whether the bot SENDS daily codes, and from which UTC hour. Whether the gateway PAYS them, and
+     * how much, are runtime settings in the System tab. */
+    dailyCodesEnabled: z.boolean().optional(),
+    dailyCodesHour: z.number().int().min(0).max(23).optional(),
     /* A list of ids, however they were typed: the console sends one per line or comma-separated and
      * both arrive as an array. Each is checked for shape and the list is de-duplicated, so what is
      * stored is exactly what the bot will compare against. */
@@ -33,14 +37,22 @@ const updateSchema = z
     reason: safeText(3, 256),
   })
   .strict()
-  .refine((value) => value.welcomeDmEnabled !== undefined || value.testOwnerIds !== undefined, {
-    message: 'Change at least one setting',
-  });
+  .refine(
+    (value) =>
+      value.welcomeDmEnabled !== undefined ||
+      value.testOwnerIds !== undefined ||
+      value.dailyCodesEnabled !== undefined ||
+      value.dailyCodesHour !== undefined,
+    { message: 'Change at least one setting' },
+  );
 
 interface SettingsRow {
   guild_id: string;
   welcome_dm_enabled: boolean;
   test_owner_ids: string;
+  daily_codes_enabled: boolean;
+  daily_codes_hour: number;
+  subscribers?: string;
   updated_at: Date;
 }
 
@@ -48,6 +60,9 @@ const view = (row: SettingsRow) => ({
   guildId: row.guild_id,
   welcomeDmEnabled: row.welcome_dm_enabled,
   testOwnerIds: row.test_owner_ids ? row.test_owner_ids.split(',') : [],
+  dailyCodesEnabled: row.daily_codes_enabled,
+  dailyCodesHour: row.daily_codes_hour,
+  dailyCodeSubscribers: Number(row.subscribers ?? '0'),
   updatedAt: row.updated_at,
 });
 
@@ -71,8 +86,11 @@ export async function registerAdminDiscordRoutes(
     { preHandler: requireAdminRead, config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async () => {
       const result = await db.query<SettingsRow>(
-        `SELECT guild_id, welcome_dm_enabled, test_owner_ids, updated_at
-           FROM discord_guild_settings ORDER BY created_at LIMIT 10`,
+        `SELECT g.guild_id, g.welcome_dm_enabled, g.test_owner_ids, g.daily_codes_enabled,
+                g.daily_codes_hour, g.updated_at,
+                (SELECT count(*) FROM discord_daily_subscribers s
+                  WHERE s.guild_id = g.guild_id)::text AS subscribers
+           FROM discord_guild_settings g ORDER BY g.created_at LIMIT 10`,
       );
       return { guilds: result.rows.map(view), maxTestOwners: MAX_TEST_OWNERS };
     },
@@ -90,7 +108,8 @@ export async function registerAdminDiscordRoutes(
       const ids = body.testOwnerIds ? [...new Set(body.testOwnerIds)] : undefined;
       return db.transaction(async (client) => {
         const before = await client.query<SettingsRow>(
-          `SELECT guild_id, welcome_dm_enabled, test_owner_ids, updated_at
+          `SELECT guild_id, welcome_dm_enabled, test_owner_ids, daily_codes_enabled,
+                  daily_codes_hour, updated_at
              FROM discord_guild_settings WHERE guild_id = $1 FOR UPDATE`,
           [params.guildId],
         );
@@ -102,10 +121,19 @@ export async function registerAdminDiscordRoutes(
           `UPDATE discord_guild_settings
               SET welcome_dm_enabled = COALESCE($2, welcome_dm_enabled),
                   test_owner_ids = COALESCE($3, test_owner_ids),
+                  daily_codes_enabled = COALESCE($4, daily_codes_enabled),
+                  daily_codes_hour = COALESCE($5, daily_codes_hour),
                   updated_at = now()
             WHERE guild_id = $1
-            RETURNING guild_id, welcome_dm_enabled, test_owner_ids, updated_at`,
-          [params.guildId, body.welcomeDmEnabled ?? null, ids ? ids.join(',') : null],
+            RETURNING guild_id, welcome_dm_enabled, test_owner_ids, daily_codes_enabled,
+                      daily_codes_hour, updated_at`,
+          [
+            params.guildId,
+            body.welcomeDmEnabled ?? null,
+            ids ? ids.join(',') : null,
+            body.dailyCodesEnabled ?? null,
+            body.dailyCodesHour ?? null,
+          ],
         );
         const row = updated.rows[0];
         if (!row)
@@ -120,8 +148,15 @@ export async function registerAdminDiscordRoutes(
             previous: {
               welcomeDmEnabled: previous.welcome_dm_enabled,
               testOwnerIds: previous.test_owner_ids,
+              dailyCodesEnabled: previous.daily_codes_enabled,
+              dailyCodesHour: previous.daily_codes_hour,
             },
-            next: { welcomeDmEnabled: row.welcome_dm_enabled, testOwnerIds: row.test_owner_ids },
+            next: {
+              welcomeDmEnabled: row.welcome_dm_enabled,
+              testOwnerIds: row.test_owner_ids,
+              dailyCodesEnabled: row.daily_codes_enabled,
+              dailyCodesHour: row.daily_codes_hour,
+            },
           },
         });
         return { guild: view(row) };

@@ -82,6 +82,10 @@ export interface GuildSettings {
   welcome_dm_enabled: boolean;
   /** Set from the admin dashboard: comma-separated Discord ids that may run /test besides the owners. */
   test_owner_ids: string;
+  /** Set from the admin dashboard. Nothing is sent while this is false (the default). */
+  daily_codes_enabled: boolean;
+  /** The UTC hour the day's codes start going out, 0 to 23. */
+  daily_codes_hour: number;
 }
 
 /**

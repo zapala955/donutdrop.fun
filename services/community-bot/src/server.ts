@@ -66,6 +66,12 @@ import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import {
+  dailyCommand,
+  onDirectMessage,
+  redeemCommand,
+  startDailySender,
+} from './features/daily-codes.js';
+import {
   avatar,
   castPollVote,
   createPoll,
@@ -115,12 +121,15 @@ async function main(): Promise<void> {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      // Not privileged. Needed so a daily code sent back to the bot in a DM is seen.
+      GatewayIntentBits.DirectMessages,
       // Invite tracking: inviteCreate/inviteDelete keep the counter snapshot current between
       // joins. Not a privileged intent -- it needs the Manage Server PERMISSION instead.
       GatewayIntentBits.GuildInvites,
     ],
     // Without this a departing member arrives uncached and the goodbye never fires.
-    partials: [Partials.GuildMember],
+    // Channel: a DM channel arrives uncached, and without it direct messages are never delivered.
+    partials: [Partials.GuildMember, Partials.Channel],
   });
 
   const wrongGuild = (guildId: string | null): boolean => guildId !== config.guildId;
@@ -141,6 +150,10 @@ async function main(): Promise<void> {
         (error: unknown) => log.error({ error }, 'invite snapshot failed'),
       );
     }
+    // The daily codes go out from here, once a minute checking who is due.
+    startDailySender(db, ready, api, config.siteUrl, config.guildId, (error) =>
+      log.error({ error }, 'daily code sender failed'),
+    );
     for (const guild of ready.guilds.cache.values()) {
       if (guild.id === config.guildId) continue;
       log.warn({ guildId: guild.id, name: guild.name }, 'leaving an unrecognised guild');
@@ -211,6 +224,13 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, (message) => {
+    // A direct message: somebody sending back a daily code.
+    if (!message.guildId) {
+      void onDirectMessage(api, message).catch((error) =>
+        log.error({ error }, 'direct message failed'),
+      );
+      return;
+    }
     if (wrongGuild(message.guildId)) return;
     void onMessage(db, message).catch((error) => log.error({ error }, 'automod failed'));
   });
@@ -306,6 +326,10 @@ async function main(): Promise<void> {
           siteUrl: config.siteUrl,
           extraOwnerIds: config.ownerIds,
         });
+      case 'daily':
+        return dailyCommand(db, client, api, config.siteUrl, interaction);
+      case 'redeem':
+        return redeemCommand(api, interaction);
       case 'tag':
         return claimTag(api, interaction);
       case 'rewards':
