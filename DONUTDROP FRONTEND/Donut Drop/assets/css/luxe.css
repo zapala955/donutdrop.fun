@@ -424,10 +424,22 @@ body.lx .lxtop .acct .menu {
   box-shadow: var(--lx-shade-hi);
 }
 body.lx .lxtop .acct .menu::before, body.lx .lxtop .acct .menu::after { content: none; }
+/* A short window still has to scroll it: a thin, light bar that belongs on a white panel, not the
+   page's dark one (obsidian.css styles every scrollbar for the dark page). */
+body.lx .lxtop .acct .menu { scrollbar-width: thin; scrollbar-color: #c9cbd1 transparent; }
+body.lx .lxtop .acct .menu::-webkit-scrollbar { width: 8px; }
+body.lx .lxtop .acct .menu::-webkit-scrollbar-track { background: transparent; }
+body.lx .lxtop .acct .menu::-webkit-scrollbar-thumb { border: 2px solid var(--lx-ink); border-radius: 8px; background: #c9cbd1; }
+body.lx .lxtop .acct .menu::-webkit-scrollbar-button { display: none; height: 0; }
+/* The old account button was a chevron that turned over when its menu opened (app.css). This one is
+   a person, and turned over it read as a different glyph entirely. */
+body.lx .lxtop .acct__btn svg,
+body.lx .lxtop .acct__btn[aria-expanded="true"] svg { transform: none; transition: none; }
 body.lx .lxtop .acct .menu[hidden] { display: none; }
 body.lx .lxtop .acct .menu .menu__row {
   display: flex; align-items: center; gap: var(--lx-s3);
-  min-height: 40px; padding: 0 var(--lx-s3);
+  /* 36px, so all eighteen rows fit a laptop window without the panel having to scroll */
+  min-height: 36px; padding: 0 var(--lx-s3);
   border-radius: var(--lx-r-s);
   background: none; color: var(--lx-2);
   font: 600 .875rem var(--lx-ui);
