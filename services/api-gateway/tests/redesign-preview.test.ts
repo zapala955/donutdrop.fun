@@ -75,6 +75,9 @@ describe('the casino-lobby shell', () => {
     assert.match(block, /location ~ \^\/test\(\?:\/\(\[a-z-\]\+\)\)\?\/\?\$ \{/);
     assert.match(block, /return 308 \/\$1\$is_args\$args;/);
     assert.doesNotMatch(block, /try_files/);
+    // Behind the TLS proxy nginx knows itself as http:8080; an absolute redirect built from that
+    // pointed visitors at http://donutluxe.com:8080/ (it did, for /test and /admin).
+    assert.match(nginx, /\n {4}absolute_redirect off;/);
   });
 
   it('routes the live site exactly as before', async () => {
