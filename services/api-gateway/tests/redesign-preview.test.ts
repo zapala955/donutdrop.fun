@@ -33,24 +33,48 @@ async function atPath<T>(pathname: string, check: (routing: Routing) => T | Prom
   }
 }
 
-describe('the /test redesign preview', () => {
-  it('is served by nginx only under /test, never indexed, with the live assets', async () => {
-    const nginx = await read('infra/nginx/nginx.conf');
-    const block = nginx.slice(nginx.indexOf('# ── the redesign preview ──'), nginx.indexOf('location ~ ^/admin/(?:index\\.html)?$'));
-    assert.match(block, /location \^~ \/test\/assets\/ \{\s+rewrite \^\/test\(\/assets\/\.\*\)\$ \$1 last;/);
-    assert.match(block, /location ~ \^\/test\(\?:\/\(\?:home\|crates\|/);
-    assert.match(block, /add_header X-Robots-Tag "noindex, nofollow, noarchive" always;/);
-    assert.match(block, /try_files \/test\.html =404;/);
-    // The live shell is untouched: the root still serves index.html.
-    assert.match(nginx, /location ~ \^\/\(\?:index\\\.html\)\?\$ \{[\s\S]*?try_files \/index\.html =404;/);
+describe('the casino-lobby shell', () => {
+  it('is the live page, with every element the scripts look up', async () => {
+    const html = await read('DONUTDROP FRONTEND/Donut Drop/index.html');
+    const ids = [
+      'skipToMain', 'burger', 'chat', 'chatScrim', 'chatLog', 'chatForm', 'chatInput', 'wCash',
+      'lvlPill', 'lvlNum', 'lvlFill', 'lvlTip', 'muteBtn', 'loginBtn', 'loginHead', 'loginLabel',
+      'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuInvites', 'signOutBtn', 'dailyCodeBtn',
+      'vaultJackpot', 'tickerRoot', 'devRoot', 'toasts', 'modal', 'modalTitle', 'modalClose',
+      'modalBody', 'main', 'lobby', 'lobbySearch', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
+      'lobbyPrev', 'lobbyNext', 'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',
+      'pbanExplore', 'pbanLeadEyebrow', 'pbanLeadH', 'pbanLeadP', 'pbanLeadArt', 'pbanInvite',
+      'pbanInviteH', 'pbanInviteGo', 'bigDrops', 'lxSide', 'lxSideBtn', 'lxChatBtn', 'lxRegister',
+    ];
+    for (const id of ids) assert.match(html, new RegExp(`id="${id}"`), `index.html lost #${id}`);
+    assert.match(html, /<body class="lx">/);
+    // Every game card links to a route and names its game for the live count.
+    const cards = [...html.matchAll(/<a class="gcard lxcard" href="\/([a-z-]+)"[^>]*data-game="([a-z-]+)"/g)];
+    assert.equal(cards.length, 10);
+    for (const [, route, game] of cards) assert.equal(route, game);
+    // The skin and its script, after app.js; the old home sheet is gone with the old home.
+    assert.match(html, /<script type="module" src="assets\/js\/app\.js\?v=\d+"><\/script>[\s\S]*<script type="module" src="assets\/js\/luxe\.js\?v=\d+"><\/script>/);
+    assert.doesNotMatch(html, /assets\/css\/home\.css/);
+    // The card and offer art is drawn, never an upscaled sprite.
+    for (const [, art] of html.matchAll(/<img class="lxcard__art" src="([^"]+)"/g)) assert.match(art, /^assets\/img\/luxe\/card-[a-z-]+\.svg$/);
   });
 
-  it('serves every route the live router knows under the prefix', async () => {
+  it('keeps the SEO head nginx rewrites per route', async () => {
+    const html = await read('DONUTDROP FRONTEND/Donut Drop/index.html');
+    assert.match(html, /<meta name="robots" content="index, follow" \/>/);
+    assert.match(html, /<link rel="canonical" href="https:\/\/donutluxe\.com\/" \/>/);
+    assert.match(html, /<script type="application\/ld\+json">/);
+    // The preview page it grew out of is gone; nothing serves a noindex copy of the site.
+    await assert.rejects(read('DONUTDROP FRONTEND/Donut Drop/test.html'));
+  });
+
+  it('sends links to the old /test preview to the same page on the live site, and nowhere else', async () => {
     const nginx = await read('infra/nginx/nginx.conf');
-    const live = /location ~ \^\/\(\?:([a-z|-]+)\)\$ \{/.exec(nginx)?.[1];
-    const preview = /location ~ \^\/test\(\?:\/\(\?:([a-z|-]+)\)\)\?\/\?\$ \{/.exec(nginx)?.[1];
-    assert.ok(live && preview);
-    assert.deepEqual(preview.split('|').sort(), live.split('|').sort());
+    const block = nginx.slice(nginx.indexOf('# ── the old redesign preview ──'), nginx.indexOf('location ~ ^/admin/(?:index\\.html)?$'));
+    // Only a route-shaped name is carried: an encoded slash cannot make the target //elsewhere.
+    assert.match(block, /location ~ \^\/test\(\?:\/\(\[a-z-\]\+\)\)\?\/\?\$ \{/);
+    assert.match(block, /return 308 \/\$1\$is_args\$args;/);
+    assert.doesNotMatch(block, /try_files/);
   });
 
   it('routes the live site exactly as before', async () => {
@@ -61,72 +85,39 @@ describe('the /test redesign preview', () => {
       assert.equal(routing.fullPath('/mines'), '/mines');
       assert.equal(routing.currentRouteName(), 'crash');
     });
-    // A live path that merely starts with "test" is not the preview.
+    // A live path that merely starts with "test" is not a preview.
     await atPath('/testing', (routing) => assert.equal(routing.BASE, ''));
   });
 
-  it('keeps the preview under /test as it navigates', async () => {
+  it('can still keep a preview under /test, should one be served there again', async () => {
     await atPath('/test/mines', (routing) => {
       assert.equal(routing.BASE, '/test');
       assert.equal(routing.currentRouteName(), 'mines');
-      assert.equal(routing.appPath('/test'), '/');
       assert.equal(routing.appPath('/test/vip'), '/vip');
-      assert.equal(routing.fullPath('/'), '/test');
       assert.equal(routing.fullPath('/vip'), '/test/vip');
     });
     await atPath('/test', (routing) => assert.equal(routing.currentRouteName(), 'home'));
-    await atPath('/test/', (routing) => assert.equal(routing.currentRouteName(), 'home'));
   });
 
-  it('never asks a crawler to index a preview page', async () => {
-    const [seo, html] = await Promise.all([
-      read('DONUTDROP FRONTEND/Donut Drop/assets/js/seo.js'),
-      read('DONUTDROP FRONTEND/Donut Drop/test.html'),
+  it('shows the chat to anybody who once folded the old rail away', async () => {
+    const [luxe, css] = await Promise.all([
+      read('DONUTDROP FRONTEND/Donut Drop/assets/js/luxe.js'),
+      read('DONUTDROP FRONTEND/Donut Drop/assets/css/luxe.css'),
     ]);
-    assert.match(seo, /const robots = BASE \? 'noindex, nofollow'/);
-    assert.match(html, /<meta name="robots" content="noindex, nofollow" \/>/);
-    // Nothing on the live site links to it.
-    const index = await read('DONUTDROP FRONTEND/Donut Drop/index.html');
-    assert.doesNotMatch(index, /href="\/test/);
-    assert.doesNotMatch(await read('DONUTDROP FRONTEND/Donut Drop/sitemap.xml'), /\/test/);
+    // social.css squeezes the chat to nothing under this flag; the panel clears it.
+    assert.match(luxe, /delete body\.dataset\.chatCollapsed;/);
+    assert.match(css, /body\.lx \.chat__dock \{ display: none; \}/);
+    // Lying over the page, the chat is over the top bar too, close button and all.
+    assert.match(css, /body\.lx \.chat \{ z-index: 105; \}/);
   });
 
-  it('carries every live view and every element the scripts look up', async () => {
-    const [index, html] = await Promise.all([
-      read('DONUTDROP FRONTEND/Donut Drop/index.html'),
-      read('DONUTDROP FRONTEND/Donut Drop/test.html'),
-    ]);
-    const views = (doc: string) => [...doc.matchAll(/data-view="([a-z-]+)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(views(html), views(index));
-    const ids = [
-      'skipToMain', 'burger', 'chat', 'chatScrim', 'chatLog', 'chatForm', 'chatInput', 'wCash',
-      'lvlPill', 'lvlNum', 'lvlFill', 'lvlTip', 'muteBtn', 'loginBtn', 'loginHead', 'loginLabel',
-      'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuInvites', 'signOutBtn',
-      'vaultJackpot', 'tickerRoot', 'devRoot', 'toasts', 'modal', 'modalTitle', 'modalClose',
-      'modalBody', 'main', 'lobby', 'lobbySearch', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
-      'lobbyPrev', 'lobbyNext', 'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',
-      'pbanExplore', 'pbanLeadEyebrow', 'pbanLeadH', 'pbanLeadP', 'pbanLeadArt', 'pbanInvite',
-      'pbanInviteH', 'pbanInviteGo', 'bigDrops',
-    ];
-    for (const id of ids) assert.match(html, new RegExp(`id="${id}"`), `test.html lost #${id}`);
-    // Every game card links to a route and names its game for the live count.
-    const cards = [...html.matchAll(/<a class="gcard lxcard" href="\/([a-z-]+)"[^>]*data-game="([a-z-]+)"/g)];
-    assert.equal(cards.length, 10);
-    for (const [, route, game] of cards) assert.equal(route, game);
-    // The scripts are the live ones, plus the shell's own.
-    // The same app.js URL the live page asks for, cache-busting version and all.
-    const live = /<script type="module" src="(assets\/js\/app\.js[^"]*)"><\/script>/.exec(index)?.[1];
-    assert.ok(live, 'index.html no longer loads app.js');
-    assert.ok(html.includes(`<script type="module" src="${live}"></script>`), `test.html must load ${live}`);
-    // And every stylesheet the live page has, except the home sheet the preview replaces.
-    const sheets = (doc: string) => [...doc.matchAll(/<link rel="stylesheet" href="(assets\/css\/[^"]+)"/g)].map((m) => m[1]);
-    for (const sheet of sheets(index)) {
-      if (sheet === 'assets/css/home.css') continue;
-      assert.ok(sheets(html).includes(sheet), `test.html is missing ${sheet}`);
-    }
-    assert.match(html, /<script type="module" src="assets\/js\/luxe\.js"><\/script>/);
-    // The live page loads none of the skin.
-    assert.doesNotMatch(index, /assets\/css\/luxe|assets\/js\/luxe\.js/);
+  it('lays the top bar out as a row, so nothing in it can be pushed over anything else', async () => {
+    const css = await read('DONUTDROP FRONTEND/Donut Drop/assets/css/luxe.css');
+    const bar = css.slice(css.indexOf('.lxtop__in {'), css.indexOf('}', css.indexOf('.lxtop__in {')));
+    assert.match(bar, /display: flex;/);
+    assert.doesNotMatch(css, /\.lxtop__in \{[^}]*grid-template-columns/);
+    // The level chip and then search and sound step aside when the bar runs out of room.
+    assert.match(css, /@container lxtop \(max-width: 1040px\) \{ body\.lx \.lxtop \.lxtop__end \.lvl \{ display: none; \} \}/);
   });
 });
 

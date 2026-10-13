@@ -196,10 +196,10 @@ describe('frontend/backend contract', () => {
     assert.match(store, /api\.get\('\/v1\/promotions'\)/);
 
     // The home page's offer banners: the figures arrive from the server, never in the markup.
-    const invite = /<a class="pban" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
+    const invite = /<a class="lxpromo" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
     assert.ok(invite, 'the home invite banner is missing');
     assert.doesNotMatch(invite, /\$\d/);
-    const lead = /<div class="pban pban--lead" id="pbanLead">[\s\S]*?<\/div>/.exec(html)?.[0];
+    const lead = /<div class="lxpromo" id="pbanLead">[\s\S]*?\n {8}<\/div>/.exec(html)?.[0];
     assert.ok(lead, 'the home lead banner is missing');
     assert.doesNotMatch(lead, /\$\d/);
     assert.match(app, /state\.promotions\?\.referral/);
@@ -210,30 +210,20 @@ describe('frontend/backend contract', () => {
     assert.match(app, /state\.promotions\?\.signupBonus/);
   });
 
-  it('puts Roulette in a Casino menu with the games still to come', async () => {
+  it('lists every live game in the sidebar and on a lobby card', async () => {
     const html = await source('index.html');
     const app = await source('assets/js/app.js');
-    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf('</nav>'));
-    const menu = /<div class="tabdrop__menu" id="casinoMenu" role="menu" hidden>[\s\S]*?\n      <\/div>/.exec(nav)?.[0];
-    assert.ok(menu, 'the Casino menu is missing from the nav');
-    assert.match(nav, /id="casinoBtn"[^>]*aria-controls="casinoMenu"/);
-
-    // Roulette is the live row, and the only way to it from the bar is through the menu.
-    assert.match(menu, /<a class="tabdrop__row" href="\/roulette" data-route="roulette" role="menuitem">/);
-    assert.equal(nav.split('href="/roulette"').length - 1, 1);
-
-    // Blackjack, Crash, Mines, Plinko and Coinflip are live. A game still to come would be
-    // announced, readable and never a link.
-    assert.match(menu, /<a class="tabdrop__row" href="\/blackjack" data-route="blackjack" role="menuitem">/);
-    assert.match(menu, /<a class="tabdrop__row" href="\/crash" data-route="crash" role="menuitem">/);
-    assert.match(menu, /<a class="tabdrop__row" href="\/mines" data-route="mines" role="menuitem">/);
-    assert.match(menu, /<a class="tabdrop__row" href="\/plinko" data-route="plinko" role="menuitem">/);
-    assert.match(menu, /<a class="tabdrop__row" href="\/mines-duel" data-route="mines-duel" role="menuitem">/);
-    assert.match(menu, /<a class="tabdrop__row" href="\/coinflip" data-route="coinflip" role="menuitem">/);
-    assert.doesNotMatch(menu, /<a [^>]*tabdrop__row--soon/);
-
-    assert.match(app, /initTabDrop\('casinoDrop', 'casinoBtn', 'casinoMenu'\)/);
-    assert.match(app, /\['casinoBtn', \['roulette', 'blackjack', 'crash', 'mines', 'plinko', 'mines-duel', 'coinflip'\]\]/);
+    /* The casino-lobby shell has no Casino drop-down: the games are the sidebar's "DonutLuxe
+     * Originals" list, each one an ordinary routed link, and a card in the lobby row. */
+    const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
+    const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
+    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'plinko', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
+      assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
+      assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
+      assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);
+    }
+    // A game still to come would be announced, readable and never a link; none is, today.
+    assert.doesNotMatch(side, /tabdrop__row--soon|aria-disabled="true"/);
     // The page exists, is routed, and is served for a direct visit.
     assert.match(html, /data-view="blackjack"/);
     assert.match(app, /blackjack: mountBlackjack/);
@@ -249,40 +239,39 @@ describe('frontend/backend contract', () => {
     assert.match(app, /'mines-duel': mountMinesDuel/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
     assert.match(nginx, /\|blackjack\|crash\|mines\|plinko\|mines-duel\|coinflip\|/);
-    // Keyboard users can reach the rows of a menu portalled to the end of <body>.
-    assert.match(app, /event\.key === 'ArrowDown'/);
   });
 
-  it('lays the phone out with the chat closed, a five-slot tab bar and no sideways scroll', async () => {
+  it('lays the phone out with the chat closed, a five-slot bottom bar and no sideways scroll', async () => {
     const html = await source('index.html');
     const app = await source('assets/js/app.js');
-    const social = await source('assets/css/social.css');
-    const mobile = await source('assets/css/mobile.css');
+    const luxe = await source('assets/css/luxe.css');
     const roulette = await source('assets/css/roulette.css');
 
-    // The phone layer loads after every other sheet, so it has the last word.
+    // The skin loads after every other sheet, so it has the last word, phones included.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
-    assert.equal(sheets.at(-1), 'mobile.css');
+    assert.deepEqual(sheets.slice(-3), ['luxe.css', 'luxe-home.css', 'luxe-games.css']);
 
-    // The drawer opens from the chat button only. The desktop collapse flag defaults to "open",
-    // and letting it drive the drawer covered every phone's first page with chat.
-    assert.doesNotMatch(social, /data-chat-collapsed="0"\]\s*\.chat\s*\{\s*transform/);
-    assert.match(social, /body\.chat-open \.chat \{ transform: translateX\(0\); \}/);
+    // The drawer opens from the chat button only, closed on arrival, and a tap off it closes it.
     assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);
     assert.match(app, /function setChatOpen\(open\)/);
     assert.match(app, /\$\('#chatScrim'\)\?\.addEventListener\('click', \(\) => setChatOpen\(false\)\)/);
-    // It ends at the tab bar, where its message box was hidden before.
-    assert.match(mobile, /\.chat \{\s*bottom: var\(--tabbar-reach\);\s*height: auto;/);
+    assert.match(luxe, /body\.lx\.chat-open \.chat \{ transform: none; \}/);
+    assert.match(luxe, /body\.lx\.chat-open \.chatscrim \{ display: block;/);
+    // It ends at the bottom bar, where its message box would otherwise be hidden.
+    assert.match(luxe, /bottom: calc\(64px \+ env\(safe-area-inset-bottom\)\);/);
 
     // Five fixed slots with an icon each, never a strip wider than the phone.
-    assert.match(mobile, /grid-template-columns: repeat\(5, minmax\(max-content, 1fr\)\)/);
-    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf('</nav>'));
-    assert.equal(nav.split('class="tabs__ico"').length - 1, 4);
-    assert.match(nav, /class="navdc__ico"/);
+    assert.match(luxe, /\.lxdock \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
+    const dock = html.slice(html.indexOf('<nav class="lxdock"'), html.indexOf('</nav>', html.indexOf('<nav class="lxdock"')));
+    assert.equal(dock.split('class="lxdock__btn"').length - 1, 5);
+    assert.equal(dock.split('<svg').length - 1, 5);
 
     // A visitor is offered Log in, not a $0 balance and a withdraw button.
     assert.match(app, /document\.body\.dataset\.auth = !state\.ready \? 'pending' : state\.authenticated \? 'in' : 'out';/);
-    assert.match(mobile, /body\[data-auth="out"\] \.top #loginBtn \{/);
+    assert.match(luxe, /body:not\(\[data-auth="in"\]\) \.lxwallet \{ display: none; \}/);
+    assert.match(luxe, /body\.lx:not\(\[data-auth="in"\]\) #loginBtn \{ display: inline-flex; \}/);
+    // Signed in, the way out is on the phone bar as plainly as the way in.
+    assert.doesNotMatch(luxe, /#withdrawBtn \{ display: none; \}/);
 
     // The roulette table collapses to a track that can shrink below its widest child.
     assert.match(roulette, /\.roulette \{\s*grid-template-columns: minmax\(0, 1fr\);/);
@@ -326,7 +315,7 @@ describe('frontend/backend contract', () => {
 
   /* Both used to go straight to the invite, which left the in-app page -- the only place a player
    * can get the code for /link -- with nothing pointing at it, and nobody could link. */
-  it('opens the in-app Discord page from the nav pill and the menu row', async () => {
+  it('opens the in-app Discord page from the sidebar and the menu row', async () => {
     const html = await source('index.html');
     const discordRows = [...html.matchAll(/<a class="menu__row"[^>]*>[\s\S]*?<\/a>/g)]
       .filter((match) => match[0].includes('<span>Discord</span>'));
@@ -336,7 +325,7 @@ describe('frontend/backend contract', () => {
     assert.match(row, /href="\/discord" data-route="discord"/);
     assert.doesNotMatch(row, /target="_blank"/);
     assert.match(row, /<svg class="menu__ico menu__ico--brand"/);
-    assert.match(html, /<a class="navdc" href="\/discord" data-route="discord"/);
+    assert.match(html, /<a class="lxnav" href="\/discord" data-route="discord"/);
 
     // The page itself still carries the invite, and the link code.
     const page = await source('assets/js/discord.js');

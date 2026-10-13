@@ -137,6 +137,12 @@ function setChat(open, { save = true } = {}) {
   if (save) remember(CHAT_KEY, body.dataset.chat);
 }
 setChat(recall(CHAT_KEY) === 'open', { save: false });
+
+/* chat.js still remembers whether the OLD rail was folded away (body[data-chat-collapsed], stored
+ * per browser), and social.css answers that flag by squeezing the chat to no width and hiding
+ * everything in it. Anybody who had ever folded the old rail opened this panel to find it empty.
+ * The panel's own open state above replaces that flag here, so it is cleared. */
+delete body.dataset.chatCollapsed;
 chatBtn.addEventListener('click', () => setChat(body.dataset.chat !== 'open'));
 
 /* On a phone the chat is app.js's drawer (body.chat-open); its handle is #burger. */
@@ -294,3 +300,6 @@ function onRoute() {
 }
 onNavigate(onRoute);
 onRoute();
+
+/* Slides only from here on: the remembered layout is already in place (see .lx-anim in luxe.css). */
+requestAnimationFrame(() => requestAnimationFrame(() => body.classList.add('lx-anim')));

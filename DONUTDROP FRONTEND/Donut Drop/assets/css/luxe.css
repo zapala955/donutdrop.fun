@@ -131,7 +131,11 @@ body.lx {
 /* surface.css paints a colour wash and a grid over the whole page. Neither belongs here. */
 body.lx::before, body.lx::after { content: none; display: none; }
 body.lx .mono { font-family: var(--lx-ui); font-variant-numeric: tabular-nums; }
-body.lx :focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+/* The ring every focusable thing gets, at the weight of a bare :focus-visible and no more. A field
+   that draws its own focus on its frame (the withdraw amount, the sign-in name, every stake box)
+   turns its input's outline off with a rule like `.auth__input:focus`; at body.lx strength this
+   one beat that, and the frame and the input both lit up: two gold rings, one inside the other. */
+:where(body.lx) :focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
 body.lx ::selection { background: var(--lx-gold); color: var(--lx-on-gold); }
 body.lx h1, body.lx h2, body.lx h3, body.lx h4 { font-family: var(--lx-ui); font-style: normal; letter-spacing: 0; }
 
@@ -157,7 +161,6 @@ body.lx .skip:focus-visible { transform: none; }
   width: var(--lx-rail);
   background: var(--lx-0);
   box-shadow: 1px 0 0 rgba(255, 255, 255, .03);
-  transition: width var(--lx-slide) var(--lx-ease);
 }
 body[data-side="open"] .lxside { width: var(--lx-side); }
 
@@ -264,10 +267,15 @@ body[data-side="open"] .lxside__label {
   position: relative; z-index: 1;
   min-width: 0;
   margin-left: var(--lx-rail);
-  transition: margin var(--lx-slide) var(--lx-ease);
 }
 body[data-side="open"] .lxapp { margin-left: var(--lx-side); }
 body[data-chat="open"] .lxapp { margin-right: var(--lx-chat); }
+
+/* The rail and the page slide when the menu or the chat is toggled, never on arrival: the remembered
+   state is applied before the first paint, and luxe.js adds .lx-anim only after it, so a returning
+   player's page does not glide into place on every load. */
+body.lx-anim .lxside { transition: width var(--lx-slide) var(--lx-ease); }
+body.lx-anim .lxapp { transition: margin var(--lx-slide) var(--lx-ease); }
 
 /* ═════════ the top bar ═════════ */
 .lxtop {
@@ -275,17 +283,22 @@ body[data-chat="open"] .lxapp { margin-right: var(--lx-chat); }
   height: var(--lx-top);
   background: var(--lx-1);
   box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .55);
+  /* The bar is as wide as the page beside the rail and the chat, not the window, so what fits in
+     it is asked of the bar itself (the @container rules below). */
+  container: lxtop / inline-size;
 }
+/* A row, not a three-column grid. The grid centred the wallet by giving each side an equal share,
+   and a signed-in right side (search, level, sound, account, chat) is wider than its share: it ran
+   left, under the Withdraw button. In a row nothing can overlap; the wallet sits in the middle of
+   whatever room the two sides leave. */
 .lxtop__in {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  display: flex; align-items: center;
   gap: var(--lx-s3);
   max-width: var(--lx-col); height: 100%;
   margin: 0 auto; padding: 0 var(--lx-gut);
 }
-body[data-auth="out"] .lxtop__in,
-body[data-auth="pending"] .lxtop__in { grid-template-columns: auto minmax(0, 1fr); }
 
-.lxbrand { justify-self: start; display: inline-flex; align-items: center; height: 40px; }
+.lxbrand { flex: none; display: inline-flex; align-items: center; height: 40px; }
 .lxbrand__word {
   font: 900 1.625rem/1 var(--lx-display);
   font-stretch: 112%;
@@ -296,7 +309,7 @@ body[data-auth="pending"] .lxtop__in { grid-template-columns: auto minmax(0, 1fr
 .lxbrand__word b { color: var(--lx-gold); font-weight: inherit; }
 
 /* the wallet: balance, Deposit, Withdraw — signed in only */
-.lxwallet { display: flex; align-items: center; gap: var(--lx-s2); }
+.lxwallet { flex: none; display: flex; align-items: center; gap: var(--lx-s2); margin: 0 auto; }
 body:not([data-auth="in"]) .lxwallet { display: none; }
 
 body.lx .lxbal {
@@ -324,7 +337,14 @@ body.lx .lxbal .cashpill__n {
   text-shadow: none;
 }
 
-.lxtop__end { justify-self: end; display: flex; align-items: center; gap: var(--lx-s2); min-width: 0; }
+.lxtop__end { flex: none; display: flex; align-items: center; gap: var(--lx-s2); margin-left: auto; }
+
+/* Room runs out from the right: the level chip goes first (the VIP page and the account menu still
+   carry it), then search and sound (Ctrl+K and the home search remain). */
+/* A container query adds no weight, and the chip's own display rule comes later in this file, so
+   these are written one step heavier (.lxtop__end) to win regardless of order. */
+@container lxtop (max-width: 1040px) { body.lx .lxtop .lxtop__end .lvl { display: none; } }
+@container lxtop (max-width: 860px) { body.lx .lxtop .lxtop__end :is(#lxSearchBtn, #muteBtn) { display: none; } }
 
 /* ═════════ buttons ═════════
    Two kinds, the reference's two: a grey one for the quiet way, a gold one for the main way.
@@ -386,8 +406,9 @@ body.lx .lxtop .lvl {
 }
 body.lx .lxtop .lvl[hidden] { display: none; }
 body.lx .lxtop .lvl::after, body.lx .lxtop .lvl::before { content: none; }
-body.lx .lxtop .lvl__n { color: var(--lx-gold); font: inherit; letter-spacing: .02em; }
-body.lx .lxtop .lvl__bar { width: 54px; height: 4px; border-radius: 2px; background: var(--lx-0); overflow: hidden; }
+body.lx .lxtop .lvl__n { color: var(--lx-gold); font: inherit; letter-spacing: .02em; white-space: nowrap; }
+body.lx .lxtop .lvl__n::before { content: none; }
+body.lx .lxtop .lvl__bar { width: 40px; height: 4px; border-radius: 2px; background: var(--lx-0); overflow: hidden; }
 body.lx .lxtop .lvl__bar i { display: block; height: 100%; background: var(--lx-gold); box-shadow: none; }
 body.lx .lxtop .lvl:hover { background: var(--lx-4); }
 body.lx .lxtop .lvl__tip { display: none; }
@@ -415,7 +436,8 @@ body.lx .lxtop .acct .menu .menu__row:hover, body.lx .lxtop .acct .menu .menu__r
 body.lx .lxtop .acct .menu .menu__ico { width: 18px; height: 18px; fill: none; stroke: var(--lx-3); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 body.lx .lxtop .acct .menu .menu__ico--brand { fill: var(--lx-3); stroke: none; }
 body.lx .lxtop .acct .menu .menu__row b { color: inherit; }
-body.lx .lxtop .acct .menu .menu__row--hi { color: var(--lx-2); }
+body.lx .lxtop .acct .menu .menu__row--hi { color: var(--lx-2); text-decoration: none; }
+body.lx .lxtop .acct .menu .menu__row--hi .menu__ico { stroke: var(--lx-gold-lo); }
 body.lx .lxtop .acct .menu .menu__sep { height: 1px; margin: var(--lx-s2) var(--lx-s2); background: #dcdde1; }
 body.lx .lxtop .acct .menu .menu__label { padding: var(--lx-s1) var(--lx-s3); color: #6b7079; font: 700 .6875rem var(--lx-ui); letter-spacing: .06em; text-transform: uppercase; }
 body.lx .lxtop .acct .menu .menu__row--muted { color: #6b7079; }
@@ -729,6 +751,9 @@ body.lx .chat__send .btn {
 }
 body.lx .chat__send .btn:hover:not(:disabled) { background: var(--lx-gold-hi); }
 body.lx .chatscrim { display: none; }
+/* chat.js's own dock handle belongs to the old rail; this panel has the bar's chat button and its
+   own close. luxe.js also clears the collapsed flag the handle used to set (see there). */
+body.lx .chat__dock { display: none; }
 
 /* ═════════ the phone bar ═════════ */
 .lxdock { display: none; }
@@ -738,7 +763,8 @@ body.lx .chatscrim { display: none; }
   /* No room for the chat beside the page: it lays over it, from the same button. */
   body[data-chat="open"] .lxapp { margin-right: 0; }
   body[data-chat="open"] .toasts { right: 16px; }
-  body.lx .chat { z-index: 96; }
+  /* Over the page, so over the top bar too: its header and close button were underneath it. */
+  body.lx .chat { z-index: 105; }
 }
 
 @media (max-width: 1023px) {
@@ -765,10 +791,9 @@ body.lx .chatscrim { display: none; }
   .lxnavs { padding: var(--lx-s1); border-radius: var(--lx-r); background: var(--lx-1); }
   .lxtip { display: none; }
 
-  .lxtop__in { grid-template-columns: auto minmax(0, 1fr); gap: var(--lx-s2); }
-  body[data-auth="in"] .lxtop__in { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .lxtop__in { gap: var(--lx-s2); }
   .lxbrand__word { font-size: 1.25rem; }
-  .lxwallet { justify-self: center; gap: var(--lx-s1); }
+  .lxwallet { gap: var(--lx-s1); }
   body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3); }
   /* Withdraw stays on a phone: the way out is never harder to find than the way in. */
   body.lx :is(#depositBtn, #withdrawBtn) { height: 40px; padding: 0 var(--lx-s3); }
@@ -783,6 +808,8 @@ body.lx .chatscrim { display: none; }
     transition: transform var(--lx-slide) var(--lx-ease);
   }
   body.lx.chat-open .chat { transform: none; }
+  /* a tap anywhere off the drawer closes it (app.js listens on #chatScrim) */
+  body.lx.chat-open .chatscrim { display: block; position: fixed; inset: 0; z-index: 104; background: var(--lx-scrim); }
   body[data-chat="open"] .chat { display: flex; }
 
   body.lx .main.lxmain { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
@@ -816,8 +843,7 @@ body.lx .chatscrim { display: none; }
   body.lx .lxbal { padding: 0 var(--lx-s2); gap: 6px; }
   body.lx :is(#depositBtn, #withdrawBtn) { padding: 0 10px; font-size: .8125rem; }
   body[data-auth="in"] .lxbrand { display: none; }
-  body[data-auth="in"] .lxtop__in { grid-template-columns: minmax(0, 1fr) auto; }
-  .lxwallet { justify-self: start; }
+  .lxwallet { margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
