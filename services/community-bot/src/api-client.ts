@@ -81,17 +81,6 @@ export interface RewardStatus {
   readonly tag: { claimedToday: boolean; days: number } | null;
 }
 
-/** What redeeming a daily code came to (the gateway decides every word of it). */
-export type DailyRedeemResult =
-  | {
-      readonly status: 'paid';
-      readonly prizeMinor: string;
-      readonly username: string;
-      readonly wagerMinor: string;
-    }
-  | { readonly status: 'nothing'; readonly username: string }
-  | { readonly status: 'refused'; readonly reason: string; readonly keepCode: boolean };
-
 /** The signup and invite figures the site advertises (GET /v1/promotions, which is public). */
 export interface Promotions {
   readonly signupBonus: { readonly amountMinor: string } | null;
@@ -137,14 +126,6 @@ export class PlatformApi {
     return this.post<TagResult>('/internal/v1/community/rewards/tag', {
       discordUserId,
       wearingTag,
-    });
-  }
-
-  /** `/redeem` or a code sent back in a DM: the gateway validates it, draws the prize and pays it. */
-  async redeemDailyCode(discordUserId: string, code: string): Promise<DailyRedeemResult> {
-    return this.post<DailyRedeemResult>('/internal/v1/community/daily-code/redeem', {
-      discordUserId,
-      code,
     });
   }
 

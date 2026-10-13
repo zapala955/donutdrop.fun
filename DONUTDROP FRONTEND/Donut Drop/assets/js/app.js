@@ -58,6 +58,7 @@ import { initDevMenu } from './devmenu.js';
 import { initLiveEvents } from './live.js';
 import { initNudge } from './nudge.js';
 import { initPopups } from './popups.js';
+import { initDailyCode } from './daily-code.js';
 import {
   currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1411,6 +1412,7 @@ bus.addEventListener('change', (event) => {
 initLiveEvents();
 initNudge({ openLogin: openLoginModal });
 initPopups({ openLogin: openLoginModal });
+initDailyCode({ openLogin: openLoginModal });
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;
@@ -1491,7 +1493,7 @@ document.addEventListener('keydown', (event) => {
       if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close();
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-    menu.addEventListener('click', (e) => { if (e.target.closest('a')) close(); });
+    menu.addEventListener('click', (e) => { if (e.target.closest('a, [data-closes-menu]')) close(); });
 
     const paintInvites = () => {
       const n = $('#menuInvites');

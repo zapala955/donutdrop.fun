@@ -14,6 +14,7 @@ import { api } from './api.js';
 import { bus, state } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
+import { openDailyCode } from './daily-code.js';
 
 /**
  * The server invite.
@@ -157,7 +158,22 @@ function paintRewards() {
       Boolean(status.tag?.claimedToday),
     ),
   );
+  /* The daily code is delivered by the bot and redeemed here. */
+  const dailyMax = Number(status.dailyCodes?.maxPrizeMinor ?? 0);
+  if (status.dailyCodes?.enabled && dailyMax > 0) {
+    list.appendChild(
+      row('A daily code in your DMs (/daily on in Discord), redeemed here', `up to ${money(dailyMax)}`),
+    );
+  }
   rewards.appendChild(list);
+
+  if (status.dailyCodes?.enabled) {
+    const redeem = el('button', 'btn dsync__redeem');
+    redeem.type = 'button';
+    redeem.textContent = 'REDEEM A DAILY CODE';
+    redeem.addEventListener('click', () => openDailyCode());
+    rewards.appendChild(redeem);
+  }
 
   const small = el('p', 'dsync__fine');
   small.textContent =

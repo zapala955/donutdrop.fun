@@ -12,9 +12,11 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * THE SHAPE
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * The community bot gives each opted-in member one personal code a day (a DM, once per UTC day) and
- * calls here when they redeem it. The bot never sees a balance and never picks a prize: it reports
- * which Discord account typed which code, and this decides.
+ * The community bot gives each opted-in member one personal code a day (a DM, once per UTC day).
+ * Redeeming happens on the SITE, in a window, by a signed-in player: the route
+ * (routes/discord-rewards.ts) passes the Discord account linked to that session, so the bot never
+ * sees a balance and never picks a prize, and a code can only be spent by the site account whose
+ * linked Discord it was sent to.
  *
  * A code is personal (only the Discord account it was sent to can redeem it), single-use, and good
  * for a day. A site account can redeem one code a UTC day however many Discord accounts it has, and
@@ -152,9 +154,17 @@ export async function redeemDailyCode(
       [input.discordUserId],
     );
     const user = linked.rows[0];
-    if (!user || user.status !== 'active') {
+    if (!user) {
       return settled(
-        refused('Link your site account first with /link, then redeem. Your code is kept', true),
+        refused(
+          'Link your Discord account to your site account first (the Discord page, then /link in the server). Your code is kept',
+          true,
+        ),
+      );
+    }
+    if (user.status !== 'active') {
+      return settled(
+        refused('This account cannot redeem codes right now. Your code is kept', true),
       );
     }
     if (!oldEnough(config, input.discordUserId)) {

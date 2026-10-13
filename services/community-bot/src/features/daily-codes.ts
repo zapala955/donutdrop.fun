@@ -10,21 +10,22 @@ import {
   type EmbedBuilder,
   type Message,
 } from 'discord.js';
-import type { DailyRedeemResult, PlatformApi } from '../api-client.js';
+import type { PlatformApi } from '../api-client.js';
 import { guildSettings, type Database } from '../db.js';
-import { COLOR, bad, embed, formatMoney, ok, warn } from '../ui.js';
+import { COLOR, bad, embed, formatMoney, ok } from '../ui.js';
 
 /**
  * daily-codes.ts — a personal code in your DMs every day, redeemed for a prize.
  *
  * A member opts in with `/daily on`. Once a day (at the hour the dashboard sets, UTC) the bot DMs
- * them a one-use code. They redeem it with `/redeem`, or by simply replying to the DM with it, for
- * a random prize from nothing up to a ceiling the operator sets.
+ * them a one-use code. They redeem it ON THE SITE, in a window the DM's button opens with the code
+ * already filled in, for a random prize from nothing up to a ceiling the operator sets.
  *
- * The bot ISSUES and DELIVERS codes and nothing else. Which prize a code is worth, whether it is
- * still valid, whether the account may redeem, and the payment itself are all the gateway's
- * (services/api-gateway/src/lib/daily-codes.ts): the bot has no wallet access and cannot pick a
- * prize, only report which Discord account typed which code.
+ * The bot ISSUES and DELIVERS codes and nothing else. It cannot redeem one: which prize a code is
+ * worth, whether it is still valid, whether the account may redeem, and the payment itself are all
+ * the gateway's (services/api-gateway/src/lib/daily-codes.ts), asked by a signed-in player on the
+ * site. The bot has no wallet access and no way to spend a code, so a code that leaks from a DM is
+ * still only worth something to the site account linked to that Discord.
  *
  * Once a day means once: the day's mark is claimed by a guarded UPDATE BEFORE the DM goes out, so two
  * ticks racing each other send one code and a crash never sends two. Three DMs in a row that cannot
@@ -82,29 +83,43 @@ function ceilingText(maxPrizeMinor: string | null): string {
   return 'a big prize';
 }
 
+/**
+ * Where a code is redeemed: the site, with the code in the URL's FRAGMENT. A fragment never leaves
+ * the browser, so the code reaches neither the site's logs nor Cloudflare's; the page reads it,
+ * fills the redeem window and clears it from the address bar.
+ */
+export const redeemUrl = (siteUrl: string, code?: string) =>
+  `${siteUrl.replace(/\/+$/, '')}/${code ? `#redeem=${code}` : ''}`;
+
+export const REDEEM_STEPS =
+  '1. Tap **Redeem on the site** below. The code is already filled in.\n' +
+  '2. Log in with your Minecraft name if you are not already.\n' +
+  '3. Press **Redeem**.\n' +
+  'No button? Open the site, open the account menu and choose **Daily code**.';
+
 export function buildCodeDm(facts: DailyCodeFacts) {
   const ceiling = ceilingText(facts.maxPrizeMinor);
   const message = embed(
     'Your daily code',
-    `Redeem it for a prize from nothing up to **${ceiling}**. Reply to this message with the code, ` +
-      'or run `/redeem` in the server.',
+    `Redeem it on the site for a prize from nothing up to **${ceiling}**.`,
   )
     .addFields(
       { name: 'Code', value: `\`\`\`${formatCode(facts.code)}\`\`\`` },
+      { name: 'How to redeem', value: REDEEM_STEPS },
       {
         name: 'Good to know',
         value:
-          'It works once and for 24 hours, and only for this Discord account, which has to be ' +
-          'linked with `/link`. A prize is playable at once and can be withdrawn after it has ' +
-          'been wagered. Stop these any time with `/daily off`.',
+          'It works once and for 24 hours, and only on the site account linked to this Discord ' +
+          '(`/link`). A prize is playable at once and can be withdrawn after it has been wagered. ' +
+          'Stop these any time with `/daily off`.',
       },
     )
-    .setFooter({ text: 'One code a day. Replies that are not a code are ignored.' });
+    .setFooter({ text: 'One code a day. Codes are redeemed on the site only.' });
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
-      .setLabel('Open the site')
-      .setURL(facts.siteUrl.replace(/\/+$/, '')),
+      .setLabel('Redeem on the site')
+      .setURL(redeemUrl(facts.siteUrl, facts.code)),
   );
   return { embeds: [message], components: [row] };
 }
@@ -147,7 +162,7 @@ export function buildDailyInviteDm(facts: DailyInviteFacts) {
         value:
           '1. Tap **Get my daily code** below, or run `/daily on` in the server.\n' +
           '2. Your first code arrives here at once.\n' +
-          '3. Reply to it with the code, or run `/redeem`.',
+          '3. Redeem it on the site: tap **Redeem on the site** on that message.',
       },
       {
         name: 'Good to know',
@@ -166,27 +181,6 @@ export function buildDailyInviteDm(facts: DailyInviteFacts) {
       .setURL(facts.siteUrl.replace(/\/+$/, '')),
   );
   return { embeds: [message], components: [row] };
-}
-
-/** What a redemption looks like to the person who made it. */
-export function describeRedeem(result: DailyRedeemResult): EmbedBuilder {
-  if (result.status === 'paid') {
-    return ok(
-      'Daily code redeemed',
-      `**${formatMoney(BigInt(result.prizeMinor))}** was added to **${result.username}**.\n` +
-        `It is playable now and can be withdrawn once you have wagered ` +
-        `**${formatMoney(BigInt(result.wagerMinor))}**.`,
-    );
-  }
-  if (result.status === 'nothing') {
-    return embed(
-      'Nothing this time',
-      `The code was valid but today’s draw came up empty, **${result.username}**. A new code ` +
-        'arrives tomorrow.',
-      COLOR.quiet,
-    );
-  }
-  return (result.keepCode ? warn : bad)('Not redeemed', result.reason);
 }
 
 // ── opting in and out ──────────────────────────────────────────────────────
@@ -362,9 +356,6 @@ export function startDailySender(
 
 // ── commands ───────────────────────────────────────────────────────────────
 
-const unavailable = () =>
-  bad('Not available', 'The connection to the site is not set up, so codes cannot be redeemed.');
-
 /** `/daily on | off | status`. */
 export async function dailyCommand(
   db: Database,
@@ -475,7 +466,7 @@ export async function enableDaily(
       ? 'Your first code is in your DMs now. '
       : 'You already had today’s code. ') +
       `A new one comes at ${String(settings.daily_codes_hour).padStart(2, '0')}:00 UTC. ` +
-      'Redeem it by replying to the DM, or with `/redeem`.',
+      'Redeem it on the site with the button on that message.',
   );
 }
 
@@ -512,96 +503,58 @@ export async function onDailyButton(
   });
 }
 
-/** `/redeem code:`. */
-export async function redeemCommand(
-  api: PlatformApi | null,
-  interaction: ChatInputCommandInteraction,
-): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  if (!api) {
-    await interaction.editReply({ embeds: [unavailable()] });
-    return;
-  }
-  const code = interaction.options.getString('code', true);
-  try {
-    const result = await api.redeemDailyCode(interaction.user.id, code);
-    await interaction.editReply({ embeds: [describeRedeem(result)] });
-  } catch {
-    await interaction.editReply({
-      embeds: [bad('Try again', 'The site did not answer. Your code has not been used.')],
-    });
-  }
-}
+// ── a reply to the DM ──────────────────────────────────────────────────────
 
-// ── redeeming by replying to the DM ────────────────────────────────────────
-
-/** Attempts per member per minute: a code is long and single-use, but nobody needs sixty tries. */
-const ATTEMPTS_PER_MINUTE = 8;
-const attempts = new Map<string, number[]>();
+/** One pointer per member every few minutes: a bot that answers every message can be made to spam. */
 const lastHelp = new Map<string, number>();
 const HELP_EVERY_MS = 5 * 60_000;
 const MAX_TRACKED = 5_000;
 
 /** Anyone can DM a bot, so what is remembered about them is capped: stale entries go first. */
 function forgetStale(now: number) {
-  if (attempts.size + lastHelp.size < MAX_TRACKED) return;
-  for (const [id, times] of attempts) {
-    if (times.every((time) => now - time >= 60_000)) attempts.delete(id);
-  }
+  if (lastHelp.size < MAX_TRACKED) return;
   for (const [id, time] of lastHelp) {
     if (now - time >= HELP_EVERY_MS) lastHelp.delete(id);
   }
 }
 
 /**
- * A direct message to the bot. A code is redeemed; anything else gets a short pointer, at most once
- * every few minutes, so the bot can never be talked into a reply loop or used to spam.
+ * A direct message to the bot. Codes are redeemed on the site, so whatever is sent, a code or a
+ * question, gets the same short pointer, at most once every few minutes, so the bot can never be
+ * talked into a reply loop or used to spam. Nothing is spent or read beyond "is this a code":
+ * that only decides whether the button carries it.
  */
 export async function onDirectMessage(
-  api: PlatformApi | null,
   message: Message,
+  siteUrl: string,
   now: number = Date.now(),
 ): Promise<void> {
   if (message.author.bot || message.guildId) return;
   const id = message.author.id;
   forgetStale(now);
+  const last = lastHelp.get(id);
+  if (last !== undefined && now - last < HELP_EVERY_MS) return;
+  lastHelp.set(id, now);
 
   const code = normalizeCode(message.content);
-  if (!code) {
-    const last = lastHelp.get(id);
-    if (last !== undefined && now - last < HELP_EVERY_MS) return;
-    lastHelp.set(id, now);
-    await message.reply({
-      embeds: [
-        embed(
-          'Daily codes',
-          'Send me your daily code (eight letters and numbers) to redeem it. To get a code every ' +
-            'day, run `/daily on` in the server.',
-          COLOR.quiet,
-        ),
-      ],
-    });
-    return;
-  }
-
-  const recent = (attempts.get(id) ?? []).filter((time) => now - time < 60_000);
-  if (recent.length >= ATTEMPTS_PER_MINUTE) {
-    attempts.set(id, recent);
-    await message.reply({ embeds: [warn('Slow down', 'Try again in a minute.')] });
-    return;
-  }
-  attempts.set(id, [...recent, now]);
-
-  if (!api) {
-    await message.reply({ embeds: [unavailable()] });
-    return;
-  }
-  try {
-    const result = await api.redeemDailyCode(id, code);
-    await message.reply({ embeds: [describeRedeem(result)] });
-  } catch {
-    await message.reply({
-      embeds: [bad('Try again', 'The site did not answer. Your code has not been used.')],
-    });
-  }
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setLabel(code ? 'Redeem on the site' : 'Open the site')
+      .setURL(redeemUrl(siteUrl, code ?? undefined)),
+  );
+  await message.reply({
+    embeds: [
+      embed(
+        code ? 'Redeem it on the site' : 'Daily codes',
+        code
+          ? 'That looks like a daily code. Codes are redeemed on the site, not here: tap the ' +
+              'button and it is filled in for you.'
+          : 'Codes are redeemed on the site, in the **Daily code** window (account menu). To get ' +
+              'a code every day, run `/daily on` in the server.',
+        COLOR.quiet,
+      ),
+    ],
+    components: [row],
+  });
 }

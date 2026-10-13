@@ -135,16 +135,40 @@ describe('the daily code settings', () => {
 });
 
 describe('how it is wired', () => {
-  it('has a signed, rate-limited redeem route for the bot, and no way in without the signature', async () => {
-    const source = await read('../src/routes/community-bot.ts');
-    const route = source.slice(source.indexOf("'/internal/v1/community/daily-code/redeem'"));
-    assert.match(route, /rateLimit: \{ max: 60, timeWindow: '1 minute' \}/);
-    assert.ok(
-      route.indexOf('verifyCommunityBotSignature(request, config)') <
-        route.indexOf('redeemDailyCode('),
-      'the signature is checked before anything is redeemed',
+  it('redeems on the site, for the signed-in player, and nowhere else', async () => {
+    const source = await read('../src/routes/discord-rewards.ts');
+    const route = source.slice(source.indexOf("'/v1/discord/daily-code/redeem'"));
+    assert.match(route, /preHandler: guards\.requireCsrf/);
+    assert.match(route, /rateLimit: \{ max: 20, timeWindow: '1 minute' \}/);
+    assert.match(
+      route,
+      /SELECT discord_user_id FROM users WHERE id = \$1/,
+      'the Discord account is the one linked to the session',
     );
-    assert.match(source, /dailyCodes: \{\s*enabled: config\.dailyCodesEnabled/);
+    assert.ok(
+      route.indexOf('SELECT discord_user_id FROM users') < route.indexOf('redeemDailyCode('),
+      'the account is looked up before anything is redeemed',
+    );
+    assert.doesNotMatch(
+      source.slice(0, source.indexOf("'/v1/discord/daily-code/redeem'")),
+      /discordUserId: z\./,
+      'the request cannot name a Discord account',
+    );
+    assert.match(
+      source,
+      /const redeemSchema = z\.object\(\{ code: z\.string\(\)\.min\(1\)\.max\(40\) \}\)\.strict\(\)/,
+    );
+    assert.match(source, /dailyCodes,/, 'the rewards read says what a code can be worth');
+  });
+
+  it('gives the bot no way to redeem a code', async () => {
+    const source = await read('../src/routes/community-bot.ts');
+    assert.doesNotMatch(source, /daily-code\/redeem|redeemDailyCode|redeemSchema/);
+    assert.match(
+      source,
+      /dailyCodes: \{\s*enabled: config\.dailyCodesEnabled/,
+      'it still reads the ceiling for the DM',
+    );
   });
 
   it('pays through the ledger under the code’s own id, with the wager requirement every reward carries', async () => {

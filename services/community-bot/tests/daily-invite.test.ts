@@ -199,7 +199,8 @@ describe('the invitation', () => {
     assert.match(text, /A free code in your DMs, every day/);
     assert.match(text, /nothing up to \*\*\$100m\*\*/);
     assert.match(text, /\/daily on/);
-    assert.match(text, /\/redeem/);
+    assert.match(text, /Redeem on the site/);
+    assert.doesNotMatch(text, /\/redeem/);
     assert.match(text, /\/link/);
     assert.match(text, /wagered/);
     assert.match(text, /\/daily off/);

@@ -1,0 +1,74 @@
+/* daily-code.css — the daily code window (assets/js/daily-code.js).
+ *
+ * It is a popup (popups.css supplies the dialog, the card, the close button and the buttons), plus
+ * the one thing a popup does not have: a field for the code. House tokens only. */
+
+.dcode__card { width: min(440px, 100%); }
+
+.dcode__form { width: 100%; display: grid; gap: 8px; margin-top: 14px; text-align: left; }
+
+.dcode__label {
+  font: 700 .6875rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The ring lands on the wrapper, like the login form's fields, so the box that is focused is the
+   box that is drawn. */
+.dcode__field {
+  display: flex; align-items: center;
+  height: 58px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--r-soft);
+  background: var(--bg2);
+  transition: border-color var(--ob-quick), box-shadow var(--ob-quick);
+}
+.dcode__field:hover { border-color: var(--line2); }
+.dcode__field:focus-within {
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px rgba(255, 170, 0, .14);
+}
+.dcode__field.is-error { border-color: var(--red); }
+.dcode__field.is-error:focus-within { box-shadow: 0 0 0 3px rgba(255, 34, 34, .16); }
+
+.dcode__input {
+  width: 100%; min-width: 0; height: 100%;
+  padding: 0; border: 0; outline: none; background: none;
+  color: var(--text);
+  font: 800 1.5rem/1 var(--mono); letter-spacing: .18em;
+  text-align: center; text-transform: uppercase;
+}
+.dcode__input::placeholder { color: var(--faint); opacity: .7; }
+
+.dcode__hint {
+  margin: 0;
+  font-size: .8125rem; line-height: 1.4; color: var(--faint);
+  text-align: center; text-wrap: pretty;
+}
+.dcode__err {
+  margin: 0; min-height: 1.25em;
+  font-size: .875rem; line-height: 1.25; color: var(--red);
+  text-align: center;
+}
+
+/* Nothing to say yet: the line keeps its place in the page for the screen reader's alert, and none
+   in the layout. */
+.dcode__err:empty { min-height: 0; }
+.dcode__form .popup__acts { margin-top: 6px; }
+.popup__go:disabled { opacity: .5; cursor: not-allowed; }
+
+/* The menu row is a <button> (it opens a window, it does not go anywhere), dressed as its sibling
+   links. */
+button.menu__row {
+  width: 100%;
+  border: 0; background: none;
+  font: inherit; font-size: .875rem; text-align: left;
+  cursor: pointer;
+}
+button.menu__row:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+
+/* The Discord page's button for it. */
+.dsync__redeem { margin-top: 10px; }
+
+@media (max-width: 560px) {
+  .dcode__card { width: 100%; }
+  .dcode__input { font-size: 1.3125rem; }
+}

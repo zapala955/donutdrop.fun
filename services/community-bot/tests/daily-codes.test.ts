@@ -3,18 +3,17 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import type { ChatInputCommandInteraction, Client, Message } from 'discord.js';
-import type { DailyRedeemResult, PlatformApi } from '../src/api-client.js';
+import type { PlatformApi } from '../src/api-client.js';
 import type { Database } from '../src/db.js';
 import {
   buildCodeDm,
   dailyCommand,
   deliverDailyCode,
-  describeRedeem,
   formatCode,
   generateCode,
   normalizeCode,
   onDirectMessage,
-  redeemCommand,
+  redeemUrl,
   runDailySender,
   subscribe,
 } from '../src/features/daily-codes.js';
@@ -129,7 +128,7 @@ describe('the code message', () => {
     const message = buildCodeDm(facts);
     return {
       embed: message.embeds[0]!.toJSON(),
-      button: (message.components[0]!.toJSON().components[0] as { url: string }).url,
+      button: message.components[0]!.toJSON().components[0] as { url: string; label: string },
     };
   };
 
@@ -142,10 +141,13 @@ describe('the code message', () => {
     const text = JSON.stringify(embed);
     assert.match(text, /ABCD-2345/);
     assert.match(text, /from nothing up to \*\*\$100m\*\*/);
-    assert.match(text, /Reply to this message with the code/);
-    assert.match(text, /\/redeem/);
+    assert.match(text, /Redeem it on the site/);
+    assert.match(text, /How to redeem/);
+    assert.match(text, /Daily code/, 'the menu entry to look for, if the button is missing');
+    assert.doesNotMatch(text, /\/redeem|Reply to this message/, 'nothing is redeemed in Discord');
     assert.match(text, /\/daily off/);
-    assert.equal(button, SITE);
+    assert.equal(button.label, 'Redeem on the site');
+    assert.equal(button.url, `${SITE}/#redeem=ABCD2345`, 'the code rides in the fragment');
   });
 
   it('does not quote a figure it was not given', () => {
@@ -157,39 +159,12 @@ describe('the code message', () => {
   });
 });
 
-describe('what a redemption says', () => {
-  const title = (result: DailyRedeemResult) => describeRedeem(result).toJSON();
-
-  it('names the prize and the wagering that unlocks it', () => {
-    const embed = title({
-      status: 'paid',
-      prizeMinor: '5000000',
-      username: 'Steve',
-      wagerMinor: '25000000',
-    });
-    assert.equal(embed.title, 'Daily code redeemed');
-    assert.match(embed.description ?? '', /\*\*\$5m\*\* was added to \*\*Steve\*\*/);
-    assert.match(embed.description ?? '', /wagered \*\*\$25m\*\*/);
-  });
-
-  it('says plainly when the draw came up empty', () => {
-    assert.equal(title({ status: 'nothing', username: 'Steve' }).title, 'Nothing this time');
-  });
-
-  it('shows a refusal in the gateway’s own words, softer when the code is kept', () => {
-    const kept = title({
-      status: 'refused',
-      reason: 'Link your site account first',
-      keepCode: true,
-    });
-    const spent = title({
-      status: 'refused',
-      reason: 'That code has already been used',
-      keepCode: false,
-    });
-    assert.equal(kept.title, 'Not redeemed');
-    assert.equal(kept.description, 'Link your site account first');
-    assert.notEqual(kept.color, spent.color);
+describe('where a code is redeemed', () => {
+  it('is the site, with the code in the fragment so it never reaches a server log', () => {
+    assert.equal(redeemUrl(SITE, 'ABCD2345'), `${SITE}/#redeem=ABCD2345`);
+    assert.equal(redeemUrl(`${SITE}/`, 'ABCD2345'), `${SITE}/#redeem=ABCD2345`);
+    assert.equal(redeemUrl(`${SITE}//`), `${SITE}/`);
+    assert.doesNotMatch(redeemUrl(SITE, 'ABCD2345'), /\?/);
   });
 });
 
@@ -445,111 +420,72 @@ describe('/daily', () => {
   });
 });
 
-describe('/redeem', () => {
-  it('asks the gateway and shows what it said', async () => {
-    const calls: [string, string][] = [];
-    const api = {
-      redeemDailyCode: async (id: string, code: string) => {
-        calls.push([id, code]);
-        return { status: 'paid', prizeMinor: '100000', username: 'Steve', wagerMinor: '500000' };
-      },
-    } as unknown as PlatformApi;
-    const { interaction, replies } = command('x', { code: 'ABCD-2345' });
-    await redeemCommand(api, interaction);
-    assert.deepEqual(calls, [[USER, 'ABCD-2345']]);
-    assert.equal(replies[0]!.title, 'Daily code redeemed');
-  });
-
-  it('says the code was not used when the site does not answer', async () => {
-    const api = {
-      redeemDailyCode: async () => {
-        throw new Error('down');
-      },
-    } as unknown as PlatformApi;
-    const { interaction, replies } = command('x', { code: 'ABCD-2345' });
-    await redeemCommand(api, interaction);
-    assert.match(replies[0]!.description ?? '', /has not been used/);
-  });
-
-  it('is unavailable, and says so, when the bot has no link to the site', async () => {
-    const { interaction, replies } = command('x', { code: 'ABCD-2345' });
-    await redeemCommand(null, interaction);
-    assert.equal(replies[0]!.title, 'Not available');
-  });
-});
-
 // ── replying to the DM ─────────────────────────────────────────────────────
 
 function dm(content: string, options: { bot?: boolean; guild?: string | null; id?: string } = {}) {
-  const replies: { title?: string; description?: string }[] = [];
+  const replies: {
+    embed: { title?: string; description?: string };
+    buttons: { url: string; label: string }[];
+  }[] = [];
   const message = {
     content,
     guildId: options.guild ?? null,
     author: { id: options.id ?? USER, bot: options.bot ?? false },
     reply: async (payload: {
       embeds: { toJSON(): { title?: string; description?: string } }[];
+      components: { toJSON(): { components: { url: string; label: string }[] } }[];
     }) => {
-      replies.push(payload.embeds[0]!.toJSON());
+      replies.push({
+        embed: payload.embeds[0]!.toJSON(),
+        buttons: payload.components[0]!.toJSON().components,
+      });
     },
   } as unknown as Message;
   return { message, replies };
 }
 
 describe('replying to the DM', () => {
-  const paying = (calls: [string, string][]) =>
-    ({
-      redeemDailyCode: async (id: string, code: string) => {
-        calls.push([id, code]);
-        return { status: 'nothing', username: 'Steve' } satisfies DailyRedeemResult;
-      },
-    }) as unknown as PlatformApi;
-
-  it('redeems a code sent back as a message, in any case and with a dash', async () => {
-    const calls: [string, string][] = [];
+  it('points a code sent back to the site, with the code filled in, and redeems nothing', async () => {
     const { message, replies } = dm('abcd-2345', { id: '501' + USER });
-    await onDirectMessage(paying(calls), message, 1_000);
-    assert.deepEqual(calls, [['501' + USER, 'ABCD2345']]);
-    assert.equal(replies[0]!.title, 'Nothing this time');
+    await onDirectMessage(message, SITE, 1_000);
+    assert.equal(replies[0]!.embed.title, 'Redeem it on the site');
+    assert.match(replies[0]!.embed.description ?? '', /not here/);
+    assert.equal(replies[0]!.buttons.length, 1);
+    assert.equal(replies[0]!.buttons[0]!.label, 'Redeem on the site');
+    assert.equal(replies[0]!.buttons[0]!.url, `${SITE}/#redeem=ABCD2345`);
   });
 
   it('ignores bots and anything said in a server', async () => {
-    const calls: [string, string][] = [];
     for (const input of [dm('ABCD2345', { bot: true }), dm('ABCD2345', { guild: GUILD })]) {
-      await onDirectMessage(paying(calls), input.message, 1_000);
+      await onDirectMessage(input.message, SITE, 1_000);
       assert.equal(input.replies.length, 0);
     }
-    assert.equal(calls.length, 0);
   });
 
-  it('points anything else to the command, but at most once every few minutes', async () => {
+  it('points anything else to the command and the site, but at most once every few minutes', async () => {
     const id = '601' + USER;
     const first = dm('hello?', { id });
-    await onDirectMessage(paying([]), first.message, 10_000);
-    assert.equal(first.replies[0]!.title, 'Daily codes');
+    await onDirectMessage(first.message, SITE, 10_000);
+    assert.equal(first.replies[0]!.embed.title, 'Daily codes');
+    assert.match(first.replies[0]!.embed.description ?? '', /\/daily on/);
+    assert.equal(first.replies[0]!.buttons[0]!.url, `${SITE}/`, 'no code, so a plain link');
     const second = dm('anybody there?', { id });
-    await onDirectMessage(paying([]), second.message, 10_000 + 60_000);
+    await onDirectMessage(second.message, SITE, 10_000 + 60_000);
     assert.equal(second.replies.length, 0, 'no reply loop');
     const later = dm('hello again', { id });
-    await onDirectMessage(paying([]), later.message, 10_000 + 6 * 60_000);
+    await onDirectMessage(later.message, SITE, 10_000 + 6 * 60_000);
     assert.equal(later.replies.length, 1);
   });
 
-  it('stops answering after eight tries in a minute', async () => {
-    const calls: [string, string][] = [];
+  it('answers a code at most once every few minutes too, however fast they are sent', async () => {
     const id = '701' + USER;
-    let last = dm('ABCD2345', { id });
-    for (let attempt = 0; attempt < 9; attempt += 1) {
-      last = dm('ABCD2345', { id });
-      await onDirectMessage(paying(calls), last.message, 100_000 + attempt * 1_000);
+    let answered = 0;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const sent = dm('ABCD2345', { id });
+      await onDirectMessage(sent.message, SITE, 100_000 + attempt * 1_000);
+      answered += sent.replies.length;
     }
-    assert.equal(calls.length, 8);
-    assert.equal(last.replies[0]!.title, 'Slow down');
-  });
-
-  it('says it is unavailable when the bot has no link to the site', async () => {
-    const { message, replies } = dm('ABCD2345', { id: '801' + USER });
-    await onDirectMessage(null, message, 1_000);
-    assert.equal(replies[0]!.title, 'Not available');
+    assert.equal(answered, 1);
   });
 });
 
@@ -562,30 +498,31 @@ describe('how it is wired', () => {
     const server = await read('../src/server.ts');
     assert.match(server, /GatewayIntentBits\.DirectMessages/);
     assert.match(server, /Partials\.Channel/);
-    assert.match(server, /if \(!message\.guildId\) \{\s*void onDirectMessage\(api, message\)/);
+    assert.match(
+      server,
+      /if \(!message\.guildId\) \{\s*void onDirectMessage\(message, config\.siteUrl\)/,
+    );
     assert.match(server, /case 'daily':/);
-    assert.match(server, /case 'redeem':/);
+    assert.doesNotMatch(server, /case 'redeem':/, 'nothing is redeemed in Discord');
     assert.match(server, /startDailySender\(db, ready, api, config\.siteUrl, config\.guildId/);
   });
 
-  it('registers /daily with on, off and status, and /redeem with a code', async () => {
+  it('registers /daily with on, off and status, and no /redeem', async () => {
     const commands = await read('../src/commands.ts');
     const daily = commands.slice(
       commands.indexOf("setName('daily')"),
-      commands.indexOf("setName('redeem')"),
+      commands.indexOf("setName('daily-invite')"),
     );
     for (const sub of ['on', 'off', 'status'])
       assert.match(daily, new RegExp(`setName\\('${sub}'\\)`));
-    assert.match(
-      commands.slice(commands.indexOf("setName('redeem')")),
-      /setName\('code'\)[\s\S]{0,200}setRequired\(true\)/,
-    );
+    assert.doesNotMatch(commands, /setName\('redeem'\)/);
   });
 
-  it('writes only its own two tables, and asks the gateway for everything about money', async () => {
+  it('writes only its own two tables, and cannot redeem a code at all', async () => {
     const source = await read('../src/features/daily-codes.ts');
     assert.doesNotMatch(source, /FROM users|UPDATE users|INSERT INTO users|wallet_transactions/i);
-    assert.match(source, /api\.redeemDailyCode\(/);
+    assert.doesNotMatch(source, /redeemDailyCode|daily-code\/redeem/);
+    assert.doesNotMatch(await read('../src/api-client.ts'), /redeemDailyCode|daily-code\/redeem/);
     assert.match(source, /discord_daily_subscribers/);
     assert.match(source, /discord_daily_codes/);
   });

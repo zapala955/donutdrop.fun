@@ -70,7 +70,6 @@ import {
   dailyCommand,
   onDailyButton,
   onDirectMessage,
-  redeemCommand,
   startDailySender,
 } from './features/daily-codes.js';
 import { dailyInviteCommand } from './features/daily-invite.js';
@@ -227,9 +226,9 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, (message) => {
-    // A direct message: somebody sending back a daily code.
+    // A direct message: somebody sending back a daily code, who is pointed to the site.
     if (!message.guildId) {
-      void onDirectMessage(api, message).catch((error) =>
+      void onDirectMessage(message, config.siteUrl).catch((error) =>
         log.error({ error }, 'direct message failed'),
       );
       return;
@@ -342,8 +341,6 @@ async function main(): Promise<void> {
           siteUrl: config.siteUrl,
           extraOwnerIds: config.ownerIds,
         });
-      case 'redeem':
-        return redeemCommand(api, interaction);
       case 'tag':
         return claimTag(api, interaction);
       case 'rewards':
