@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- The redesign preview, served only at /test (see infra/nginx/nginx.conf). Same app, same scripts,
+     same routes as index.html; a new shell (left sidebar, top bar, right chat panel) and a new skin
+     (assets/css/luxe*.css) on top of the existing sheets. The views below the home view are
+     index.html's own, copied unchanged, so every game and page keeps working exactly as it does on
+     the live site. The Content-Security-Policy is index.html's. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self'; connect-src 'self' https://challenges.cloudflare.com http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001 ws://127.0.0.1:3001" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>DonutLuxe.com — DonutSMP Crash, Mines, Coinflip &amp; Cases</title>
+<meta name="description" content="Play crash, mines, plinko, coinflip, blackjack, roulette, cases, case battles and the upgrader with DonutSMP money. Deposit and withdraw in game." />
+<!-- A preview: never indexed. seo.js keeps this on every route, and nginx sends X-Robots-Tag. -->
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="https://donutluxe.com/" />
+<meta name="theme-color" content="#0a0a0c" />
+<meta property="og:title" content="DonutLuxe.com — DonutSMP Crash, Mines, Coinflip &amp; Cases" />
+<meta property="og:description" content="Play crash, mines, plinko, coinflip, blackjack, roulette, cases, case battles and the upgrader with DonutSMP money. Deposit and withdraw in game." />
+<meta property="og:url" content="https://donutluxe.com/" />
+<meta name="twitter:title" content="DonutLuxe.com — DonutSMP Crash, Mines, Coinflip &amp; Cases" />
+<meta name="twitter:description" content="Play crash, mines, plinko, coinflip, blackjack, roulette, cases, case battles and the upgrader with DonutSMP money. Deposit and withdraw in game." />
+<meta name="api-base-url" content="" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Figtree carries the interface, Archivo (wide, heavy) the game names. Rubik and JetBrains Mono
+     stay requested for anything that still names them; a face no element uses is never downloaded. -->
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,700..900&family=Figtree:wght@400..800&family=JetBrains+Mono:wght@400;500;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/app.css" />
+<link rel="stylesheet" href="assets/css/surface.css" />
+<link rel="stylesheet" href="assets/css/upgrader.css" />
+<link rel="stylesheet" href="assets/css/vault.css" />
+<link rel="stylesheet" href="assets/css/platform.css" />
+<link rel="stylesheet" href="assets/css/matte.css" />
+<link rel="stylesheet" href="assets/css/pages.css" />
+<link rel="stylesheet" href="assets/css/obsidian.css" />
+<link rel="stylesheet" href="assets/css/duel.css" />
+<link rel="stylesheet" href="assets/css/social.css" />
+<link rel="stylesheet" href="assets/css/polish.css" />
+<link rel="stylesheet" href="assets/css/auth.css" />
+<link rel="stylesheet" href="assets/css/referrals.css" />
+<link rel="stylesheet" href="assets/css/roulette.css" />
+<link rel="stylesheet" href="assets/css/blackjack.css" />
+<link rel="stylesheet" href="assets/css/crash.css" />
+<link rel="stylesheet" href="assets/css/mines.css" />
+<link rel="stylesheet" href="assets/css/plinko.css" />
+<link rel="stylesheet" href="assets/css/coinflip.css" />
+<link rel="stylesheet" href="assets/css/mines-duel.css" />
+<link rel="stylesheet" href="assets/css/battles.css" />
+<!-- home.css is left out on purpose: the home view below is new and luxe-home.css owns all of it. -->
+<link rel="stylesheet" href="assets/css/gamehead.css" />
+<link rel="stylesheet" href="assets/css/nudge.css" />
+<link rel="stylesheet" href="assets/css/popups.css" />
+<link rel="stylesheet" href="assets/css/sitefoot.css" />
+<link rel="stylesheet" href="assets/css/mobile.css" />
+<!-- The skin. Last, so it settles every argument the sheets above were having. -->
+<link rel="stylesheet" href="assets/css/luxe.css" />
+<link rel="stylesheet" href="assets/css/luxe-home.css" />
+<link rel="stylesheet" href="assets/css/luxe-games.css" />
+<link rel="icon" href="assets/img/items/ender_chest.png" />
+</head>
+<body class="lx">
+<button class="skip" id="skipToMain" type="button">Skip to content</button>
+
+<!-- ══════════ sidebar ══════════
+     A rail of icons that opens into a labelled menu (the burger), remembered per browser. Below
+     1024px it is a drawer opened from the bottom bar. Every link is an ordinary path; the router
+     takes it from there. -->
+<aside class="lxside" id="lxSide" aria-label="Menu">
+  <div class="lxside__head">
+    <button class="lxside__burger" id="lxSideBtn" type="button" aria-controls="lxSide" aria-expanded="false" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>
+    </button>
+    <div class="lxmodes">
+      <a class="lxmode" href="/" data-mode="casino" data-tip="Casino">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle class="lxfill" cx="8.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="12" cy="12" r="1.4"/><circle class="lxfill" cx="8.5" cy="15.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="15.5" r="1.4"/></svg>
+        <span>Casino</span>
+      </a>
+      <a class="lxmode" href="/crates" data-mode="cases" data-tip="Cases">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10V8.5a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4V10"/><path d="M3.5 10h17v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M10.5 10v3.5h3V10"/></svg>
+        <span>Cases</span>
+      </a>
+    </div>
+  </div>
+
+  <nav class="lxside__nav" aria-label="Site">
+    <ul class="lxnavs">
+      <li><a class="lxnav" href="/vip" data-route="vip" data-tip="VIP Club">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M4 18 2.5 8.5l5 3.5L12 5l4.5 7 5-3.5L20 18"/></svg><span>VIP Club</span></a></li>
+      <li><a class="lxnav" href="/rewards" data-route="rewards" data-tip="Rewards">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16V20H4z"/><path d="M3 7h18v3.5H3zM12 7v13"/><path d="M12 7H8.5a2.25 2.25 0 1 1 0-4.5C11 2.5 12 7 12 7zm0 0h3.5a2.25 2.25 0 1 0 0-4.5C13 2.5 12 7 12 7z"/></svg><span>Rewards</span></a></li>
+      <li><a class="lxnav" href="/daily-rewards" data-route="daily-rewards" data-tip="Daily Rewards">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg><span>Daily Rewards</span></a></li>
+      <li><a class="lxnav" href="/race" data-route="race" data-tip="Wager Race">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4.5h12l-2 3.5 2 3.5H5"/></svg><span>Wager Race</span></a></li>
+      <li><a class="lxnav" href="/referrals" data-route="referrals" data-tip="Invite &amp; Earn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.25"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M18 8.5v6M15 11.5h6"/></svg><span>Invite &amp; Earn</span></a></li>
+    </ul>
+
+    <hr class="lxside__rule" />
+    <p class="lxside__label">DonutLuxe Originals</p>
+    <ul class="lxnavs">
+      <li><a class="lxnav" href="/crash" data-route="crash" data-tip="Crash">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 19.5c6 0 11-4 14-13"/><path d="M13.5 6.5h4v4"/><path d="M3.5 3.5v16h17"/></svg><span>Crash</span></a></li>
+      <li><a class="lxnav" href="/mines" data-route="mines" data-tip="Mines">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18M9.5 4 8 9l4 11 4-11-1.5-5"/></svg><span>Mines</span></a></li>
+      <li><a class="lxnav" href="/plinko" data-route="plinko" data-tip="Plinko">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="lxfill" cx="12" cy="5" r="1.5"/><circle class="lxfill" cx="9" cy="10" r="1.5"/><circle class="lxfill" cx="15" cy="10" r="1.5"/><circle class="lxfill" cx="6" cy="15" r="1.5"/><circle class="lxfill" cx="12" cy="15" r="1.5"/><circle class="lxfill" cx="18" cy="15" r="1.5"/><path d="M3.5 20h17"/></svg><span>Plinko</span></a></li>
+      <li><a class="lxnav" href="/blackjack" data-route="blackjack" data-tip="Blackjack">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="10" height="14" rx="1.75" transform="rotate(-10 8.5 12.5)"/><rect x="10.5" y="4.5" width="10" height="14" rx="1.75" transform="rotate(8 15.5 11.5)"/></svg><span>Blackjack</span></a></li>
+      <li><a class="lxnav" href="/roulette" data-route="roulette" data-tip="Roulette">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5"/></svg><span>Roulette</span></a></li>
+      <li><a class="lxnav" href="/upgrader" data-route="upgrader" data-tip="Upgrader">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 6-6 6 6"/><path d="m6 18.5 6-6 6 6"/></svg><span>Upgrader</span></a></li>
+      <li><a class="lxnav" href="/coinflip" data-route="coinflip" data-tip="Coinflip">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="7.5" ry="8.5"/><ellipse cx="12" cy="12" rx="4" ry="5"/></svg><span>Coinflip</span></a></li>
+      <li><a class="lxnav" href="/mines-duel" data-route="mines-duel" data-tip="Mines Duel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8C6 5.5 9.5 4.5 13 5"/><path d="M20.5 8C18 5.5 14.5 4.5 11 5"/><path d="m7 5.5 13 15"/><path d="M17 5.5 4 20.5"/></svg><span>Mines Duel</span></a></li>
+      <li><a class="lxnav" href="/battles" data-route="battles" data-tip="Case Battles">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5"/><path d="m5 14 4 4M7 17l-3 3M3 19l2 2"/></svg><span>Case Battles</span></a></li>
+    </ul>
+
+    <hr class="lxside__rule" />
+    <ul class="lxnavs">
+      <li><a class="lxnav" href="/leaderboard" data-route="leaderboard" data-tip="Leaderboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Leaderboard</span></a></li>
+      <li><a class="lxnav" href="/statistics" data-route="statistics" data-tip="Statistics">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V4M16 20v-7M21.5 20h-19"/></svg><span>Statistics</span></a></li>
+      <li><a class="lxnav" href="/fairness" data-route="fairness" data-tip="Provably Fair">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19.5 6v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></svg><span>Provably Fair</span></a></li>
+      <li><a class="lxnav" href="/creator-media" data-route="creator-media" data-tip="Media Programme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 11 6-3v8l-6-3z"/></svg><span>Media Programme</span></a></li>
+      <li><a class="lxnav" href="/discord" data-route="discord" data-tip="Discord">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="lxfill" d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg><span>Discord</span></a></li>
+      <li><a class="lxnav" href="/support" data-route="support" data-tip="Live Support">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3.5" y="13" width="4" height="6" rx="1.5"/><rect x="16.5" y="13" width="4" height="6" rx="1.5"/><path d="M20.5 19c0 1.5-2 2.5-5 2.5"/></svg><span>Live Support</span></a></li>
+    </ul>
+  </nav>
+</aside>
+<!-- Behind the menu when it is a drawer; a tap anywhere off it closes it. -->
+<div class="lxscrim" id="lxScrim" hidden></div>
+
+<!-- A single floating label for the collapsed rail: the nav scrolls, so a label drawn inside it
+     would be clipped by its own scroller. -->
+<div class="lxtip" id="lxTip" role="tooltip" hidden></div>
+
+<div class="lxapp" id="lxApp">
+
+  <!-- ══════════ top bar ══════════ -->
+  <header class="lxtop">
+    <div class="lxtop__in">
+      <a class="lxbrand" href="/" aria-label="DonutLuxe home">
+        <span class="lxbrand__word">Donut<b>Luxe</b></span>
+      </a>
+
+      <!-- Signed in: the balance and the two money actions, centred like the wallet it is. -->
+      <div class="lxwallet">
+        <div class="cashpill lxbal" role="status" aria-atomic="true" title="Balance — in-game DonutSMP dollars">
+          <i class="cashpill__coin" aria-hidden="true"></i>
+          <span class="cashpill__lbl">Balance </span>
+          <b class="cashpill__n mono" id="wCash">$0</b>
+        </div>
+        <button class="btn btn--go lxbtn lxbtn--gold" id="depositBtn" type="button"><span>Deposit</span></button>
+        <button class="btn btn--withdraw lxbtn lxbtn--ghost" id="withdrawBtn" type="button"><span>Withdraw</span></button>
+      </div>
+
+      <div class="lxtop__end">
+        <button class="lxicon" id="lxSearchBtn" type="button" aria-label="Search games" aria-keyshortcuts="Control+K">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        </button>
+        <button class="lvl" id="lvlPill" type="button" hidden>
+          <span class="lvl__n mono" id="lvlNum">—</span>
+          <span class="lvl__bar"><i id="lvlFill"></i></span>
+        </button>
+        <button class="ihint lvl__tip" type="button" id="lvlTip" hidden
+                aria-label="VIP progress" data-tip="VIP progress"></button>
+        <button class="lxicon mute" id="muteBtn" type="button" data-muted="0" aria-pressed="false" aria-label="Mute sound">
+          <svg class="mute__on" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="M16 9a4.25 4.25 0 0 1 0 6"/><path d="M18.5 6.5a7.75 7.75 0 0 1 0 11"/></svg>
+          <svg class="mute__off" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="m16.5 9.5 5 5m0-5-5 5"/></svg>
+        </button>
+        <!-- Signed out: the two doors in. Both open the one Minecraft sign-in, which signs a new
+             player up and a returning one in. -->
+        <button class="btn btn--glass lxbtn lxbtn--ghost" id="loginBtn" type="button">
+          <img class="loginbtn__head" id="loginHead" alt="" width="26" height="26" hidden />
+          <span id="loginLabel">Log in</span>
+        </button>
+        <button class="lxbtn lxbtn--gold" id="lxRegister" type="button">Register</button>
+        <div class="acct">
+          <button class="lxicon acct__btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></svg>
+          </button>
+          <div class="menu" id="acctMenu" role="menu" hidden>
+      <a class="menu__row" href="/profile" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+        <span>Profile</span>
+      </a>
+      <a class="menu__row menu__row--hi" href="/referrals" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 11h4M19 9v4"/></svg>
+        <span><b id="menuInvites"></b> Invites</span>
+      </a>
+      <a class="menu__row" href="/wallet" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.2"/></svg>
+        <span>Wallet</span>
+      </a>
+      <a class="menu__row menu__row--hi" href="/vip" data-route="vip" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M4 18l-1.5-9 5 3.5L12 5l4.5 7.5 5-3.5L20 18"/></svg>
+        <span>VIP</span>
+      </a>
+      <a class="menu__row" href="/rewards" data-route="rewards" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h3.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
+        <span>Rewards</span>
+      </a>
+      <a class="menu__row" href="/daily-rewards" data-route="daily-rewards" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/></svg>
+        <span>Daily Rewards</span>
+      </a>
+      <a class="menu__row" href="/fairness" data-route="fairness" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span>Fairness</span>
+      </a>
+      <a class="menu__row" href="/race" data-route="race" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 5h11l-1.6 3L16 11H5z"/></svg>
+        <span>Race</span>
+      </a>
+      <a class="menu__row" href="/creator-media" data-route="creator-media" role="menuitem">
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 11l6-3v8l-6-3z"/></svg>
+        <span>Media Programme</span>
+      </a>
+      <!-- The in-app /discord page, like the nav pill: it carries the invite AND the account link
+           (a code for /link in the server). Sending this row straight to the invite left the link
+           code on a page nothing pointed at, so nobody could link. -->
+      <a class="menu__row" href="/discord" data-route="discord" role="menuitem"
+         aria-label="Discord: join the server and link your account">
+        <svg class="menu__ico menu__ico--brand" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg>
+        <span>Discord</span>
+      </a>
+
+        <!-- Skill Duels, Quests & Streak and Faction War were listed here under "Play".
+             All three came off the board together: none had anything live in it at the time --
+             no open duel lobby, no faction, no unclaimed quest reward -- so nothing was stranded
+             by unlisting them. The routes and their views still exist; a mode taken off the menu
+             can be put back by restoring this block, which is why it is described rather than
+             deleted without trace. -->
+
+        <div class="menu__sep" role="separator"></div>
+        <div class="menu__label">Activity</div>
+        <a class="menu__row" href="/leaderboard" data-route="leaderboard" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+          <span>Leaderboard</span>
+        </a>
+        <a class="menu__row" href="/statistics" data-route="statistics" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <span>Statistics</span>
+        </a>
+        <a class="menu__row" href="/history" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>
+          <span>Match history</span>
+        </a>
+        <div class="menu__sep" role="separator"></div>
+        <div class="menu__label">Account</div>
+        <a class="menu__row" href="/settings" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.92a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.12.6.72 1 1.33 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </a>
+        <a class="menu__row" href="/support" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.4"/><path d="M12 17h.01"/></svg>
+          <span>Support</span>
+        </a>
+        <a class="menu__row" href="/terms" role="menuitem">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          <span>Terms</span>
+        </a>
+        <a class="menu__row menu__row--muted" href="/" role="menuitem" id="signOutBtn">
+          <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 19H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
+          <span>Sign out</span>
+        </a>
+          </div>
+        </div>
+        <button class="lxicon" id="lxChatBtn" type="button" aria-controls="chat" aria-pressed="false" aria-label="Show chat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10.5H10l-4.5 3.5V16h-1z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg>
+        </button>
+        <!-- The phone drawer's handle. app.js owns it; on a phone the bottom bar presses it. -->
+        <button class="top__burger lxburger" id="burger" type="button" aria-label="Open chat" aria-expanded="false" aria-controls="chat" tabindex="-1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10.5H10l-4.5 3.5V16h-1z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- the vault jackpot, directly under the bar (assets/js/vault-jackpot.js) -->
+  <div class="vjp" id="vaultJackpot" hidden></div>
+
+  <main class="main lxmain" id="main" tabindex="-1">
+
+    <!-- ─────── HOME ───────
+         The lobby, laid out the way the big casino lobbies do it: three offers, one search, one tab
+         strip, then a row of portrait cards. Every game is in the markup, not built by script: the
+         cards are the home page's links into every game. Every figure in the offers is the
+         server's (GET /v1/promotions); mountHome in app.js fills them. -->
+    <section class="view" data-view="home" hidden>
+      <h1 class="lxsr">DonutLuxe: DonutSMP crash, mines, coinflip and cases</h1>
+
+      <section class="lxpromos" aria-label="Offers">
+        <!-- Signed out: the sign-up bonus, and the card logs you in. Signed in: the whole lobby. -->
+        <div class="lxpromo" id="pbanLead">
+          <a class="lxpromo__cover" id="pbanLeadCover" href="/" tabindex="-1" aria-hidden="true"></a>
+          <span class="lxpromo__art"><img src="assets/img/luxe/promo-bonus.svg" alt="" width="180" height="180" /></span>
+          <span class="lxpromo__copy">
+            <span class="lxtag lxtag--gold" id="pbanLeadEyebrow">DonutLuxe Originals</span>
+            <span class="lxpromo__h" id="pbanLeadH">Explore the games</span>
+            <span class="lxpromo__p" id="pbanLeadP">Crash, Mines, Coinflip, Plinko, Blackjack and more.</span>
+            <span class="lxpromo__acts">
+              <a class="lxpromo__go" id="pbanLeadGo" href="/" hidden>Log in</a>
+              <button class="lxpromo__go" type="button" id="pbanExplore">Explore games</button>
+            </span>
+          </span>
+          <!-- app.js still sets this image's src; the art above is what shows. -->
+          <img id="pbanLeadArt" src="assets/img/items/ender_chest.png" alt="" hidden />
+        </div>
+        <!-- Signed out, this opens the sign-up rather than the referrals page's dead end. -->
+        <a class="lxpromo" id="pbanInvite" href="/referrals">
+          <span class="lxpromo__art"><img src="assets/img/luxe/promo-invite.svg" alt="" width="180" height="180" /></span>
+          <span class="lxpromo__copy">
+            <span class="lxtag">Promotion</span>
+            <span class="lxpromo__h" id="pbanInviteH">Invite your friends</span>
+            <span class="lxpromo__p">Share your link. You earn from every player you bring in.</span>
+            <span class="lxpromo__acts"><span class="lxpromo__go" id="pbanInviteGo">Get your link</span></span>
+          </span>
+        </a>
+        <a class="lxpromo" href="/discord">
+          <span class="lxpromo__art"><img src="assets/img/luxe/promo-discord.svg" alt="" width="180" height="180" /></span>
+          <span class="lxpromo__copy">
+            <span class="lxtag">Community</span>
+            <span class="lxpromo__h">Join the Discord</span>
+            <span class="lxpromo__p">Chat with other players and link your account with /link.</span>
+            <span class="lxpromo__acts"><span class="lxpromo__go">Join Discord</span></span>
+          </span>
+        </a>
+      </section>
+
+      <section class="lxlobby" id="lobby" aria-labelledby="lobbyH" tabindex="-1">
+        <label class="lxsearch">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+          <input type="search" id="lobbySearch" placeholder="Search DonutLuxe" aria-label="Search games"
+                 aria-keyshortcuts="Control+K" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+          <kbd class="lxkbd" aria-hidden="true">Ctrl + K</kbd>
+        </label>
+
+        <div class="lxtabs">
+          <div class="lxtabs__track" role="group" aria-label="Show games by type">
+            <button class="lobby__tab lxtab" type="button" data-cat="all" data-title="DonutLuxe Originals" aria-pressed="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle class="lxfill" cx="8.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="12" cy="12" r="1.4"/><circle class="lxfill" cx="8.5" cy="15.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="15.5" r="1.4"/></svg>
+              <span>Lobby</span>
+            </button>
+            <button class="lobby__tab lxtab" type="button" data-cat="new" data-title="New games" aria-pressed="false" id="lxTabNew">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7-5.6-1.9L10.1 9z"/><path d="M19 3v4M17 5h4"/></svg>
+              <span>New</span>
+            </button>
+            <button class="lobby__tab lxtab" type="button" data-cat="casino" data-title="Casino" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5"/></svg>
+              <span>Casino</span>
+            </button>
+            <button class="lobby__tab lxtab" type="button" data-cat="pvp" data-title="PvP" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5"/><path d="m5 14 4 4M7 17l-3 3M3 19l2 2"/></svg>
+              <span>PvP</span>
+            </button>
+            <button class="lobby__tab lxtab" type="button" data-cat="cases" data-title="Cases" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10V8.5a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4V10"/><path d="M3.5 10h17v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M10.5 10v3.5h3V10"/></svg>
+              <span>Cases</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="lxrow__head">
+          <h2 class="lxrow__h" id="lobbyH">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c-4 0-7-2.6-7-6.6 0-3.3 2.3-5 3.6-7.6.4 1.8 1.4 2.9 2.4 3.4C11.2 6.6 12.6 4.4 15 3c-.4 2.6.4 4.6 1.8 6.3 1.4 1.7 2.2 3 2.2 5.1 0 4-3 6.6-7 6.6z"/></svg>
+            <span id="lobbyTitle">DonutLuxe Originals</span>
+          </h2>
+          <div class="lxrow__arrows">
+            <button class="lxarrow" type="button" id="lobbyPrev" aria-label="Scroll games left" aria-controls="lobbyTrack" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+            </button>
+            <button class="lxarrow" type="button" id="lobbyNext" aria-label="Scroll games right" aria-controls="lobbyTrack">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- "N playing" under each card is the server's count of distinct players with a round in
+             that game in the last fifteen minutes (GET /v1/activity/playing); a game nobody is in
+             says nothing rather than zero. -->
+        <ul class="lxrow" id="lobbyTrack">
+          <li><a class="gcard lxcard" href="/crash" data-cat="casino" data-game="crash" data-q="crash cash out before it crashes multiplier">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-crash.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Crash</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="crash" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/mines" data-cat="casino" data-game="mines" data-q="mines dodge the tnt grow the multiplier grid diamond">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-mines.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Mines</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="mines" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/plinko" data-cat="casino" data-game="plinko" data-q="plinko drop a ball down the pegs">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-plinko.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Plinko</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="plinko" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/blackjack" data-cat="casino" data-game="blackjack" data-q="blackjack 21 cards beat the dealer">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-blackjack.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Blackjack</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="blackjack" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/roulette" data-cat="casino" data-game="roulette" data-q="roulette wheel red black shared">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-roulette.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Roulette</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="roulette" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/upgrader" data-cat="casino" data-game="upgrader" data-q="upgrader upgrade pick a prize set your odds spin">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-upgrader.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Upgrader</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="upgrader" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/coinflip" data-cat="pvp" data-game="coinflip" data-q="coinflip coin flip heads tails 1v1 pot">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-coinflip.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Coinflip</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="coinflip" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/mines-duel" data-cat="pvp" data-game="mines-duel" data-q="mines duel 1v1 tnt versus safe tiles">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-mines-duel.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Mines Duel</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="mines-duel" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/crates" data-cat="cases" data-game="crates" data-q="cases crates open case published odds chest">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-cases.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Cases</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="crates" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/battles" data-cat="cases pvp" data-game="battles" data-q="case battles battle versus same crates one pot">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art" src="assets/img/luxe/card-battles.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Case Battles</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="battles" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+        </ul>
+        <div class="lxnone" id="lobbyNone" hidden>
+          <p>No game matches that search. Try "mines", "cards" or "1v1".</p>
+          <button class="lxbtn lxbtn--ghost" type="button" id="lobbyReset">Show every game</button>
+        </div>
+        <div class="lxmore">
+          <button class="lxmore__btn" type="button" id="lxMore" aria-controls="lobbyTrack" aria-expanded="false">See all games</button>
+        </div>
+      </section>
+
+      <!-- Rewards: the three things that pay a player back for playing. None quotes a figure; each
+           page states its own terms. -->
+      <section class="lxperks" aria-labelledby="perksH">
+        <div class="lxrow__head">
+          <h2 class="lxrow__h" id="perksH">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16V20H4z"/><path d="M3 7h18v3.5H3zM12 7v13"/><path d="M12 7H8.5a2.25 2.25 0 1 1 0-4.5C11 2.5 12 7 12 7zm0 0h3.5a2.25 2.25 0 1 0 0-4.5C13 2.5 12 7 12 7z"/></svg>
+            <span>Rewards</span>
+          </h2>
+        </div>
+        <ul class="lxperks__row">
+          <li><a class="lxperk" href="/daily-rewards">
+            <svg class="lxperk__ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg>
+            <span class="lxperk__copy"><b>Daily Rewards</b><span>Play each day, claim each day</span></span>
+          </a></li>
+          <li><a class="lxperk" href="/race">
+            <svg class="lxperk__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4.5h12l-2 3.5 2 3.5H5"/></svg>
+            <span class="lxperk__copy"><b>Wager Race</b><span>Every wager counts toward the prizes</span></span>
+          </a></li>
+          <li><a class="lxperk" href="/vip">
+            <svg class="lxperk__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M4 18 2.5 8.5l5 3.5L12 5l4.5 7 5-3.5L20 18"/></svg>
+            <span class="lxperk__copy"><b>VIP Club</b><span>Level up as you play, earn rakeback</span></span>
+          </a></li>
+        </ul>
+      </section>
+
+      <section class="lxpulls" aria-labelledby="pullsH">
+        <div class="lxrow__head">
+          <h2 class="lxrow__h" id="pullsH">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+            <span>Biggest pulls today</span>
+          </h2>
+        </div>
+        <ol class="drops lxdrops" id="bigDrops"></ol>
+      </section>
+    </section>
+
+    <!-- ─────── CRATES ─────── -->
+    <section class="view" data-view="crates" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/chest.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Crates</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Every crate shows its full drop table and odds before you pay."
+          data-tip="Every crate shows its full drop table and odds before you pay."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="crates" id="crateRoot"></div>
+    </section>
+
+    <!-- ─────── REFERRALS ─────── -->
+    <section class="view" data-view="referrals" hidden>
+      <header class="phead">
+        <h1>Invite &amp; Earn <button class="ihint" type="button" aria-label="You earn a cut of the house margin on your invites, never a cut of their losses."
+          data-tip="You earn a cut of the house margin on your invites, never a cut of their losses."></button></h1>
+      </header>
+      <div class="refer" id="referRoot"></div>
+    </section>
+
+    <!-- ─────── CASE BATTLES ─────── -->
+    <section class="view" data-view="battles" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/netherite_sword.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Case Battles</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Every seat pays the same, every drop joins one pot, and the winning side takes all of it."
+          data-tip="Every seat pays the same, every drop joins one pot, and the winning side takes all of it."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="battles" id="battleRoot"></div>
+    </section>
+
+    <!-- ─────── COMMUNITY CRATES ─────── -->
+    <section class="view" data-view="studio" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/ender_chest.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Community Crates</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Build a crate and earn a royalty on every open."
+          data-tip="Build a crate and earn a royalty on every open."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="studiowrap" id="studioRoot"></div>
+    </section>
+
+    <!-- ─────── UPGRADER ─────── -->
+    <section class="view" data-view="upgrader" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/xp_bottle.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Upgrader</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: The gold arc is your window: the pointer stops inside it and the payout is yours."
+          data-tip="The gold arc is your window: the pointer stops inside it and the payout is yours."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="upg" id="upgRoot"></div>
+    </section>
+
+    <!-- â”€â”€â”€â”€â”€â”€â”€ ROULETTE â”€â”€â”€â”€â”€â”€â”€ -->
+    <section class="view" data-view="roulette" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/nether_star.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Roulette</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: One server-owned European wheel is shared by every player. Bets lock every ten seconds."
+          data-tip="One server-owned European wheel is shared by every player. Bets lock every ten seconds."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="roulette" id="rouletteRoot"></div>
+    </section>
+
+    <!-- ─────── BLACKJACK ─────── -->
+    <section class="view" data-view="blackjack" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/enchanted_book.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Blackjack</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. Every card comes from your committed fairness seed, revealed when the hand ends."
+          data-tip="Wins pay 1.8x, blackjack pays 2.5x, ties push, dealer hits soft 17. Every card comes from your committed fairness seed, revealed when the hand ends."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="bj" id="blackjackRoot"></div>
+    </section>
+
+    <!-- ─────── CRASH ─────── -->
+    <section class="view" data-view="crash" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/elytra.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Crash</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: One shared multiplier climbs from 1.00x until it busts. Cash out before it does."
+          data-tip="One shared multiplier climbs from 1.00x until it busts. Cash out before it does."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="crash" id="crashRoot"></div>
+    </section>
+
+    <!-- ─────── MINES ─────── -->
+    <section class="view" data-view="mines" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/tnt.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Mines</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like."
+          data-tip="Choose how much TNT hides in the 25 tiles, then turn tiles one at a time. Every diamond raises the multiplier; TNT loses the stake. Cash out whenever you like."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="mines" id="minesRoot"></div>
+    </section>
+
+    <!-- ─────── PLINKO ─────── -->
+    <section class="view" data-view="plinko" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/slime_ball.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Plinko</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach."
+          data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="plinko" id="plinkoRoot"></div>
+    </section>
+
+    <!-- ─────── MINES DUEL ─────── -->
+    <section class="view" data-view="mines-duel" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/diamond_pickaxe.svg" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Mines Duel</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes."
+          data-tip="Two players, one hidden field of 25 tiles with TNT in it. You both turn tiles at once without seeing each other's progress. One TNT and your score is zero; lock in whenever you like, or the clock locks you in. The higher count of safe tiles wins the pot minus the house rake; equal scores return both stakes."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="mduel" id="minesDuelRoot"></div>
+    </section>
+
+    <!-- ─────── COINFLIP ─────── -->
+    <section class="view" data-view="coinflip" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/gold_ingot.png" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Coinflip</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. It is an exact 50/50 you can verify from the revealed seeds."
+          data-tip="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the pot minus the house rake. It is an exact 50/50 you can verify from the revealed seeds."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="duelwrap" id="coinflipRoot"></div>
+    </section>
+
+    <!-- ─────── 1v1 SKILL DUEL ─────── -->
+    <section class="view" data-view="skill-duel" hidden>
+      <header class="phead">
+        <h1>1v1 Skill <button class="ihint" type="button"
+          aria-label="Pure skill: the house takes no edge on the result and is paid a rake on the pot of a duel it decides."
+          data-tip="Pure skill. The house takes no edge on the result — it is paid a rake on the pot of a duel it decides, and nothing on a draw."></button></h1>
+      </header>
+      <div class="duelwrap" id="duelRoot"></div>
+    </section>
+
+    <!-- ─────── QUESTS ─────── -->
+    <section class="view" data-view="quests" hidden>
+      <header class="phead">
+        <h1>Quests &amp; Streak <button class="ihint" type="button" aria-label="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."
+          data-tip="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."></button></h1>
+      </header>
+      <div class="quests" id="questRoot"></div>
+    </section>
+
+    <!-- ─────── FACTION WAR ─────── -->
+    <section class="view" data-view="war" hidden>
+      <header class="phead">
+        <h1>Faction War <button class="ihint" type="button" aria-label="Pick a side once. Every wager you place counts toward its total."
+          data-tip="Pick a side once. Every wager you place counts toward its total."></button></h1>
+      </header>
+      <div class="war" id="warRoot"></div>
+    </section>
+
+    <!-- ─────── PROVABLY FAIR ─────── -->
+    <section class="view" data-view="fairness" hidden>
+      <header class="phead">
+        <h1>Provably Fair <button class="ihint" type="button"
+          aria-label="Every roll is committed before you play and revealed after. Re-hash the revealed seed here, in your own browser, and confirm it matches the commitment you were given."
+          data-tip="Every roll is committed before you play and revealed after. Re-hash the revealed seed in your own browser and confirm it matches the commitment you were given."></button></h1>
+      </header>
+      <div class="fair" id="fairRoot"></div>
+    </section>
+
+    <!-- ─────── VIP ─────── -->
+    <section class="view" data-view="vip" hidden>
+      <header class="phead">
+        <h1>VIP <button class="ihint" type="button"
+          aria-label="Your level is lifetime wagered volume. The only thing it grants is rakeback."
+          data-tip="Your level is lifetime wagered volume. The only thing it grants is rakeback."></button></h1>
+      </header>
+      <div class="vip" id="vipRoot"></div>
+    </section>
+
+    <!-- ─────── REWARDS ─────── -->
+    <section class="view" data-view="rewards" hidden>
+      <header class="phead">
+        <h1>Rewards <button class="ihint" type="button"
+          aria-label="Claim referral share and any available rakeback here."
+          data-tip="Your referral share from invited players builds here until you claim it."></button></h1>
+      </header>
+      <div class="rake" id="rewardsRoot"></div>
+    </section>
+
+    <!-- ─────── DAILY REWARDS ─────── -->
+    <section class="view" data-view="daily-rewards" hidden>
+      <header class="phead">
+        <h1>Daily Rewards <button class="ihint" type="button"
+          aria-label="Wager at least $10M each UTC day to claim. Miss a day and the streak resets to one."
+          data-tip="Wager at least $10M each UTC day to claim. Miss a day and the streak resets to one."></button></h1>
+      </header>
+      <div class="daily" id="dailyRoot"></div>
+    </section>
+
+    <!-- ─────── DISCORD ─────── -->
+    <section class="view" data-view="discord" hidden>
+      <header class="phead">
+        <h1>Discord</h1>
+      </header>
+      <div class="dsync" id="discordRoot"></div>
+    </section>
+
+    <!-- ─────── WAGER RACE ─────── -->
+    <section class="view" data-view="race" hidden>
+      <header class="phead">
+        <h1>Wager Race <button class="ihint" type="button"
+          aria-label="Every wager you place counts automatically. Prizes pay out the moment the clock ends."
+          data-tip="Every wager you place counts automatically. Prizes pay out the moment the clock ends."></button></h1>
+      </header>
+      <div class="race" id="raceRoot"></div>
+    </section>
+
+    <!-- ─────── CREATOR & MEDIA ─────── -->
+    <section class="view" data-view="creator-media" hidden>
+      <header class="phead">
+        <h1>Creator &amp; Media <button class="ihint" type="button"
+          aria-label="An approved code raises your revenue share out of the house margin, never out of your audience."
+          data-tip="An approved code raises your revenue share out of the house margin, never out of your audience."></button></h1>
+      </header>
+      <div class="creator" id="creatorRoot"></div>
+    </section>
+
+    <!-- ─────── LEADERBOARD ─────── -->
+    <section class="view" data-view="leaderboard" hidden>
+      <header class="phead">
+        <h1>Leaderboard <button class="ihint" type="button"
+          aria-label="Every board covers the last 30 days, so the top is always reachable."
+          data-tip="Every board covers the last 30 days, so the top is always reachable."></button></h1>
+      </header>
+      <div class="board" id="boardRoot"></div>
+    </section>
+
+    <!-- ─────── STATISTICS ─────── -->
+    <section class="view" data-view="statistics" hidden>
+      <header class="phead">
+        <h1>Statistics</h1>
+      </header>
+      <div class="stats" id="statsRoot"></div>
+    </section>
+
+    <section class="view" data-view="profile" hidden></section>
+    <section class="view" data-view="wallet" hidden></section>
+    <section class="view" data-view="history" hidden></section>
+    <section class="view" data-view="settings" hidden></section>
+    <section class="view" data-view="support" hidden></section>
+    <section class="view" data-view="terms" hidden></section>
+
+    <!-- ─────── REWARDS ─────── -->
+
+    <!-- ─────── LIVE BETS ───────
+         At the foot of every route, like the bets table under every game. ticker.js builds it. -->
+    <div id="tickerRoot" class="feedwrap"></div>
+
+    <!-- ─────── FOOTER NOTICE ───────
+         The last thing in the column, on every page: who this site is for, and who it is not. -->
+    <footer class="sitefoot" id="siteFoot">
+      <p class="sitefoot__age">
+        <span class="sitefoot__badge" aria-hidden="true">18+</span>
+        <span>You must be at least 18 years old to use this site.</span>
+      </p>
+      <p>
+        DonutLuxe is an independent site. It is not affiliated with, endorsed by or connected to
+        DonutSMP, Mojang or Microsoft. Minecraft is a trademark of Mojang; this is not an official
+        Minecraft product.
+        <a href="/terms">Terms</a>
+      </p>
+    </footer>
+
+  </main>
+</div>
+
+<!-- ══════════ chat ══════════
+     A panel down the right edge on a wide screen, shown or hidden with the chat button in the top
+     bar and remembered; a drawer on a phone. chat.js builds everything inside it. -->
+<aside class="chat" id="chat" aria-label="Live chat">
+    <!-- Lava Rain. Empty and hidden until GET /v1/social/rain reports a live drop; chat.js builds
+         the pot, the countdown and the claim button from that answer. It used to ship a static
+         "$0 · RAIN POT · 12:00 · Join" here that showed whenever no drop was running. -->
+    <div class="chat__rain" hidden></div>
+    <div class="chat__head">
+      <span>GLOBAL CHAT</span>
+    </div>
+    <div class="chat__log" id="chatLog"></div>
+    <form class="chat__send" id="chatForm">
+      <input id="chatInput" placeholder="Send message…" maxlength="240" aria-label="Chat message" autocomplete="off" />
+      <button class="btn btn--tiny" type="submit">Send</button>
+    </form>
+  </aside>
+<div class="chatscrim" id="chatScrim" aria-hidden="true"></div>
+
+<!-- ══════════ phone bar ══════════ -->
+<nav class="lxdock" aria-label="Quick links">
+  <button class="lxdock__btn" type="button" id="lxDockMenu" aria-controls="lxSide" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg><span>Browse</span>
+  </button>
+  <a class="lxdock__btn" href="/" data-dock="home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle class="lxfill" cx="8.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="15.5" r="1.4"/><circle class="lxfill" cx="12" cy="12" r="1.4"/></svg><span>Casino</span>
+  </a>
+  <a class="lxdock__btn" href="/crates" data-dock="crates">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10V8.5a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4V10"/><path d="M3.5 10h17v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M10.5 10v3.5h3V10"/></svg><span>Cases</span>
+  </a>
+  <a class="lxdock__btn" href="/rewards" data-dock="rewards">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16V20H4z"/><path d="M3 7h18v3.5H3zM12 7v13"/></svg><span>Rewards</span>
+  </a>
+  <button class="lxdock__btn" type="button" id="lxDockChat" aria-controls="chat" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10.5H10l-4.5 3.5V16h-1z"/></svg><span>Chat</span>
+  </button>
+</nav>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<dialog class="modal" id="modal" aria-labelledby="modalTitle">
+  <header class="modal__bar">
+    <h2 id="modalTitle">—</h2>
+    <button class="modal__x" id="modalClose" aria-label="Close">✕</button>
+  </header>
+  <div class="modal__body" id="modalBody"></div>
+</dialog>
+
+<script src="assets/js/file-guard.js"></script>
+<div id="devRoot"></div>
+
+<script type="module" src="assets/js/app.js"></script>
+<!-- After app.js: the sidebar, the chat panel, Ctrl+K, the live player counts. -->
+<script type="module" src="assets/js/luxe.js"></script>
+</body>
+</html>

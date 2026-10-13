@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">
+  <!-- Invite and earn: a gift tied in gold, for the friend and for you. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#2f2f38"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffaa00" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffaa00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e2412f"/>
+      <stop offset="1" stop-color="#8e2318"/>
+    </linearGradient>
+    <linearGradient id="boxSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a82d20"/>
+      <stop offset="1" stop-color="#5a120c"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff5a45"/>
+      <stop offset="1" stop-color="#c0392b"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d98800"/>
+      <stop offset=".5" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#d98800"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="360" fill="url(#bg)"/>
+  <circle cx="180" cy="176" r="170" fill="url(#glow)"/>
+  <ellipse cx="180" cy="300" rx="118" ry="18" fill="#000" fill-opacity=".5"/>
+  <g transform="translate(180 210)">
+    <rect x="-96" y="-34" width="192" height="122" rx="10" fill="url(#box)"/>
+    <rect x="18" y="-34" width="78" height="122" rx="0" fill="url(#boxSide)" fill-opacity=".55"/>
+    <rect x="-18" y="-34" width="36" height="122" fill="url(#ribbon)"/>
+    <rect x="-108" y="-70" width="216" height="44" rx="10" fill="url(#lid)"/>
+    <rect x="-18" y="-70" width="36" height="44" fill="url(#ribbon)"/>
+    <path d="M-100-62H100" stroke="#ffffff" stroke-opacity=".35" stroke-width="5" stroke-linecap="round"/>
+    <!-- bow -->
+    <path d="M0-70C-22-110-74-118-70-86C-66-62-26-66 0-70Z" fill="url(#ribbon)"/>
+    <path d="M0-70C22-110 74-118 70-86C66-62 26-66 0-70Z" fill="url(#ribbon)"/>
+    <path d="M0-70C-16-98-50-106-52-90" fill="none" stroke="#fff6cc" stroke-width="4" stroke-linecap="round"/>
+    <path d="M0-70C-10-56-22-38-36-28L-22-30L-14-18C-6-36 0-54 0-70Z" fill="#d98800"/>
+    <path d="M0-70C10-56 22-38 36-28L22-30L14-18C6-36 0-54 0-70Z" fill="#d98800"/>
+    <circle cx="0" cy="-70" r="14" fill="#ffd700" stroke="#a35f00" stroke-width="3"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M66 82l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill-opacity=".95"/>
+    <path d="M292 64l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill-opacity=".85"/>
+    <path d="M300 200l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill-opacity=".7"/>
+  </g>
+</svg>

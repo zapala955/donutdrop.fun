@@ -1,0 +1,811 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R4 V4
+ * Hallmark · genre: atmospheric · macrostructure: casino lobby shell (rail + bar + centred column)
+ *   · studied: yes · DNA-source: image (the operator's Stake.com reference, layout only)
+ *   · theme: the site's own obsidian + lava gold, unchanged · designed-as-app
+ *
+ * luxe.css — the shell and the shared parts of the /test redesign. Loaded only by test.html, after
+ * every other sheet, so it can restate the root tokens outright: a derived token declared earlier
+ * on :root (--gl-1: var(--mat-obsidian)) resolves against the value this sheet leaves there.
+ *
+ * The palette is the site's, not the reference's. Stake's slate ladder is rebuilt from the
+ * obsidian stops the site already had, darkest at the rail and the wells, lightest on a pressed
+ * control; its blue becomes the site's gold, and gold stays the only colour that means "do this".
+ *
+ * What changes is the material. The old finish was gradients, gold hairlines, glows and a grid
+ * over the page. Here a surface is one flat colour, an edge is a step in that ladder, and depth is
+ * a single soft shadow; nothing glows unless it is a win.
+ */
+
+:root {
+  /* ── the ladder: obsidian, five steps ── */
+  --lx-0: #0a0a0c;   /* the rail, wells, the tab tray            */
+  --lx-1: #121216;   /* the page and the top bar                 */
+  --lx-2: #1c1c22;   /* a card, a panel                          */
+  --lx-3: #24242b;   /* a card being pointed at                  */
+  --lx-4: #2f2f38;   /* a control; a pressed tab                 */
+  --lx-5: #3a3a45;   /* a control being pointed at               */
+
+  --lx-ink:   #ffffff;   /* titles, the live thing                */
+  --lx-text:  #d1d5db;   /* body                                  */
+  --lx-mute:  #9096a0;   /* secondary: 5.9:1 on --lx-1            */
+  --lx-faint: #757b85;
+
+  --lx-gold:    #ffaa00;   /* the one action colour               */
+  --lx-gold-hi: #ffd700;
+  --lx-gold-lo: #d98800;
+  --lx-on-gold: #0a0a0c;   /* 9.6:1 on --lx-gold                  */
+  --lx-gold-wash: rgba(255, 170, 0, .12);
+  --lx-loss:  #ff2222;
+  --lx-red:   #c0392b;
+  --lx-discord: #5865f2;
+  --lx-scrim: rgba(5, 5, 7, .72);
+  --lx-shade: 0 4px 12px -2px rgba(0, 0, 0, .45);
+  --lx-shade-hi: 0 10px 24px -6px rgba(0, 0, 0, .6);
+  --lx-focus: #ffd700;
+  /* the padlock on a page that needs you signed in, drawn in --lx-gold */
+  --lx-lock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffaa00' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2'/%3E%3Cpath d='M8 10.5V7.5a4 4 0 0 1 8 0v3'/%3E%3C/svg%3E");
+
+  /* ── geometry ── */
+  --lx-rail: 60px;
+  --lx-side: 240px;
+  --lx-top: 60px;
+  --lx-chat: 340px;
+  --lx-col: 1200px;
+  --lx-gut: 24px;
+  --lx-r-s: 4px;
+  --lx-r: 8px;
+  --lx-r-pill: 999px;
+
+  /* ── spacing: 4pt ── */
+  --lx-s1: 4px; --lx-s2: 8px; --lx-s3: 12px; --lx-s4: 16px; --lx-s5: 20px; --lx-s6: 24px; --lx-s8: 32px;
+
+  /* ── motion ── */
+  --lx-ease: cubic-bezier(.16, 1, .3, 1);
+  --lx-ease-io: cubic-bezier(.65, 0, .35, 1);
+  --lx-quick: 140ms;
+  --lx-slide: 240ms;
+
+  /* ── type: Figtree for everything you read, Archivo (wide, black) for a game's name ── */
+  --lx-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --lx-display: "Archivo", "Figtree", system-ui, sans-serif;
+  --body: var(--lx-ui);
+  --disp: var(--lx-ui);
+  --mono: var(--lx-ui);
+  --pixel: var(--lx-ui);
+
+  /* ── the old materials, flattened ── */
+  --bg2: var(--lx-1);
+  --panel: var(--lx-2);
+  --panel2: var(--lx-3);
+  --panel3: var(--lx-4);
+  --line: #24242b;
+  --line2: var(--lx-4);
+  --text: var(--lx-text);
+  --muted: var(--lx-mute);
+  --faint: var(--lx-faint);
+  --mat-obsidian: var(--lx-2);
+  --mat-lava: var(--lx-2);
+  --mat-diamond: var(--lx-2);
+  --mat-rose: var(--lx-2);
+  --gl-1: var(--lx-2);
+  --gl-2: var(--lx-2);
+  --gl-sunk: var(--lx-0);
+  --gl-line: transparent;
+  --gl-hi: transparent;
+  --gl-lo: transparent;
+  --grid: none;
+  --glass: var(--lx-2);
+  --glass-hi: var(--lx-3);
+  --plate: var(--lx-0);
+  --ob-line: rgba(255, 255, 255, .06);
+  --ob-line-hi: rgba(255, 255, 255, .1);
+  --gold-edge: rgba(255, 255, 255, .08);
+  --gold-edge-hi: rgba(255, 170, 0, .45);
+  --ob-glow: none;
+  --ember: none;
+  --ember-hi: none;
+  --el-1: var(--lx-shade);
+  --el-2: var(--lx-shade);
+  --el-3: var(--lx-shade-hi);
+  --bev-hi: transparent;
+  --bev-lo: transparent;
+  --r-crisp: var(--lx-r-s);
+  --r-soft: var(--lx-r);
+  --r-panel: var(--lx-r);
+  --ob-track: var(--lx-0);
+  --ob-thumb: var(--lx-4);
+  --ob-thumb-hi: var(--lx-5);
+}
+
+/* ═════════ base ═════════ */
+html { overflow-x: clip; background: var(--lx-1); scrollbar-color: var(--lx-4) var(--lx-1); }
+body.lx {
+  margin: 0;
+  overflow-x: clip;
+  min-height: 100dvh;
+  background: var(--lx-1);
+  color: var(--lx-text);
+  font: 500 .875rem/1.5 var(--lx-ui);
+  -webkit-font-smoothing: antialiased;
+}
+/* surface.css paints a colour wash and a grid over the whole page. Neither belongs here. */
+body.lx::before, body.lx::after { content: none; display: none; }
+body.lx .mono { font-family: var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx :focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx ::selection { background: var(--lx-gold); color: var(--lx-on-gold); }
+body.lx h1, body.lx h2, body.lx h3, body.lx h4 { font-family: var(--lx-ui); font-style: normal; letter-spacing: 0; }
+
+.lxsr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+body.lx .skip {
+  position: fixed; top: 8px; left: 8px; z-index: var(--z-skip, 300);
+  transform: translateY(-160%);
+  padding: 10px 16px; border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-gold); color: var(--lx-on-gold); font: 700 .875rem var(--lx-ui);
+}
+body.lx .skip:focus-visible { transform: none; }
+
+/* ═════════ the sidebar ═════════
+   Collapsed it is a rail of icons, expanded a labelled menu. The state lives on <body> as
+   data-side="open" (luxe.js, remembered). Below 1024px it is a drawer over the page instead. */
+.lxside {
+  position: fixed; inset: 0 auto 0 0; z-index: 90;
+  display: flex; flex-direction: column;
+  width: var(--lx-rail);
+  background: var(--lx-0);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, .03);
+  transition: width var(--lx-slide) var(--lx-ease);
+}
+body[data-side="open"] .lxside { width: var(--lx-side); }
+
+.lxside__head {
+  display: flex; flex-direction: column; align-items: center; gap: var(--lx-s2);
+  padding: 0 var(--lx-s2) var(--lx-s3);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .04);
+}
+body[data-side="open"] .lxside__head {
+  flex-direction: row; align-items: center; height: var(--lx-top); padding: 0 var(--lx-s3); gap: var(--lx-s2);
+  box-shadow: 0 6px 12px -6px rgba(0, 0, 0, .6);
+}
+
+.lxside__burger {
+  flex: none;
+  display: grid; place-items: center;
+  width: 44px; height: var(--lx-top);
+  border: 0; background: none; color: var(--lx-mute); cursor: pointer;
+}
+body[data-side="open"] .lxside__burger { width: 32px; height: 40px; }
+.lxside__burger svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.lxside__burger:hover { color: var(--lx-ink); }
+.lxside__burger:active { transform: scale(.94); }
+
+.lxmodes { display: flex; flex-direction: column; gap: var(--lx-s2); width: 100%; align-items: center; }
+body[data-side="open"] .lxmodes { flex-direction: row; flex: 1; min-width: 0; }
+
+.lxmode {
+  display: flex; align-items: center; justify-content: center; gap: var(--lx-s2);
+  width: 44px; height: 44px;
+  border-radius: var(--lx-r);
+  background: var(--lx-3);
+  color: var(--lx-ink);
+  font-weight: 700; font-size: .875rem; white-space: nowrap;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+.lxmode span { display: none; }
+body[data-side="open"] .lxmode { flex: 1; width: auto; height: 40px; padding: 0 var(--lx-s2); }
+body[data-side="open"] .lxmode span { display: inline; }
+.lxmode svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lxmode:hover { background: var(--lx-4); }
+.lxmode:active { transform: scale(.97); }
+.lxmode[aria-current="page"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.lxmode[aria-current="page"]:hover { background: var(--lx-gold-hi); }
+.lxfill { fill: currentColor; stroke: none; }
+
+.lxside__nav {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  padding: var(--lx-s3) var(--lx-s2) var(--lx-s6);
+  scrollbar-width: none;
+}
+.lxside__nav::-webkit-scrollbar { display: none; }
+body[data-side="open"] .lxside__nav { padding: var(--lx-s3) var(--lx-s3) var(--lx-s6); }
+
+.lxnavs { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+body[data-side="open"] .lxnavs { padding: var(--lx-s1); border-radius: var(--lx-r); background: var(--lx-1); }
+
+.lxnav {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  height: 44px; padding: 0 12px;
+  border-radius: var(--lx-r-s);
+  color: var(--lx-mute);
+  font-weight: 600; white-space: nowrap;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+.lxnav span { display: none; }
+body[data-side="open"] .lxnav span { display: inline; color: var(--lx-text); }
+.lxnav svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lxnav:hover { color: var(--lx-ink); background: var(--lx-3); }
+.lxnav:active { transform: scale(.98); }
+.lxnav[aria-current="page"] { color: var(--lx-gold); background: var(--lx-3); }
+body[data-side="open"] .lxnav[aria-current="page"] span { color: var(--lx-ink); }
+
+.lxside__rule { height: 2px; width: 60%; margin: var(--lx-s3) auto; border: 0; background: var(--lx-3); }
+body[data-side="open"] .lxside__rule { width: 100%; margin: var(--lx-s3) 0; background: transparent; }
+.lxside__label { display: none; }
+body[data-side="open"] .lxside__label {
+  display: block; margin: 0 0 var(--lx-s2) var(--lx-s2);
+  color: var(--lx-faint); font-size: .75rem; font-weight: 700; letter-spacing: .02em;
+}
+
+/* the collapsed rail's label: one floating chip, placed by luxe.js */
+.lxtip {
+  position: fixed; z-index: 95; pointer-events: none;
+  padding: 7px 12px; border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font-weight: 700; font-size: .8125rem; white-space: nowrap;
+  box-shadow: var(--lx-shade);
+  transform: translateY(-50%);
+}
+.lxtip::before {
+  content: ""; position: absolute; left: -5px; top: 50%;
+  border: 5px solid transparent; border-left: 0; border-right-color: var(--lx-4);
+  transform: translateY(-50%);
+}
+.lxtip[hidden] { display: none; }
+
+.lxscrim { position: fixed; inset: 0; z-index: 85; background: var(--lx-scrim); }
+.lxscrim[hidden] { display: none; }
+
+/* ═════════ the frame ═════════ */
+.lxapp {
+  position: relative; z-index: 1;
+  min-width: 0;
+  margin-left: var(--lx-rail);
+  transition: margin var(--lx-slide) var(--lx-ease);
+}
+body[data-side="open"] .lxapp { margin-left: var(--lx-side); }
+body[data-chat="open"] .lxapp { margin-right: var(--lx-chat); }
+
+/* ═════════ the top bar ═════════ */
+.lxtop {
+  position: sticky; top: 0; z-index: var(--z-top, 100);
+  height: var(--lx-top);
+  background: var(--lx-1);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .55);
+}
+.lxtop__in {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: var(--lx-s3);
+  max-width: var(--lx-col); height: 100%;
+  margin: 0 auto; padding: 0 var(--lx-gut);
+}
+body[data-auth="out"] .lxtop__in,
+body[data-auth="pending"] .lxtop__in { grid-template-columns: auto minmax(0, 1fr); }
+
+.lxbrand { justify-self: start; display: inline-flex; align-items: center; height: 40px; }
+.lxbrand__word {
+  font: 900 1.625rem/1 var(--lx-display);
+  font-stretch: 112%;
+  letter-spacing: -.02em;
+  color: var(--lx-ink);
+  white-space: nowrap;
+}
+.lxbrand__word b { color: var(--lx-gold); font-weight: inherit; }
+
+/* the wallet: balance, Deposit, Withdraw — signed in only */
+.lxwallet { display: flex; align-items: center; gap: var(--lx-s2); }
+body:not([data-auth="in"]) .lxwallet { display: none; }
+
+body.lx .lxbal {
+  display: inline-flex; align-items: center; gap: var(--lx-s2);
+  width: auto; min-width: 150px; height: 44px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: none;
+  backdrop-filter: none;
+  /* obsidian.css makes the old fixed-width pill a size container; this one sizes to its figure,
+     and a size container has no width of its own to size to. */
+  container-type: normal;
+  overflow: visible;
+}
+body.lx .lxbal .cashpill__lbl { display: none; }
+body.lx .lxbal .cashpill__coin {
+  width: 16px; height: 16px; flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--lx-gold-hi), var(--lx-gold) 55%, var(--lx-gold-lo));
+  box-shadow: none;
+}
+body.lx .lxbal .cashpill__n {
+  margin-left: auto;
+  color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+.lxtop__end { justify-self: end; display: flex; align-items: center; gap: var(--lx-s2); min-width: 0; }
+
+/* ═════════ buttons ═════════
+   Two kinds, the reference's two: a grey one for the quiet way, a gold one for the main way.
+   States: default · hover · focus-visible · active · disabled · busy (aria-busy) · the gold one's
+   pressed shade. Errors and successes are said in words next to them, never by the button alone. */
+body.lx .lxbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--lx-s2);
+  height: 44px; padding: 0 var(--lx-s5);
+  border: 0; border-radius: var(--lx-r-s);
+  font: 700 .9375rem/1 var(--lx-ui); letter-spacing: 0; text-transform: none;
+  white-space: nowrap; cursor: pointer;
+  box-shadow: var(--lx-shade);
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease), transform 80ms var(--lx-ease);
+}
+body.lx .lxbtn::before, body.lx .lxbtn::after { content: none; }
+body.lx .lxbtn svg, body.lx .lxbtn .btn__ico { display: none; }
+/* surface.css and app.css shrink the old bar's buttons to icons on narrow screens by hiding their
+   labels. These buttons have no icon, so the label is the button: it always shows. */
+body.lx .lxtop :is(#loginBtn, #depositBtn, #withdrawBtn) > span { display: inline; }
+body.lx .lxbtn--ghost { background: var(--lx-4); color: var(--lx-ink); }
+body.lx .lxbtn--ghost:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .lxbtn--gold { background: var(--lx-gold); color: var(--lx-on-gold); }
+body.lx .lxbtn--gold:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .lxbtn:active:not(:disabled) { transform: translateY(1px); }
+body.lx .lxbtn:disabled, body.lx .lxbtn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+body.lx .lxbtn[aria-busy="true"] { cursor: progress; opacity: .8; }
+
+/* Signed in, the two doors go and the account button comes; signed out, the reverse. */
+body[data-auth="in"] #loginBtn, body[data-auth="in"] #lxRegister { display: none; }
+body:not([data-auth="in"]) .lxtop .acct { display: none; }
+body[data-auth="pending"] #loginBtn, body[data-auth="pending"] #lxRegister { visibility: hidden; }
+body.lx #loginBtn .loginbtn__head { display: none; }
+
+/* the round icon buttons: search, sound, account, chat */
+body.lx .lxicon {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0;
+  border: 0; border-radius: var(--lx-r-s);
+  background: transparent; color: var(--lx-mute);
+  cursor: pointer; box-shadow: none;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+body.lx .lxicon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.lx .lxicon:hover { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .lxicon:active { transform: scale(.95); }
+body.lx .lxicon[aria-pressed="true"], body.lx .lxicon[aria-expanded="true"] { background: var(--lx-3); color: var(--lx-gold); }
+body.lx .mute__off { display: none; }
+body.lx .mute[data-muted="1"] .mute__on { display: none; }
+body.lx .mute[data-muted="1"] .mute__off { display: block; }
+body.lx .lxburger { display: none; }
+
+/* the VIP level, a quiet chip */
+body.lx .lxtop .lvl {
+  display: inline-flex; align-items: center; gap: var(--lx-s2);
+  height: 36px; padding: 0 var(--lx-s3);
+  border: 0; border-radius: var(--lx-r-pill);
+  background: var(--lx-3); box-shadow: none;
+  color: var(--lx-text); font: 700 .75rem var(--lx-ui);
+}
+body.lx .lxtop .lvl[hidden] { display: none; }
+body.lx .lxtop .lvl::after, body.lx .lxtop .lvl::before { content: none; }
+body.lx .lxtop .lvl__n { color: var(--lx-gold); font: inherit; letter-spacing: .02em; }
+body.lx .lxtop .lvl__bar { width: 54px; height: 4px; border-radius: 2px; background: var(--lx-0); overflow: hidden; }
+body.lx .lxtop .lvl__bar i { display: block; height: 100%; background: var(--lx-gold); box-shadow: none; }
+body.lx .lxtop .lvl:hover { background: var(--lx-4); }
+body.lx .lxtop .lvl__tip { display: none; }
+
+/* the account menu */
+body.lx .lxtop .acct { position: relative; }
+body.lx .lxtop .acct .menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 120;
+  width: 240px; max-height: calc(100dvh - var(--lx-top) - 24px); overflow-y: auto;
+  padding: var(--lx-s2);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-ink);
+  box-shadow: var(--lx-shade-hi);
+}
+body.lx .lxtop .acct .menu::before, body.lx .lxtop .acct .menu::after { content: none; }
+body.lx .lxtop .acct .menu[hidden] { display: none; }
+body.lx .lxtop .acct .menu .menu__row {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  min-height: 40px; padding: 0 var(--lx-s3);
+  border-radius: var(--lx-r-s);
+  background: none; color: var(--lx-2);
+  font: 600 .875rem var(--lx-ui);
+}
+body.lx .lxtop .acct .menu .menu__row:hover, body.lx .lxtop .acct .menu .menu__row:focus-visible { background: #e8e9ec; outline-offset: -2px; }
+body.lx .lxtop .acct .menu .menu__ico { width: 18px; height: 18px; fill: none; stroke: var(--lx-3); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+body.lx .lxtop .acct .menu .menu__ico--brand { fill: var(--lx-3); stroke: none; }
+body.lx .lxtop .acct .menu .menu__row b { color: inherit; }
+body.lx .lxtop .acct .menu .menu__row--hi { color: var(--lx-2); }
+body.lx .lxtop .acct .menu .menu__sep { height: 1px; margin: var(--lx-s2) var(--lx-s2); background: #dcdde1; }
+body.lx .lxtop .acct .menu .menu__label { padding: var(--lx-s1) var(--lx-s3); color: #6b7079; font: 700 .6875rem var(--lx-ui); letter-spacing: .06em; text-transform: uppercase; }
+body.lx .lxtop .acct .menu .menu__row--muted { color: #6b7079; }
+
+/* ═════════ the column ═════════ */
+body.lx .main.lxmain {
+  max-width: var(--lx-col);
+  margin: 0 auto;
+  padding: var(--lx-s6) var(--lx-gut) 64px;
+  min-width: 0;
+}
+body.lx .view { animation: lx-in .2s var(--lx-ease) both; }
+@keyframes lx-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── a page's own heading (VIP, Rewards, Leaderboard …) ── */
+body.lx .phead:not(.phead--game) {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  margin: 0 0 var(--lx-s5); padding: 0;
+  border: 0; background: none; box-shadow: none;
+}
+body.lx .phead:not(.phead--game)::before, body.lx .phead:not(.phead--game)::after { content: none; }
+body.lx .phead:not(.phead--game) h1 {
+  display: flex; align-items: center; gap: var(--lx-s2);
+  margin: 0; color: var(--lx-ink);
+  font: 700 1.375rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none;
+  background: none; -webkit-text-fill-color: currentColor; text-shadow: none;
+}
+
+/* ── the ⓘ hint ── */
+body.lx .ihint::after {
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-ink); color: var(--lx-2);
+  font: 600 .8125rem/1.45 var(--lx-ui); letter-spacing: 0; text-transform: none;
+  box-shadow: var(--lx-shade-hi);
+}
+
+/* ── the shared panel ── */
+body.lx .card {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx .card::before, body.lx .card::after { content: none; }
+body.lx .card__h { color: var(--lx-ink); font: 700 1rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .card__h::before { content: none; }
+
+/* ── the site's own buttons, wherever a page builds them ── */
+body.lx .main .btn, body.lx .modal .btn, body.lx .chat .btn {
+  border: 0; border-radius: var(--lx-r-s);
+  font-family: var(--lx-ui); font-weight: 700; letter-spacing: 0; text-transform: none;
+  box-shadow: var(--lx-shade);
+  text-shadow: none;
+}
+body.lx .main .btn::before, body.lx .main .btn::after,
+body.lx .modal .btn::before, body.lx .modal .btn::after { content: none; }
+body.lx .main .btn--go, body.lx .modal .btn--go, body.lx .vjpflare .btn--go {
+  background: var(--lx-gold); color: var(--lx-on-gold);
+}
+body.lx .main .btn--go:hover:not(:disabled), body.lx .modal .btn--go:hover:not(:disabled) { background: var(--lx-gold-hi); filter: none; transform: none; }
+body.lx .main .btn--glass, body.lx .modal .btn--glass, body.lx .main .btn--ghost, body.lx .modal .btn--ghost {
+  background: var(--lx-4); color: var(--lx-ink); backdrop-filter: none;
+}
+body.lx .main .btn--glass:hover:not(:disabled), body.lx .modal .btn--glass:hover:not(:disabled),
+body.lx .main .btn--ghost:hover:not(:disabled), body.lx .modal .btn--ghost:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .main .btn:active:not(:disabled), body.lx .modal .btn:active:not(:disabled) { transform: translateY(1px); }
+
+/* ── fields ── */
+body.lx .main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+body.lx .modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+body.lx .main select, body.lx .modal select, body.lx .main textarea {
+  font-family: var(--lx-ui);
+}
+
+/* ── the jackpot bar under the top bar ── */
+body.lx .vjp {
+  position: sticky; top: var(--lx-top); z-index: 60;
+  border: 0; border-radius: 0;
+  background: var(--lx-0);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+/* ── toasts: top right, white, like every other notice in the shell ── */
+body.lx .toasts { top: calc(var(--lx-top) + 12px); right: 16px; }
+body[data-chat="open"] .toasts { right: calc(var(--lx-chat) + 16px); }
+body.lx .toast {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-ink); color: var(--lx-2);
+  box-shadow: var(--lx-shade-hi);
+  font-family: var(--lx-ui);
+}
+body.lx .toast::before, body.lx .toast::after { content: none; }
+body.lx .toast b { color: var(--lx-2); font: 700 .9375rem var(--lx-ui); }
+body.lx .toast span { color: #5b606a; font: 500 .8125rem var(--lx-ui); }
+body.lx .toast--win { box-shadow: inset 4px 0 0 var(--lx-gold), var(--lx-shade-hi); }
+body.lx .toast--loss, body.lx .toast--err, body.lx .toast--error { box-shadow: inset 4px 0 0 var(--lx-loss), var(--lx-shade-hi); }
+
+/* ── the modal ── */
+body.lx .modal {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-1);
+  color: var(--lx-text);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .8);
+}
+body.lx .modal::before, body.lx .modal::after { content: none; }
+body.lx .modal::backdrop { background: var(--lx-scrim); backdrop-filter: none; }
+body.lx .modal__bar {
+  padding: var(--lx-s4) var(--lx-s5);
+  border: 0; background: var(--lx-1); box-shadow: none;
+}
+body.lx .modal__bar h2 { color: var(--lx-ink); font: 700 1rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .modal__x {
+  width: 36px; height: 36px; border: 0; border-radius: var(--lx-r-s);
+  background: transparent; color: var(--lx-mute); font-size: 1rem;
+}
+body.lx .modal__x:hover { background: var(--lx-3); color: var(--lx-ink); }
+
+/* ── the sign-in card (auth.css): the same wells and labels as every other form here ── */
+body.lx .modal .auth__title { font-family: var(--lx-ui); font-weight: 800; letter-spacing: 0; }
+body.lx .modal .auth__label { color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .modal .auth__field {
+  height: 48px;
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+}
+body.lx .modal .auth__field:hover { border-color: var(--lx-5); }
+body.lx .modal .auth__field:focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx .modal .auth__field.is-error { border-color: var(--lx-loss); }
+body.lx .modal .auth__bonus { border: 0; border-radius: var(--lx-r); background: var(--lx-2); box-shadow: inset 3px 0 0 var(--lx-gold); }
+body.lx .modal .auth__go { border-radius: var(--lx-r-s); background: var(--lx-gold); color: var(--lx-on-gold); font-family: var(--lx-ui); box-shadow: var(--lx-shade); }
+body.lx .modal .auth__go:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .modal .auth__go:disabled { background: var(--lx-4); color: var(--lx-mute); opacity: 1; }
+
+/* ── the live bets table at the foot of every page ── */
+body.lx .feedwrap { margin-top: var(--lx-s8); }
+body.lx .feed {
+  border: 0; border-radius: var(--lx-r);
+  background: transparent; box-shadow: none;
+}
+body.lx .feed::before, body.lx .feed::after { content: none; }
+body.lx .feed__head {
+  display: flex; align-items: center; gap: var(--lx-s2);
+  padding: 0 0 var(--lx-s3); border: 0; background: none;
+}
+body.lx .feed__title { color: var(--lx-ink); font: 700 1.125rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .feed__sub { color: var(--lx-mute); font: 500 .8125rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .feed__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lx-gold); box-shadow: none; }
+body.lx .feed__cols {
+  padding: 0 var(--lx-s4); height: 40px; align-items: center;
+  border: 0; background: none;
+  color: var(--lx-mute); font: 600 .8125rem var(--lx-ui); letter-spacing: 0; text-transform: none;
+}
+body.lx .feed__cols span { color: inherit; font: inherit; letter-spacing: 0; text-transform: none; }
+body.lx .feed__rows { border-radius: var(--lx-r); overflow: hidden; background: none; }
+body.lx .feedrow {
+  min-height: 52px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: 0;
+  background: var(--lx-1);
+  color: var(--lx-text);
+  font: 600 .875rem var(--lx-ui);
+}
+body.lx .feedrow:nth-child(odd) { background: var(--lx-2); }
+body.lx .feedrow:hover { background: var(--lx-3); transform: none; }
+body.lx .feedrow::before, body.lx .feedrow::after { content: none; }
+body.lx .gamechip { gap: var(--lx-s2); padding: 0; border: 0; background: none; color: var(--lx-ink); font: 700 .875rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .gamechip__ico { width: auto; height: auto; background: none; border: 0; color: var(--lx-mute); font-style: normal; box-shadow: none; }
+body.lx .feedrow__who { color: var(--lx-text); }
+body.lx .feedrow__who .mono, body.lx .feedrow .mono { font-family: var(--lx-ui); }
+body.lx .coinchip { padding: 0; border: 0; background: none; box-shadow: none; }
+body.lx .coinchip b { color: var(--lx-ink); font: 700 .875rem var(--lx-ui); }
+body.lx .coinchip__coin, body.lx .feedrow__coin {
+  border-radius: 50%; border: 0;
+  background: radial-gradient(circle at 35% 30%, var(--lx-gold-hi), var(--lx-gold) 55%, var(--lx-gold-lo));
+  box-shadow: none;
+}
+body.lx .feedrow__mult { color: var(--lx-mute); font: 700 .875rem var(--lx-ui); }
+body.lx .feedrow__mult[data-up="1"] { color: var(--lx-ink); }
+body.lx .feedrow__delta { color: var(--lx-mute); font: 700 .875rem var(--lx-ui); }
+body.lx .feedrow__delta[data-up="1"] { color: var(--lx-gold-hi); }
+body.lx .feed__empty { padding: var(--lx-s6); color: var(--lx-mute); text-align: center; }
+
+/* ── the 18+ notice ── */
+body.lx .sitefoot {
+  margin-top: var(--lx-s8); padding: var(--lx-s6) 0 0;
+  border-top: 1px solid var(--lx-3);
+  background: none; color: var(--lx-faint);
+  font: 500 .8125rem/1.6 var(--lx-ui);
+}
+body.lx .sitefoot a { color: var(--lx-mute); }
+body.lx .sitefoot a:hover { color: var(--lx-ink); }
+
+/* app.css drops Log in below 420px because the old bar ran out of room. This bar has it. */
+body.lx:not([data-auth="in"]) #loginBtn { display: inline-flex; }
+
+/* ── the offer pop-up and the corner card (popups.js, nudge.js) ── */
+body.lx :is(.popup__card, .nudge) {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .8);
+}
+body.lx :is(.popup__card, .nudge)::before, body.lx :is(.popup__card, .nudge)::after { content: none; }
+body.lx .popup::backdrop { background: var(--lx-scrim); backdrop-filter: none; }
+body.lx :is(.popup__art, .nudge__art) { border: 0; border-radius: var(--lx-r); background: var(--lx-2); }
+body.lx :is(.popup__eyebrow, .nudge__eyebrow) {
+  display: inline-block; padding: 2px 6px; border-radius: 3px;
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  font: 700 .75rem/1.3 var(--lx-ui); letter-spacing: 0; text-transform: none;
+}
+body.lx :is(.popup__h, .nudge__h) { color: var(--lx-ink); font-family: var(--lx-ui); font-weight: 700; letter-spacing: 0; }
+body.lx :is(.popup__p, .nudge__p) { color: var(--lx-mute); font-family: var(--lx-ui); }
+body.lx :is(.popup__go, .nudge__go) {
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  font: 800 1rem var(--lx-ui); letter-spacing: 0; text-transform: none;
+  box-shadow: var(--lx-shade); filter: none;
+}
+body.lx :is(.popup__go, .nudge__go):hover:not(:disabled) { background: var(--lx-gold-hi); transform: none; filter: none; }
+body.lx :is(.popup__go, .nudge__go)::before, body.lx :is(.popup__go, .nudge__go)::after { content: none; }
+body.lx .popup__later { color: var(--lx-mute); font: 600 .875rem var(--lx-ui); letter-spacing: 0; }
+body.lx .popup__later:hover { color: var(--lx-ink); background: var(--lx-3); }
+body.lx :is(.popup__x, .nudge__x) { color: var(--lx-mute); }
+body.lx :is(.popup__x, .nudge__x):hover { color: var(--lx-ink); background: var(--lx-3); }
+@media (max-width: 1023px) {
+  body.lx .nudge { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+
+/* ═════════ the chat panel ═════════
+   Down the right edge, under the top bar. Wide screens keep it beside the page (data-chat="open",
+   remembered); a phone slides it over the page instead (app.js's chat-open). */
+body.lx .chat {
+  position: fixed; top: 0; right: 0; bottom: 0; left: auto; z-index: 95;
+  display: none; flex-direction: column;
+  width: var(--lx-chat); height: auto; max-height: none;
+  margin: 0; padding: 0;
+  border: 0; border-radius: 0;
+  background: var(--lx-1);
+  box-shadow: -1px 0 0 rgba(255, 255, 255, .04), -8px 0 24px -12px rgba(0, 0, 0, .6);
+  transform: none;
+}
+body.lx .chat::before, body.lx .chat::after { content: none; }
+body[data-chat="open"] .chat { display: flex; }
+body.lx .chat__head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2);
+  flex: none; height: var(--lx-top); padding: 0 var(--lx-s2) 0 var(--lx-s4);
+  border: 0; background: var(--lx-1);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .55);
+}
+body.lx .chat__head span { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .chat__x { width: 40px; height: 40px; }
+/* The header leads, the rain card follows it. In the markup the card comes first. */
+body.lx .chat__head { order: -1; }
+body.lx .chat__rain:not([hidden]) {
+  flex: none; margin: var(--lx-s3) var(--lx-s3) 0; padding: var(--lx-s3);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: inset 3px 0 0 var(--lx-gold);
+}
+body.lx .chat__rain[data-next="1"] { opacity: 1; box-shadow: inset 3px 0 0 var(--lx-4); }
+body.lx .chat__rain b { color: var(--lx-gold-hi); font: 800 1rem var(--lx-ui); }
+body.lx .chat__rain span { color: var(--lx-mute); font: 600 .6875rem var(--lx-ui); letter-spacing: .04em; }
+body.lx .chat__rain .btn { height: 36px; padding: 0 var(--lx-s3); background: var(--lx-gold); color: var(--lx-on-gold); }
+body.lx .chat__jump { border: 0; border-radius: var(--lx-r-pill); background: var(--lx-ink); color: var(--lx-2); font-family: var(--lx-ui); letter-spacing: 0; }
+body.lx .chat__log {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: var(--lx-s3) var(--lx-s3);
+  background: none;
+  scrollbar-width: thin;
+}
+body.lx .chat .msg {
+  margin: 0 0 var(--lx-s2); padding: var(--lx-s2) var(--lx-s3);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2); box-shadow: none;
+}
+body.lx .chat .msg::before, body.lx .chat .msg::after { content: none; }
+body.lx .chat .msg:hover { background: var(--lx-3); transform: none; }
+body.lx .chat .msg__who { color: var(--lx-ink); font: 700 .8125rem var(--lx-ui); letter-spacing: 0; }
+body.lx .chat .msg__body { color: var(--lx-text); font: 500 .875rem/1.45 var(--lx-ui); }
+body.lx .chat .msg__t { color: var(--lx-faint); font: 500 .6875rem var(--lx-ui); }
+body.lx .chat .msg[data-staff="1"] { box-shadow: inset 3px 0 0 var(--lx-gold); }
+body.lx .chat__send {
+  display: flex; gap: var(--lx-s2); flex: none;
+  padding: var(--lx-s3); border: 0;
+  background: var(--lx-1);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, .04);
+}
+body.lx .chat__send input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 var(--lx-s3);
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0); color: var(--lx-ink);
+  font: 500 .875rem var(--lx-ui);
+}
+body.lx .chat__send input:hover { border-color: var(--lx-5); }
+body.lx .chat__send input:focus { outline: none; border-color: var(--lx-gold); }
+body.lx .chat__send .btn {
+  height: 44px; padding: 0 var(--lx-s4);
+  background: var(--lx-gold); color: var(--lx-on-gold);
+}
+body.lx .chat__send .btn:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .chatscrim { display: none; }
+
+/* ═════════ the phone bar ═════════ */
+.lxdock { display: none; }
+
+/* ═════════ narrower screens ═════════ */
+@media (max-width: 1279px) {
+  /* No room for the chat beside the page: it lays over it, from the same button. */
+  body[data-chat="open"] .lxapp { margin-right: 0; }
+  body[data-chat="open"] .toasts { right: 16px; }
+  body.lx .chat { z-index: 96; }
+}
+
+@media (max-width: 1023px) {
+  :root { --lx-gut: 16px; --lx-top: 56px; }
+  .lxapp, body[data-side="open"] .lxapp { margin-left: 0; }
+
+  /* the menu becomes a drawer, always labelled */
+  .lxside {
+    width: min(300px, 86vw);
+    transform: translateX(-102%);
+    transition: transform var(--lx-slide) var(--lx-ease);
+    box-shadow: 12px 0 32px -12px rgba(0, 0, 0, .8);
+  }
+  body[data-side="open"] .lxside { width: min(300px, 86vw); }
+  body[data-drawer="open"] .lxside { transform: none; }
+  .lxside__head { flex-direction: row; height: var(--lx-top); padding: 0 var(--lx-s3); }
+  .lxside__burger { width: 32px; height: 40px; }
+  .lxmodes { flex-direction: row; flex: 1; }
+  .lxmode { flex: 1; width: auto; height: 40px; padding: 0 var(--lx-s2); }
+  .lxmode span { display: inline; }
+  .lxnav span { display: inline; color: var(--lx-text); }
+  .lxside__label { display: block; margin: 0 0 var(--lx-s2) var(--lx-s2); color: var(--lx-faint); font-size: .75rem; font-weight: 700; }
+  .lxside__rule { width: 100%; background: transparent; }
+  .lxnavs { padding: var(--lx-s1); border-radius: var(--lx-r); background: var(--lx-1); }
+  .lxtip { display: none; }
+
+  .lxtop__in { grid-template-columns: auto minmax(0, 1fr); gap: var(--lx-s2); }
+  body[data-auth="in"] .lxtop__in { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .lxbrand__word { font-size: 1.25rem; }
+  .lxwallet { justify-self: center; gap: var(--lx-s1); }
+  body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3); }
+  /* Withdraw stays on a phone: the way out is never harder to find than the way in. */
+  body.lx :is(#depositBtn, #withdrawBtn) { height: 40px; padding: 0 var(--lx-s3); }
+  body.lx #lxSearchBtn, body.lx #muteBtn, body.lx .lxtop .lvl, body.lx #lxChatBtn { display: none; }
+  body.lx .lxtop .lxbtn { height: 40px; padding: 0 var(--lx-s4); }
+
+  /* the chat is a full drawer from the right, opened from the bottom bar */
+  body.lx .chat {
+    display: flex; width: min(380px, 100vw);
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    transform: translateX(102%);
+    transition: transform var(--lx-slide) var(--lx-ease);
+  }
+  body.lx.chat-open .chat { transform: none; }
+  body[data-chat="open"] .chat { display: flex; }
+
+  body.lx .main.lxmain { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  .lxdock {
+    position: fixed; inset: auto 0 0 0; z-index: 97;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: calc(64px + env(safe-area-inset-bottom));
+    padding: 0 var(--lx-s2) env(safe-area-inset-bottom);
+    background: var(--lx-0);
+    box-shadow: 0 -1px 0 rgba(255, 255, 255, .04), 0 -8px 24px -12px rgba(0, 0, 0, .8);
+  }
+  .lxdock__btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    min-width: 0; height: 64px; padding: 0;
+    border: 0; background: none; color: var(--lx-mute);
+    font: 600 .6875rem var(--lx-ui); cursor: pointer;
+  }
+  .lxdock__btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .lxdock__btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lxdock__btn:hover, .lxdock__btn[aria-current="page"], .lxdock__btn[aria-expanded="true"] { color: var(--lx-ink); }
+  .lxdock__btn[aria-current="page"] svg, .lxdock__btn[aria-expanded="true"] svg { stroke: var(--lx-gold); }
+  .lxdock__btn[aria-current="page"] .lxfill { fill: var(--lx-gold); }
+  .lxdock__btn:active { transform: scale(.94); }
+
+  body.lx .toasts { top: calc(var(--lx-top) + 8px); right: 8px; left: 8px; }
+}
+
+@media (max-width: 479px) {
+  body.lx .lxtop .lxbtn { padding: 0 var(--lx-s3); font-size: .875rem; }
+  body.lx .lxbal { padding: 0 var(--lx-s2); gap: 6px; }
+  body.lx :is(#depositBtn, #withdrawBtn) { padding: 0 10px; font-size: .8125rem; }
+  body[data-auth="in"] .lxbrand { display: none; }
+  body[data-auth="in"] .lxtop__in { grid-template-columns: minmax(0, 1fr) auto; }
+  .lxwallet { justify-self: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lxside, .lxapp, body.lx .chat, .lxside .lxnav, .lxmode, body.lx .lxbtn, body.lx .lxicon { transition: none; }
+  body.lx .view { animation: none; }
+}

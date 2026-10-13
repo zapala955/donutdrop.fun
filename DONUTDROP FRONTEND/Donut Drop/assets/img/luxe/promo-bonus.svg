@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">
+  <!-- New players: a block of gold with coins spilling off it. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#4a3204"/>
+      <stop offset="1" stop-color="#1a1002"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffd700" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#ffd700" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset="1" stop-color="#ffd700"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#d98800"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d98800"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </linearGradient>
+    <radialGradient id="coin" cx=".36" cy=".3" r=".8">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset=".45" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#d98800"/>
+    </radialGradient>
+  </defs>
+  <rect width="360" height="360" fill="url(#bg)"/>
+  <circle cx="180" cy="170" r="170" fill="url(#glow)"/>
+  <ellipse cx="180" cy="300" rx="120" ry="18" fill="#000" fill-opacity=".45"/>
+  <!-- the block -->
+  <g transform="translate(180 186)">
+    <path d="M0-110L96-56L0-2L-96-56Z" fill="url(#top)"/>
+    <path d="M-96-56L0-2V106L-96 52Z" fill="url(#left)"/>
+    <path d="M96-56L0-2V106L96 52Z" fill="url(#right)"/>
+    <g stroke="#a35f00" stroke-opacity=".35" stroke-width="3" fill="none">
+      <path d="M-48-83L48-29M48-83L-48-29"/>
+      <path d="M-96 0L0 54M-48-29V79"/>
+      <path d="M96 0L0 54M48-29V79"/>
+    </g>
+    <path d="M0-110L96-56L0-2L-96-56Z" fill="none" stroke="#fff6cc" stroke-width="3"/>
+    <path d="M-62-74L-22-96L-6-87L-46-65Z" fill="#ffffff" fill-opacity=".75"/>
+  </g>
+  <!-- coins -->
+  <g>
+    <ellipse cx="74" cy="268" rx="34" ry="13" fill="#a35f00"/>
+    <ellipse cx="74" cy="262" rx="34" ry="13" fill="url(#coin)"/>
+    <ellipse cx="74" cy="262" rx="22" ry="8" fill="none" stroke="#a35f00" stroke-width="3"/>
+    <g transform="translate(290 250) rotate(18)">
+      <ellipse rx="30" ry="34" fill="#a35f00" transform="translate(6 2)"/>
+      <ellipse rx="30" ry="34" fill="url(#coin)"/>
+      <ellipse rx="20" ry="23" fill="none" stroke="#a35f00" stroke-width="3"/>
+    </g>
+    <g transform="translate(286 92) rotate(-24)">
+      <ellipse rx="24" ry="27" fill="#a35f00" transform="translate(5 2)"/>
+      <ellipse rx="24" ry="27" fill="url(#coin)"/>
+      <ellipse rx="15" ry="18" fill="none" stroke="#a35f00" stroke-width="3"/>
+    </g>
+  </g>
+  <g fill="#ffffff">
+    <path d="M72 70l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill-opacity=".95"/>
+    <path d="M244 40l4 9 9 4-9 4-4 9-4-9-9-4 9-4z" fill-opacity=".8"/>
+  </g>
+</svg>

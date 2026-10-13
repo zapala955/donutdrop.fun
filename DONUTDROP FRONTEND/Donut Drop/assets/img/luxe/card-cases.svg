@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Cases: a chest with its lid up and the light coming out of it. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#a35f00"/>
+      <stop offset=".55" stop-color="#5a3604"/>
+      <stop offset="1" stop-color="#2a1c02"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff6cc" stop-opacity=".95"/>
+      <stop offset=".4" stop-color="#ffd700" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#ffd700" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ray" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#fff6cc" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#fff6cc" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5e26"/>
+      <stop offset="1" stop-color="#5a3a14"/>
+    </linearGradient>
+    <linearGradient id="woodSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b4518"/>
+      <stop offset="1" stop-color="#3f280c"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a35f00"/>
+      <stop offset=".5" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1002" stop-opacity="0"/>
+      <stop offset="1" stop-color="#1a1002" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <g fill="url(#ray)">
+    <path d="M150 150L60 0H110Z"/>
+    <path d="M150 150L135 0H170Z"/>
+    <path d="M150 150L200 0H252Z"/>
+    <path d="M150 150L-10 40V90Z" fill-opacity=".6"/>
+    <path d="M150 150L310 40V96Z" fill-opacity=".6"/>
+  </g>
+  <circle cx="150" cy="150" r="120" fill="url(#glow)"/>
+  <g transform="translate(150 196)">
+    <ellipse cx="0" cy="62" rx="98" ry="14" fill="#000" fill-opacity=".45"/>
+    <!-- lid, open, tilted back -->
+    <path d="M-86-40L-74-92H74L86-40Z" fill="url(#woodSide)"/>
+    <path d="M-74-92H74L66-104H-66Z" fill="#8a5e26"/>
+    <path d="M-12-92H12L10-104H-10Z" fill="url(#band)"/>
+    <path d="M-86-40L-74-92" stroke="#ffd700" stroke-width="5"/>
+    <path d="M86-40L74-92" stroke="#ffd700" stroke-width="5"/>
+    <!-- the light inside -->
+    <path d="M-80-40H80L74-22H-74Z" fill="#fff6cc"/>
+    <!-- body -->
+    <rect x="-86" y="-24" width="172" height="84" rx="8" fill="url(#wood)"/>
+    <path d="M-86-6H86M-86 22H86" stroke="#3f280c" stroke-opacity=".5" stroke-width="2"/>
+    <rect x="-86" y="-24" width="172" height="84" rx="8" fill="none" stroke="#ffd700" stroke-width="5"/>
+    <rect x="-14" y="-24" width="28" height="84" fill="url(#band)"/>
+    <rect x="-16" y="-6" width="32" height="34" rx="5" fill="url(#band)" stroke="#7a4700" stroke-width="2"/>
+    <circle cx="0" cy="8" r="5" fill="#2a1c02"/>
+    <path d="M-2 10h4v10h-4z" fill="#2a1c02"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M70 120l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill-opacity=".9"/>
+    <path d="M232 104l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill-opacity=".85"/>
+    <path d="M200 64l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill-opacity=".7"/>
+  </g>
+  <rect y="270" width="300" height="130" fill="url(#foot)"/>
+</svg>

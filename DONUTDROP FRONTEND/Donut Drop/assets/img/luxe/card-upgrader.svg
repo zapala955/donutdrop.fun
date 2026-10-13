@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Upgrader: the dial with its winning arc, and the arrow that means "up a tier". -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".5" y2="1">
+      <stop offset="0" stop-color="#ffaa00"/>
+      <stop offset=".55" stop-color="#ff7b00"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff6cc" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#fff6cc" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f2f38"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <linearGradient id="arc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset="1" stop-color="#ffd700"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fff6cc"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b3d00" stop-opacity="0"/>
+      <stop offset="1" stop-color="#6b3d00" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <g stroke="#ffffff" stroke-opacity=".12" stroke-width="16" fill="none">
+    <circle cx="150" cy="150" r="138"/>
+  </g>
+  <circle cx="150" cy="150" r="130" fill="url(#glow)"/>
+  <g transform="translate(150 150)">
+    <circle r="96" fill="#000" fill-opacity=".3" transform="translate(6 10)"/>
+    <circle r="96" fill="url(#ring)"/>
+    <circle r="78" fill="none" stroke="#2f2f38" stroke-width="18"/>
+    <!-- the winning window, about a third of the dial -->
+    <path d="M-67.5-39A78 78 0 0 1 39-67.5" fill="none" stroke="url(#arc)" stroke-width="18" stroke-linecap="round"/>
+    <g stroke="#3a3a45" stroke-width="3" stroke-linecap="round">
+      <path d="M0-104V-112M73.5-73.5L79.2-79.2M104 0H112M73.5 73.5L79.2 79.2M0 104V112M-73.5 73.5L-79.2 79.2M-104 0H-112M-73.5-73.5L-79.2-79.2"/>
+    </g>
+    <!-- pointer -->
+    <path d="M-6-58L0-84L6-58Z" fill="#ffffff" transform="rotate(-18)"/>
+    <circle r="54" fill="#16161b"/>
+    <path d="M0-34L30 2H12V34H-12V2H-30Z" fill="url(#arrow)"/>
+    <path d="M0-34L30 2H12V8L0-6L-12 8V2H-30Z" fill="#ffffff"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M54 62l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill-opacity=".9"/>
+    <path d="M258 236l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill-opacity=".7"/>
+  </g>
+  <rect y="250" width="300" height="150" fill="url(#foot)"/>
+</svg>

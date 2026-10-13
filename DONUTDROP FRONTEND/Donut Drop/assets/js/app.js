@@ -60,7 +60,7 @@ import { initNudge } from './nudge.js';
 import { initPopups } from './popups.js';
 import { initDailyCode } from './daily-code.js';
 import {
-  currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
+  appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
 
 /* ═════════ home ═════════ */
@@ -187,7 +187,7 @@ function mountHome(view) {
   const exploreGames = () => {
     search.value = '';
     pickCategory('all');
-    const covered = ['.top', '#vaultJackpot']
+    const covered = ['.top', '.lxtop', '#vaultJackpot']
       .map((selector) => document.querySelector(selector))
       .filter((node) => node && !node.hidden)
       .reduce((bottom, node) => Math.max(bottom, node.getBoundingClientRect().bottom), 0);
@@ -1536,7 +1536,7 @@ document.addEventListener('click', (event) => {
 
   const target = new URL(link.href, location.href);
   if (target.origin !== location.origin || target.hash) return;
-  const segments = target.pathname.split('/').filter(Boolean);
+  const segments = appPath(target.pathname).split('/').filter(Boolean);
   if (segments.length > 1) return;
   const requested = segments[0] || 'home';
   if (!VIEWS[requested] && requested !== 'rakeback') return;

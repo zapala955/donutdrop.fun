@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Roulette: the shared wheel from above, gold frets, the ball resting in a pocket. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#6e1a12"/>
+      <stop offset=".55" stop-color="#2a0c08"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffaa00" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#ffaa00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd700"/>
+      <stop offset=".5" stop-color="#d98800"/>
+      <stop offset="1" stop-color="#7a4700"/>
+    </linearGradient>
+    <radialGradient id="hub" cx=".38" cy=".32" r=".75">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset=".5" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </radialGradient>
+    <radialGradient id="cone" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#2f2f38"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </radialGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0a0c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0a0a0c" stop-opacity=".92"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <circle cx="150" cy="150" r="150" fill="url(#glow)"/>
+  <g transform="translate(150 152)">
+    <circle r="112" fill="#000" fill-opacity=".45" transform="translate(6 10)"/>
+    <circle r="112" fill="url(#rim)"/>
+    <circle r="100" fill="#16161b"/>
+    <!-- 18 alternating pockets, built as wedges of 20 degrees -->
+    <g stroke="#d4a303" stroke-width="2">
+      <path d="M0 0V-96A96 96 0 0 1 32.8-90.2Z" fill="#c0392b"/>
+      <path d="M0 0L32.8-90.2A96 96 0 0 1 61.7-73.5Z" fill="#16161b"/>
+      <path d="M0 0L61.7-73.5A96 96 0 0 1 83.1-48Z" fill="#c0392b"/>
+      <path d="M0 0L83.1-48A96 96 0 0 1 94.5-16.7Z" fill="#16161b"/>
+      <path d="M0 0L94.5-16.7A96 96 0 0 1 94.5 16.7Z" fill="#c0392b"/>
+      <path d="M0 0L94.5 16.7A96 96 0 0 1 83.1 48Z" fill="#16161b"/>
+      <path d="M0 0L83.1 48A96 96 0 0 1 61.7 73.5Z" fill="#c0392b"/>
+      <path d="M0 0L61.7 73.5A96 96 0 0 1 32.8 90.2Z" fill="#16161b"/>
+      <path d="M0 0L32.8 90.2A96 96 0 0 1 0 96Z" fill="#ffaa00"/>
+      <path d="M0 0V96A96 96 0 0 1-32.8 90.2Z" fill="#c0392b"/>
+      <path d="M0 0L-32.8 90.2A96 96 0 0 1-61.7 73.5Z" fill="#16161b"/>
+      <path d="M0 0L-61.7 73.5A96 96 0 0 1-83.1 48Z" fill="#c0392b"/>
+      <path d="M0 0L-83.1 48A96 96 0 0 1-94.5 16.7Z" fill="#16161b"/>
+      <path d="M0 0L-94.5 16.7A96 96 0 0 1-94.5-16.7Z" fill="#c0392b"/>
+      <path d="M0 0L-94.5-16.7A96 96 0 0 1-83.1-48Z" fill="#16161b"/>
+      <path d="M0 0L-83.1-48A96 96 0 0 1-61.7-73.5Z" fill="#c0392b"/>
+      <path d="M0 0L-61.7-73.5A96 96 0 0 1-32.8-90.2Z" fill="#16161b"/>
+      <path d="M0 0L-32.8-90.2A96 96 0 0 1 0-96Z" fill="#c0392b"/>
+    </g>
+    <circle r="62" fill="url(#cone)"/>
+    <circle r="62" fill="none" stroke="#d4a303" stroke-width="3"/>
+    <g stroke="url(#rim)" stroke-width="8" stroke-linecap="round">
+      <path d="M0-14V-48M0 14V48M-14 0H-48M14 0H48"/>
+    </g>
+    <circle r="20" fill="url(#hub)"/>
+    <circle cx="-6" cy="-7" r="6" fill="#ffffff" fill-opacity=".8"/>
+    <circle cx="46" cy="-72" r="11" fill="#ffffff"/>
+    <circle cx="43" cy="-75" r="4" fill="#ffffff"/>
+    <circle cx="46" cy="-72" r="11" fill="none" stroke="#d1d5db" stroke-width="2"/>
+    <ellipse cx="-58" cy="-78" rx="30" ry="9" fill="#ffffff" fill-opacity=".18" transform="rotate(-40 -58 -78)"/>
+  </g>
+  <rect y="250" width="300" height="150" fill="url(#foot)"/>
+</svg>

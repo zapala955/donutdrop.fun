@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- The Mines diamond: the card's cut, alone on a tile. -->
+  <g transform="translate(60 62)">
+    <ellipse cx="0" cy="46" rx="34" ry="5" fill="#000" fill-opacity=".35"/>
+    <path d="M-48-12L-27-38H27L48-12L0 44Z" fill="#0091c4"/>
+    <path d="M-48-12H48L0 44Z" fill="#0a6f97"/>
+    <path d="M-48-12L-17-12L0 44Z" fill="#0b5a7b"/>
+    <path d="M17-12H48L0 44Z" fill="#06415a"/>
+    <path d="M-17-12H17L0 44Z" fill="#1aa7d6"/>
+    <path d="M-27-38L-17-12H-48Z" fill="#5fd0f5"/>
+    <path d="M-27-38L0-12L-17-12Z" fill="#a8ecff"/>
+    <path d="M-27-38H27L0-12Z" fill="#dff8ff"/>
+    <path d="M27-38L17-12L0-12Z" fill="#7fdcfa"/>
+    <path d="M27-38L48-12H17Z" fill="#2fb6e6"/>
+    <path d="M-27-38L-20-34H18L27-38Z" fill="#ffffff" fill-opacity=".9"/>
+    <path d="M-34-18L-22-33L-18-28L-29-16Z" fill="#ffffff" fill-opacity=".85"/>
+  </g>
+</svg>

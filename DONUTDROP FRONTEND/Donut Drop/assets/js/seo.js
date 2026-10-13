@@ -18,6 +18,8 @@
  * snippet is the first thing a new player reads about the site.
  */
 
+import { BASE } from './routing.js';
+
 export const SITE_ORIGIN = 'https://donutluxe.com';
 
 /** Every route, public ones in the order sitemap.xml lists them. `home` is served at `/`. */
@@ -181,7 +183,10 @@ export function applyRouteMeta(route) {
 
   document.title = title;
   setMeta('meta[name="description"]', 'content', description);
-  setMeta('meta[name="robots"]', 'content', indexable ? 'index, follow' : 'noindex, follow');
+  /* The /test preview is never indexed, whatever the route: its canonical already names the live
+   * page, and the server sends X-Robots-Tag as well, but the tag a crawler renders must agree. */
+  const robots = BASE ? 'noindex, nofollow' : indexable ? 'index, follow' : 'noindex, follow';
+  setMeta('meta[name="robots"]', 'content', robots);
   setMeta('link[rel="canonical"]', 'href', url);
   setMeta('meta[property="og:title"]', 'content', title);
   setMeta('meta[property="og:description"]', 'content', description);

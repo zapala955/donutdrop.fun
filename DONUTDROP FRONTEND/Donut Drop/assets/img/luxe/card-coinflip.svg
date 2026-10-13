@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Coinflip: one gold coin mid-air, turning, its shadow on the table below. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#4a3204"/>
+      <stop offset=".55" stop-color="#2a1c02"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffd700" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#ffd700" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7a4700"/>
+      <stop offset=".5" stop-color="#d98800"/>
+      <stop offset="1" stop-color="#7a4700"/>
+    </linearGradient>
+    <radialGradient id="face" cx=".36" cy=".3" r=".8">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset=".4" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#d98800"/>
+    </radialGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d98800"/>
+      <stop offset="1" stop-color="#ffd700"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0a0c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0a0a0c" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <circle cx="150" cy="140" r="150" fill="url(#glow)"/>
+  <ellipse cx="150" cy="268" rx="70" ry="12" fill="#000" fill-opacity=".5"/>
+  <g transform="translate(150 140) rotate(-16)">
+    <!-- the coin's thickness, seen as it turns -->
+    <ellipse cx="10" cy="6" rx="86" ry="96" fill="url(#edge)"/>
+    <g stroke="#a35f00" stroke-width="2" stroke-opacity=".7">
+      <path d="M90 -30v8M93 -8v8M93 14v8M88 36v8M80 56v8"/>
+    </g>
+    <ellipse rx="86" ry="96" fill="url(#face)"/>
+    <ellipse rx="70" ry="78" fill="none" stroke="#a35f00" stroke-width="4"/>
+    <ellipse rx="64" ry="72" fill="url(#inner)" fill-opacity=".35"/>
+    <!-- a crown, the house mark -->
+    <path d="M-38 22L-46-22L-20 0L0-34L20 0L46-22L38 22Z" fill="#a35f00"/>
+    <path d="M-38 22L-46-22L-20 0L0-34L20 0L46-22L38 22Z" fill="none" stroke="#7a4700" stroke-width="2"/>
+    <rect x="-40" y="26" width="80" height="12" rx="3" fill="#a35f00"/>
+    <circle cx="0" cy="-38" r="6" fill="#a35f00"/>
+    <circle cx="-48" cy="-26" r="5" fill="#a35f00"/>
+    <circle cx="48" cy="-26" r="5" fill="#a35f00"/>
+    <ellipse cx="-34" cy="-52" rx="26" ry="12" fill="#ffffff" fill-opacity=".55" transform="rotate(-35 -34 -52)"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M240 60l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill-opacity=".9"/>
+    <path d="M58 200l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill-opacity=".7"/>
+    <path d="M70 70l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill-opacity=".6"/>
+  </g>
+  <rect y="250" width="300" height="150" fill="url(#foot)"/>
+</svg>

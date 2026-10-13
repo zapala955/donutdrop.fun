@@ -1,0 +1,415 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R4 V4
+ * Hallmark · genre: atmospheric · macrostructure: game frame (controls left · stage right · bar under)
+ *   · studied: yes · DNA-source: image (the operator's Stake.com reference) · theme: site tokens
+ *
+ * luxe-games.css — every game and page under the /test shell.
+ *
+ * A game is one frame: the controls in a panel down the left, the game itself on the darkest
+ * surface to the right, and a bar under both with the game's name and "How it works". The games
+ * build their own markup (assets/js/*.js); nothing here touches it, it only lays it out. Each
+ * game already names its parts as grid areas, so the frame is a new grid template, not new DOM.
+ *
+ * States carried by the games themselves (data-tone, data-kind, aria-busy, :disabled) keep their
+ * meaning; only the material under them changes. Win stays gold, loss stays the loss red.
+ */
+
+/* ═════════ the frame ═════════ */
+/* Only a single table gets the bar under it. A lobby (Coinflip, Mines Duel, Cases, Case Battles)
+   is a list of tables, and its name goes on top like any page's. */
+body.lx .view:not([hidden]):has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
+
+/* the bar under the game */
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  height: 56px; margin: 0; padding: 0 var(--lx-s2) 0 var(--lx-s5);
+  border: 0; border-top: 2px solid var(--lx-2);
+  border-radius: 0 0 var(--lx-r) var(--lx-r);
+  background: var(--lx-0);
+  box-shadow: var(--lx-shade);
+}
+/* a lobby's title: on top, no bar */
+body.lx .phead--game {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  margin: 0 0 var(--lx-s5); padding: 0;
+  border: 0; background: none; box-shadow: none;
+}
+body.lx .phead--game .phead__ico { display: none; }
+body.lx .phead--game .phead__txt { flex-direction: row; align-items: baseline; gap: var(--lx-s3); }
+body.lx .phead--game h1 {
+  color: var(--lx-ink);
+  font: 900 1.0625rem/1 var(--lx-display); font-stretch: 105%;
+  letter-spacing: 0; text-transform: uppercase;
+}
+body.lx .phead--game .phead__tag { color: var(--lx-mute); font: 600 .8125rem/1 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .phead--game .phead__how {
+  height: 40px; padding: 0 var(--lx-s3);
+  border: 0; border-radius: var(--lx-r-s);
+  background: transparent; color: var(--lx-mute);
+  font: 700 .875rem/1 var(--lx-ui);
+}
+body.lx .phead--game .phead__how:hover { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .phead--game .phead__how[aria-expanded="true"] { color: var(--lx-gold); }
+/* the bubble opens upward when the bar is under the game */
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
+  top: auto; bottom: calc(100% + 10px); left: auto; right: 0;
+  width: min(360px, 80vw);
+  transform: translateY(3px);
+}
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
+
+/* ═════════ the single-player tables: Crash · Mines · Plinko ═════════ */
+body.lx :is(.crash, .mines, .plinko) {
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  gap: 0;
+  align-items: stretch;
+  border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx .crash {
+  grid-template-areas: "panel stage" "players stage";
+  grid-template-rows: auto minmax(0, 1fr);
+}
+body.lx :is(.crash__stage, .mines__stage, .plinko__stage) {
+  min-height: 600px;
+  border: 0; border-radius: 0 var(--lx-r) 0 0;
+  background: var(--lx-0);
+  box-shadow: none;
+}
+body.lx .crash[data-phase="busted"] .crash__stage { border: 0; box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .35); }
+body.lx :is(.crash__panel, .mines__panel, .plinko__panel) {
+  padding: var(--lx-s3) var(--lx-s3) var(--lx-s4);
+  border: 0; border-radius: var(--lx-r) 0 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.lx :is(.crash__form, .mines__form, .plinko__form) { gap: var(--lx-s2); }
+
+/* labels: sentence case, the way a form talks */
+body.lx :is(.crash__label, .mines__label, .plinko__label, .mduel__label, .bj__label, .bj__stakelabel) {
+  margin: var(--lx-s2) 0 0;
+  color: var(--lx-mute);
+  font: 600 .8125rem/1.2 var(--lx-ui);
+  letter-spacing: 0; text-transform: none;
+}
+
+/* the stake field: a dark well, ½ and 2× bolted to its right edge */
+body.lx :is(.crash__field, .mines__field, .plinko__field, .mduel__field) {
+  height: 44px; padding: 0 0 0 var(--lx-s3); gap: 0;
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: none;
+  overflow: hidden;
+}
+body.lx :is(.crash__field, .mines__field, .plinko__field, .mduel__field):hover { border-color: var(--lx-5); }
+body.lx :is(.crash__field, .mines__field, .plinko__field, .mduel__field):focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx :is(.crash__field, .mines__field, .plinko__field, .mduel__field) span { color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); padding-right: var(--lx-s2); }
+body.lx :is(.crash__field, .mines__field, .plinko__field, .mduel__field) input {
+  color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx :is(.crash__adj, .mines__adj, .plinko__adj, .mduel__adj, .bj__adj) {
+  align-self: stretch;
+  min-width: 46px; height: auto;
+  border: 0; border-left: 2px solid var(--lx-2); border-radius: 0;
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .875rem var(--lx-ui);
+}
+body.lx :is(.crash__adj, .mines__adj, .plinko__adj, .mduel__adj, .bj__adj):hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); }
+
+/* quick picks and steppers: grey buttons, gold when chosen */
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk, .mines__step, .plinko__step) {
+  height: 36px;
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  box-shadow: none;
+}
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk, .mines__step, .plinko__step):hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); }
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-pressed="true"],
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-checked="true"] {
+  background: var(--lx-gold); color: var(--lx-on-gold); border: 0;
+}
+body.lx :is(.mines__stepper, .plinko__stepper) {
+  height: 44px; padding: 0;
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0); overflow: hidden;
+}
+body.lx :is(.mines__stepper, .plinko__stepper) :is(.mines__step, .plinko__step) { height: 100%; border-radius: 0; }
+body.lx :is(.mines__stepper, .plinko__stepper) output,
+body.lx :is(.mines__stepper, .plinko__stepper) input { color: var(--lx-ink); font: 700 1rem var(--lx-ui); background: none; border: 0; }
+
+/* the one button, flat gold; its phase still decides its words and its state */
+body.lx :is(.crash .crash__go, .mines .mines__go, .plinko .plinko__go) {
+  height: 52px; margin-top: var(--lx-s3);
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: var(--lx-shade);
+  filter: none;
+}
+body.lx :is(.crash .crash__go, .mines .mines__go, .plinko .plinko__go):hover:not(:disabled) { background: var(--lx-gold-hi); filter: none; }
+body.lx :is(.crash .crash__go, .mines .mines__go)[data-tone="cash"] { background: var(--lx-gold-hi); box-shadow: 0 0 0 3px rgba(255, 215, 0, .22), var(--lx-shade); }
+body.lx :is(.crash .crash__go, .mines .mines__go)[data-tone="idle"] { background: var(--lx-4); color: var(--lx-mute); }
+body.lx .crash .crash__go[data-tone="won"] { background: var(--lx-gold-wash); color: var(--lx-gold-hi); box-shadow: inset 0 0 0 2px rgba(255, 215, 0, .45); }
+body.lx .crash .crash__go[data-tone="lost"] { background: rgba(255, 34, 34, .1); color: var(--lx-loss); box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .4); }
+body.lx :is(.crash .crash__go, .mines .mines__go, .plinko .plinko__go):disabled { filter: none; opacity: .55; }
+body.lx :is(.crash__go, .mines__go, .plinko__go) kbd { border-color: currentColor; font-family: var(--lx-ui); }
+body.lx :is(.crash__hint, .mines__hint, .plinko__hint, .plinko__falling) { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
+body.lx :is(.crash__mine) { border: 0; border-radius: var(--lx-r-s); background: var(--lx-0); }
+body.lx .mines__random {
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .875rem var(--lx-ui); box-shadow: none;
+}
+body.lx .mines__random:hover:not(:disabled) { background: var(--lx-5); }
+
+/* ── Crash ── */
+body.lx .crash {
+  --crash-stage-bg-a: var(--lx-0);
+  --crash-stage-bg-b: var(--lx-0);
+  --crash-grid: rgba(255, 255, 255, .05);
+  --crash-label: rgba(209, 213, 219, .45);
+}
+body.lx .crash__history { padding: var(--lx-s3) var(--lx-s4) 0; }
+body.lx .crash__past {
+  border: 0; border-radius: var(--lx-r-pill);
+  background: var(--lx-3); color: var(--lx-text);
+  font: 700 .75rem/1 var(--lx-ui);
+  box-shadow: none;
+}
+body.lx .crash__big, body.lx .crash__readout b { font-family: var(--lx-display); font-stretch: 100%; }
+body.lx .crash__players {
+  margin: 0; padding: 0 var(--lx-s3) var(--lx-s3);
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+}
+body.lx .crash__players > * { border-radius: var(--lx-r-s); }
+body.lx .crash__head { padding: var(--lx-s3) 0 var(--lx-s2); border: 0; background: none; color: var(--lx-ink); font: 700 .875rem var(--lx-ui); }
+body.lx .crash__player { border: 0; border-radius: var(--lx-r-s); background: var(--lx-1); }
+
+/* ── Mines: flat raised tiles, a gem and a stick of TNT drawn for the skin ── */
+body.lx .mines__stage { align-content: center; padding: var(--lx-s6); }
+body.lx .mines__readout b { font-family: var(--lx-display); font-stretch: 100%; color: var(--lx-gold-hi); }
+body.lx .mines__readout span { font-family: var(--lx-ui); }
+body.lx .mines__board {
+  gap: 10px; padding: 0;
+  width: min(100%, 560px);
+  background: none; box-shadow: none;
+}
+body.lx .mtile {
+  border-radius: var(--lx-r);
+  background: var(--lx-4);
+  box-shadow: 0 5px 0 var(--lx-2);
+}
+body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover {
+  transform: translateY(-3px);
+  background: var(--lx-5);
+  box-shadow: 0 8px 0 var(--lx-2);
+}
+body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--lx-2); }
+body.lx .mines__board[data-state="idle"] .mtile { filter: none; opacity: .75; }
+body.lx .mtile:is([data-kind="gem"], [data-kind="tnt"], [data-kind="dim-gem"], [data-kind="boom"]) {
+  background: var(--lx-1);
+  box-shadow: inset 0 0 0 2px var(--lx-3);
+  transform: none;
+}
+body.lx .mtile[data-kind="gem"] { box-shadow: inset 0 0 0 2px rgba(0, 145, 196, .55); }
+body.lx .mtile[data-kind="boom"] { background: rgba(255, 34, 34, .14); box-shadow: inset 0 0 0 2px var(--lx-loss); }
+/* the sprites give way to the drawn gem and TNT */
+body.lx .mtile img { display: none; }
+body.lx .mtile:is([data-kind="gem"], [data-kind="dim-gem"])::after,
+body.lx .mtile:is([data-kind="tnt"], [data-kind="boom"])::after {
+  content: ""; position: absolute; inset: 14%;
+  background: url("../img/luxe/gem.svg") center / contain no-repeat;
+  animation: lx-pop .26s var(--lx-ease) both;
+}
+body.lx .mtile:is([data-kind="tnt"], [data-kind="boom"])::after { background-image: url("../img/luxe/tnt.svg"); }
+body.lx .mtile[data-kind="dim-gem"]::after { opacity: .3; animation: none; }
+body.lx .mtile[data-kind="tnt"]::after { opacity: .45; animation: none; }
+@keyframes lx-pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+body.lx .mines__banner {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: 0 0 0 3px var(--lx-gold), var(--lx-shade-hi);
+}
+body.lx .mines__banner[data-tone="lost"] { box-shadow: 0 0 0 3px var(--lx-loss), var(--lx-shade-hi); }
+body.lx .mines__banner b { font-family: var(--lx-display); font-stretch: 100%; color: var(--lx-gold-hi); }
+body.lx .mines__banner span { font-family: var(--lx-ui); }
+
+/* ── Plinko ── */
+body.lx .plinko__stage { padding: var(--lx-s4); }
+body.lx .plinko__board { background: none; border: 0; box-shadow: none; }
+body.lx .plinko__slot { border: 0; border-radius: var(--lx-r-s); font-family: var(--lx-ui); font-weight: 800; box-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
+body.lx .plinko__recent { border: 0; background: none; }
+body.lx .plinko__chip { border: 0; border-radius: var(--lx-r-s); font-family: var(--lx-ui); }
+
+/* ═════════ the other tables: one surface, flat ═════════ */
+body.lx :is(.roulette__stage, .roulette__board, .bj__table, .bj__felt, .mduel__panel, .mduel__main, .cfstage, .cfside, .ustage, .stakebox, .battles, .btlcard, .barena) {
+  border-color: transparent;
+  box-shadow: var(--lx-shade);
+}
+body.lx :is(.roulette__stage, .roulette__board) { border: 0; border-radius: var(--lx-r); background: var(--lx-2); }
+body.lx .roulette__stage { background: var(--lx-0); }
+
+/* a lobby's title reads as a page title */
+body.lx .phead--game h1 { font-size: 1.375rem; }
+body.lx .view:has(> :is(.crash, .mines, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
+
+/* ═════════ Blackjack: controls left, the felt right ═════════ */
+body.lx .bj {
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "controls table";
+  gap: 0;
+  border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx .bj__table { grid-area: table; min-height: 600px; justify-content: space-between; padding: var(--lx-s6) var(--lx-s4); border: 0; border-radius: 0 var(--lx-r) 0 0; box-shadow: none; }
+body.lx .bj__controls { grid-area: controls; display: block; padding: var(--lx-s3) var(--lx-s3) var(--lx-s4); }
+body.lx .bj__betting { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); width: 100%; }
+body.lx .bj__stake {
+  height: 44px; padding: 0 0 0 var(--lx-s3); gap: 0;
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0); overflow: hidden; box-shadow: none;
+}
+body.lx .bj__stake:hover { border-color: var(--lx-5); }
+body.lx .bj__stake:focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx .bj__stake span { color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); padding-right: var(--lx-s2); }
+body.lx .bj__stake input { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); }
+body.lx .bj .bj__deal, body.lx .bj__actions .btn { height: 52px; margin-top: var(--lx-s3); font-size: 1rem; }
+body.lx .bj__actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+body.lx .bj__actions[hidden] { display: none; }
+body.lx .bj__actions .btn:not(.btn--go) { background: var(--lx-4); color: var(--lx-ink); }
+body.lx .bj__actions .btn:not(.btn--go):hover:not(:disabled) { background: var(--lx-5); }
+body.lx .bj__actions .btn kbd { font-family: var(--lx-ui); border-color: currentColor; }
+body.lx .bj__hint { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
+body.lx .bj__label { color: var(--lx-text); font: 700 .875rem var(--lx-ui); text-transform: none; letter-spacing: 0; }
+body.lx .bj__total { font-family: var(--lx-ui); }
+body.lx .bj__rules { font-family: var(--lx-ui); }
+body.lx .bj__result { border: 0; border-radius: var(--lx-r); background: var(--lx-1); box-shadow: 0 0 0 3px var(--lx-gold), var(--lx-shade-hi); }
+
+/* ═════════ Roulette: the wheel on the dark, the board on the panel ═════════ */
+body.lx .roulette {
+  gap: 0;
+  border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx .roulette__stage { border-radius: var(--lx-r) 0 0 0; background: var(--lx-0); box-shadow: none; }
+body.lx .roulette__board { border-radius: 0 var(--lx-r) 0 0; background: transparent; box-shadow: none; }
+body.lx .roulette, body.lx .roulette * { font-family: var(--lx-ui); }
+
+/* ═════════ Upgrader: one flat machine ═════════ */
+body.lx .upg {
+  --u-stage: var(--lx-0);
+  --u-panel: var(--lx-2);
+  --u-panel-2: var(--lx-3);
+  --u-grid: none;
+  border: 0; border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-0);
+  box-shadow: var(--lx-shade);
+}
+body.lx .upg::before, body.lx .upg::after { content: none; }
+body.lx .ucard {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+}
+body.lx .ucard--dst:hover { background: var(--lx-3); border: 0; }
+/* An empty card shows its chevron on a clean surface: no darkened, blurred sprite behind it. */
+body.lx .ucard__art[data-empty="1"] img { display: none; }
+body.lx .ucard__art::before { opacity: .35; }
+body.lx .ucard__art[data-empty="1"] .ucard__glyph { opacity: .9; }
+body.lx .ucard__head { color: var(--lx-ink); font-family: var(--lx-ui); }
+body.lx .stakebox {
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+}
+body.lx .stakebox:hover { border-color: var(--lx-5); }
+body.lx .stakebox:focus-within { border-color: var(--lx-gold); }
+body.lx .stakebox__cur, body.lx .stakebox__in { font-family: var(--lx-ui); }
+body.lx .chips .btn {
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .75rem var(--lx-ui); box-shadow: none;
+}
+body.lx .chips .btn:hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); border: 0; }
+body.lx .chips .btn[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+body.lx .wheel__ring { background: radial-gradient(closest-side, var(--lx-1) 68%, var(--lx-2) 70%, var(--lx-1) 100%); }
+body.lx .wheel__track { stroke: var(--lx-3); }
+body.lx .wheel__ticks .tick { stroke: var(--lx-4); }
+body.lx .utool__stat { letter-spacing: .08em; font-family: var(--lx-ui); }
+
+body.lx .upg #pullBtn {
+  height: 52px; border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  font: 800 1rem var(--lx-ui); box-shadow: var(--lx-shade); filter: none;
+}
+body.lx .upg #pullBtn:hover:not(:disabled) { background: var(--lx-gold-hi); transform: none; filter: none; }
+/* Disabled still says what it needs ("Log in first"), so it stays readable: grey, not faded out. */
+body.lx .upg #pullBtn:disabled { background: var(--lx-4); color: var(--lx-text); opacity: 1; box-shadow: none; }
+body.lx .upg #pullBtn:disabled .btn__chev svg path { fill: var(--lx-mute); }
+body.lx .roulette { align-items: stretch; }
+body.lx .roulette__stage { align-self: stretch; }
+
+/* ═════════ lobbies: Coinflip · Mines Duel · Cases · Case Battles ═════════ */
+body.lx :is(.mduel__panel, .cfside, .btlcard, .mduel__row, .cf__row, .cfstage, .mduel__main) { border-color: transparent; }
+body.lx .mduel__panel { border: 0; border-radius: var(--lx-r); background: var(--lx-2); }
+body.lx .crate {
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx .crate::before, body.lx .crate::after { content: none; }
+body.lx .crate:hover { background: var(--lx-3); transform: translateY(-3px); box-shadow: var(--lx-shade-hi); }
+body.lx .crate__nm { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); letter-spacing: 0; }
+body.lx .crate__price { font-family: var(--lx-ui); }
+body.lx .crate__odds { font-family: var(--lx-ui); letter-spacing: 0; }
+body.lx .crate__tier { border: 0; border-radius: var(--lx-r-s); font-family: var(--lx-ui); letter-spacing: 0; }
+
+/* ═════════ a page that needs you signed in ═════════
+   Every module says so in one short card; the skin makes it the empty state it is, and luxe.js
+   puts the Log in button under it. */
+body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .refer__card) {
+  display: grid; justify-items: center; gap: var(--lx-s3);
+  max-width: none; margin: 0; padding: var(--lx-s8) var(--lx-s6);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+  text-align: center;
+}
+body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .refer__card)::before {
+  content: ""; width: 56px; height: 56px; border-radius: 50%;
+  background: var(--lx-gold-wash) var(--lx-lock) center / 26px no-repeat;
+}
+body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice) p,
+body.lx .refer__gate { margin: 0; color: var(--lx-text); font: 600 1rem/1.4 var(--lx-ui); }
+body.lx .refer__title { color: var(--lx-ink); font: 700 1.25rem var(--lx-ui); letter-spacing: 0; }
+body.lx .refer:has(> .refer__card) { display: block; max-width: none; }
+body.lx .lxgate { margin-top: var(--lx-s2); }
+
+/* ── the bets table: the result is a figure, not a pill ── */
+body.lx .feedrow__delta, body.lx .feedrow__delta[data-up="1"] { padding: 0; border: 0; background: none; box-shadow: none; }
+body.lx .feedrow__mult { text-shadow: none; }
+
+/* ═════════ phones ═════════ */
+@media (max-width: 1023px) {
+  body.lx :is(.crash, .mines, .plinko) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage" "panel";
+  }
+  body.lx .crash { grid-template-areas: "stage" "panel" "players"; grid-template-rows: none; }
+  body.lx :is(.crash__stage, .mines__stage, .plinko__stage) { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  body.lx .crash__stage { min-height: 340px; }
+  body.lx :is(.crash__panel, .mines__panel, .plinko__panel) { border-radius: 0; }
+  body.lx .mines__stage { padding: var(--lx-s3); }
+  body.lx .phead--game { padding-left: var(--lx-s4); }
+  body.lx .phead--game .phead__tag { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.lx .mtile::after { animation: none; }
+  body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover { transform: none; }
+}

@@ -46,6 +46,11 @@ const topTodayQuery = z
  * round into one every few seconds. */
 const TOP_TODAY_TTL_MS = 10_000;
 
+/* "Playing" means a round placed or settled this recently. Every lobby asks on load and every
+ * half minute, so one answer is shared for a few seconds rather than counted per viewer. */
+const PLAYING_WINDOW_MINUTES = 15;
+const PLAYING_TTL_MS = 20_000;
+
 /**
  * Usernames are masked to a first character and a run of asterisks.
  *
@@ -338,5 +343,58 @@ export async function registerActivityRoutes(
     );
     topToday = { at: Date.now(), limit: query.limit, rows: result.rows };
     return { activities: result.rows };
+  });
+
+  /**
+   * How many people are playing each game: the distinct players who placed or settled a round in
+   * it within the last PLAYING_WINDOW_MINUTES. The lobby's game cards print it as "N playing".
+   *
+   * Counted, never estimated. A lobby that shows a busier table than the one somebody is about to
+   * sit down at is advertising, and this page is where players decide whether to play at all. A
+   * game nobody has touched in the window is simply absent, and the card says nothing.
+   *
+   * Keyed by route name, the one name the page already uses for a game. Both sides of a coinflip
+   * or a mines duel are playing it. Case battles are paused and have no entry.
+   */
+  let playing: { at: number; games: Record<string, number> } | null = null;
+  app.get('/v1/activity/playing', async () => {
+    if (playing && Date.now() - playing.at < PLAYING_TTL_MS) {
+      return { windowMinutes: PLAYING_WINDOW_MINUTES, games: playing.games };
+    }
+    const result = await db.query<{ game: string; players: number }>(
+      `WITH since AS (SELECT now() - make_interval(mins => $1) AS at)
+       SELECT seat.game, count(DISTINCT seat.user_id)::integer AS players FROM (
+         SELECT 'crash'::text AS game, b.user_id FROM crash_bets b, since
+          WHERE b.created_at > since.at OR b.settled_at > since.at
+         UNION ALL
+         SELECT 'mines', g.user_id FROM mines_games g, since
+          WHERE g.created_at > since.at OR g.settled_at > since.at
+         UNION ALL
+         SELECT 'plinko', b.user_id FROM plinko_bets b, since WHERE b.created_at > since.at
+         UNION ALL
+         SELECT 'blackjack', h.user_id FROM blackjack_hands h, since
+          WHERE h.created_at > since.at OR h.settled_at > since.at
+         UNION ALL
+         SELECT 'roulette', b.user_id FROM roulette_bets b, since WHERE b.created_at > since.at
+         UNION ALL
+         SELECT 'upgrader', r.user_id FROM upgrader_rounds r, since WHERE r.created_at > since.at
+         UNION ALL
+         SELECT 'crates', r.user_id FROM case_rounds r, since WHERE r.created_at > since.at
+         UNION ALL
+         SELECT 'coinflip', p.user_id FROM coinflip_games g, since,
+                LATERAL (VALUES (g.host_user_id), (g.opponent_user_id)) p(user_id)
+          WHERE p.user_id IS NOT NULL AND (g.created_at > since.at OR g.settled_at > since.at)
+         UNION ALL
+         SELECT 'mines-duel', p.user_id FROM mines_duel_games g, since,
+                LATERAL (VALUES (g.host_user_id), (g.opponent_user_id)) p(user_id)
+          WHERE p.user_id IS NOT NULL AND (g.created_at > since.at OR g.settled_at > since.at)
+       ) seat
+       GROUP BY seat.game`,
+      [PLAYING_WINDOW_MINUTES],
+    );
+    const games: Record<string, number> = {};
+    for (const row of result.rows) if (row.players > 0) games[row.game] = Number(row.players);
+    playing = { at: Date.now(), games };
+    return { windowMinutes: PLAYING_WINDOW_MINUTES, games };
   });
 }

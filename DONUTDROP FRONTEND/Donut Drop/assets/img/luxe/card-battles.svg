@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Case Battles: two chests face each other, the swords crossed between them. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#8e2318"/>
+      <stop offset=".55" stop-color="#3a0e09"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffd700" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffd700" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9096a0"/>
+      <stop offset=".5" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#9096a0"/>
+    </linearGradient>
+    <linearGradient id="hilt" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a35f00"/>
+      <stop offset=".5" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5e26"/>
+      <stop offset="1" stop-color="#5a3a14"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a0702e"/>
+      <stop offset="1" stop-color="#6b4518"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0a0c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0a0a0c" stop-opacity=".92"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <circle cx="150" cy="120" r="130" fill="url(#glow)"/>
+  <!-- swords -->
+  <g transform="translate(150 112) rotate(-38)">
+    <path d="M-6 30V-96L0-110L6-96V30Z" fill="url(#blade)"/>
+    <path d="M0-104V24" stroke="#d1d5db" stroke-width="1.5"/>
+    <rect x="-26" y="28" width="52" height="10" rx="4" fill="url(#hilt)"/>
+    <rect x="-5" y="38" width="10" height="30" rx="3" fill="#5a3a14"/>
+    <circle cy="72" r="7" fill="url(#hilt)"/>
+  </g>
+  <g transform="translate(150 112) rotate(38)">
+    <path d="M-6 30V-96L0-110L6-96V30Z" fill="url(#blade)"/>
+    <path d="M0-104V24" stroke="#d1d5db" stroke-width="1.5"/>
+    <rect x="-26" y="28" width="52" height="10" rx="4" fill="url(#hilt)"/>
+    <rect x="-5" y="38" width="10" height="30" rx="3" fill="#5a3a14"/>
+    <circle cy="72" r="7" fill="url(#hilt)"/>
+  </g>
+  <!-- two chests -->
+  <g transform="translate(78 222)">
+    <ellipse cx="0" cy="40" rx="62" ry="10" fill="#000" fill-opacity=".45"/>
+    <rect x="-54" y="-30" width="108" height="34" rx="8" fill="url(#lid)"/>
+    <rect x="-54" y="2" width="108" height="38" rx="6" fill="url(#wood)"/>
+    <rect x="-54" y="-30" width="108" height="70" rx="8" fill="none" stroke="#ffd700" stroke-width="4"/>
+    <path d="M-54 2H54" stroke="#ffd700" stroke-width="3"/>
+    <rect x="-10" y="-6" width="20" height="22" rx="4" fill="url(#hilt)"/>
+  </g>
+  <g transform="translate(222 222)">
+    <ellipse cx="0" cy="40" rx="62" ry="10" fill="#000" fill-opacity=".45"/>
+    <rect x="-54" y="-30" width="108" height="34" rx="8" fill="url(#lid)"/>
+    <rect x="-54" y="2" width="108" height="38" rx="6" fill="url(#wood)"/>
+    <rect x="-54" y="-30" width="108" height="70" rx="8" fill="none" stroke="#ffd700" stroke-width="4"/>
+    <path d="M-54 2H54" stroke="#ffd700" stroke-width="3"/>
+    <rect x="-10" y="-6" width="20" height="22" rx="4" fill="url(#hilt)"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M150 52l5 12 12 5-12 5-5 12-5-12-12-5 12-5z" fill-opacity=".95"/>
+    <path d="M54 92l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill-opacity=".7"/>
+    <path d="M250 84l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill-opacity=".7"/>
+  </g>
+  <rect y="270" width="300" height="130" fill="url(#foot)"/>
+</svg>

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Blackjack: a natural twenty-one fanned on obsidian, a gold chip stack beside it. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0" stop-color="#2f2f38"/>
+      <stop offset=".55" stop-color="#16161b"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffaa00" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#ffaa00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ece6d6"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d98800"/>
+      <stop offset=".5" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#a35f00"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0a0c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0a0a0c" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <circle cx="150" cy="150" r="150" fill="url(#glow)"/>
+  <!-- back card: king of hearts -->
+  <g transform="translate(122 150) rotate(-14)">
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="#000" fill-opacity=".35" transform="translate(6 8)"/>
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="url(#face)"/>
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="none" stroke="#d4a303" stroke-width="3"/>
+    <text x="-46" y="-56" font-family="Archivo, Arial, sans-serif" font-weight="900" font-size="28" fill="#c0392b">K</text>
+    <path d="M-34-40c-5-7-15-2-11 6l11 11 11-11c4-8-6-13-11-6z" fill="#c0392b"/>
+  </g>
+  <!-- front card: ace of spades -->
+  <g transform="translate(176 160) rotate(10)">
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="#000" fill-opacity=".4" transform="translate(6 8)"/>
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="url(#face)"/>
+    <rect x="-62" y="-88" width="124" height="176" rx="12" fill="none" stroke="#d4a303" stroke-width="3"/>
+    <text x="-46" y="-56" font-family="Archivo, Arial, sans-serif" font-weight="900" font-size="28" fill="#16161b">A</text>
+    <path d="M0-30C-20-8-42 4-42 22c0 14 14 22 28 14-2 10-8 18-14 22h56c-6-4-12-12-14-22 14 8 28 0 28-14C42 4 20-8 0-30z" fill="#16161b"/>
+    <path d="M-10-12C-18-4-26 4-28 12" stroke="#ffffff" stroke-opacity=".35" stroke-width="4" stroke-linecap="round" fill="none"/>
+  </g>
+  <!-- chip stack -->
+  <g transform="translate(66 250)">
+    <ellipse cx="0" cy="26" rx="40" ry="11" fill="#000" fill-opacity=".45"/>
+    <g>
+      <path d="M-34 12v8c0 6 15 11 34 11s34-5 34-11v-8z" fill="#7a4700"/>
+      <ellipse cx="0" cy="12" rx="34" ry="11" fill="url(#chip)"/>
+      <path d="M-34 0v8c0 6 15 11 34 11s34-5 34-11V0z" fill="#a35f00"/>
+      <ellipse cx="0" cy="0" rx="34" ry="11" fill="url(#chip)"/>
+      <path d="M-34-12v8c0 6 15 11 34 11s34-5 34-11v-8z" fill="#a35f00"/>
+      <ellipse cx="0" cy="-12" rx="34" ry="11" fill="url(#chip)"/>
+      <ellipse cx="0" cy="-12" rx="22" ry="7" fill="none" stroke="#fff6cc" stroke-width="3" stroke-dasharray="6 5"/>
+    </g>
+  </g>
+  <rect y="250" width="300" height="150" fill="url(#foot)"/>
+</svg>

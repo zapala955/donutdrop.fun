@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- The Mines TNT: the card's stick, alone on a tile. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2222"/>
+      <stop offset=".6" stop-color="#c0392b"/>
+      <stop offset="1" stop-color="#8e2318"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(60 66) rotate(-12)">
+    <ellipse cx="2" cy="40" rx="36" ry="5" fill="#000" fill-opacity=".35"/>
+    <rect x="-38" y="-30" width="76" height="64" rx="7" fill="url(#body)"/>
+    <path d="M-25-30V34M-8-30V34M9-30V34M26-30V34" stroke="#8e2318" stroke-opacity=".55" stroke-width="2.5"/>
+    <rect x="-38" y="-10" width="76" height="20" fill="#ffffff"/>
+    <text x="0" y="6" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="#2a1c02">TNT</text>
+    <path d="M2-30C4-42 14-48 24-45" fill="none" stroke="#d9c7a0" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="27" cy="-46" r="8" fill="#ffd700"/>
+    <circle cx="27" cy="-46" r="4" fill="#ffffff"/>
+    <path d="M-34-26H30" stroke="#ffffff" stroke-opacity=".3" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,358 @@
+/* Hallmark · pre-emit critique: P4 H5 E5 S4 R4 V4
+ * Hallmark · genre: atmospheric · macrostructure: casino lobby (offers · search · tabs · card row)
+ *   · studied: yes · DNA-source: image (the operator's Stake.com reference) · theme: site tokens
+ *
+ * luxe-home.css — the /test home view. Spends luxe.css's tokens and nothing else.
+ */
+
+/* ═════════ the three offers ═════════
+   Art on the left, a tag, a title and one line on the right; the whole card is the link. */
+.lxpromos {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s4);
+  margin: 0 0 var(--lx-s6);
+}
+.lxpromo {
+  position: relative;
+  display: grid; grid-template-columns: 146px minmax(0, 1fr);
+  min-height: 146px;
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  color: var(--lx-text);
+  overflow: hidden;
+  box-shadow: var(--lx-shade);
+  transition: background var(--lx-quick) var(--lx-ease), transform var(--lx-quick) var(--lx-ease);
+}
+a.lxpromo:hover, .lxpromo:has(.lxpromo__cover:hover) { background: var(--lx-3); }
+a.lxpromo:active { transform: translateY(1px); }
+a.lxpromo:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.lxpromo__cover { position: absolute; inset: 0; z-index: 1; }
+/* app.css sets every img to display:block, which beats the hidden attribute. */
+.lxpromo > img[hidden] { display: none; }
+.lxpromo__art { display: block; overflow: hidden; }
+.lxpromo__art img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  transition: transform var(--lx-slide) var(--lx-ease);
+}
+a.lxpromo:hover .lxpromo__art img, .lxpromo:has(.lxpromo__cover:hover) .lxpromo__art img { transform: scale(1.04); }
+.lxpromo__copy {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px;
+  min-width: 0; padding: var(--lx-s4) var(--lx-s5);
+}
+.lxtag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--lx-ink); color: var(--lx-2);
+  font: 700 .75rem/1.3 var(--lx-ui);
+}
+.lxtag--gold { background: var(--lx-gold); color: var(--lx-on-gold); }
+.lxpromo__h {
+  color: var(--lx-ink);
+  font: 700 1.1875rem/1.25 var(--lx-ui);
+  overflow-wrap: anywhere;
+}
+.lxpromo__h b { color: var(--lx-gold); font-weight: inherit; }
+.lxpromo__p {
+  color: var(--lx-mute); font: 500 .875rem/1.45 var(--lx-ui);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.lxpromo__acts { display: flex; gap: var(--lx-s3); margin-top: 2px; }
+/* The action, said as a link the way the reference says "Read more". The cover link behind the
+   copy makes the whole card do it; these sit above the cover so a keyboard reaches them. */
+.lxpromo__go {
+  position: relative; z-index: 2;
+  padding: 0; border: 0; background: none;
+  color: var(--lx-gold); font: 700 .875rem/1.3 var(--lx-ui);
+  cursor: pointer;
+}
+/* app.js marks the main one with the site's button classes (btn--go, pban__more); here it stays a link */
+body.lx .lxpromo__go:is(.btn--go, .pban__more) {
+  height: auto; padding: 0; border: 0; border-radius: 0;
+  background: none; color: var(--lx-gold); box-shadow: none; filter: none;
+}
+.lxpromo__go::after { content: " \2192"; }
+.lxpromo__go:hover { color: var(--lx-gold-hi); text-decoration: underline; text-underline-offset: 3px; }
+.lxpromo__go[hidden] { display: none; }
+/* Signed out the card logs in: its one link is "Log in". Signed in it explores: "Explore games". */
+#pbanLead[data-kind="login"] #pbanExplore { display: none; }
+#pbanLead[data-kind="explore"] #pbanLeadGo { display: none; }
+
+/* ═════════ search ═════════ */
+.lxsearch {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  height: 48px; padding: 0 var(--lx-s2) 0 var(--lx-s4);
+  border: 2px solid var(--lx-4);
+  border-radius: var(--lx-r);
+  background: var(--lx-0);
+  cursor: text;
+  transition: border-color var(--lx-quick) var(--lx-ease);
+}
+.lxsearch:hover { border-color: var(--lx-5); }
+.lxsearch:focus-within { border-color: var(--lx-gold); }
+.lxsearch > svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--lx-mute); stroke-width: 2; stroke-linecap: round; }
+.lxsearch input {
+  flex: 1; min-width: 0; height: 100%;
+  border: 0; background: none; outline: none;
+  color: var(--lx-ink); font: 600 .9375rem var(--lx-ui);
+}
+.lxsearch input::placeholder { color: var(--lx-mute); font-weight: 500; }
+.lxsearch input::-webkit-search-cancel-button { filter: grayscale(1) brightness(1.6); }
+.lxkbd {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+}
+.lxsearch:focus-within .lxkbd { display: none; }
+
+/* ═════════ the category tray ═════════ */
+.lxtabs { margin: var(--lx-s5) 0 var(--lx-s6); }
+.lxtabs__track {
+  display: flex; gap: var(--lx-s1);
+  width: max-content; max-width: 100%;
+  padding: 5px;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-0);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lxtabs__track::-webkit-scrollbar { display: none; }
+.lxtab {
+  flex: none;
+  display: inline-flex; align-items: center; gap: var(--lx-s2);
+  height: 42px; padding: 0 var(--lx-s5);
+  border: 0; border-radius: var(--lx-r-pill);
+  background: transparent; color: var(--lx-ink);
+  font: 700 .9375rem/1 var(--lx-ui); white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.lxtab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.lxtab:hover { background: var(--lx-3); }
+.lxtab:active { transform: scale(.98); }
+.lxtab:focus-visible { outline-offset: -2px; }
+.lxtab[aria-pressed="true"] { background: var(--lx-4); }
+.lxtab[aria-pressed="true"] svg { stroke: var(--lx-gold); }
+.lxtab[aria-pressed="true"] .lxfill { fill: var(--lx-gold); }
+.lxtab[hidden] { display: none; }
+
+/* ═════════ a row ═════════ */
+.lxrow__head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s3);
+  margin: 0 0 var(--lx-s3);
+}
+.lxrow__h {
+  display: flex; align-items: center; gap: var(--lx-s2);
+  margin: 0; color: var(--lx-ink);
+  font: 700 1.125rem/1.2 var(--lx-ui);
+}
+.lxrow__h svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--lx-mute); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.lxrow__arrows { display: flex; gap: var(--lx-s2); }
+.lxarrow {
+  display: grid; place-items: center;
+  width: 44px; height: 36px; padding: 0;
+  border: 2px solid var(--lx-4); border-radius: var(--lx-r-pill);
+  background: transparent; color: var(--lx-ink);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease), border-color var(--lx-quick) var(--lx-ease);
+}
+.lxarrow svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.lxarrow:hover:not(:disabled) { background: var(--lx-3); border-color: var(--lx-5); }
+.lxarrow:active:not(:disabled) { transform: scale(.96); }
+.lxarrow:disabled { color: var(--lx-faint); border-color: var(--lx-3); cursor: default; }
+
+/* Eight cards to the width, the rest a swipe away; "See all games" wraps them into a grid. */
+.lxrow {
+  --lx-card-gap: 16px;
+  display: grid; grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 7 * var(--lx-card-gap)) / 8);
+  gap: var(--lx-s2) var(--lx-card-gap);
+  margin: 0; padding: 8px 0 4px;
+  list-style: none;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.lxrow::-webkit-scrollbar { display: none; }
+.lxrow > li { scroll-snap-align: start; min-width: 0; }
+.lxrow > li[hidden] { display: none; }
+.lxlobby[data-all="1"] .lxrow {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--lx-s4) var(--lx-card-gap);
+  overflow: visible;
+}
+.lxlobby[data-all="1"] .lxrow__arrows { visibility: hidden; }
+
+/* ── the card ──
+   The art fills it; the name sits on the art's dark foot in wide black capitals, with the house
+   line under it. It rises a few pixels under the pointer, and the art is never scaled past 1. */
+.lxcard {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--lx-r);
+  overflow: hidden;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+  isolation: isolate;
+  /* The name is sized off the card's own width, so "BLACKJACK" fits a phone's card and a wide one. */
+  container-type: inline-size;
+  transition: transform var(--lx-quick) var(--lx-ease), box-shadow var(--lx-quick) var(--lx-ease);
+}
+.lxcard__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+.lxcard__txt {
+  position: absolute; left: 0; right: 0; bottom: 10%;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 0 6px;
+  text-align: center;
+}
+.lxcard__name {
+  display: block; max-width: 100%;
+  color: var(--lx-ink);
+  font: 900 min(12.5cqi, 1.5rem)/1 var(--lx-display);
+  font-stretch: 100%;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .28), 0 4px 14px rgba(0, 0, 0, .45);
+  text-wrap: balance;
+}
+.lxcard__brand {
+  color: rgba(255, 255, 255, .78);
+  font: 700 .5rem/1 var(--lx-display);
+  font-stretch: 75%;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.lxcard__badge {
+  position: absolute; top: 8px; left: 8px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: var(--lx-ink); color: var(--lx-2);
+  font: 800 .6875rem/1.2 var(--lx-ui);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+}
+.lxcard__badge[hidden] { display: none; }
+.lxcard:hover { transform: translateY(-6px); box-shadow: var(--lx-shade-hi); }
+.lxcard:active { transform: translateY(-3px); transition-duration: 60ms; }
+.lxcard:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+
+/* "N playing": the server's count, a gold dot because a game with people in it is live */
+.lxlive {
+  display: flex; align-items: center; gap: 6px;
+  margin: var(--lx-s2) 0 0; padding: 0 2px;
+  color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lxlive b { color: var(--lx-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.lxlive i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--lx-gold); }
+.lxlive[hidden] { display: flex; visibility: hidden; }
+
+.lxnone {
+  display: grid; justify-items: center; gap: var(--lx-s3);
+  padding: var(--lx-s8) var(--lx-s4);
+  border-radius: var(--lx-r); background: var(--lx-2);
+  color: var(--lx-mute); text-align: center;
+}
+.lxnone[hidden] { display: none; }
+
+/* the "See all games" divider: hairlines either side of a quiet button */
+.lxmore {
+  display: flex; align-items: center; gap: var(--lx-s4);
+  margin: var(--lx-s4) 0 0;
+}
+.lxmore::before, .lxmore::after { content: ""; flex: 1; height: 1px; background: var(--lx-3); }
+.lxmore__btn {
+  height: 36px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-s);
+  background: none; color: var(--lx-text);
+  font: 700 .9375rem var(--lx-ui);
+  cursor: pointer;
+}
+.lxmore__btn:hover { background: var(--lx-3); color: var(--lx-ink); }
+.lxmore__btn:active { transform: translateY(1px); }
+.lxmore[hidden] { display: none; }
+
+/* ═════════ rewards ═════════ */
+.lxperks { margin-top: var(--lx-s8); }
+.lxperks__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s4); margin: 0; padding: 0; list-style: none; }
+.lxperk {
+  display: flex; align-items: center; gap: var(--lx-s4);
+  height: 76px; padding: 0 var(--lx-s5);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.lxperk:hover { background: var(--lx-3); }
+.lxperk:active { transform: translateY(1px); }
+.lxperk__ico {
+  flex: none; width: 44px; height: 44px; padding: 11px;
+  border-radius: var(--lx-r);
+  background: var(--lx-gold-wash);
+  fill: none; stroke: var(--lx-gold); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+}
+.lxperk__copy { display: grid; gap: 2px; min-width: 0; }
+.lxperk__copy b { color: var(--lx-ink); font: 700 .9375rem/1.2 var(--lx-ui); }
+.lxperk__copy span { color: var(--lx-mute); font: 500 .8125rem/1.35 var(--lx-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ═════════ biggest pulls today ═════════ */
+.lxpulls { margin-top: var(--lx-s8); }
+body.lx .lxdrops {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--lx-s3);
+  margin: 0; padding: 0; list-style: none;
+}
+body.lx .lxdrops li {
+  display: flex; align-items: center; gap: var(--lx-s3);
+  min-height: 64px; margin: 0; padding: var(--lx-s2) var(--lx-s4);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: inset 3px 0 0 var(--rar, var(--lx-gold));
+}
+body.lx .lxdrops li:hover { background: var(--lx-3); transform: none; }
+body.lx .lxdrops li::before, body.lx .lxdrops li::after { content: none; }
+body.lx .lxdrops img { width: 36px; height: 36px; flex: none; image-rendering: pixelated; }
+body.lx .lxdrops .drops__stack { display: grid; min-width: 0; gap: 2px; }
+body.lx .lxdrops .what { color: var(--lx-ink); font: 700 .875rem/1.2 var(--lx-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.lx .lxdrops .who { color: var(--lx-mute); font: 500 .75rem/1.2 var(--lx-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.lx .lxdrops .amt {
+  margin-left: auto; flex: none;
+  padding: 4px 8px; border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-gold-wash); color: var(--lx-gold-hi);
+  font: 800 .8125rem/1 var(--lx-ui); box-shadow: none;
+}
+body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; color: var(--lx-mute); box-shadow: none; }
+
+/* ═════════ narrower ═════════ */
+@media (max-width: 1279px) {
+  .lxrow { grid-auto-columns: calc((100% - 5 * var(--lx-card-gap)) / 6); }
+  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .lxpromos { grid-template-columns: repeat(3, minmax(260px, 1fr)); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 2px; }
+  .lxpromos::-webkit-scrollbar { display: none; }
+  .lxpromo { scroll-snap-align: start; }
+}
+@media (max-width: 1023px) {
+  .lxpromos { grid-template-columns: repeat(3, minmax(300px, 86%)); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
+  .lxpromo { grid-template-columns: 120px minmax(0, 1fr); min-height: 120px; }
+  .lxrow { --lx-card-gap: 12px; grid-auto-columns: calc((100% - 3.5 * var(--lx-card-gap)) / 4.5); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
+  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-right: 0; padding-right: 0; }
+  .lxperks__row { grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+  .lxperk { height: 68px; }
+}
+@media (max-width: 599px) {
+  .lxkbd { display: none; }
+  .lxtabs { margin: var(--lx-s4) calc(-1 * var(--lx-gut)) var(--lx-s5) 0; }
+  .lxtab { height: 40px; padding: 0 var(--lx-s4); font-size: .875rem; }
+  .lxrow { grid-auto-columns: calc((100% - 2.5 * var(--lx-card-gap)) / 3.3); }
+  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lxrow__arrows { display: none; }
+  .lxcard__brand { display: none; }
+  .lxlive { font-size: .75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lxcard, .lxpromo, .lxpromo__art img, .lxtab, .lxarrow, .lxperk { transition: none; }
+  .lxcard:hover, .lxcard:active { transform: none; }
+  a.lxpromo:hover .lxpromo__art img { transform: none; }
+}
