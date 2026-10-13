@@ -8,6 +8,7 @@ import { creditWallet, recordWager, type WagerOutcome } from '../lib/cash-settle
 import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { announceWin } from '../lib/discord-flex.js';
+import { flexName } from '../lib/media-test.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import {
@@ -282,7 +283,7 @@ export async function registerPlinkoRoutes(app: FastifyInstance, db: Database, c
         return { row, wager };
       });
 
-      announce(config, request.authUser?.minecraftUsername, result.row, result.wager, app.log);
+      announce(config, flexName(request.authUser), result.row, result.wager, app.log);
       const [balance, next] = await Promise.all([balanceOf(db, userId), currentCommitment(db, userId)]);
       return reply
         .code(201)

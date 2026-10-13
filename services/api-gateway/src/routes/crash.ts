@@ -20,6 +20,7 @@ import {
 import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { announceWin } from '../lib/discord-flex.js';
+import { flexName } from '../lib/media-test.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { liveEvents } from '../lib/live-events.js';
@@ -234,10 +235,12 @@ async function cashOut(
   return row;
 }
 
+/* The names a win post may carry. A media test twin has none: its wins are play money and are
+ * never announced (lib/media-test.ts). */
 async function usernames(client: DbClient, userIds: string[]): Promise<Map<string, string>> {
   if (userIds.length === 0) return new Map();
   const result = await client.query<{ id: string; minecraft_username: string }>(
-    'SELECT id, minecraft_username FROM users WHERE id = ANY($1::uuid[])',
+    'SELECT id, minecraft_username FROM users WHERE id = ANY($1::uuid[]) AND demo_of IS NULL',
     [userIds],
   );
   return new Map(result.rows.map((row) => [row.id, row.minecraft_username]));
@@ -680,7 +683,7 @@ export async function registerCrashRoutes(app: FastifyInstance, db: Database, co
       liveEvents.publish('crash');
       liveEvents.publish('balance', [userId]);
       if (placed.wager) {
-        announceJackpot(config, request.authUser?.minecraftUsername, placed.wager, app.log);
+        announceJackpot(config, flexName(request.authUser), placed.wager, app.log);
       }
       return reply.code(placed.replay ? 200 : 201).send({
         bet: betView(placed.bet),

@@ -597,6 +597,14 @@ const environmentSchema = z
      * the code to playing, and is why a code costs the house less than its average prize looks like.
      * 0 turns the bar off. */
     DAILY_CODE_MIN_WAGER_MINOR: nonNegativeBigintString.default('2000000'),
+    /* Media test mode: approved creators and staff play the house games with play money on a
+     * separate test account, for clips (lib/media-test.ts). The balance is what the account is
+     * filled back up to; it is play money and never leaves that account. */
+    MEDIA_TEST_MODE_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    MEDIA_TEST_BALANCE_MINOR: positiveBigintString.default('1000000000'),
     BATTLES_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -1368,6 +1376,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
     dailyCodeMinWagerMinor: BigInt(env.DAILY_CODE_MIN_WAGER_MINOR),
+    mediaTestModeEnabled: env.MEDIA_TEST_MODE_ENABLED,
+    mediaTestBalanceMinor: BigInt(env.MEDIA_TEST_BALANCE_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,
     battleBotsEnabled: env.BATTLE_BOTS_ENABLED,
     cashPayoutsHold: env.CASH_PAYOUTS_HOLD,

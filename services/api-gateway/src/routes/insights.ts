@@ -5,6 +5,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { maskedName } from '../lib/masked-name.js';
+import { notDemoPredicate } from '../lib/media-test.js';
 import { parseWith } from '../lib/validation.js';
 
 /**
@@ -190,6 +191,7 @@ async function runBoard(
                 r.target_value_minor::text AS detail
            FROM upgrader_rounds r JOIN users u ON u.id = r.user_id
           WHERE r.outcome = 'win' AND r.created_at >= ${window} AND r.stake_value_minor > 0
+            AND ${notDemoPredicate('u')}
           ORDER BY r.user_id, (r.target_value_minor::numeric / nullif(r.stake_value_minor, 0)) DESC
        ) best
        ORDER BY value::numeric DESC
@@ -205,7 +207,7 @@ async function runBoard(
               count(*)::text AS value,
               sum(cr.price_minor)::text AS detail
          FROM case_rounds cr JOIN users u ON u.id = cr.user_id
-        WHERE cr.created_at >= ${window}
+        WHERE cr.created_at >= ${window} AND ${notDemoPredicate('u')}
         GROUP BY cr.user_id, u.minecraft_username
         ORDER BY count(*) DESC, sum(cr.price_minor) DESC
         LIMIT $1`,
@@ -232,7 +234,7 @@ async function runBoard(
             sum(v.amount)::text AS value,
             count(*)::text AS detail
        FROM volume v JOIN users u ON u.id = v.user_id
-      WHERE v.created_at >= ${window}
+      WHERE v.created_at >= ${window} AND ${notDemoPredicate('u')}
       GROUP BY v.user_id, u.minecraft_username
       ORDER BY sum(v.amount) DESC
       LIMIT $1`,

@@ -260,6 +260,8 @@ export async function registerActivityRoutes(
            LEFT JOIN user_wager_totals t ON t.user_id = fc.user_id
            JOIN factions f ON f.id = fc.faction_id
        ) activity
+       -- Media test twins play with play money; their rounds are not the site's (lib/media-test.ts).
+       WHERE NOT EXISTS (SELECT 1 FROM users d WHERE d.id = activity.player_id AND d.demo_of IS NOT NULL)
        ORDER BY activity.created_at DESC, activity.id DESC
        LIMIT $1`,
       [query.limit],
@@ -337,6 +339,7 @@ export async function registerActivityRoutes(
             AND r.outcome = 'win'
             AND r.payout_minor > r.stake_value_minor
        ) pull
+       WHERE NOT EXISTS (SELECT 1 FROM users d WHERE d.id = pull.player_id AND d.demo_of IS NOT NULL)
        ORDER BY pull.payout_minor DESC, pull.created_at DESC
        LIMIT $1`,
       [query.limit],

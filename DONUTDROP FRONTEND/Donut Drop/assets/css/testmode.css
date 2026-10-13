@@ -1,0 +1,97 @@
+/* testmode.css — the media test-mode switch in the top bar (assets/js/testmode.js).
+ *
+ * It sits in the wallet group, next to the balance it switches, and is built like the bar's own
+ * controls (luxe.css): flat, the well colour, the small radius, the bar's heights. Off, it is the
+ * quietest thing in the bar: only creators and staff ever see it. On, it is lit cyan -- a colour
+ * nothing else in the bar uses -- so the person recording always knows which balance they are
+ * looking at. */
+
+.testpill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--lx-r-s, 4px);
+  background: var(--lx-0, #0a0a0c);
+  color: var(--lx-mute, #9096a0);
+  font: 700 0.6875rem/1 var(--lx-ui, system-ui, sans-serif);
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition:
+    background var(--lx-quick, 140ms) ease,
+    color var(--lx-quick, 140ms) ease;
+}
+.testpill[hidden] {
+  display: none;
+}
+.testpill:hover {
+  background: var(--lx-3, #24242b);
+  color: #7fe7ff;
+}
+.testpill:active {
+  transform: scale(0.97);
+}
+.testpill:focus-visible {
+  outline: 2px solid #7fe7ff;
+  outline-offset: 2px;
+}
+
+.testpill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a4e56;
+}
+
+.testpill[data-on='1'] {
+  background: rgba(64, 214, 255, 0.14);
+  color: #bff3ff;
+  box-shadow: inset 0 0 0 1px rgba(64, 214, 255, 0.45);
+}
+.testpill[data-on='1'] .testpill__dot {
+  background: #40d6ff;
+  box-shadow: 0 0 8px rgba(64, 214, 255, 0.85);
+}
+
+.testpill--refill {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  color: #7fe7ff;
+}
+.testpill--refill svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The bar drops to 40px controls with the side rail (luxe.css). */
+@media (max-width: 1023px) {
+  .testpill {
+    height: 40px;
+  }
+  .testpill--refill {
+    width: 40px;
+  }
+}
+
+/* A phone bar has no room to spare: the switch keeps its dot and drops the word, and the top-up
+   button goes -- switching test mode on fills the play money up anyway. */
+@media (max-width: 479px) {
+  .testpill {
+    padding: 0 10px;
+  }
+  .testpill:not(.testpill--refill) span {
+    display: none;
+  }
+  .testpill--refill {
+    display: none;
+  }
+}

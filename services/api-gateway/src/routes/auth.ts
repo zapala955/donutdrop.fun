@@ -13,6 +13,7 @@ import {
   sessionCookieName,
   sessionCookieOptions,
 } from '../lib/auth.js';
+import { accountId, testModeEligible } from '../lib/media-test.js';
 import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
@@ -500,16 +501,21 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
     if (!auth) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
     /* Every page load asks this, so it is where the networks a signed-in player moves between are
      * noticed (at most one write an hour each). Best effort, and not awaited: a failure here must
-     * never show a player the Log in button. */
-    void recordNetwork(db, config, auth.id, request.ip).catch((error: unknown) => {
+     * never show a player the Log in button. The real account, never a media-test twin. */
+    void recordNetwork(db, config, auth.demoOf ?? auth.id, request.ip).catch((error: unknown) => {
       request.log.warn({ err: error }, 'Could not record the network of a signed-in player');
     });
+    /* Media test mode: in it, everything above describes the test twin. `eligible` is asked of the
+     * real account, so the header knows whether to offer the switch at all. */
+    const eligible =
+      config.mediaTestModeEnabled && (await testModeEligible(db, auth.demoOf ?? auth.id));
     return {
       id: auth.id,
       minecraftIdentity: auth.minecraftIdentity,
       minecraftUsername: auth.minecraftUsername,
       role: auth.role,
       status: auth.status,
+      testMode: { active: Boolean(auth.demoOf), eligible },
     };
   });
 
@@ -524,7 +530,8 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
   app.post('/v1/auth/logout-all', { preHandler: guards.requireCsrf }, async (request, reply) => {
     await db.query(
       'UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL',
-      [request.authUser?.id],
+      // The real account's sessions, also from a session in media test mode.
+      [accountId(request.authUser)],
     );
     guards.clearSession(reply);
     return reply.code(204).send();

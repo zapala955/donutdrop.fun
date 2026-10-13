@@ -159,12 +159,15 @@ export const GAME_KINDS = GAMES.flatMap((game) => [
 
 /**
  * The SQL that says an account is staff, for a `users` alias. Admins by role, the developer test
- * login by its `dev:` identity, and the system accounts (the catalogue seed) by `system:`.
+ * login by its `dev:` identity, the system accounts (the catalogue seed) by `system:`, and the
+ * media test twins by `demo:` -- their play money is neither the house's loss nor its revenue, and
+ * a twin's winnings must never trip the anti-drain monitor (lib/media-test.ts).
  */
 export function staffPredicate(alias: string): string {
   return (
     `(${alias}.role = 'admin' OR ${alias}.minecraft_identity LIKE 'dev:%'` +
-    ` OR ${alias}.minecraft_identity LIKE 'system:%')`
+    ` OR ${alias}.minecraft_identity LIKE 'system:%'` +
+    ` OR ${alias}.minecraft_identity LIKE 'demo:%')`
   );
 }
 

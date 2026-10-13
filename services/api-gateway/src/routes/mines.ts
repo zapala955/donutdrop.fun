@@ -8,6 +8,7 @@ import { creditWallet, recordWager, type WagerOutcome } from '../lib/cash-settle
 import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { announceWin } from '../lib/discord-flex.js';
+import { flexName } from '../lib/media-test.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { publishLiveSoon } from '../lib/live-events.js';
@@ -367,7 +368,7 @@ export async function registerMinesRoutes(app: FastifyInstance, db: Database, co
         return { row: next, settled: null as Settlement | null };
       });
 
-      announce(config, request.authUser?.minecraftUsername, result.settled, app.log);
+      announce(config, flexName(request.authUser), result.settled, app.log);
       return { game: gameView(result.row), balanceMinor: await balanceOf(db, userId) };
     },
   );
@@ -391,7 +392,7 @@ export async function registerMinesRoutes(app: FastifyInstance, db: Database, co
         return { row: settled.row, settled };
       });
 
-      announce(config, request.authUser?.minecraftUsername, result.settled, app.log);
+      announce(config, flexName(request.authUser), result.settled, app.log);
       return { game: gameView(result.row), balanceMinor: await balanceOf(db, userId) };
     },
   );

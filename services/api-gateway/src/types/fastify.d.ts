@@ -9,6 +9,9 @@ export interface AuthUser {
   role: 'player' | 'admin';
   status: 'active' | 'suspended' | 'closed';
   csrfHash: Buffer;
+  /** Set when the session is in media test mode: `id` is then the test twin, and this is the real
+   * account behind it. See lib/media-test.ts. */
+  demoOf?: string;
 }
 
 declare module 'fastify' {

@@ -103,6 +103,8 @@
 <link rel="stylesheet" href="assets/css/popups.css" />
 <!-- the window where a daily code is redeemed (assets/js/daily-code.js) -->
 <link rel="stylesheet" href="assets/css/daily-code.css" />
+<!-- the media test-mode switch in the header (assets/js/testmode.js) -->
+<link rel="stylesheet" href="assets/css/testmode.css" />
 <!-- the not-affiliated notice at the foot of every page -->
 <link rel="stylesheet" href="assets/css/sitefoot.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
@@ -212,6 +214,16 @@
 
       <!-- Signed in: the balance and the two money actions, centred like the wallet it is. -->
       <div class="lxwallet">
+        <!-- Media test mode (assets/js/testmode.js), shown only to approved creators and staff. On,
+             the session plays a test account with play money, for clips; the arrow tops it up. -->
+        <button class="testpill" id="testModeBtn" type="button" aria-pressed="false" data-on="0" hidden>
+          <i class="testpill__dot" aria-hidden="true"></i>
+          <span class="mono" id="testModeLbl">TEST</span>
+        </button>
+        <button class="testpill testpill--refill" id="testTopUpBtn" type="button"
+                aria-label="Top up play money" title="Top up play money" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+        </button>
         <div class="cashpill lxbal" role="status" aria-atomic="true" title="Balance — in-game DonutSMP dollars">
           <i class="cashpill__coin" aria-hidden="true"></i>
           <span class="cashpill__lbl">Balance </span>

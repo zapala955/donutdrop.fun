@@ -3,6 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { Database } from './db.js';
 import { AppError } from './errors.js';
 import { safeEqualBuffer, safeEqualText, sha256, sha256Hex } from './crypto.js';
+import { testModeAllows } from './media-test.js';
 
 interface SessionRow {
   session_id: string;
@@ -14,6 +15,9 @@ interface SessionRow {
   csrf_hash: Buffer;
   admin_mfa_verified_at: Date | null;
   admin_mfa_key_fingerprint: string | null;
+  /** The test twin, present only while the session is in media test mode. */
+  demo_user_id?: string | null;
+  demo_identity?: string | null;
 }
 
 export function sessionCookieName(config: AppConfig): string {
@@ -81,9 +85,10 @@ export function createAuthGuards(db: Database, config: AppConfig) {
     const result = await db.query<SessionRow>(
       `SELECT s.id AS session_id, u.id AS user_id, u.minecraft_identity,
               u.minecraft_username, u.role, u.status, s.csrf_hash, s.admin_mfa_verified_at,
-              s.admin_mfa_key_fingerprint
+              s.admin_mfa_key_fingerprint, d.id AS demo_user_id, d.minecraft_identity AS demo_identity
          FROM sessions s
          JOIN users u ON u.id = s.user_id
+         LEFT JOIN users d ON s.demo_mode AND d.demo_of = u.id
         WHERE s.token_hash = $1
           AND s.revoked_at IS NULL
           AND s.expires_at > now()`,
@@ -128,8 +133,33 @@ export function createAuthGuards(db: Database, config: AppConfig) {
       );
       throw new AppError(401, 'ADMIN_MFA_REQUIRED', 'Administrator MFA is required');
     }
+    /* Slide the real session forward. For a test-mode request this is the creator's own session
+     * (the row is the real account), renewed on its own csrf -- the twin has no session of its
+     * own, so renewing before the swap below keeps a creator signed in exactly like anyone else. */
     if (row.role === 'player') {
       await renewSession(request, reply, row.session_id, unsigned.value, row.csrf_hash);
+    }
+    /* Media test mode: the session is served as the creator's test twin, a player account with a
+     * play-money wallet. Every check above ran against the REAL account first, and a suspended
+     * creator is not swapped -- their requests stay theirs and are refused as such. Writes are
+     * then limited to the house games by requireCsrf. See lib/media-test.ts. */
+    if (
+      config.mediaTestModeEnabled &&
+      row.demo_user_id &&
+      row.demo_identity &&
+      row.status === 'active'
+    ) {
+      request.authUser = {
+        id: row.demo_user_id,
+        sessionId: row.session_id,
+        minecraftIdentity: row.demo_identity,
+        minecraftUsername: row.minecraft_username,
+        role: 'player',
+        status: row.status,
+        csrfHash: row.csrf_hash,
+        demoOf: row.user_id,
+      };
+      return;
     }
     request.authUser = {
       id: row.user_id,
@@ -192,6 +222,15 @@ export function createAuthGuards(db: Database, config: AppConfig) {
     const actual = sha256(supplied);
     if (!safeEqualBuffer(actual, expected)) {
       throw new AppError(403, 'INVALID_CSRF', 'The CSRF token is invalid');
+    }
+    /* Every write runs through here, so this is the one door a test-mode session's play money
+     * could leave by. An allow-list, so a route added later is closed until somebody opens it. */
+    if (request.authUser.demoOf && !testModeAllows(request.method, request.routeOptions.url)) {
+      throw new AppError(
+        403,
+        'TEST_MODE_ACTIVE',
+        'Not available in test mode. Switch test mode off to use this.',
+      );
     }
   }
 

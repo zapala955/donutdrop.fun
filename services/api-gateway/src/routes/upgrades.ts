@@ -14,6 +14,7 @@ import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { creditWallet, recordQuestProgress, recordWager } from '../lib/cash-settlement.js';
 import { announceWin } from '../lib/discord-flex.js';
+import { flexName } from '../lib/media-test.js';
 import type { WagerOutcome } from '../lib/cash-settlement.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
@@ -585,8 +586,8 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
       /* AFTER the commit, never inside it. A webhook is a network call to a third party, and a
        * third party being slow is not a reason a player's payout is slow — nor is it a reason a
        * settled round rolls back. `announceWin` throws nothing and is deliberately not awaited. */
-      const username = request.authUser?.minecraftUsername ?? 'Player';
-      if (settled.wager && round?.['outcome'] === 'win') {
+      const username = flexName(request.authUser);
+      if (username && settled.wager && round?.['outcome'] === 'win') {
         /* The row is typed with an index signature of `unknown`, so the column is narrowed rather
          * than stringified: String() on an unexpected object would silently produce
          * "[object Object]" and BigInt would then throw inside a settled round's response. */
@@ -609,7 +610,7 @@ export async function registerUpgradeRoutes(app: FastifyInstance, db: Database, 
       /* A jackpot draw that hit is announced on its own terms: it carries no multiplier, because it
        * is not a multiple of anything the player staked. */
       const jackpotWin = settled.wager?.jackpot.win ?? null;
-      if (jackpotWin) {
+      if (username && jackpotWin) {
         void announceWin(
           config,
           {

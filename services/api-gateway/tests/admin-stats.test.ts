@@ -51,9 +51,16 @@ describe('admin dashboard figures', () => {
       (match) => match[1] ?? '',
     );
     assert.ok(allowed.length > 40, 'the kind constraint was found');
-    /* Not the house's money either way: a tip moves cash between two players, and the piggy bank
-     * was retired before it took a stake. */
-    const neutral = ['tip_sent', 'tip_received', 'piggy_open', 'piggy_claim', 'piggy_break'];
+    /* Not the house's money either way: a tip moves cash between two players, the piggy bank
+     * was retired before it took a stake, and a media test top-up is play money on a test twin. */
+    const neutral = [
+      'tip_sent',
+      'tip_received',
+      'piggy_open',
+      'piggy_claim',
+      'piggy_break',
+      'demo_topup',
+    ];
     const placed = new Set<string>([
       ...GAMES.flatMap((game) => [...game.stakes, ...game.payouts, ...game.refunds]),
       ...Object.keys(PROMO_KINDS),

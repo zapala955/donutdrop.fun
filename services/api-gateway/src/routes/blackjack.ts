@@ -20,6 +20,7 @@ import { creditWallet, recordWager, type WagerOutcome } from '../lib/cash-settle
 import { canonicalJson, decryptSecret, encryptSecret, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { announceWin } from '../lib/discord-flex.js';
+import { flexName } from '../lib/media-test.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { publishLiveSoon } from '../lib/live-events.js';
@@ -295,7 +296,7 @@ export async function registerBlackjackRoutes(
         return { row, settledNow: null };
       });
 
-      announce(config, request.authUser?.minecraftUsername, result.settledNow, app.log);
+      announce(config, flexName(request.authUser), result.settledNow, app.log);
       const balance = await balanceOf(db, userId);
       return reply.code(201).send({ hand: handView(result.row), balanceMinor: balance });
     },
@@ -382,7 +383,7 @@ export async function registerBlackjackRoutes(
         return { row: settledNow.row, settledNow };
       });
 
-      announce(config, request.authUser?.minecraftUsername, result.settledNow, app.log);
+      announce(config, flexName(request.authUser), result.settledNow, app.log);
       const balance = await balanceOf(db, userId);
       return { hand: handView(result.row), balanceMinor: balance };
     },

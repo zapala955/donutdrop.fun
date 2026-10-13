@@ -59,6 +59,7 @@ import { initLiveEvents } from './live.js';
 import { initNudge } from './nudge.js';
 import { initPopups } from './popups.js';
 import { initDailyCode } from './daily-code.js';
+import { initTestMode } from './testmode.js';
 import {
   appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1413,6 +1414,7 @@ initLiveEvents();
 initNudge({ openLogin: openLoginModal });
 initPopups({ openLogin: openLoginModal });
 initDailyCode({ openLogin: openLoginModal });
+initTestMode();
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;

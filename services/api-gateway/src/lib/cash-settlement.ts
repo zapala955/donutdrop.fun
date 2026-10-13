@@ -13,6 +13,7 @@ import {
 import { recordVipWager } from './vip.js';
 import { publishLiveSoon } from './live-events.js';
 import { reduceWagerRequirement } from './wager-requirements.js';
+import { isDemoAccount } from './media-test.js';
 
 /* The cash credit itself lives in wallet.ts and is re-exported here, because every game route
  * already reaches for it through this module and the referral engine below needs it too. */
@@ -161,6 +162,13 @@ export async function recordWager(
    */
   marginMinor?: bigint,
 ): Promise<WagerOutcome> {
+  /* A media test twin's wager is play money and buys nothing: no race place, no jackpot ticket,
+   * no rakeback, VIP, referral share or quest tick. Every one of those is paid in real money or
+   * ranks the twin against real players. See lib/media-test.ts. */
+  if (await isDemoAccount(client, userId)) {
+    publishLiveSoon('balance', [userId]);
+    return { vip: null, jackpot: { contributedMinor: 0n, win: null } };
+  }
   for (const metric of metrics) {
     await recordQuestProgress(client, userId, metric, metric.endsWith('_minor') ? amountMinor : 1n);
   }

@@ -95,7 +95,10 @@ export type WalletKind =
   | 'discord_invite_reward'
   /* Daily codes: the prize of a code redeemed from the community bot's DM. Referenced by the code's
    * own id, so the ledger's unique index is what makes a second payment impossible. */
-  | 'daily_code_reward';
+  | 'daily_code_reward'
+  /* Media test mode: play money paid into a creator's test twin, and only ever into a twin. The
+   * twin is outside the house figures (staffPredicate), so this is not a cost to the house. */
+  | 'demo_topup';
 
 /**
  * Credits the wallet and writes the matching ledger row.

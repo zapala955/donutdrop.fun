@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { creditWallet } from './cash-settlement.js';
 import type { DbClient } from './db.js';
+import { isDemoAccount } from './media-test.js';
 
 /**
  * creator-royalties.ts — paying the author of a community crate.
@@ -59,6 +60,12 @@ export async function payCreatorRoyalty(
 ): Promise<RoyaltyResult> {
   if (!Number.isInteger(openCount) || openCount < 1) {
     throw new RangeError(`openCount must be a positive integer, received ${openCount}`);
+  }
+
+  /* A media test twin opens with play money: it pays the author nothing, and it does not count
+   * toward the marketplace's "most opened" or its volume either. See lib/media-test.ts. */
+  if (payerUserId && (await isDemoAccount(client, payerUserId))) {
+    return { paid: false, amountMinor: 0n, creatorUserId: null };
   }
 
   const crate = await client.query<CrateRow>(

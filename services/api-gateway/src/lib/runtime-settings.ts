@@ -579,6 +579,23 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── media test mode ──
+   *
+   * Read on every request. Turning it off puts every test-mode session straight back on its real
+   * account; the play money stays on the test accounts, untouched, for when it is turned on. */
+  mediaTestModeEnabled: {
+    kind: 'boolean',
+    group: 'features',
+    label: 'Media test mode (creators play with play money for clips)',
+  },
+  mediaTestBalanceMinor: {
+    kind: 'bigint',
+    group: 'economy',
+    label: 'Play money a media test account is filled up to',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
   /* ── invite codes entered after sign-up ── */
   referralLateEntryDays: {
     kind: 'integer',
