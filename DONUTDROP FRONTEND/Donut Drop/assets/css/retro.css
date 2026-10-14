@@ -1,0 +1,76 @@
+/* retro.css — brings the old Minecraft look back into the new Luxe layout.
+ *
+ * Loaded LAST so it wins over luxe.css without rewriting it. It keeps the new structure (the rail,
+ * the top bar, the lobby grid) and repaints the surfaces in the old warm lava-and-gold theme with
+ * real Minecraft item art, pixel grid and the pixel display face -- all from app.css's own tokens
+ * (--mat-lava, --home-wash-hi, --gold-edge, --grid, --pixel), so nothing new is invented.
+ *
+ * Staged: this pass is the lobby cards. Game pages, account and wallet follow. */
+
+/* home.css is gone (its washes), and luxe.css flattened --mat-lava to a dark panel. Both are
+   restored here to the old warm lava, by value, so the cards read warm again. */
+:root {
+  --home-wash-hi: rgba(255, 190, 40, .30);
+  --home-shade: rgba(0, 0, 0, .55);
+  --retro-lava: linear-gradient(168deg,
+    rgba(74, 44, 6, .94) 0%, rgba(46, 26, 4, .95) 44%, rgba(20, 11, 2, .97) 100%);
+}
+
+/* ── lobby game cards: the warm card, the pixel grid, the centred MC item ── */
+body.lx .lxcard {
+  background:
+    radial-gradient(85% 55% at 50% 36%, var(--home-wash-hi), transparent 72%),
+    var(--retro-lava);
+  border: 1px solid var(--gold-edge);
+  border-radius: var(--r-panel, 14px);
+  isolation: isolate;
+  overflow: hidden;
+}
+body.lx .lxcard::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background-image: var(--grid);
+}
+body.lx .lxcard::after {
+  content: ""; position: absolute; inset: 50% 0 0; z-index: -1;
+  background: linear-gradient(180deg, transparent, var(--home-shade));
+}
+body.lx .lxcard:hover {
+  border-color: var(--gold-body);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+}
+
+/* The art no longer fills the card: it is a Minecraft sprite, drawn pixel-sharp, floated over the
+   top of the card with the name on the warm foot below -- the old lobby's arrangement. */
+body.lx .lxcard__art.retroart {
+  position: absolute;
+  inset: auto auto auto 50%;
+  top: 14%;
+  width: 52%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  image-rendering: pixelated;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 10px 14px var(--home-shade)) drop-shadow(0 0 18px var(--home-wash-hi));
+  transition: transform .25s var(--ob-ease, ease);
+  z-index: 0;
+}
+body.lx .lxcard:hover .lxcard__art.retroart { transform: translateX(-50%) translateY(-4px) scale(1.04); }
+
+/* The name in the pixel display face, warm, on the card's dark foot. */
+body.lx .lxcard__name {
+  font-family: var(--pixel);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .01em;
+  color: var(--text, #efe9df);
+  text-shadow: 0 2px 0 var(--home-shade);
+}
+body.lx .lxcard__brand {
+  font-family: var(--pixel);
+  letter-spacing: .14em;
+  color: var(--gold-body);
+  opacity: .85;
+}
+/* luxe already positions the foot (absolute, bottom); only lift it over the floated sprite. */
+body.lx .lxcard__txt { z-index: 1; }

@@ -55,8 +55,10 @@ describe('the casino-lobby shell', () => {
     // The skin and its script, after app.js; the old home sheet is gone with the old home.
     assert.match(html, /<script type="module" src="assets\/js\/app\.js\?v=\d+"><\/script>[\s\S]*<script type="module" src="assets\/js\/luxe\.js\?v=\d+"><\/script>/);
     assert.doesNotMatch(html, /assets\/css\/home\.css/);
-    // The card and offer art is drawn, never an upscaled sprite.
-    for (const [, art] of html.matchAll(/<img class="lxcard__art" src="([^"]+)"/g)) assert.match(art ?? '', /^assets\/img\/luxe\/card-[a-z-]+\.svg$/);
+    // Retro skin: every card wears a real Minecraft item sprite (retro.css draws it pixel-sharp).
+    const cardArt = [...html.matchAll(/<img class="lxcard__art retroart" src="([^"]+)"/g)];
+    assert.equal(cardArt.length, 10);
+    for (const [, src] of cardArt) assert.match(src ?? '', /^assets\/img\/items\/[a-z_]+\.(png|svg)$/);
   });
 
   it('keeps the SEO head nginx rewrites per route', async () => {
