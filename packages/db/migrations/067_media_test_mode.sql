@@ -61,15 +61,16 @@ ALTER TABLE wallet_transactions
       'demo_topup'
     ));
 
--- Supersedes donut_schema_ready_v65.
-CREATE FUNCTION donut_schema_ready_v66() RETURNS boolean
+-- Supersedes donut_schema_ready_v66 (066 is the same-network referral block, already applied when
+-- this was first numbered 066 too).
+CREATE FUNCTION donut_schema_ready_v67() RETURNS boolean
   LANGUAGE sql
   IMMUTABLE
   PARALLEL SAFE
   SET search_path = pg_catalog, public
   AS $$ SELECT true $$;
 
-REVOKE ALL ON FUNCTION donut_schema_ready_v66() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION donut_schema_ready_v66() TO donut_api_runtime;
+REVOKE ALL ON FUNCTION donut_schema_ready_v67() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION donut_schema_ready_v67() TO donut_api_runtime;
 
 COMMIT;

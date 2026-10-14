@@ -201,7 +201,7 @@ describe('media test mode', () => {
 
   it('ships a migration that marks twins and refuses one without the demo identity', async () => {
     const sql = await readFile(
-      path.join(root, 'packages/db/migrations/066_media_test_mode.sql'),
+      path.join(root, 'packages/db/migrations/067_media_test_mode.sql'),
       'utf8',
     );
     assert.match(sql, /ALTER TABLE users ADD COLUMN demo_of uuid REFERENCES users\(id\)/);
@@ -211,7 +211,7 @@ describe('media test mode', () => {
       /CREATE UNIQUE INDEX users_demo_of_idx ON users \(demo_of\) WHERE demo_of IS NOT NULL/,
     );
     assert.match(sql, /ALTER TABLE sessions ADD COLUMN demo_mode boolean NOT NULL DEFAULT false/);
-    assert.match(sql, /'daily_code_reward',\n\s+'demo_topup'\n\s+\)\);/);
-    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v66\(\) RETURNS boolean/);
+    assert.match(sql, /'daily_code_reward',\s+'demo_topup'\s+\)\);/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v67\(\) RETURNS boolean/);
   });
 });

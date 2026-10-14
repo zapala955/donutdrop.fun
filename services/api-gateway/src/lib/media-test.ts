@@ -9,7 +9,7 @@ import type { DbClient } from './db.js';
  * PLAY MONEY LIVES ON ITS OWN ACCOUNT
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * A session in test mode is served as the creator's "test twin": a second users row with its own
- * wallet, rounds, seeds and inventory (migration 066). The swap happens once, in the auth guard,
+ * wallet, rounds, seeds and inventory (migration 067). The swap happens once, in the auth guard,
  * so every game route runs unchanged -- same engines, same odds, same provably-fair seeds. Nothing
  * here decides an outcome, and nothing may: a test round is a real round on a play-money wallet.
  *
