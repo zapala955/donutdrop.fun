@@ -37,7 +37,7 @@ const RETRY_MS = 8_000;
 
 /* Pages with a live table on them. The same list nudge.js keeps off, for the same reason. */
 const TABLES = new Set([
-  'upgrader', 'roulette', 'blackjack', 'crash', 'mines', 'plinko', 'coinflip', 'mines-duel',
+  'upgrader', 'roulette', 'blackjack', 'crash', 'mines', 'tower', 'plinko', 'coinflip', 'mines-duel',
   'battles', 'crates', 'duel', 'studio',
 ]);
 

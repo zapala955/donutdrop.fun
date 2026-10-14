@@ -199,6 +199,7 @@ function gameCell(play) {
           : kind === 'blackjack' ? '\u2660'
             : kind === 'crash' ? '\u2197'
               : kind === 'mines' ? '\u25C6'
+                : kind === 'tower' ? '\u25A4'
                 : kind === 'plinko' ? '\u25CF'
                 : kind === 'coinflip' ? '\u25D0'
                 : kind === 'minesduel' ? '\u25A6'
@@ -273,6 +274,7 @@ function gameLabel(play) {
   if (kind === 'blackjack') return 'Blackjack';
   if (kind === 'crash') return 'Crash';
   if (kind === 'mines') return 'Mines';
+  if (kind === 'tower') return 'Tower';
   if (kind === 'plinko') return 'Plinko';
   if (kind === 'coinflip') return 'Coinflip';
   if (kind === 'minesduel') return 'Mines Duel';

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <!-- Tower: floors of tiles climbed one at a time, a gem on each floor cleared, the next floor lit
+       in gold (a medium floor 4 pays 4.55×), and the prize gem waiting at the top. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="#3b1a5e"/>
+      <stop offset=".55" stop-color="#1d0d33"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#b57cff" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#b57cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a2a6e"/>
+      <stop offset="1" stop-color="#2c1646"/>
+    </linearGradient>
+    <linearGradient id="sunk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#150a24"/>
+      <stop offset="1" stop-color="#1f1033"/>
+    </linearGradient>
+    <linearGradient id="foot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0a0c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0a0a0c" stop-opacity=".92"/>
+    </linearGradient>
+    <!-- a small cut gem, the game's safe tile -->
+    <g id="gem">
+      <path d="M-13-4L-8-11H8L13-4L0 12Z" fill="#0091c4"/>
+      <path d="M-13-4H13L0 12Z" fill="#0a6f97"/>
+      <path d="M-5-4H5L0 12Z" fill="#1aa7d6"/>
+      <path d="M-8-11L0-4L-5-4Z" fill="#a8ecff"/>
+      <path d="M-8-11H8L0-4Z" fill="#dff8ff"/>
+      <path d="M8-11L5-4L0-4Z" fill="#7fdcfa"/>
+    </g>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  <circle cx="150" cy="70" r="120" fill="url(#glow)"/>
+
+  <!-- floors still to climb -->
+  <g fill="url(#tile)" stroke="#7b4fb0" stroke-opacity=".35" stroke-width="2">
+    <rect x="46" y="120" width="64" height="34" rx="7"/>
+    <rect x="118" y="120" width="64" height="34" rx="7"/>
+    <rect x="190" y="120" width="64" height="34" rx="7"/>
+    <rect x="46" y="162" width="64" height="34" rx="7"/>
+    <rect x="118" y="162" width="64" height="34" rx="7"/>
+    <rect x="190" y="162" width="64" height="34" rx="7"/>
+  </g>
+  <!-- the floor being climbed, lit -->
+  <g fill="#4f2f75" stroke="#ffaa00" stroke-width="2.5">
+    <rect x="46" y="204" width="64" height="34" rx="7"/>
+    <rect x="118" y="204" width="64" height="34" rx="7"/>
+    <rect x="190" y="204" width="64" height="34" rx="7"/>
+  </g>
+  <g fill="#ffd700" font-family="Figtree, Arial, sans-serif" font-weight="800" font-size="13" text-anchor="middle">
+    <text x="78" y="226">4.55×</text>
+    <text x="150" y="226">4.55×</text>
+    <text x="222" y="226">4.55×</text>
+  </g>
+  <!-- floors climbed: sunk, a gem where the pick was -->
+  <g fill="url(#sunk)" stroke="#2b6b86" stroke-opacity=".45" stroke-width="2">
+    <rect x="46" y="246" width="64" height="34" rx="7"/>
+    <rect x="118" y="246" width="64" height="34" rx="7"/>
+    <rect x="190" y="246" width="64" height="34" rx="7"/>
+    <rect x="46" y="288" width="64" height="34" rx="7"/>
+    <rect x="118" y="288" width="64" height="34" rx="7"/>
+    <rect x="190" y="288" width="64" height="34" rx="7"/>
+    <rect x="46" y="330" width="64" height="34" rx="7"/>
+    <rect x="118" y="330" width="64" height="34" rx="7"/>
+    <rect x="190" y="330" width="64" height="34" rx="7"/>
+  </g>
+  <use href="#gem" x="222" y="263"/>
+  <use href="#gem" x="78" y="305"/>
+  <use href="#gem" x="150" y="347"/>
+
+  <!-- the prize at the top -->
+  <g transform="translate(150 62)">
+    <ellipse cx="0" cy="44" rx="40" ry="6" fill="#000" fill-opacity=".35"/>
+    <path d="M-46-12L-26-38H26L46-12L0 40Z" fill="#9b5de5"/>
+    <path d="M-46-12H46L0 40Z" fill="#6f3bb0"/>
+    <path d="M-46-12L-16-12L0 40Z" fill="#5a2d93"/>
+    <path d="M16-12H46L0 40Z" fill="#43206f"/>
+    <path d="M-16-12H16L0 40Z" fill="#b07cf0"/>
+    <path d="M-26-38L-16-12H-46Z" fill="#c9a2ff"/>
+    <path d="M-26-38L0-12L-16-12Z" fill="#e2ccff"/>
+    <path d="M-26-38H26L0-12Z" fill="#f4ebff"/>
+    <path d="M26-38L16-12L0-12Z" fill="#d6b6ff"/>
+    <path d="M26-38L46-12H16Z" fill="#a46cf0"/>
+    <path d="M-26-38L-19-33H17L26-38Z" fill="#ffffff" fill-opacity=".9"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M232 46l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill-opacity=".85"/>
+    <path d="M70 96l3 6 6 3-6 3-3 6-3-6-6-3 6-3z" fill-opacity=".6"/>
+  </g>
+  <rect y="250" width="300" height="150" fill="url(#foot)"/>
+</svg>

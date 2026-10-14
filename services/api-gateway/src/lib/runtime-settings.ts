@@ -15,6 +15,7 @@ type SettingGroup =
   | 'blackjack'
   | 'crash'
   | 'mines'
+  | 'tower'
   | 'plinko'
   | 'discord'
   | 'duels'
@@ -383,6 +384,34 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'mines',
     label: 'Mines maximum payout per game (a game cashes out automatically when it reaches this)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── tower ── The edge and the modes are fixed in lib/tower.ts; these are the table's limits. */
+  towerEnabled: {
+    kind: 'boolean',
+    group: 'tower',
+    label: 'Tower open (a climb in play can always finish)',
+  },
+  towerMinStakeMinor: {
+    kind: 'bigint',
+    group: 'tower',
+    label: 'Tower minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  towerMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'tower',
+    label: 'Tower maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  towerMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'tower',
+    label: 'Tower maximum payout per game (a climb cashes out automatically when it reaches this)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -892,6 +921,8 @@ function assertInvariants(view: AppConfig): void {
     ['Crash minimum bet', view.crashMinStakeMinor, 'the maximum', view.crashMaxStakeMinor],
     ['Mines minimum stake', view.minesMinStakeMinor, 'the maximum', view.minesMaxStakeMinor],
     ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
+    ['Tower minimum stake', view.towerMinStakeMinor, 'the maximum', view.towerMaxStakeMinor],
+    ['Tower maximum stake', view.towerMaxStakeMinor, 'the maximum payout', view.towerMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],

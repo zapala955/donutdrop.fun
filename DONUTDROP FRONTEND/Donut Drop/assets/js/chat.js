@@ -56,6 +56,7 @@ const TABLE_GAMES = new Map([
   ['blackjack', 'Blackjack'],
   ['crash', 'Crash'],
   ['mines', 'Mines'],
+  ['tower', 'Tower'],
   ['plinko', 'Plinko'],
   ['coinflip', 'Coinflip'],
   ['minesduel', 'Mines Duel'],

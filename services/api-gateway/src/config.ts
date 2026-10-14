@@ -535,6 +535,15 @@ const environmentSchema = z
     MINES_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     MINES_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     MINES_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Tower. The edge and the four modes are fixed in lib/tower.ts. A climb whose payout reaches
+     * the ceiling cashes out there, as a deep Mines field does. */
+    TOWER_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    TOWER_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    TOWER_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    TOWER_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     /* Plinko. The edge is fixed in lib/plinko.ts. A ball whose best slot would pay more than the
      * ceiling is refused, so the ceiling sets the largest stake on each rows-and-risk table. */
     PLINKO_ENABLED: z
@@ -1003,6 +1012,20 @@ const environmentSchema = z
         message: 'must be at least MINES_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.TOWER_MIN_STAKE_MINOR) > BigInt(env.TOWER_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['TOWER_MAX_STAKE_MINOR'],
+        message: 'must be at least TOWER_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.TOWER_MAX_PAYOUT_MINOR) < BigInt(env.TOWER_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['TOWER_MAX_PAYOUT_MINOR'],
+        message: 'must be at least TOWER_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.PLINKO_MIN_STAKE_MINOR) > BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1469,6 +1492,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     minesMinStakeMinor: BigInt(env.MINES_MIN_STAKE_MINOR),
     minesMaxStakeMinor: BigInt(env.MINES_MAX_STAKE_MINOR),
     minesMaxPayoutMinor: BigInt(env.MINES_MAX_PAYOUT_MINOR),
+    towerEnabled: env.TOWER_ENABLED,
+    towerMinStakeMinor: BigInt(env.TOWER_MIN_STAKE_MINOR),
+    towerMaxStakeMinor: BigInt(env.TOWER_MAX_STAKE_MINOR),
+    towerMaxPayoutMinor: BigInt(env.TOWER_MAX_PAYOUT_MINOR),
     plinkoEnabled: env.PLINKO_ENABLED,
     plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
     plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),

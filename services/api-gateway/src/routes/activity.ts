@@ -9,7 +9,7 @@ import { parseWith } from '../lib/validation.js';
 /**
  * The live feed.
  *
- * Eight kinds of event share one chronological stream:
+ * These kinds of event share one chronological stream:
  *
  *   case      a crate was opened — what it cost, what it paid.
  *   upgrade   an upgrader round settled — stake in, payout out.
@@ -17,6 +17,7 @@ import { parseWith } from '../lib/validation.js';
  *   blackjack a hand settled — everything on the table, and what came back.
  *   crash     a bet cashed out or busted.
  *   mines     a game cashed out or hit TNT.
+ *   tower     a climb cashed out or hit TNT.
  *   plinko    a ball landed in a slot.
  *   minesduel a mines duel was decided, as one row for its winner.
  *   faction   a wager was credited to a team in the running faction war.
@@ -179,6 +180,24 @@ export async function registerActivityRoutes(
                 1 AS quantity, 0 AS chance_ppm,
                 NULL::smallint AS game_result
            FROM mines_games g
+           JOIN users u ON u.id = g.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
+          WHERE g.status = 'settled'
+         UNION ALL
+         /* A finished tower climb: the stake, and what it cashed out for (nothing, on TNT). */
+         SELECT g.id, 'tower'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Tower'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM tower_games g
            JOIN users u ON u.id = g.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
           WHERE g.status = 'settled'
@@ -371,6 +390,9 @@ export async function registerActivityRoutes(
           WHERE b.created_at > since.at OR b.settled_at > since.at
          UNION ALL
          SELECT 'mines', g.user_id FROM mines_games g, since
+          WHERE g.created_at > since.at OR g.settled_at > since.at
+         UNION ALL
+         SELECT 'tower', g.user_id FROM tower_games g, since
           WHERE g.created_at > since.at OR g.settled_at > since.at
          UNION ALL
          SELECT 'plinko', b.user_id FROM plinko_bets b, since WHERE b.created_at > since.at

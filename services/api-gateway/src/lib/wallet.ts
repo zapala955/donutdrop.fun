@@ -71,6 +71,8 @@ export type WalletKind =
   | 'crash_payout'
   // A mines game cashed out, stake included. Referenced by the game's id.
   | 'mines_payout'
+  // A tower climb cashed out, stake included. Referenced by the game's id.
+  | 'tower_payout'
   // A plinko ball's slot paying out, stake included. Referenced by the bet's id.
   | 'plinko_payout'
   /* Coinflip: the pot less the rake paid to the winner, and the host's stake handed back when a

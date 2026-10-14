@@ -23,6 +23,7 @@ import { mountBlackjack } from './blackjack.js';
 import { mountCrash } from './crash.js';
 import { mountMines } from './mines.js';
 import { mountPlinko } from './plinko.js';
+import { mountTower } from './tower.js';
 import { mountCoinflip } from './coinflip.js';
 import { mountMinesDuel } from './mines-duel.js';
 import { mountCrates } from './crates.js';
@@ -1083,6 +1084,7 @@ const VIEWS = {
   blackjack: mountBlackjack,
   crash: mountCrash,
   mines: mountMines,
+  tower: mountTower,
   plinko: mountPlinko,
   coinflip: mountCoinflip,
   'mines-duel': mountMinesDuel,
@@ -1265,7 +1267,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'plinko', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'plinko', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);

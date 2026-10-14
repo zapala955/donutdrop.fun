@@ -51,6 +51,7 @@ import { registerRouletteRoutes } from './routes/roulette.js';
 import { registerBlackjackRoutes } from './routes/blackjack.js';
 import { registerCrashRoutes } from './routes/crash.js';
 import { registerMinesRoutes } from './routes/mines.js';
+import { registerTowerRoutes } from './routes/tower.js';
 import { registerPlinkoRoutes } from './routes/plinko.js';
 import { registerDiscordRewardRoutes } from './routes/discord-rewards.js';
 import { registerVipRoutes } from './routes/vip.js';
@@ -251,6 +252,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerBlackjackRoutes(app, db, config);
   await registerCrashRoutes(app, db, config);
   await registerMinesRoutes(app, db, config);
+  await registerTowerRoutes(app, db, config);
   await registerPlinkoRoutes(app, db, config);
   await registerDiscordRewardRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);

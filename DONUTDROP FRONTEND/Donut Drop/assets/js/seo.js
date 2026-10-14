@@ -60,6 +60,12 @@ export const ROUTE_META = {
       'Play mines with DonutSMP money on DonutLuxe: pick tiles, avoid the mines, and cash out ' +
       'whenever you like.',
   },
+  tower: {
+    title: 'DonutLuxe Tower — DonutSMP Tower',
+    description:
+      'Play tower with DonutSMP money on DonutLuxe: climb nine floors on easy, medium, hard or ' +
+      'expert, dodge the TNT, and cash out whenever you like.',
+  },
   plinko: {
     title: 'DonutLuxe Plinko — DonutSMP Plinko',
     description: 'Play plinko with DonutSMP money on DonutLuxe: drop a ball and win where it lands.',
