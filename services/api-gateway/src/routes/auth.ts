@@ -8,6 +8,7 @@ import { AppError, conflict } from '../lib/errors.js';
 import {
   createAuthGuards,
   csrfCookieName,
+  csrfCookieOptions,
   linkCookieName,
   sessionCookieName,
   sessionCookieOptions,
@@ -466,13 +467,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
       const user = completion.user;
 
       reply.setCookie(sessionCookieName(config), sessionToken, sessionCookieOptions(config));
-      reply.setCookie(csrfCookieName(config), csrfToken, {
-        path: '/',
-        httpOnly: false,
-        secure: config.secureCookies,
-        sameSite: 'strict',
-        maxAge: config.sessionTtlHours * 60 * 60,
-      });
+      reply.setCookie(csrfCookieName(config), csrfToken, csrfCookieOptions(config));
       reply.clearCookie(linkCookieName(config), { path: '/' });
       return reply.send({
         user: {

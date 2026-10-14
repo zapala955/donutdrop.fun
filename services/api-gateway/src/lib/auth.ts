@@ -36,19 +36,42 @@ export function csrfCookieName(config: AppConfig): string {
   return config.secureCookies ? '__Host-du_csrf' : 'du_csrf';
 }
 
-export function sessionCookieOptions(config: AppConfig) {
+/* Lax, not Strict. Strict withholds the cookie whenever the visit starts on another site, and
+ * players arrive from Discord links, DMs and old bookmarks; some browsers then also withheld it from
+ * that page's own API calls, and the player was shown the Log in button with a valid session in
+ * hand. Lax still keeps the cookie off every cross-site POST, and nothing here changes state on a
+ * GET: every write goes through requireCsrf (an X-CSRF-Token header no other site can set). */
+export function sessionCookieOptions(config: AppConfig, maxAgeSeconds = config.sessionTtlHours * 60 * 60) {
   return {
     path: '/',
     httpOnly: true,
     secure: config.secureCookies,
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     signed: true,
-    maxAge: config.sessionTtlHours * 60 * 60,
+    maxAge: maxAgeSeconds,
   };
 }
 
+/** The readable CSRF cookie: same lifetime and same SameSite as the session it belongs to. */
+export function csrfCookieOptions(config: AppConfig, maxAgeSeconds = config.sessionTtlHours * 60 * 60) {
+  return {
+    path: '/',
+    httpOnly: false,
+    secure: config.secureCookies,
+    sameSite: 'lax' as const,
+    maxAge: maxAgeSeconds,
+  };
+}
+
+/* A player's session is renewed while it is used: once less than half its lifetime is left, the
+ * next authenticated request moves the expiry to a full lifetime from now (one write per half
+ * lifetime, not one per request). It never runs past SESSION_MAX_DAYS from the sign-in, so a
+ * stolen cookie cannot be kept alive for ever. Administrator sessions keep their fixed, shorter
+ * lifetime: they carry MFA and are not renewed. */
+const SESSION_MAX_DAYS = 30;
+
 export function createAuthGuards(db: Database, config: AppConfig) {
-  async function authenticate(request: FastifyRequest): Promise<void> {
+  async function authenticate(request: FastifyRequest, reply?: FastifyReply): Promise<void> {
     const signed = request.cookies[sessionCookieName(config)];
     if (!signed) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
     const unsigned = request.unsignCookie(signed);
@@ -105,6 +128,9 @@ export function createAuthGuards(db: Database, config: AppConfig) {
       );
       throw new AppError(401, 'ADMIN_MFA_REQUIRED', 'Administrator MFA is required');
     }
+    if (row.role === 'player') {
+      await renewSession(request, reply, row.session_id, unsigned.value, row.csrf_hash);
+    }
     request.authUser = {
       id: row.user_id,
       sessionId: row.session_id,
@@ -116,8 +142,44 @@ export function createAuthGuards(db: Database, config: AppConfig) {
     };
   }
 
-  async function requireCsrf(request: FastifyRequest): Promise<void> {
-    await authenticate(request);
+  /**
+   * Moves a player's expiry forward once less than half its lifetime is left, and hands the browser
+   * both cookies again to live exactly as long. The row and the cookies move together or not at
+   * all: renewing the row without new cookies (no reply to set them on) would leave the browser's
+   * copies to lapse first, and the window this checks would by then be closed until they had. The
+   * page reads its CSRF token from that cookie, and only its hash is stored, so it can be renewed
+   * only from the value the browser sent -- without it the session is left to run out as issued
+   * rather than outliving the token every write needs.
+   */
+  async function renewSession(
+    request: FastifyRequest,
+    reply: FastifyReply | undefined,
+    sessionId: string,
+    token: string,
+    csrfHash: Buffer,
+  ): Promise<void> {
+    if (!reply) return;
+    const csrf = request.cookies?.[csrfCookieName(config)];
+    if (typeof csrf !== 'string' || !safeEqualBuffer(sha256(csrf), csrfHash)) return;
+    const renewed = await db.query<{ seconds_left: string }>(
+      `UPDATE sessions
+          SET expires_at = LEAST(now() + ($2 * interval '1 hour'), created_at + ($3 * interval '1 day')),
+              last_seen_at = now()
+        WHERE id = $1
+          AND revoked_at IS NULL
+          AND expires_at < now() + ($2 * interval '1 hour') / 2
+          AND expires_at < created_at + ($3 * interval '1 day')
+        RETURNING floor(extract(epoch FROM (expires_at - now())))::text AS seconds_left`,
+      [sessionId, config.sessionTtlHours, SESSION_MAX_DAYS],
+    );
+    const left = Number(renewed.rows[0]?.seconds_left ?? 0);
+    if (left <= 0) return;
+    reply.setCookie(sessionCookieName(config), token, sessionCookieOptions(config, left));
+    reply.setCookie(csrfCookieName(config), csrf, csrfCookieOptions(config, left));
+  }
+
+  async function requireCsrf(request: FastifyRequest, reply?: FastifyReply): Promise<void> {
+    await authenticate(request, reply);
     const origin = request.headers.origin;
     if (!origin || !safeEqualText(origin, config.appOrigin)) {
       throw new AppError(403, 'INVALID_ORIGIN', 'Request origin is not allowed');

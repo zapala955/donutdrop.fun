@@ -35,6 +35,11 @@ let amountNode = null;
 let fillNode = null;
 let timer = 0;
 let lastPot = 0n;
+/* Set when the server says the jackpot is switched off: nothing is asked again on this page. */
+let disabled = false;
+/* Events (a balance change, any round settled anywhere) ask again, but no more than this often. */
+const EVENT_GAP_MS = 3_000;
+let lastAskedAt = 0;
 
 export function initVaultJackpot(mount) {
   host = mount;
@@ -45,7 +50,14 @@ export function initVaultJackpot(mount) {
    * most likely moment for the pot to have moved, and waiting twelve seconds to show it makes the
    * bar look disconnected from the game that feeds it. */
   bus.addEventListener('change', (event) => {
-    if (['balance', 'activity'].includes(event.detail)) void poll();
+    /* "activity" fires on every round anyone settles, so this asked once per round per open page:
+     * thousands of requests an hour with the jackpot switched off, every one of them counted
+     * against that player's rate limit until their own sign-in check was refused (429). */
+    if (disabled || !['balance', 'activity'].includes(event.detail)) return;
+    // Inside the gap the ask moves to the end of it rather than being dropped, so the round the
+    // player just settled still shows within a few seconds.
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => void poll(), Math.max(0, lastAskedAt + EVENT_GAP_MS - Date.now()));
   });
 }
 
@@ -79,6 +91,7 @@ function build() {
 
 async function poll() {
   window.clearTimeout(timer);
+  if (disabled) return;
   /* Not while a round is playing. The draw happens inside the transaction that settles a round,
    * so mid-spin this answer can carry the player's own win -- the flare would fire, and the pot
    * would drop, before their wheel or reel had shown them anything. The release refreshes the
@@ -89,12 +102,14 @@ async function poll() {
     return;
   }
   let board;
+  lastAskedAt = Date.now();
   try {
     board = await api.get('/v1/social/jackpot');
   } catch (error) {
     /* Disabled is not an error worth showing: the bar simply is not part of this deployment. Any
      * other failure is transient and the next poll will pick it up. */
     if (error?.code === 'JACKPOT_DISABLED') {
+      disabled = true;
       host.hidden = true;
       return;
     }

@@ -56,7 +56,7 @@ describe('the casino-lobby shell', () => {
     assert.match(html, /<script type="module" src="assets\/js\/app\.js\?v=\d+"><\/script>[\s\S]*<script type="module" src="assets\/js\/luxe\.js\?v=\d+"><\/script>/);
     assert.doesNotMatch(html, /assets\/css\/home\.css/);
     // The card and offer art is drawn, never an upscaled sprite.
-    for (const [, art] of html.matchAll(/<img class="lxcard__art" src="([^"]+)"/g)) assert.match(art, /^assets\/img\/luxe\/card-[a-z-]+\.svg$/);
+    for (const [, art] of html.matchAll(/<img class="lxcard__art" src="([^"]+)"/g)) assert.match(art ?? '', /^assets\/img\/luxe\/card-[a-z-]+\.svg$/);
   });
 
   it('keeps the SEO head nginx rewrites per route', async () => {

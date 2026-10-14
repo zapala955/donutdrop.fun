@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { appendAudit } from '../lib/audit.js';
-import { csrfCookieName, sessionCookieName, sessionCookieOptions } from '../lib/auth.js';
+import { csrfCookieName, csrfCookieOptions, sessionCookieName, sessionCookieOptions } from '../lib/auth.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import {
@@ -527,13 +527,7 @@ export async function registerDiscordControlRoutes(
         ...sessionCookieOptions(config),
         maxAge: session.ttlHours * 60 * 60,
       });
-      reply.setCookie(csrfCookieName(config), session.csrfToken, {
-        path: '/',
-        httpOnly: false,
-        secure: config.secureCookies,
-        sameSite: 'strict',
-        maxAge: session.ttlHours * 60 * 60,
-      });
+      reply.setCookie(csrfCookieName(config), session.csrfToken, csrfCookieOptions(config, session.ttlHours * 60 * 60));
       return reply.send({
         csrfToken: session.csrfToken,
         minecraftUsername: session.minecraftUsername,

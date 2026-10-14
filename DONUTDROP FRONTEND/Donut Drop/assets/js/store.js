@@ -237,6 +237,26 @@ function normalizeActivity(raw) {
   };
 }
 
+/**
+ * The signed-in player, asked again over a hiccup before concluding there is none.
+ *
+ * Only a 401 means "not signed in". A 429 (the rate limit), a 502 while the API restarts, or a
+ * dropped connection used to land in the same place and show the Log in button to a player whose
+ * session was perfectly valid; they signed in again, and it looked as though the site had logged
+ * them out. Three more tries, a second, three and six seconds apart, then the honest answer.
+ */
+async function whoAmI() {
+  const waits = [1000, 3000, 6000];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api.get('/v1/auth/me');
+    } catch (error) {
+      if ((error instanceof ApiError && error.status === 401) || attempt >= waits.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
+    }
+  }
+}
+
 export async function bootstrap() {
   state.lastError = null;
   const publicLoads = await Promise.allSettled([
@@ -248,7 +268,7 @@ export async function bootstrap() {
   // Promotions never reject (see below), so only the first two can say the API is unreachable.
   if (publicLoads.slice(0, 2).every((entry) => entry.status === 'rejected')) state.online = false;
   try {
-    state.user = await api.get('/v1/auth/me');
+    state.user = await whoAmI();
     state.authenticated = true;
     try {
       await refreshPrivate(false);
