@@ -79,8 +79,22 @@ function boardMaxStake(n = rows, level = risk) {
   return ceiling < max ? ceiling : max;
 }
 
+/** Payouts already credited by the server for balls still falling, not yet shown to the player. */
+function inAir() {
+  return balls.reduce((sum, ball) => sum + BigInt(ball.bet.payoutMinor), 0n);
+}
+
+/**
+ * What the next ball may stake: the balance the pill shows, less the balls waiting to be sent.
+ *
+ * The pill is the server's balance less the payouts still in the air. Counting from the server's
+ * figure instead let a player stake a win their falling ball had not revealed yet: the server
+ * rightly accepted it (the money is credited the moment the ball is placed), but the pill, still
+ * holding that win back, went below zero, and being able to drop past the shown balance gave the
+ * hidden result away. Spending is held back exactly as long as the figure is.
+ */
 function available() {
-  const base = serverBalance ?? BigInt(state.balanceMinor || '0');
+  const base = serverBalance === null ? BigInt(state.balanceMinor || '0') : serverBalance - inAir();
   return queue.reduce((left, drop) => left - drop.stakeMinor, base);
 }
 
@@ -292,8 +306,11 @@ function land(ball) {
 /** The pill: the server's balance less every payout still in the air. */
 function showFalling() {
   if (serverBalance === null) return;
-  const inAir = balls.reduce((sum, ball) => sum + BigInt(ball.bet.payoutMinor), 0n);
-  showBalance((serverBalance - inAir).toString());
+  /* Never below zero. available() keeps it there for balls dropped here; another tab spending the
+   * same wallet meanwhile could still undercut it, and a wallet cannot be negative (the database
+   * refuses it), so neither may its figure. */
+  const shown = serverBalance - inAir();
+  showBalance((shown < 0n ? 0n : shown).toString());
 }
 
 function settleIfDone() {

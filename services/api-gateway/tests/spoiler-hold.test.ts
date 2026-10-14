@@ -238,6 +238,22 @@ describe('the pages that hold for their own rounds', LIMIT, () => {
     assert.ok(body.lastIndexOf('liveFiguresFresh(epoch)') > body.indexOf("api.get('/v1/social/jackpot')"));
   });
 
+  it('plinko spends only the balance it shows, so the pill never goes below zero', async () => {
+    /* The pill holds back the payouts of balls still falling. Letting the next ball stake from the
+     * server's figure (those payouts included) let a player spend an unrevealed win: the pill went
+     * negative, and being allowed to drop past it gave the hidden result away. The wallet itself
+     * was never negative; the database refuses that (user_wallets CHECK balance_minor >= 0). */
+    const source = await readFile(js('plinko.js'), 'utf8');
+    const available = source.slice(source.indexOf('function available()'), source.indexOf('function dropProblem()'));
+    assert.match(available, /serverBalance - inAir\(\)/);
+    assert.match(available, /queue\.reduce\(\(left, drop\) => left - drop\.stakeMinor, base\)/);
+    const falling = source.slice(source.indexOf('function showFalling()'), source.indexOf('function settleIfDone()'));
+    assert.match(falling, /const shown = serverBalance - inAir\(\);/);
+    assert.match(falling, /shown < 0n \? 0n : shown/);
+    // The drop button asks available() before anything is queued.
+    assert.match(source, /if \(state\.authenticated && stake > available\(\)\) return 'That is more than your balance';/);
+  });
+
   it('every game with an animated result holds before its request', async () => {
     const holds: Record<string, RegExp> = {
       'blackjack.js': /const release = holdLiveFigures\(\);\s*try \{[\s\S]*?api\.post\(\s*'\/v1\/blackjack\/hands'/,
