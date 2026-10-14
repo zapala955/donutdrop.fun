@@ -370,9 +370,20 @@ body.lx .crate__odds { font-family: var(--lx-ui); letter-spacing: 0; }
 body.lx .crate__tier { border: 0; border-radius: var(--lx-r-s); font-family: var(--lx-ui); letter-spacing: 0; }
 
 /* ═════════ a page that needs you signed in ═════════
-   Every module says so in one short card; the skin makes it the empty state it is, and luxe.js
-   puts the Log in button under it. */
-body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .refer__card) {
+   Every module says so in one short card; luxe.js puts the Log in button under it and marks the
+   card .lxgated, and only then is it the padlocked empty state. The same classes also carry other
+   notes ("Races are not switched on yet", and on the invite page the cards themselves), which keep
+   a plain panel or their own sheet's look. */
+body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .race__notice) {
+  margin: 0; padding: var(--lx-s4) var(--lx-s5);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .race__notice) p {
+  margin: 0; color: var(--lx-text); font: 500 .9375rem/1.45 var(--lx-ui);
+}
+body.lx .lxgated {
   display: grid; justify-items: center; gap: var(--lx-s3);
   max-width: none; margin: 0; padding: var(--lx-s8) var(--lx-s6);
   border: 0; border-radius: var(--lx-r);
@@ -380,14 +391,13 @@ body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__
   box-shadow: var(--lx-shade);
   text-align: center;
 }
-body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .refer__card)::before {
+body.lx .lxgated::before {
   content: ""; width: 56px; height: 56px; border-radius: 50%;
   background: var(--lx-gold-wash) var(--lx-lock) center / 26px no-repeat;
 }
-body.lx :is(.vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice) p,
-body.lx .refer__gate { margin: 0; color: var(--lx-text); font: 600 1rem/1.4 var(--lx-ui); }
-body.lx .refer__title { color: var(--lx-ink); font: 700 1.25rem var(--lx-ui); letter-spacing: 0; }
-body.lx .refer:has(> .refer__card) { display: block; max-width: none; }
+body.lx .lxgated p, body.lx .lxgated .refer__gate { margin: 0; color: var(--lx-text); font: 600 1rem/1.4 var(--lx-ui); }
+body.lx .lxgated .refer__title { color: var(--lx-ink); font: 700 1.25rem var(--lx-ui); letter-spacing: 0; }
+body.lx .refer:has(> .lxgated) { display: block; max-width: none; }
 body.lx .lxgate { margin-top: var(--lx-s2); }
 
 /* ── the bets table: the result is a figure, not a pill ── */

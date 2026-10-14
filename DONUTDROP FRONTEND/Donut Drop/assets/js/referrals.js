@@ -200,31 +200,12 @@ function paint() {
   }
 
   const wrap = el('div', 'refer');
-  const inviter = inviterCard(data);
-  if (inviter) wrap.appendChild(inviter);
+  /* "You were invited by ..." stood first here; it came off at the operator's request
+   * (2026-10-14). The code itself is still entered, once, in Settings. */
   wrap.appendChild(offerCard(data));
   wrap.appendChild(statGrid(data));
   wrap.appendChild(inviteList(data));
   root.appendChild(wrap);
-}
-
-/**
- * Who invited this player. The code itself is entered in Settings, once.
- */
-function inviterCard(data) {
-  const self = data.self ?? {};
-  if (!self.referredBy) return null;
-  const card = el('div', 'refer__card');
-  const note = el('p', 'refer__note');
-  note.textContent = `You were invited by ${self.referredBy}.`;
-  card.appendChild(note);
-  if (self.codeEntry?.available) {
-    const link = el('a', 'refer__note');
-    link.href = '/settings';
-    link.textContent = 'Wrong code? You can change it once in Settings.';
-    card.appendChild(link);
-  }
-  return card;
 }
 
 /** One icon from path data. SVG needs createElementNS; createElement puts it in the wrong namespace. */

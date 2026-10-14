@@ -285,6 +285,8 @@ function armGates(scope) {
     go.textContent = 'Log in';
     go.addEventListener('click', () => $('#loginBtn').click());
     card.appendChild(go);
+    // Only a real sign-in prompt wears the padlock (luxe-games.css); the same classes carry other notes.
+    card.classList.add('lxgated');
   }
 }
 new MutationObserver(() => armGates($('#main'))).observe($('#main'), { childList: true, subtree: true });
