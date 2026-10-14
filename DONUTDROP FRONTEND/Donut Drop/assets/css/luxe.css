@@ -635,7 +635,7 @@ body.lx .feedrow__delta { color: var(--lx-mute); font: 700 .875rem var(--lx-ui);
 body.lx .feedrow__delta[data-up="1"] { color: var(--lx-gold-hi); }
 body.lx .feed__empty { padding: var(--lx-s6); color: var(--lx-mute); text-align: center; }
 
-/* ── the 18+ notice ── */
+/* ── the notice at the foot of every page ── */
 body.lx .sitefoot {
   margin-top: var(--lx-s8); padding: var(--lx-s6) 0 0;
   border-top: 1px solid var(--lx-3);
