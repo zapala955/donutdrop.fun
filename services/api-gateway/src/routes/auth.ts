@@ -17,6 +17,7 @@ import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
 import { creditWallet } from '../lib/wallet.js';
+import { blockSameNetworkReferral, recordNetwork, referralStanding } from '../lib/referral-network.js';
 import {
   addDepositRequirement,
   addWagerRequirement,
@@ -337,6 +338,8 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         );
         const row = inserted.rows[0];
         if (!row) throw new Error('User upsert returned no row');
+        // Every sign-in notes the network it came from; the invite check below compares them.
+        await recordNetwork(client, config, row.id, request.ip);
 
         /* The invite code is redeemed HERE, and only here.
          *
@@ -361,11 +364,21 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
            * code. It is here because that is a property of today's insert order rather than a rule
            * anybody stated, and the cost of asserting it is one comparison. */
           if (referrerId && referrerId !== row.id) {
-            await client.query(
-              `INSERT INTO referrals (referee_id, referrer_id, code)
-               VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING`,
-              [row.id, referrerId, challenge.referral_code],
-            );
+            /* An inviter blocked from the programme recruits nobody: the account is created
+             * without one, as for a code that matched nothing. A new account on the inviter's own
+             * network is bound and then voided at once, which blocks both, and keeps the row as
+             * the record. Either way the sign-up itself goes ahead. */
+            const standing = await referralStanding(client, row.id, referrerId);
+            if (!standing.referrerBlocked) {
+              const bound = await client.query(
+                `INSERT INTO referrals (referee_id, referrer_id, code)
+                 VALUES ($1, $2, $3) ON CONFLICT (referee_id) DO NOTHING`,
+                [row.id, referrerId, challenge.referral_code],
+              );
+              if (bound.rowCount && standing.sharedNetwork) {
+                await blockSameNetworkReferral(client, config, row.id, referrerId, 'invite');
+              }
+            }
           }
         }
         /* The signup bonus, decided by the same `!existing.rows[0]` as the invite above: the only
@@ -485,6 +498,12 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
   app.get('/v1/auth/me', { preHandler: guards.authenticate }, async (request) => {
     const auth = request.authUser;
     if (!auth) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+    /* Every page load asks this, so it is where the networks a signed-in player moves between are
+     * noticed (at most one write an hour each). Best effort, and not awaited: a failure here must
+     * never show a player the Log in button. */
+    void recordNetwork(db, config, auth.id, request.ip).catch((error: unknown) => {
+      request.log.warn({ err: error }, 'Could not record the network of a signed-in player');
+    });
     return {
       id: auth.id,
       minecraftIdentity: auth.minecraftIdentity,

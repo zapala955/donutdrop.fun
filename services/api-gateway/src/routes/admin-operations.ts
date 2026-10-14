@@ -150,13 +150,16 @@ const referralQuerySchema = z
     /* A username or a code. One box rather than two: an operator chasing a ring has one of the
      * two in front of them and should not have to know which field it belongs in. */
     search: z.string().max(32).optional(),
-    state: z.enum(['all', 'live', 'voided', 'unlocked', 'pending']).default('all'),
+    state: z.enum(['all', 'live', 'voided', 'unlocked', 'pending', 'blocked']).default('all'),
     limit: z.coerce.number().int().min(1).max(200).default(50),
     offset: z.coerce.number().int().min(0).max(100_000).default(0),
   })
   .strict();
 const referralVoidSchema = z
   .object({ voided: z.boolean(), reason: safeText(3, 256) })
+  .strict();
+const referralBlockSchema = z
+  .object({ blocked: z.boolean(), reason: safeText(3, 256) })
   .strict();
 const referralCodeSchema = z
   .object({
@@ -929,9 +932,13 @@ export async function registerAdminOperationRoutes(
       `SELECT r.referee_id, r.referrer_id, r.code, r.wagered_minor,
               r.revshare_paid_minor, r.revshare_claimable_minor,
               r.bonus_unlocked_at, r.bonus_paid_minor, r.created_at,
-              r.voided_at, r.void_reason,
+              r.voided_at, r.void_reason, r.network_reviewed_at,
               referee.minecraft_username AS referee_username,
               referrer.minecraft_username AS referrer_username,
+              referee.referral_blocked_at AS referee_blocked_at,
+              referee.referral_block_reason AS referee_block_reason,
+              referrer.referral_blocked_at AS referrer_blocked_at,
+              referrer.referral_block_reason AS referrer_block_reason,
               voider.minecraft_username AS voided_by_username
          FROM referrals r
          JOIN users referee ON referee.id = r.referee_id
@@ -946,6 +953,8 @@ export async function registerAdminOperationRoutes(
                 WHEN 'voided' THEN r.voided_at IS NOT NULL
                 WHEN 'unlocked' THEN r.bonus_unlocked_at IS NOT NULL
                 WHEN 'pending' THEN r.bonus_unlocked_at IS NULL AND r.voided_at IS NULL
+                WHEN 'blocked' THEN referee.referral_blocked_at IS NOT NULL
+                                 OR referrer.referral_blocked_at IS NOT NULL
                 ELSE true
               END
         ORDER BY r.created_at DESC
@@ -964,7 +973,9 @@ export async function registerAdminOperationRoutes(
               coalesce(sum(revshare_paid_minor), 0)::text AS revshare_paid_minor,
               coalesce(sum(revshare_claimable_minor)
                        FILTER (WHERE voided_at IS NULL), 0)::text AS revshare_claimable_minor,
-              coalesce(sum(bonus_paid_minor), 0)::text AS bonus_paid_minor
+              coalesce(sum(bonus_paid_minor), 0)::text AS bonus_paid_minor,
+              (SELECT count(*) FROM users WHERE referral_blocked_at IS NOT NULL)::text
+                AS blocked_accounts
          FROM referrals`,
     );
 
@@ -1018,6 +1029,10 @@ export async function registerAdminOperationRoutes(
               SET voided_at = CASE WHEN $2::boolean THEN now() ELSE NULL END,
                   voided_by = CASE WHEN $2::boolean THEN $3::uuid ELSE NULL END,
                   void_reason = CASE WHEN $2::boolean THEN $4::varchar(256) ELSE NULL END,
+                  /* A restore is a person having looked at this pair and called it genuine, so
+                     the same-network check leaves it alone from here on. */
+                  network_reviewed_at = CASE WHEN $2::boolean THEN network_reviewed_at
+                                             ELSE now() END,
                   updated_at = now()
             WHERE referee_id = $1
             RETURNING referee_id, referrer_id, voided_at, revshare_claimable_minor`,
@@ -1036,6 +1051,58 @@ export async function registerAdminOperationRoutes(
           },
         });
         return { referral: updated.rows[0] };
+      });
+    },
+  );
+
+  /**
+   * Blocks an account from the referral programme, or lifts the block.
+   *
+   * The same-network check sets these on its own; this is how an administrator undoes one that
+   * caught a family or a shared flat, or sets one by hand. A blocked account plays as normal and
+   * keeps whatever it has banked, but is paid no bonus and can claim nothing until it is lifted.
+   * Lifting it does not restore a voided invite: that is the referral's own Restore.
+   */
+  app.patch(
+    '/v1/admin/referral-blocks/:id',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(referralBlockSchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        const current = await client.query<{
+          referral_blocked_at: Date | null;
+          referral_block_reason: string | null;
+        }>(
+          'SELECT referral_blocked_at, referral_block_reason FROM users WHERE id = $1 FOR UPDATE',
+          [params.id],
+        );
+        const account = current.rows[0];
+        if (!account) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+
+        const updated = await client.query<EntityRow>(
+          `UPDATE users
+              SET referral_blocked_at = CASE WHEN $2::boolean
+                                             THEN coalesce(referral_blocked_at, now()) END,
+                  referral_block_reason = CASE WHEN $2::boolean THEN $3::varchar(256) END,
+                  updated_at = now()
+            WHERE id = $1
+            RETURNING id, referral_blocked_at, referral_block_reason`,
+          [params.id, body.blocked, body.reason],
+        );
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: body.blocked ? 'referral.block' : 'referral.unblock',
+          targetType: 'user',
+          targetId: params.id,
+          details: {
+            reason: body.reason,
+            wasBlocked: account.referral_blocked_at !== null,
+            previousReason: account.referral_block_reason,
+          },
+        });
+        return { user: updated.rows[0] };
       });
     },
   );

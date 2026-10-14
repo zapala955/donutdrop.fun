@@ -13,6 +13,7 @@ interface MaintenanceResult {
   expiredLeases?: string;
   sessionsRemoved?: number;
   challengesRemoved?: number;
+  networksRemoved?: number;
   inboundEventsRemoved?: string;
   inventorySnapshotsRemoved?: string;
   discordLinksRemoved?: number;
@@ -82,6 +83,11 @@ async function runMaintenance(pool: pg.Pool): Promise<MaintenanceResult> {
     const challenges = await client.query(
       "DELETE FROM auth_link_challenges WHERE expires_at < now() - interval '1 day'",
     );
+    /* The networks an account has used are kept only as long as the same-network invite check
+     * can use them (its window is 30 days); after 90 days unseen they are gone. */
+    const networks = await client.query(
+      "DELETE FROM user_networks WHERE last_seen_at < now() - interval '90 days'",
+    );
     const telemetry = await client.query<{
       inbound_events_deleted: string;
       inventory_snapshots_deleted: string;
@@ -100,6 +106,7 @@ async function runMaintenance(pool: pg.Pool): Promise<MaintenanceResult> {
       expiredLeases: expiredLeases.rows[0]?.count ?? '0',
       sessionsRemoved: sessions.rowCount ?? 0,
       challengesRemoved: challenges.rowCount ?? 0,
+      networksRemoved: networks.rowCount ?? 0,
       inboundEventsRemoved: telemetryCounts?.inbound_events_deleted ?? '0',
       inventorySnapshotsRemoved: telemetryCounts?.inventory_snapshots_deleted ?? '0',
       discordLinksRemoved: discord.linksRemoved,

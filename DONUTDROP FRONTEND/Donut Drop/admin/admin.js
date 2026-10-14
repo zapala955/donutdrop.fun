@@ -3685,6 +3685,7 @@ const REFERRAL_FILTERS = [
   ['Voided', 'voided'],
   ['Bonus paid', 'unlocked'],
   ['Bonus pending', 'pending'],
+  ['Blocked', 'blocked'],
 ];
 
 async function loadReferrals() {
@@ -3710,6 +3711,12 @@ async function loadReferrals() {
     ['Referrals', totals.referrals ?? '0'],
     ['Referrers', totals.referrers ?? '0'],
     ['Voided', totals.voided ?? '0', Number(totals.voided ?? 0) > 0],
+    [
+      'Blocked accounts',
+      totals.blocked_accounts ?? '0',
+      Number(totals.blocked_accounts ?? 0) > 0,
+      'Accounts that cannot earn from invites: blocked by the same-network check or by hand.',
+    ],
     ['Wagered by referees', compactAmount(totals.wagered_minor ?? '0')],
     ['Revenue share paid', compactAmount(totals.revshare_paid_minor ?? '0')],
     ['Waiting to be claimed', compactAmount(totals.revshare_claimable_minor ?? '0')],
@@ -3776,8 +3783,8 @@ async function loadReferrals() {
         }`;
       }
       tr.append(
-        cell(row.referee_username),
-        cell(row.referrer_username),
+        blockedCell(row.referee_username, row.referee_blocked_at, row.referee_block_reason),
+        blockedCell(row.referrer_username, row.referrer_blocked_at, row.referrer_block_reason),
         cell(row.code, { mono: true }),
         cell(compactAmount(row.wagered_minor), { mono: true }),
         cell(compactAmount(row.revshare_claimable_minor), { mono: true }),
@@ -3788,6 +3795,9 @@ async function loadReferrals() {
           button(row.voided_at ? 'Restore' : 'Void', () => voidReferral(row), {
             danger: !row.voided_at,
           }),
+          ...(row.referee_blocked_at || row.referrer_blocked_at
+            ? [button('Unblock', () => unblockReferral(row))]
+            : []),
           button('Code', () => renameReferralCode(row)),
         ),
       );
@@ -3812,11 +3822,48 @@ async function voidReferral(row) {
           `and ${claimable} of unclaimed revenue share becomes unclaimable. Nothing already ` +
           'paid out is reversed.'
       : `Restore ${row.referee_username}'s referral by ${row.referrer_username}? It starts ` +
-          `earning again and ${claimable} becomes claimable once more.`,
+          `earning again and ${claimable} becomes claimable once more. The same-network check ` +
+          'will leave this pair alone from now on. A blocked account stays blocked until you ' +
+          'Unblock it.',
   );
   if (!reason) return;
   await api.patch(`/v1/admin/referrals/${row.referee_id}/void`, { voided: voiding, reason });
   toast(voiding ? 'Referral voided.' : 'Referral restored.');
+  await loadReferrals();
+}
+
+/** A player's name, and a BLOCKED badge carrying the reason when they cannot earn from invites. */
+function blockedCell(username, blockedAt, reason) {
+  const td = cell(username);
+  if (blockedAt) {
+    const badge = pill('BLOCKED', 'bad');
+    badge.title = reason || 'no reason recorded';
+    td.append(' ', badge);
+  }
+  return td;
+}
+
+/**
+ * Lifts the invite block from whichever accounts in this row carry one.
+ *
+ * Both sides are blocked together by the same-network check, so both are lifted together here. It
+ * does not restore the referral itself; that is Restore, and the dialog says so.
+ */
+async function unblockReferral(row) {
+  const blocked = [
+    row.referee_blocked_at ? { id: row.referee_id, name: row.referee_username } : null,
+    row.referrer_blocked_at ? { id: row.referrer_id, name: row.referrer_username } : null,
+  ].filter(Boolean);
+  const reason = await confirmAction(
+    `Unblock ${blocked.map((account) => account.name).join(' and ')}? They can earn from invites ` +
+      'again, and anything they had banked becomes claimable. This referral stays ' +
+      `${row.voided_at ? 'voided until you Restore it' : 'as it is'}.`,
+  );
+  if (!reason) return;
+  for (const account of blocked) {
+    await api.patch(`/v1/admin/referral-blocks/${account.id}`, { blocked: false, reason });
+  }
+  toast(blocked.length > 1 ? 'Both accounts unblocked.' : 'Account unblocked.');
   await loadReferrals();
 }
 

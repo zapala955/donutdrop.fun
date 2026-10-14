@@ -209,8 +209,9 @@ describe('referral revenue share', () => {
     assert.equal(client.state.claimable, expected);
     assert.equal(client.state.wagered, 1_000_000n);
 
-    const claim = await claimReferralRewards(client, REFERRER);
-    assert.equal(claim.claimedMinor, expected.toString());
+    const claim = await claimReferralRewards(client, settings, REFERRER);
+    assert.equal(claim.blocked, false);
+    assert.equal(claim.blocked ? null : claim.claimedMinor, expected.toString());
     assert.equal(client.state.claimable, 0n);
     assert.equal(client.state.paid, expected);
     const paid = client.credits.filter((entry) => entry.kind === 'referral_revshare');
@@ -219,7 +220,7 @@ describe('referral revenue share', () => {
     assert.equal(paid[0]?.userId, REFERRER);
 
     await assert.rejects(
-      claimReferralRewards(client, REFERRER),
+      claimReferralRewards(client, settings, REFERRER),
       (error: { code?: string }) => error.code === 'REFERRAL_REWARDS_EMPTY',
     );
   });

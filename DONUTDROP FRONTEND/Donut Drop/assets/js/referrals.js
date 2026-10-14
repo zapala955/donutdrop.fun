@@ -198,6 +198,12 @@ function paint() {
     root.appendChild(gate('Invites are not switched on yet.'));
     return;
   }
+  /* Blocked from the programme: the link would recruit nobody and nothing could be claimed, so
+   * the page says why and where to go rather than offering either. */
+  if (data.self?.referralBlocked) {
+    root.appendChild(blockedNotice());
+    return;
+  }
 
   const wrap = el('div', 'refer');
   /* "You were invited by ..." stood first here; it came off at the operator's request
@@ -414,6 +420,22 @@ function linkField(data) {
 
   field.append(input, copy);
   wrap.append(label, field);
+  return wrap;
+}
+
+/** What a player blocked from invite rewards sees here: the reason, and the way to dispute it. */
+function blockedNotice() {
+  const wrap = gate('This account can’t earn invite rewards.');
+  const line = el('p', 'refer__gate');
+  line.append(
+    'An invite was made between two accounts on the same network, and the programme does not pay '
+      + 'for that. If it was a family member or a shared connection, ',
+  );
+  const support = document.createElement('a');
+  support.href = '/support';
+  support.textContent = 'contact support';
+  line.append(support, ' and we will look at it.');
+  wrap.querySelector('.refer__card')?.append(line);
   return wrap;
 }
 

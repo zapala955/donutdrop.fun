@@ -431,6 +431,10 @@
   font-size: 0.9375rem;
   line-height: 1.55;
 }
+/* The way out of a gate, when it has one: the terms page's link, so it reads as a link here too. */
+.refer__gate a { color: var(--gold-bright); text-decoration: underline; text-underline-offset: 3px; }
+.refer__gate a:hover { color: var(--amber); }
+.refer__gate + .refer__gate { margin-top: 10px; }
 .refer__empty {
   padding: 18px 15px;
   border-radius: 10px;
