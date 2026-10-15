@@ -38,6 +38,7 @@ describe('biggest wins today', () => {
       ['crash', 'crash_bets', /b\.settled_at >= day\.at/, /b\.payout_minor > b\.stake_minor/],
       ['mines', 'mines_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
       ['tower', 'tower_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
+      ['chicken', 'chicken_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
       ['plinko', 'plinko_bets', /b\.created_at >= day\.at/, /b\.payout_minor > b\.stake_minor/],
       ['coinflip', 'coinflip_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
       ['minesduel', 'mines_duel_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
@@ -73,7 +74,7 @@ describe('biggest wins today', () => {
     assert.doesNotMatch(paint, /filter\(\(entry\) => entry\.item\)/);
     assert.match(paint, /art\.src = item \? safeImage\(item\.img\) : game\.art;/);
     assert.match(paint, /amount\.textContent = `\+\$\{money\(Number\(payout - wager\)\)\}`;/);
-    for (const kind of ['crash', 'mines', 'tower', 'plinko', 'blackjack', 'roulette', 'coinflip', 'minesduel']) {
+    for (const kind of ['crash', 'mines', 'tower', 'chicken', 'plinko', 'blackjack', 'roulette', 'coinflip', 'minesduel']) {
       assert.match(app, new RegExp(`\\b${kind}: \\{ name: '`), `${kind} has no name and sprite`);
     }
     assert.match(store, /api\.get\('\/v1\/activity\/top-today\?limit=7'\)/);

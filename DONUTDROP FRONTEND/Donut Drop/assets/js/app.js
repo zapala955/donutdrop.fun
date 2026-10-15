@@ -24,6 +24,7 @@ import { mountCrash } from './crash.js';
 import { mountMines } from './mines.js';
 import { mountPlinko } from './plinko.js';
 import { mountTower } from './tower.js';
+import { mountChicken } from './chicken.js';
 import { mountCoinflip } from './coinflip.js';
 import { mountMinesDuel } from './mines-duel.js';
 import { mountCrates } from './crates.js';
@@ -255,6 +256,7 @@ function mountHome(view) {
     crash: { name: 'Crash', art: 'assets/img/items/elytra.png' },
     mines: { name: 'Mines', art: 'assets/img/items/tnt.png' },
     tower: { name: 'Tower', art: 'assets/img/items/beacon.png' },
+    chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
     plinko: { name: 'Plinko', art: 'assets/img/items/slime_ball.png' },
     blackjack: { name: 'Blackjack', art: 'assets/img/items/enchanted_book.png' },
     roulette: { name: 'Roulette', art: 'assets/img/items/nether_star.png' },
@@ -1099,6 +1101,7 @@ const VIEWS = {
   crash: mountCrash,
   mines: mountMines,
   tower: mountTower,
+  chicken: mountChicken,
   plinko: mountPlinko,
   coinflip: mountCoinflip,
   'mines-duel': mountMinesDuel,
@@ -1281,7 +1284,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'plinko', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);

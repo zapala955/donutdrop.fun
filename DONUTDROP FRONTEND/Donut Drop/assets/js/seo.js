@@ -66,6 +66,12 @@ export const ROUTE_META = {
       'Play tower with DonutSMP money on DonutLuxe: climb nine floors on easy, medium, hard or ' +
       'expert, dodge the TNT, and cash out whenever you like.',
   },
+  chicken: {
+    title: 'DonutLuxe Chicken — DonutSMP Chicken',
+    description:
+      'Play chicken with DonutSMP money on DonutLuxe: cross twenty minecart rails on easy, medium, ' +
+      'hard or hardcore, and cash out before a minecart comes.',
+  },
   plinko: {
     title: 'DonutLuxe Plinko — DonutSMP Plinko',
     description: 'Play plinko with DonutSMP money on DonutLuxe: drop a ball and win where it lands.',

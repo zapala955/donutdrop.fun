@@ -16,6 +16,7 @@
   --card-glow-crash: rgba(255, 170, 0, .24);
   --card-glow-mines: rgba(0, 145, 196, .28);
   --card-glow-tower: rgba(155, 93, 229, .3);
+  --card-glow-chicken: rgba(242, 165, 26, .24);
   --card-glow-plinko: rgba(226, 65, 47, .26);
   --card-glow-blackjack: rgba(181, 124, 255, .2);
   --card-glow-roulette: rgba(192, 57, 43, .28);
@@ -39,6 +40,7 @@ body.lx .lxcard {
 body.lx .lxcard[data-game="crash"] { --card-glow: var(--card-glow-crash); }
 body.lx .lxcard:is([data-game="mines"], [data-game="mines-duel"]) { --card-glow: var(--card-glow-mines); }
 body.lx .lxcard[data-game="tower"] { --card-glow: var(--card-glow-tower); }
+body.lx .lxcard[data-game="chicken"] { --card-glow: var(--card-glow-chicken); }
 body.lx .lxcard[data-game="plinko"] { --card-glow: var(--card-glow-plinko); }
 body.lx .lxcard[data-game="blackjack"] { --card-glow: var(--card-glow-blackjack); }
 body.lx .lxcard[data-game="roulette"] { --card-glow: var(--card-glow-roulette); }

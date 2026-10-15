@@ -220,7 +220,7 @@ describe('the tower page', () => {
     assert.match(html, /<a class="lxnav" href="\/tower" data-route="tower" data-tip="Tower">/);
     assert.match(html, /href="assets\/css\/tower\.css"/);
     assert.match(app, /tower: mountTower,/);
-    assert.match(nginx, /\|mines\|tower\|plinko\|/);
+    assert.match(nginx, /\|mines\|tower\|/);
     assert.match(nginx, /\/tower "https:\/\/donutluxe\.com\/tower";/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/tower<\/loc>/);
     assert.match(seo, /tower: \{\s*title: 'DonutLuxe Tower/);
@@ -244,8 +244,8 @@ describe('the tower page', () => {
 
   it('sits in the shared game frame, in the site’s tokens', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/tower.css')]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.plinko\) \{/);
-    assert.match(frame, /:is\(\.crash, \.mines, \.tower, \.plinko, \.bj, \.roulette, \.upg\)/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, [^)]*\.plinko\) \{/);
+    assert.match(frame, /:is\(\.crash, \.mines, \.tower, [^)]*\.plinko, \.bj, \.roulette, \.upg\)/);
     // Every colour in the board's rules is a token; the few it needs are lifted to the top.
     const rules = css.slice(css.indexOf('/* ─────────── the tower'));
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');

@@ -70,6 +70,7 @@ describe('media test mode', () => {
       'POST /v1/upgrades',
       'POST /v1/mines/games/:id/cashout',
       'POST /v1/tower/games/:id/pick',
+      'POST /v1/chicken/games/:id/step',
       'POST /v1/plinko/bets',
       'POST /v1/blackjack/hands/:id/actions',
       'POST /v1/crash/bets',

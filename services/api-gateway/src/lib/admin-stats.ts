@@ -74,6 +74,7 @@ export const GAMES: readonly GameDefinition[] = [
   { key: 'crash', label: 'Crash', stakes: ['crash_stake'], payouts: ['crash_payout'], refunds: [] },
   { key: 'mines', label: 'Mines', stakes: ['mines_stake'], payouts: ['mines_payout'], refunds: [] },
   { key: 'tower', label: 'Tower', stakes: ['tower_stake'], payouts: ['tower_payout'], refunds: [] },
+  { key: 'chicken', label: 'Chicken', stakes: ['chicken_stake'], payouts: ['chicken_payout'], refunds: [] },
   {
     key: 'plinko',
     label: 'Plinko',

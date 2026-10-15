@@ -59,6 +59,8 @@ const KIND_LABEL = {
   mines_payout: 'Mines cash-out',
   tower_stake: 'Tower stake',
   tower_payout: 'Tower cash-out',
+  chicken_stake: 'Chicken stake',
+  chicken_payout: 'Chicken cash-out',
   plinko_stake: 'Plinko ball',
   plinko_payout: 'Plinko payout',
   daily_code_reward: 'Daily code',

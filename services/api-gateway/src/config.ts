@@ -544,6 +544,15 @@ const environmentSchema = z
     TOWER_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     TOWER_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     TOWER_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Chicken. The edge and the four modes are fixed in lib/chicken.ts. A run whose payout reaches
+     * the ceiling cashes out there, as a deep Tower climb does. */
+    CHICKEN_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    CHICKEN_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    CHICKEN_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    CHICKEN_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     /* Plinko. The edge is fixed in lib/plinko.ts. A ball whose best slot would pay more than the
      * ceiling is refused, so the ceiling sets the largest stake on each rows-and-risk table. */
     PLINKO_ENABLED: z
@@ -1026,6 +1035,20 @@ const environmentSchema = z
         message: 'must be at least TOWER_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.CHICKEN_MIN_STAKE_MINOR) > BigInt(env.CHICKEN_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CHICKEN_MAX_STAKE_MINOR'],
+        message: 'must be at least CHICKEN_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.CHICKEN_MAX_PAYOUT_MINOR) < BigInt(env.CHICKEN_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CHICKEN_MAX_PAYOUT_MINOR'],
+        message: 'must be at least CHICKEN_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.PLINKO_MIN_STAKE_MINOR) > BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1496,6 +1519,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     towerMinStakeMinor: BigInt(env.TOWER_MIN_STAKE_MINOR),
     towerMaxStakeMinor: BigInt(env.TOWER_MAX_STAKE_MINOR),
     towerMaxPayoutMinor: BigInt(env.TOWER_MAX_PAYOUT_MINOR),
+    chickenEnabled: env.CHICKEN_ENABLED,
+    chickenMinStakeMinor: BigInt(env.CHICKEN_MIN_STAKE_MINOR),
+    chickenMaxStakeMinor: BigInt(env.CHICKEN_MAX_STAKE_MINOR),
+    chickenMaxPayoutMinor: BigInt(env.CHICKEN_MAX_PAYOUT_MINOR),
     plinkoEnabled: env.PLINKO_ENABLED,
     plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
     plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),

@@ -16,6 +16,7 @@ type SettingGroup =
   | 'crash'
   | 'mines'
   | 'tower'
+  | 'chicken'
   | 'plinko'
   | 'discord'
   | 'duels'
@@ -412,6 +413,34 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'tower',
     label: 'Tower maximum payout per game (a climb cashes out automatically when it reaches this)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── chicken ── The edge and the modes are fixed in lib/chicken.ts; these are the road's limits. */
+  chickenEnabled: {
+    kind: 'boolean',
+    group: 'chicken',
+    label: 'Chicken open (a run in play can always finish)',
+  },
+  chickenMinStakeMinor: {
+    kind: 'bigint',
+    group: 'chicken',
+    label: 'Chicken minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  chickenMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'chicken',
+    label: 'Chicken maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  chickenMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'chicken',
+    label: 'Chicken maximum payout per run (a run cashes out automatically when it reaches this)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -923,6 +952,8 @@ function assertInvariants(view: AppConfig): void {
     ['Mines maximum stake', view.minesMaxStakeMinor, 'the maximum payout', view.minesMaxPayoutMinor],
     ['Tower minimum stake', view.towerMinStakeMinor, 'the maximum', view.towerMaxStakeMinor],
     ['Tower maximum stake', view.towerMaxStakeMinor, 'the maximum payout', view.towerMaxPayoutMinor],
+    ['Chicken minimum stake', view.chickenMinStakeMinor, 'the maximum', view.chickenMaxStakeMinor],
+    ['Chicken maximum stake', view.chickenMaxStakeMinor, 'the maximum payout', view.chickenMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],

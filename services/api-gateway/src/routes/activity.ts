@@ -18,6 +18,7 @@ import { parseWith } from '../lib/validation.js';
  *   crash     a bet cashed out or busted.
  *   mines     a game cashed out or hit TNT.
  *   tower     a climb cashed out or hit TNT.
+ *   chicken   a run across the rails cashed out or met a minecart.
  *   plinko    a ball landed in a slot.
  *   minesduel a mines duel was decided, as one row for its winner.
  *   faction   a wager was credited to a team in the running faction war.
@@ -198,6 +199,24 @@ export async function registerActivityRoutes(
                 1 AS quantity, 0 AS chance_ppm,
                 NULL::smallint AS game_result
            FROM tower_games g
+           JOIN users u ON u.id = g.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
+          WHERE g.status = 'settled'
+         UNION ALL
+         /* A finished chicken run: the stake, and what it cashed out for (nothing, on a minecart). */
+         SELECT g.id, 'chicken'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Chicken'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM chicken_games g
            JOIN users u ON u.id = g.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = g.user_id
           WHERE g.status = 'settled'
@@ -448,6 +467,21 @@ export async function registerActivityRoutes(
           WHERE u.id = g.user_id AND g.status = 'settled' AND g.settled_at >= day.at
             AND g.payout_minor > g.stake_minor
          UNION ALL
+         SELECT g.id, 'chicken'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Chicken'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM chicken_games g, day, users u
+          WHERE u.id = g.user_id AND g.status = 'settled' AND g.settled_at >= day.at
+            AND g.payout_minor > g.stake_minor
+         UNION ALL
          SELECT b.id, 'plinko'::text AS kind, b.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 'Plinko'::text AS source_name,
@@ -530,6 +564,9 @@ export async function registerActivityRoutes(
           WHERE g.created_at > since.at OR g.settled_at > since.at
          UNION ALL
          SELECT 'tower', g.user_id FROM tower_games g, since
+          WHERE g.created_at > since.at OR g.settled_at > since.at
+         UNION ALL
+         SELECT 'chicken', g.user_id FROM chicken_games g, since
           WHERE g.created_at > since.at OR g.settled_at > since.at
          UNION ALL
          SELECT 'plinko', b.user_id FROM plinko_bets b, since WHERE b.created_at > since.at

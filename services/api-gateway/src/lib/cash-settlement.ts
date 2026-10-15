@@ -56,6 +56,7 @@ export type ContributionSource =
   | 'crash'
   | 'mines'
   | 'tower'
+  | 'chicken'
   | 'plinko'
   | 'coinflip'
   | 'mines_duel';

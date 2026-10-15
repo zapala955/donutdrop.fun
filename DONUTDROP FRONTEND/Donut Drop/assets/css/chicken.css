@@ -1,0 +1,279 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: chicken road · genre: atmospheric (the site's obsidian + gold) · theme: luxe tokens
+ * states: lanes -- ahead (default, carries its price), next (lit gold), done, hit (error), cart (the
+ *         reveal after a cash-out); the chicken -- walking, safe, hit; the Go button and Cash out --
+ *         default, hover, :focus-visible, :active, disabled, aria-busy (a step or cash-out out), and
+ *         the result banner (won / lost). The difficulty radios share the frame's states.
+ * signature: the road is Minecraft's rails, one lane per price. The chicken stands on the last lane it
+ *            crossed, the next lane is the one lit in gold, and when a run ends the lane the minecart
+ *            was on is shown, cash-out or not.
+ * motion: the chicken's hop (260ms), the minecart coming down (300ms) and one shake of its lane.
+ *         Reduced motion: none -- the end state is drawn at once.
+ */
+
+.chicken {
+  /* The road's own colours, lifted so no rule below writes one inline. */
+  --chicken-rail: rgba(144, 150, 160, .38);
+  --chicken-tie: rgba(255, 255, 255, .06);
+  --chicken-loss-wash: rgba(255, 34, 34, .14);
+  --chicken-gold-ring: rgba(255, 170, 0, .55);
+  --chicken-shadow: rgba(0, 0, 0, .55);
+  --chicken-lane: 84px;
+  --chicken-curb: 96px;
+  --chicken-road-h: 300px;
+  --chicken-hen: 60px;
+  --chicken-cart: 58px;
+
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the road ─────────── */
+.chicken__stage {
+  grid-area: stage;
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: var(--lx-s4);
+  padding: var(--lx-s6);
+  min-width: 0;
+}
+
+.chicken__readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--lx-s1) var(--lx-s3);
+}
+.chicken__readout b { color: var(--lx-gold-hi); font: 800 1.25rem/1.2 var(--lx-display); font-variant-numeric: tabular-nums; }
+.chicken__readout span { color: var(--lx-mute); font: 600 .8125rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
+
+/* The road scrolls inside its own box; the page never scrolls sideways. */
+.chicken__road {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: inset 0 0 0 1px var(--lx-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--lx-4) transparent;
+}
+.chicken__road:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+
+.chicken__track {
+  position: relative;
+  display: flex;
+  width: max-content;
+  height: var(--chicken-road-h);
+}
+
+.clane {
+  position: relative;
+  flex: 0 0 var(--chicken-lane);
+  /* One narrow track down the middle of the lane -- two rails and the ties between them, drawn,
+     not a texture -- and open ground either side, so twenty lanes read as twenty tracks. */
+  background:
+    linear-gradient(90deg, transparent 35%, var(--chicken-rail) 35% 38%, transparent 38% 62%,
+      var(--chicken-rail) 62% 65%, transparent 65%),
+    repeating-linear-gradient(180deg, var(--chicken-tie) 0 7px, transparent 7px 24px) center / 30% 100% no-repeat;
+  transition: background-color var(--lx-quick) var(--lx-ease);
+}
+.clane__x {
+  position: absolute;
+  left: 50%;
+  bottom: var(--lx-s4);
+  transform: translateX(-50%);
+  min-width: 60px;
+  padding: 6px 8px;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-3);
+  color: var(--lx-mute);
+  font: 700 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+
+/* The curbs either side: the chicken starts on the left one and wants the right one. */
+.clane--start,
+.clane--end {
+  flex-basis: var(--chicken-curb);
+  background: var(--lx-2);
+  box-shadow: inset -1px 0 0 var(--lx-3);
+}
+.clane--end { background: linear-gradient(90deg, var(--lx-2), var(--lx-gold-wash)); box-shadow: none; }
+
+/* The next lane: lit, its price in gold. */
+.clane[data-state="next"] { background-color: var(--lx-gold-wash); }
+.clane[data-state="next"] .clane__x {
+  background: var(--lx-4);
+  color: var(--lx-gold-hi);
+  box-shadow: inset 0 0 0 2px var(--chicken-gold-ring);
+}
+/* Lanes crossed: their price spent. */
+.clane[data-state="done"] .clane__x { background: var(--lx-2); color: var(--lx-faint); }
+/* The lane the minecart came down: red. After a cash-out, the lane it was on: plain, named. */
+.clane[data-state="hit"] { background-color: var(--chicken-loss-wash); }
+.clane[data-state="hit"] .clane__x { color: var(--lx-loss); box-shadow: inset 0 0 0 2px var(--lx-loss); }
+.clane[data-state="cart"] .clane__x { color: var(--lx-text); }
+
+.chicken__hen,
+.chicken__cart {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.chicken__hen {
+  top: calc(50% - var(--chicken-hen) / 2 - 18px);
+  width: var(--chicken-hen);
+  height: var(--chicken-hen);
+  z-index: 2;
+  transition: transform 260ms var(--lx-ease);
+}
+.chicken__hen img,
+.chicken__cart {
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 8px var(--chicken-shadow));
+}
+.chicken__hen img { display: block; width: 100%; height: 100%; }
+.chicken__hen[data-state="hit"] img { transform: rotate(-90deg); opacity: .55; }
+.chicken__cart {
+  top: calc(50% - var(--chicken-cart) / 2 - 30px);
+  width: var(--chicken-cart);
+  height: var(--chicken-cart);
+  z-index: 3;
+}
+.chicken__cart[hidden] { display: none; }
+.chicken__cart[data-tone="reveal"] { top: var(--lx-s4); opacity: .5; }
+
+/* Over the top of the road, not its middle: the chicken and the minecart it explains stay in view. */
+.chicken__banner {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 170px;
+  padding: var(--lx-s3) var(--lx-s6);
+  border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: 0 0 0 3px var(--lx-gold), var(--lx-shade-hi);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+.chicken__banner[hidden] { display: none; }
+.chicken__banner b { color: var(--lx-gold-hi); font: 800 1.75rem/1.1 var(--lx-display); font-variant-numeric: tabular-nums; }
+.chicken__banner span { color: var(--lx-text); font: 700 .875rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.chicken__banner[data-tone="lost"] { box-shadow: 0 0 0 3px var(--lx-loss), var(--lx-shade-hi); }
+.chicken__banner[data-tone="lost"] b { color: var(--lx-loss); }
+
+/* ─────────── the panel ─────────── */
+.chicken__panel { grid-area: panel; min-width: 0; }
+.chicken__form { display: grid; grid-template-columns: minmax(0, 1fr); }
+.chicken__field { display: flex; align-items: center; }
+.chicken__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.chicken__field input:focus { outline: none; }
+.chicken__adj { cursor: pointer; }
+.chicken__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* Difficulty: two by two, so "Hardcore" never has to squeeze. */
+.chicken__modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s1); }
+.chicken__mode {
+  height: 40px;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+.chicken__mode:hover:not(:disabled) { background: var(--lx-5); }
+.chicken__mode:active:not(:disabled) { transform: translateY(1px); }
+.chicken__mode:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.chicken__mode[aria-checked="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.chicken__mode:disabled { cursor: not-allowed; opacity: .55; }
+.chicken__mode[aria-checked="true"]:disabled { opacity: .8; }
+
+/* Go: the frame's gold button (luxe-games.css). Its shape here. */
+.chicken .chicken__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--lx-quick) var(--lx-ease), transform 90ms var(--lx-ease);
+}
+.chicken .chicken__go:active:not(:disabled) { transform: translateY(1px); }
+.chicken .chicken__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+.chicken .chicken__go[aria-busy="true"] { cursor: progress; }
+
+/* Cash out: the money, one step quieter than Go -- gold ink on the dark, ringed in gold. */
+.chicken__cash {
+  height: 48px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-2);
+  color: var(--lx-gold-hi);
+  box-shadow: inset 0 0 0 2px var(--lx-gold);
+  font: 800 .9375rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.chicken__cash[hidden] { display: none; }
+.chicken__cash:hover:not(:disabled) { background: var(--lx-gold-wash); }
+.chicken__cash:active:not(:disabled) { transform: translateY(1px); }
+.chicken__cash:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.chicken__cash:disabled { cursor: default; color: var(--lx-faint); box-shadow: inset 0 0 0 2px var(--lx-4); }
+.chicken__cash[aria-busy="true"] { cursor: progress; }
+
+.chicken__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.chicken__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .chicken { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .chicken__stage { padding: var(--lx-s4) var(--lx-s3); }
+}
+@media (max-width: 560px) {
+  .chicken {
+    --chicken-lane: 72px;
+    --chicken-curb: 64px;
+    --chicken-road-h: 230px;
+    --chicken-hen: 48px;
+    --chicken-cart: 46px;
+  }
+  .clane__x { min-width: 54px; font-size: .75rem; }
+  .chicken__readout b { font-size: 1.0625rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clane,
+  .clane__x,
+  .chicken__hen,
+  .chicken__mode,
+  .chicken__cash,
+  .chicken .chicken__go { transition: none; }
+}
