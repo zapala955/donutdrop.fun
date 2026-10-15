@@ -316,13 +316,27 @@ export async function registerActivityRoutes(
    * them the same way, without the wager total the feed turns into a VIP label.
    */
   let topToday: { at: number; limit: number; rows: unknown[] } | null = null;
+  /**
+   * Today's biggest wins, for the home page: every game, the day's winning rounds (they returned
+   * more than they cost), biggest profit first.
+   *
+   * Ranked by PROFIT, not payout. Ranked by payout, a large stake cashed out at 1.01x would sit
+   * above a real hit; what a watcher means by "a big win" is how much somebody came away up, and
+   * that is the figure the card prints. A round that returned less than it cost is a loss and is not
+   * here; the live feed at the foot of the page shows every round, wins and losses alike.
+   *
+   * One row per round, as the feed shows them: a roulette spin is one row per player, a coinflip
+   * or a mines duel one row for its winner. The day is the UTC day. Media test twins are left out,
+   * as they are from the feed (lib/media-test.ts).
+   */
   app.get('/v1/activity/top-today', async (request) => {
     const query = parseWith(topTodayQuery, request.query ?? {});
     if (topToday && topToday.limit === query.limit && Date.now() - topToday.at < TOP_TODAY_TTL_MS) {
       return { activities: topToday.rows };
     }
     const result = await db.query(
-      `SELECT pull.* FROM (
+      `WITH day AS (SELECT date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS at)
+       SELECT win.* FROM (
          SELECT r.id, 'case'::text AS kind, r.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 cs.name AS source_name,
@@ -334,11 +348,9 @@ export async function registerActivityRoutes(
                 r.awarded_quantity AS quantity,
                 ((r.awarded_weight::bigint * 1000000) / r.total_weight)::integer AS chance_ppm,
                 NULL::smallint AS game_result
-           FROM case_rounds r
-           JOIN users u ON u.id = r.user_id
-           JOIN cases cs ON cs.id = r.case_id
-           JOIN catalog_items c ON c.id = r.awarded_catalog_item_id
-          WHERE r.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+           FROM case_rounds r, day, cases cs, users u, catalog_items c
+          WHERE cs.id = r.case_id AND u.id = r.user_id AND c.id = r.awarded_catalog_item_id
+            AND r.created_at >= day.at
             AND r.payout_minor > r.price_minor
          UNION ALL
          SELECT r.id, 'upgrade'::text AS kind, r.created_at, u.id AS player_id,
@@ -351,15 +363,140 @@ export async function registerActivityRoutes(
                 c.unit_value_minor, c.metadata,
                 r.target_quantity AS quantity, r.chance_ppm,
                 NULL::smallint AS game_result
-           FROM upgrader_rounds r
-           JOIN users u ON u.id = r.user_id
-           JOIN catalog_items c ON c.id = r.target_catalog_item_id
-          WHERE r.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+           FROM upgrader_rounds r, day, users u, catalog_items c
+          WHERE u.id = r.user_id AND c.id = r.target_catalog_item_id
+            AND r.created_at >= day.at
             AND r.outcome = 'win'
             AND r.payout_minor > r.stake_value_minor
-       ) pull
-       WHERE NOT EXISTS (SELECT 1 FROM users d WHERE d.id = pull.player_id AND d.demo_of IS NOT NULL)
-       ORDER BY pull.payout_minor DESC, pull.created_at DESC
+         UNION ALL
+         /* A roulette spin, one row per player: every chip they had on it, against what it paid. */
+         SELECT min(b.id::text)::uuid AS id, 'roulette'::text AS kind, r.settled_at AS created_at,
+                u.id AS player_id,
+                max(${MASKED_NAME}) AS player,
+                'Roulette'::text AS source_name,
+                NULL::char(7) AS accent,
+                sum(b.stake_minor)::bigint AS wager_minor,
+                sum(COALESCE(b.payout_minor, '0'))::bigint AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                count(*)::integer AS quantity, 0 AS chance_ppm,
+                r.result AS game_result
+           FROM roulette_bets b, day, roulette_rounds r, users u
+          WHERE r.id = b.round_id AND r.status = 'settled' AND u.id = b.user_id
+            AND r.settled_at >= day.at
+          GROUP BY r.id, r.settled_at, r.result, u.id
+         HAVING sum(COALESCE(b.payout_minor, '0')) > sum(b.stake_minor)
+         UNION ALL
+         SELECT h.id, 'blackjack'::text AS kind, h.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Blackjack'::text AS source_name,
+                NULL::char(7) AS accent,
+                (h.stake_minor * CASE WHEN h.doubled THEN 2 ELSE 1 END)::bigint AS wager_minor,
+                h.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM blackjack_hands h, day, users u
+          WHERE u.id = h.user_id AND h.status = 'settled' AND h.settled_at >= day.at
+            AND h.payout_minor > h.stake_minor * CASE WHEN h.doubled THEN 2 ELSE 1 END
+         UNION ALL
+         SELECT b.id, 'crash'::text AS kind, b.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Crash'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM crash_bets b, day, users u
+          WHERE u.id = b.user_id AND b.status <> 'active' AND b.settled_at >= day.at
+            AND b.payout_minor > b.stake_minor
+         UNION ALL
+         SELECT g.id, 'mines'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Mines'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM mines_games g, day, users u
+          WHERE u.id = g.user_id AND g.status = 'settled' AND g.settled_at >= day.at
+            AND g.payout_minor > g.stake_minor
+         UNION ALL
+         SELECT g.id, 'tower'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Tower'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM tower_games g, day, users u
+          WHERE u.id = g.user_id AND g.status = 'settled' AND g.settled_at >= day.at
+            AND g.payout_minor > g.stake_minor
+         UNION ALL
+         SELECT b.id, 'plinko'::text AS kind, b.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Plinko'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM plinko_bets b, day, users u
+          WHERE u.id = b.user_id AND b.created_at >= day.at
+            AND b.payout_minor > b.stake_minor
+         UNION ALL
+         /* A coinflip or a mines duel, as one row for its winner: their stake against the pot. */
+         SELECT g.id, 'coinflip'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Coinflip'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM coinflip_games g, day, users u
+          WHERE u.id = g.winner_user_id AND g.status = 'settled' AND g.settled_at >= day.at
+            AND g.payout_minor > g.stake_minor
+         UNION ALL
+         SELECT g.id, 'minesduel'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Mines Duel'::text AS source_name,
+                NULL::char(7) AS accent,
+                g.stake_minor AS wager_minor,
+                g.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM mines_duel_games g, day, users u
+          WHERE u.id = g.winner_user_id AND g.status = 'settled' AND g.outcome <> 'draw'
+            AND g.settled_at >= day.at
+            AND g.payout_minor > g.stake_minor
+       ) win
+       WHERE NOT EXISTS (SELECT 1 FROM users d WHERE d.id = win.player_id AND d.demo_of IS NOT NULL)
+       ORDER BY (win.payout_minor - win.wager_minor) DESC, win.created_at DESC
        LIMIT $1`,
       [query.limit],
     );

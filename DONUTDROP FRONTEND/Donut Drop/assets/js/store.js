@@ -18,7 +18,7 @@ export const state = {
   catalog: [],
   cases: [],
   activities: [],
-  // The day's biggest winning pulls, from the server. Not derived from `activities`, which is minutes wide.
+  // The day's biggest wins, every game, from the server. Not derived from `activities`, which is minutes wide.
   topPulls: [],
   fairness: null,
   upgradeConfig: null,
@@ -368,14 +368,14 @@ export async function refreshActivity(notify = true) {
   if (!stillFresh(epoch)) return state.activities;
   state.activities = (result.activities || []).map(normalizeActivity);
   if (notify) emit('activity');
-  // A settled round is also the only thing that can change today's top pulls.
+  // A settled round is also the only thing that can change today's biggest wins.
   void refreshTopPulls().catch(() => undefined);
   return state.activities;
 }
 
-/* Today's biggest pulls, for the home page. Asked for after new rounds, but at most every fifteen
- * seconds -- rounds land several a second on a busy evening -- with one trailing ask, so a big pull
- * inside the gap still shows up. Held like the feed while a round animates. */
+/* Today's biggest wins, every game, for the home page. Asked for after new rounds, but at most every
+ * fifteen seconds -- rounds land several a second on a busy evening -- with one trailing ask, so a
+ * big win inside the gap still shows up. Held like the feed while a round animates. */
 const TOP_PULLS_EVERY_MS = 15_000;
 let topPullsAt = 0;
 let topPullsTimer = 0;

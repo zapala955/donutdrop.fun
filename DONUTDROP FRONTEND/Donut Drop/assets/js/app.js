@@ -250,59 +250,73 @@ function mountHome(view) {
    * The marquee this also fed is gone. It was a moving strip directly under the navigation that
    * duplicated the live feed at the foot of the page, and a scroller is unreadable the moment you
    * want to actually read a line of it. */
+  /* The table games' names and the sprites their lobby cards wear (retro.css), for the wins card. */
+  const WIN_GAMES = {
+    crash: { name: 'Crash', art: 'assets/img/items/elytra.png' },
+    mines: { name: 'Mines', art: 'assets/img/items/tnt.png' },
+    tower: { name: 'Tower', art: 'assets/img/items/beacon.png' },
+    plinko: { name: 'Plinko', art: 'assets/img/items/slime_ball.png' },
+    blackjack: { name: 'Blackjack', art: 'assets/img/items/enchanted_book.png' },
+    roulette: { name: 'Roulette', art: 'assets/img/items/nether_star.png' },
+    coinflip: { name: 'Coinflip', art: 'assets/img/items/gold_ingot.png' },
+    minesduel: { name: 'Mines Duel', art: 'assets/img/items/diamond_pickaxe.svg' },
+  };
   const paintActivity = () => {
     const drops = $('#bigDrops', view);
     if (!drops) return;
     drops.innerHTML = '';
 
-    /* This card is headed "Biggest pulls today", and the server now answers exactly that: the
-     * day's winning crate and upgrader pulls, biggest payout first (/v1/activity/top-today).
+    /* "Biggest wins today": every game's winning rounds since midnight UTC, biggest profit first
+     * (/v1/activity/top-today). A win returned more than it cost; the live feed at the foot of the
+     * page shows every round, losses included.
      *
-     * It used to be filtered out of the live feed in this browser, and the feed is the last forty
-     * rounds -- minutes, on a busy evening. The day's best pulls scrolled out of that window and
-     * the card looked as though it had reset.
-     *
-     * A pull is a win: it returned more than it cost. Rounds that returned less are real, and they
-     * belong in the live feed at the foot of the page, which shows everything. */
-    const rounds = (state.topPulls ?? []).filter((entry) => entry.item);
+     * A crate or upgrader win shows the item it paid; a table game shows its own lobby sprite, so
+     * the row reads as the game at a glance. The figure is the PROFIT, what the player came away
+     * up, which is also the order: a large stake cashed out at 1.01x is not a big win. */
+    const rounds = state.topPulls ?? [];
 
     if (!rounds.length) {
       const empty = el('li', 'drops__empty');
-      /* Says which list is empty. "No completed drops yet" was wrong the moment this became a
-       * wins-only list: rounds may well have completed, and none of them won. */
-      empty.textContent = 'No winning pulls yet today.';
+      empty.textContent = 'No wins yet today.';
       drops.appendChild(empty);
       return;
     }
 
     for (const entry of rounds.slice(0, 7)) {
       const { item, player, sourceName } = entry;
+      const wager = BigInt(entry.wagerMinor ?? '0');
+      const payout = BigInt(entry.payoutMinor ?? '0');
+      const game = WIN_GAMES[entry.kind];
+      if (!item && !game) continue;
       const row = el('li');
-      /* The rarity drives a border and a glow, not just a swatch: a Netherite pull and a Spawner
-       * pull should be distinguishable from across the room, which is the whole reason the list
-       * exists. rarityFor() can return a tier this table does not carry; fall back rather than
-       * throw. */
-      row.style.setProperty('--rar', RARITY[item.rarity]?.color ?? '#ffaa00');
-      row.dataset.rarity = item.rarity ?? 'common';
+      /* An item's rarity drives the edge, so a Netherite pull still stands out from a Diamond one;
+       * a table game wears the house gold. rarityFor() can return a tier this table does not
+       * carry; fall back rather than throw. */
+      row.style.setProperty('--rar', item ? RARITY[item.rarity]?.color ?? '#ffaa00' : '#ffaa00');
+      row.dataset.rarity = item?.rarity ?? 'game';
+      row.dataset.kind = entry.kind;
 
       const art = document.createElement('img');
-      art.src = safeImage(item.img);
+      art.src = item ? safeImage(item.img) : game.art;
       art.alt = '';
       art.loading = 'lazy';
 
       const stack = el('span', 'drops__stack');
       const what = el('span', 'what');
-      what.textContent = item.name;
+      what.textContent = item ? item.name : game.name;
       const who = el('span', 'who');
-      who.textContent = sourceName ? `${player ?? '???'} · ${sourceName}` : (player ?? '???');
+      // Whole numbers past 1,000x, so the line keeps its room: "17,714×", not "17714.70×".
+      const times = wager > 0n ? Number((payout * 100n) / wager) / 100 : 0;
+      const multiple = !times ? '' : times >= 1000
+        ? `${Math.floor(times).toLocaleString('en-US')}×`
+        : `${times.toFixed(2)}×`;
+      const detail = item ? sourceName : multiple;
+      who.textContent = detail ? `${player ?? '???'} · ${detail}` : (player ?? '???');
       stack.append(what, who);
 
-      /* The PAYOUT, not the catalogue price. What the round actually paid is the number somebody
-       * scanning this list is looking for; the sticker price of the item is a different figure and
-       * on a losing round it is not the one that changed hands. */
-      const paid = Number(entry.payoutMinor ?? entry.payout_minor ?? 0) || item.value;
       const amount = el('span', 'amt mono');
-      amount.textContent = money(paid);
+      amount.textContent = `+${money(Number(payout - wager))}`;
+      amount.title = `Won ${money(Number(payout))} on ${money(Number(wager))}`;
 
       row.append(art, stack, amount);
       drops.appendChild(row);

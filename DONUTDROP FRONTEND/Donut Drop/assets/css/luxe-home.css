@@ -297,7 +297,7 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
 .lxperk__copy b { color: var(--lx-ink); font: 700 .9375rem/1.2 var(--lx-ui); }
 .lxperk__copy span { color: var(--lx-mute); font: 500 .8125rem/1.35 var(--lx-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ═════════ biggest pulls today ═════════ */
+/* ═════════ biggest wins today ═════════ */
 .lxpulls { margin-top: var(--lx-s8); }
 body.lx .lxdrops {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--lx-s3);

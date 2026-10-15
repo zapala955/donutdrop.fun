@@ -95,8 +95,8 @@ describe('activity avatars', () => {
   it('carries an opaque player id through every activity kind and normalizes it', async () => {
     const apiSource = await activity();
     // case, upgrade, roulette, blackjack, crash, mines, tower, plinko, coinflip, mines duel and faction in
-    // the feed, and the case and upgrade pulls in today's top list.
-    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 13);
+    // the feed, and the same ten games (no faction) in today's biggest wins.
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 21);
     const storeSource = await store();
     assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
   });

@@ -23,27 +23,59 @@ describe('win cards in chat', () => {
   });
 });
 
-describe('biggest pulls today', () => {
-  it('reads the whole UTC day from the server, winning pulls only, biggest first', async () => {
+describe('biggest wins today', () => {
+  it('reads every game for the whole UTC day, winning rounds only, biggest profit first', async () => {
     const route = await read('services/api-gateway/src/routes/activity.ts');
-    const top = route.slice(route.indexOf("'/v1/activity/top-today'"));
+    const top = route.slice(route.indexOf("'/v1/activity/top-today'"), route.indexOf("'/v1/activity/playing'"));
     assert.ok(top.length > 0, 'the endpoint is missing');
-    assert.equal(top.match(/r\.created_at >= date_trunc\('day', now\(\) AT TIME ZONE 'UTC'\) AT TIME ZONE 'UTC'/g)?.length, 2);
-    assert.match(top, /r\.payout_minor > r\.price_minor/);
-    assert.match(top, /r\.outcome = 'win'\s+AND r\.payout_minor > r\.stake_value_minor/);
-    assert.match(top, /ORDER BY pull\.payout_minor DESC, pull\.created_at DESC/);
-    // The lifetime wager total never rides along on this list.
+    assert.match(top, /WITH day AS \(SELECT date_trunc\('day', now\(\) AT TIME ZONE 'UTC'\) AT TIME ZONE 'UTC' AS at\)/);
+    // Every game that pays money is in it, each kept to today and to rounds that won.
+    for (const [kind, table, today, won] of [
+      ['case', 'case_rounds', /r\.created_at >= day\.at/, /r\.payout_minor > r\.price_minor/],
+      ['upgrade', 'upgrader_rounds', /r\.created_at >= day\.at/, /r\.payout_minor > r\.stake_value_minor/],
+      ['roulette', 'roulette_bets', /r\.settled_at >= day\.at/, /HAVING sum\(COALESCE\(b\.payout_minor, '0'\)\) > sum\(b\.stake_minor\)/],
+      ['blackjack', 'blackjack_hands', /h\.settled_at >= day\.at/, /h\.payout_minor > h\.stake_minor \* CASE WHEN h\.doubled THEN 2 ELSE 1 END/],
+      ['crash', 'crash_bets', /b\.settled_at >= day\.at/, /b\.payout_minor > b\.stake_minor/],
+      ['mines', 'mines_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
+      ['tower', 'tower_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
+      ['plinko', 'plinko_bets', /b\.created_at >= day\.at/, /b\.payout_minor > b\.stake_minor/],
+      ['coinflip', 'coinflip_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
+      ['minesduel', 'mines_duel_games', /g\.settled_at >= day\.at/, /g\.payout_minor > g\.stake_minor/],
+    ] as const) {
+      const at = top.indexOf(`'${kind}'::text AS kind`);
+      assert.ok(at > 0, `${kind} is missing`);
+      const branch = top.slice(at, top.indexOf('UNION ALL', at) > 0 ? top.indexOf('UNION ALL', at) : undefined);
+      assert.match(branch, new RegExp(`FROM ${table}\\b`), `${kind} reads ${table}`);
+      assert.match(branch, today, `${kind} is not kept to today`);
+      assert.match(branch, won, `${kind} lets a loss in`);
+    }
+    // A duel's winner only, and never a draw; a blackjack double counts what was risked.
+    assert.match(top, /u\.id = g\.winner_user_id AND g\.status = 'settled' AND g\.outcome <> 'draw'/);
+    // Biggest profit first: a big stake at 1.01x is not a big win.
+    assert.match(top, /ORDER BY \(win\.payout_minor - win\.wager_minor\) DESC, win\.created_at DESC/);
+    // Media test twins are left out, and the lifetime wager total never rides along.
+    assert.match(top, /WHERE NOT EXISTS \(SELECT 1 FROM users d WHERE d\.id = win\.player_id AND d\.demo_of IS NOT NULL\)/);
     assert.doesNotMatch(top, /wagered_minor/);
   });
 
-  it('paints the card from that list, not from the minutes-wide live feed', async () => {
-    const [app, store] = await Promise.all([
+  it('paints the card from that list, every game, the profit as the figure', async () => {
+    const [app, store, html] = await Promise.all([
       read('DONUTDROP FRONTEND/Donut Drop/assets/js/app.js'),
       read('DONUTDROP FRONTEND/Donut Drop/assets/js/store.js'),
+      read('DONUTDROP FRONTEND/Donut Drop/index.html'),
     ]);
+    assert.match(html, /<span>Biggest wins today<\/span>/);
+    assert.doesNotMatch(html, /Biggest pulls today/);
     const paint = app.slice(app.indexOf('const paintActivity = () => {'), app.indexOf('paintActivity();'));
-    assert.match(paint, /const rounds = \(state\.topPulls \?\? \[\]\)/);
+    assert.match(paint, /const rounds = state\.topPulls \?\? \[\];/);
     assert.doesNotMatch(paint, /state\.activities/);
+    // Not only item pulls any more: a table game shows its own sprite and name.
+    assert.doesNotMatch(paint, /filter\(\(entry\) => entry\.item\)/);
+    assert.match(paint, /art\.src = item \? safeImage\(item\.img\) : game\.art;/);
+    assert.match(paint, /amount\.textContent = `\+\$\{money\(Number\(payout - wager\)\)\}`;/);
+    for (const kind of ['crash', 'mines', 'tower', 'plinko', 'blackjack', 'roulette', 'coinflip', 'minesduel']) {
+      assert.match(app, new RegExp(`\\b${kind}: \\{ name: '`), `${kind} has no name and sprite`);
+    }
     assert.match(store, /api\.get\('\/v1\/activity\/top-today\?limit=7'\)/);
     // Held like the feed while a round animates, and asked for at most every fifteen seconds.
     const refresh = store.slice(store.indexOf('export async function refreshTopPulls('));
