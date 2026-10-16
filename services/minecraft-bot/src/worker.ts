@@ -111,6 +111,52 @@ export function isBanKick(text: string): boolean {
 }
 
 /**
+ * How long the bot stays away when the server says it cannot come in yet.
+ *
+ * On 2026-10-16 a relog landed on DonutSMP's maintenance. Its network then held the old session
+ * ("You are already online") for nine minutes, and the vault knocked about once a minute the whole
+ * time, each knock a fresh login on the same account. Five minutes apart is quieter, and still
+ * back soon after the server lets it in.
+ */
+const HELD_OFF_RETRY_MS = 5 * 60_000;
+
+/** Whether a kick says the server is not letting this account in yet: maintenance, or a session it still holds. */
+export function isHeldOffKick(text: string): boolean {
+  return /already online|under maintenance/i.test(text);
+}
+
+const NBT_TYPES = new Set([
+  'compound', 'list', 'string', 'byte', 'short', 'int', 'long', 'float', 'double',
+  'byteArray', 'intArray', 'longArray',
+]);
+
+/** Whether a value is a node of the NBT form newer servers send chat in: exactly `{ type, value }`. */
+function isNbtNode(node: Record<string, unknown>): boolean {
+  const keys = Object.keys(node);
+  return keys.length === 2 && 'value' in node && typeof node['type'] === 'string'
+    && NBT_TYPES.has(node['type']);
+}
+
+/** An NBT node as the plain chat component it stands for. */
+function fromNbt(node: { type: string; value: unknown }, depth: number): unknown {
+  if (depth > 16) return undefined;
+  if (node.type === 'compound' && node.value && typeof node.value === 'object') {
+    return Object.fromEntries(
+      Object.entries(node.value as Record<string, { type: string; value: unknown }>)
+        .map(([key, child]) => [key, child && typeof child === 'object' ? fromNbt(child, depth + 1) : child]),
+    );
+  }
+  if (node.type === 'list' && node.value && typeof node.value === 'object') {
+    // A list carries its element type once, and its elements as bare values.
+    const list = node.value as { type?: unknown; value?: unknown };
+    if (typeof list.type !== 'string' || !Array.isArray(list.value)) return [];
+    const type = list.type;
+    return list.value.map((value: unknown) => fromNbt({ type, value }, depth + 1));
+  }
+  return node.value;
+}
+
+/**
  * Renders a kick reason as something a person can read.
  *
  * The server sends a chat component -- a nested object of text, translate keys and `extra` arrays
@@ -118,34 +164,46 @@ export function isBanKick(text: string): boolean {
  * "[object Object]", which is what every kick in this log said until now: the one field that
  * explains why the bot cannot stay connected, reliably discarded before it was written down.
  */
-export function describeKick(reason: unknown, depth = 0): string {
+export function describeKick(reason: unknown): string {
+  /* Trimmed once, here, and not piece by piece: a message is split across components at its
+   * spaces ("You are connected to proxy: " + "7eab12058666"), and trimming each piece glued the
+   * words together. */
+  return renderKick(reason, 0).trim().slice(0, 500);
+}
+
+function renderKick(reason: unknown, depth: number): string {
   if (depth > 8) return '';
   if (typeof reason === 'string') {
     const trimmed = reason.trim();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       try {
-        return describeKick(JSON.parse(trimmed), depth + 1);
+        return renderKick(JSON.parse(trimmed), depth + 1);
       } catch {
         // Not JSON after all; it is already the message.
       }
     }
-    return trimmed.slice(0, 500);
+    return reason.slice(0, 500);
   }
   if (Array.isArray(reason)) {
     return reason
-      .map((part) => describeKick(part, depth + 1))
+      .map((part) => renderKick(part, depth + 1))
       .join('')
       .slice(0, 500);
   }
   if (reason && typeof reason === 'object') {
     const node = reason as Record<string, unknown>;
+    /* "You are already online" came as NBT -- `{ type: 'compound', value: ... }` all the way down --
+     * and was logged as 500 characters of raw JSON with the message buried in it. */
+    if (isNbtNode(node)) {
+      return renderKick(fromNbt(node as { type: string; value: unknown }, 0), depth + 1);
+    }
     let text = '';
     if (typeof node['text'] === 'string') text += node['text'];
     // A translated kick ("multiplayer.disconnect.duplicate_login") carries its key, not its text.
     if (!text && typeof node['translate'] === 'string') text += node['translate'];
-    if (node['with'] !== undefined) text += describeKick(node['with'], depth + 1);
-    if (node['extra'] !== undefined) text += describeKick(node['extra'], depth + 1);
-    if (text.trim()) return text.trim().slice(0, 500);
+    if (node['with'] !== undefined) text += renderKick(node['with'], depth + 1);
+    if (node['extra'] !== undefined) text += renderKick(node['extra'], depth + 1);
+    if (text.trim()) return text.slice(0, 500);
     /* Nothing recognisable in it. The raw JSON is still infinitely more use than the word
      * "object", so it goes in the log rather than being thrown away. */
     try {
@@ -188,6 +246,8 @@ export class MinecraftWorker {
   private stopped = false;
   /** Set when the server kicked this account as banned; the next attempt waits BANNED_RETRY_MS. */
   private banned = false;
+  /** Set when the server said it cannot let this account in yet; the next attempt waits HELD_OFF_RETRY_MS. */
+  private heldOff = false;
   /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
   private relogDue = false;
   /** The current logout is a relog, so the bot comes back after RELOG_OFFLINE_*, not ten seconds. */
@@ -521,6 +581,7 @@ export class MinecraftWorker {
       const text = describeKick(reason);
       this.log.warn({ reason: text }, 'Bot kicked');
       if (isBanKick(text)) this.banned = true;
+      else if (isHeldOffKick(text)) this.heldOff = true;
     });
     bot.on('error', (error) => this.log.error({ err: error }, 'Mineflayer error'));
     bot.once('end', (reason) => {
@@ -556,6 +617,19 @@ export class MinecraftWorker {
         const banWait = setTimeout(() => this.connect(), BANNED_RETRY_MS);
         // Tracked, so stopping the container clears it rather than waiting to be killed.
         this.timers.add(banWait);
+      } else if (!this.stopped && this.heldOff) {
+        /* Held open and tracked, like the ban wait: a process that exited here would be restarted
+         * by Docker within a minute and knock again, which is the loop this replaces. */
+        this.log.warn(
+          { retryInMinutes: HELD_OFF_RETRY_MS / 60_000 },
+          'The server is not letting this account in yet; trying again later',
+        );
+        this.heldOff = false;
+        const timer = setTimeout(() => {
+          this.timers.delete(timer);
+          this.connect();
+        }, HELD_OFF_RETRY_MS);
+        this.timers.add(timer);
       } else if (!this.stopped && relogging) {
         /* Held open (no unref) like the ban wait, so the process does not exit and leave the gap
          * to Docker's restart; tracked in `timers`, so a shutdown inside the gap clears it rather
