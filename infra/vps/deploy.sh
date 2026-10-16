@@ -27,6 +27,12 @@ if grep -q '^COMMUNITY_APPLICATION_ID=.\+' "$env_file"; then
   compose+=(--profile community)
   echo "Community bot configured; deploying it too."
 fi
+# And the operator bot. Without its profile a deploy left it running whatever image it was first
+# built from: its alert feed changed in bc5c08f and the running bot had not been rebuilt in a month.
+if grep -q '^DISCORD_APPLICATION_ID=.\+' "$env_file"; then
+  compose+=(--profile discord)
+  echo "Discord operator bot configured; deploying it too."
+fi
 
 # ── the API mounts the community key whether or not the bot is running ─────────────────────────
 # A compose secret is a bind mount, and a bind mount whose source is missing stops the container
