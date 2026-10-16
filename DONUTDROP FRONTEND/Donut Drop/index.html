@@ -33,12 +33,12 @@
 <meta property="og:title" content="DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More" />
 <meta property="og:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <meta property="og:url" content="https://donutluxe.com/" />
-<meta property="og:image" content="https://donutluxe.com/assets/img/brand/og-image.png" />
+<meta property="og:image" content="https://donutluxe.com/assets/img/brand/og-image.png?v=2" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="DonutLuxe, the DonutSMP casino" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:image" content="https://donutluxe.com/assets/img/brand/og-image.png" />
+<meta name="twitter:image" content="https://donutluxe.com/assets/img/brand/og-image.png?v=2" />
 <meta name="twitter:title" content="DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More" />
 <meta name="twitter:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <!-- Structured data: the site's name (and the old one, so searches for DonutDrop find it) and its
@@ -122,11 +122,13 @@
 <link rel="stylesheet" href="assets/css/luxe-games.css" />
 <!-- retro skin: the old Minecraft theme over the new layout. Last, so it wins. -->
 <link rel="stylesheet" href="assets/css/retro.css" />
-<!-- The site's own mark: a gold donut on obsidian. Search results show it beside the name; Google
-     wants a square in multiples of 48px, which favicon.ico (48, plus 16/32/64) and the 192 are. -->
-<link rel="icon" href="/favicon.ico" sizes="48x48" />
-<link rel="icon" href="/assets/img/brand/icon-192.png" type="image/png" sizes="192x192" />
-<link rel="apple-touch-icon" href="/assets/img/brand/apple-touch-icon.png" />
+<!-- The site's own mark: a gold-iced donut drawn as a Minecraft item, on the 16-pixel grid of the
+     lobby's sprites, transparent so it sits on whatever Google or the browser puts behind it. Google
+     wants a square in multiples of 48px; favicon.ico (16/32/48/64) and the 192 are whole-pixel
+     scales of the sprite. ?v= so a browser that cached the last mark asks again. -->
+<link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+<link rel="icon" href="/assets/img/brand/icon-192.png?v=2" type="image/png" sizes="192x192" />
+<link rel="apple-touch-icon" href="/assets/img/brand/apple-touch-icon.png?v=2" />
 </head>
 <body class="lx">
 <button class="skip" id="skipToMain" type="button">Skip to content</button>
