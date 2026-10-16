@@ -210,7 +210,7 @@ async function deliver(which, face, { delay = 0, sideways = false, faces }) {
   const slot = makeCard(face, { sideways });
   seat(which).cards.append(slot);
   await flyIn(slot, delay);
-  playSound('card');
+  playSound('tick');
   if (faces) paintTotal(which, faces);
   return slot;
 }

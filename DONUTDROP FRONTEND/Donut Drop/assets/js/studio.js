@@ -687,6 +687,7 @@ function paintPalette() {
 
     chip.addEventListener('click', () => {
       view.draft.drops.push({ catalogItemId: item.id, weight: 100 });
+      playSound('click');
       paintDrops();
       paintPalette();
       schedulePreview();

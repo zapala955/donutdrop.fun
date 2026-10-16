@@ -17,7 +17,7 @@ import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
-import { playSound, stepRate } from './audio-engine.js';
+import { playSound } from './audio-engine.js';
 
 const FLOORS = 9;
 const EDGE_BPS = 1000n;
@@ -230,7 +230,7 @@ function tileNode(floor, tile) {
 }
 
 function gem(floor, tile) {
-  playSound('tick', { rate: stepRate(floor) });
+  playSound('tick');
   if (reduceMotion()) return;
   tileNode(floor, tile)?.animate(
     [{ transform: 'scale(.94)' }, { transform: 'scale(1.04)', offset: 0.55 }, { transform: 'scale(1)' }],

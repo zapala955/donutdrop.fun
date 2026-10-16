@@ -572,7 +572,7 @@ function fireCue(message) {
   if (stage) stage.dataset.state = 'cue';
   if (cue) cue.dataset.on = '1';
   if (label) label.textContent = 'NOW';
-  playSound('tick', { rate: 1.3 });
+  playSound('click', { rate: 1.6 });
 }
 
 /** The precision needle. One rAF loop against the shared start, so both screens agree.

@@ -13,7 +13,7 @@ import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
-import { playSound, stepRate } from './audio-engine.js';
+import { playSound } from './audio-engine.js';
 
 const TILES = 25;
 const QUICK_MINES = [1, 3, 5, 10, 24];
@@ -223,7 +223,7 @@ function tileNode(index) {
 }
 
 function gem(index) {
-  playSound('tick', { rate: stepRate(game?.revealed?.length) });
+  playSound('tick');
   const node = tileNode(index);
   if (!node || reduceMotion()) return;
   node.querySelector('img')?.animate(
