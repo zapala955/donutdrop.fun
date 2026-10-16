@@ -45,6 +45,19 @@ describe('frontend/backend contract', () => {
     assert.match(store, /Authenticated data refresh failed/);
   });
 
+  it('never leaves the sign-in window over a signed-in player', async () => {
+    /* An invite link opened the window at load, when everybody still looks signed out, so the
+     * `?ref=` left in the address bar put it back over every player who had signed up through one.
+     * And a 429 or a dropped connection on a status poll ended the poll for good, after which a
+     * paid login waited on a screen nothing was watching. */
+    const app = await source('assets/js/app.js');
+    assert.doesNotMatch(app, /if \(pendingReferralCode\(\) && !state\.authenticated\) \{\s*openLoginModal\(\);/);
+    assert.match(app, /if \(event\.detail !== 'ready'\) return;\s*bus\.removeEventListener\('change', openForInvite\);/);
+    assert.match(app, /&& state\.authenticated\) \{\s*if \(signInOpen\(\)\) closeModal\(\);/);
+    assert.match(app, /if \(isTransient\(error\)\) \{[^}]*setTimeout\(\(\) => pollLink\(challengeId, body\), 4000\);/);
+    assert.match(app, /const isTransient = \(error\) => !error\?\.status \|\| error\.status === 429 \|\| error\.status >= 500;/);
+  });
+
   it('routes every core economic action to the backend', async () => {
     const store = await source('assets/js/store.js');
     assert.match(store, /\/v1\/cases\/'/);

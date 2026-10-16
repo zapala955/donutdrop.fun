@@ -1017,11 +1017,26 @@ async function pollLink(challengeId, body) {
     }
     if (['expired', 'locked', 'completed'].includes(state)) return;
   } catch (error) {
+    /* A dropped connection, a 429 or a 502 says nothing about the payment. One used to end the
+     * poll for good, and a player who paid a second later sat in front of "waiting for your
+     * payment" with nothing left watching for it. Only an answer about the challenge itself — not
+     * found, not yours — is worth stopping on. */
+    if (isTransient(error)) {
+      const status = $('#linkState', body);
+      if (status) status.textContent = 'connection hiccup, still checking';
+      setTimeout(() => pollLink(challengeId, body), 4000);
+      return;
+    }
     showApiError(error);
     return;
   }
   setTimeout(() => pollLink(challengeId, body), 2000);
 }
+
+const isTransient = (error) => !error?.status || error.status === 429 || error.status >= 500;
+
+/* The sign-in window, as opposed to deposit and withdraw, which share its variant. */
+const signInOpen = () => $('#modal').open && Boolean($('#linkForm', $('#modalBody')));
 
 /**
  * Signs in a confirmed login, and offers a retry only if that fails.
@@ -1040,7 +1055,7 @@ async function finishLogin(challengeId, body) {
 
   try {
     const user = await completeLogin(challengeId);
-    closeModal();
+    if (signInOpen()) closeModal();
     toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
   } catch (error) {
     if (!body.isConnected) return;
@@ -1406,14 +1421,24 @@ captureReferralCode();
  * Without this the link dropped them on the crates page with a code held silently in session
  * storage — the one thing the sender wanted to happen required the recipient to independently
  * decide to log in. A logged-in visitor is left alone: they cannot spend a code, and covering
- * their screen to tell them so would be worse than saying nothing. */
-if (pendingReferralCode() && !state.authenticated) {
-  openLoginModal();
-}
+ * their screen to tell them so would be worse than saying nothing.
+ *
+ * It waits for 'ready' because only then is it known who is signed in. It used to open at load,
+ * when everybody still looks signed out, so the `?ref=` left in the address bar put the window back
+ * over every player who had just signed up through a link, on every reload, and nothing closed it. */
+bus.addEventListener('change', function openForInvite(event) {
+  if (event.detail !== 'ready') return;
+  bus.removeEventListener('change', openForInvite);
+  if (pendingReferralCode() && !state.authenticated && !$('#modal').open) openLoginModal();
+});
 /* A link's code is only ever spent by a sign-up. Anybody signed in who still has one in hand was
- * not signing up: it is dropped, and a registered player is told where their one entry is. */
+ * not signing up: it is dropped, and a registered player is told where their one entry is.
+ *
+ * And a sign-in window has no business staying open over a signed-in player, however it got
+ * there: opened just before the session was found, or left behind by a poll that lost its way. */
 bus.addEventListener('change', (event) => {
   if ((event.detail === 'login' || event.detail === 'ready') && state.authenticated) {
+    if (signInOpen()) closeModal();
     void settlePendingReferral();
   }
 });
