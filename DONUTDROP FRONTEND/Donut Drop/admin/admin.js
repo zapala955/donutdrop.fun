@@ -3572,6 +3572,7 @@ const GROUP_LABELS = {
   plinko: 'Plinko',
   dice: 'Dice',
   discord: 'Discord rewards',
+  alerts: 'Staff alerts (Discord)',
   minesduel: 'Mines Duel',
   payouts: 'Payouts & anti-drain',
   dailycodes: 'Daily codes',

@@ -21,7 +21,10 @@ export type LiveTopic =
   | 'coinflip'
   // A mines duel opened, was taken, had a player finish, or settled. Carries nothing about a
   // player's tiles: a refresh reads what the reader is allowed to see.
-  | 'minesduel';
+  | 'minesduel'
+  // Per player: something for the notification bell landed -- a deposit, a withdrawal paid or
+  // refunded, a tip, a reward (lib/notifications.ts). The page re-reads the bell and the deposits.
+  | 'notice';
 
 interface Subscriber {
   readonly response: ServerResponse;

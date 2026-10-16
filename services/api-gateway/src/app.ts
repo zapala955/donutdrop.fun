@@ -57,6 +57,7 @@ import { registerPlinkoRoutes } from './routes/plinko.js';
 import { registerDiscordRewardRoutes } from './routes/discord-rewards.js';
 import { registerVipRoutes } from './routes/vip.js';
 import { registerMediaTestRoutes } from './routes/media-test.js';
+import { registerNotificationRoutes } from './routes/notifications.js';
 import { startAntiDrainMonitor } from './lib/anti-drain.js';
 import { startTellerSweeper } from './lib/teller-sweeper.js';
 import { assertVipSolvency } from './lib/vip.js';
@@ -260,6 +261,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   await registerMediaTestRoutes(app, db, config);
+  await registerNotificationRoutes(app, db, config);
   // Registers nothing unless DEV_LOGIN_ENABLED is on, and config refuses to boot with it on
   // in production. See routes/dev.ts for the full fencing.
   await registerDevRoutes(app, db, config);

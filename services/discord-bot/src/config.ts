@@ -75,7 +75,8 @@ const schema = z
       .string()
       .url()
       .refine((value) => /^https?:\/\//.test(value), 'must be an HTTP(S) URL'),
-    /* Where operational alerts are posted. Empty disables the alert feed entirely. */
+    /* Where operational alerts are posted when the admin panel names no staff alert channel.
+     * Empty with no channel in the panel either, the feed polls and posts nothing. */
     DISCORD_ALERT_CHANNEL_ID: z
       .string()
       .regex(/^$|^[0-9]{5,32}$/)

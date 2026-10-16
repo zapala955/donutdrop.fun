@@ -8,6 +8,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { liveEvents } from '../lib/live-events.js';
+import { noticeSoon } from '../lib/notifications.js';
 import { isValidCurve, settleRace } from '../lib/rewards.js';
 import {
   RuntimeSettings,
@@ -472,13 +473,15 @@ export async function registerAdminOperationRoutes(
           conflict('WITHDRAWAL_NOT_IN_REVIEW', 'Only a payout under manual review can be resolved');
         }
         if (body.outcome === 'paid') {
-          await client.query(
+          const paid = await client.query<{ user_id: string }>(
             `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), error_code = NULL,
                     approved_by = coalesce(approved_by, $2),
                     approved_at = coalesce(approved_at, now()), updated_at = now()
-              WHERE id = $1`,
+              WHERE id = $1
+              RETURNING user_id`,
             [params.id, actor],
           );
+          for (const row of paid.rows) noticeSoon(row.user_id);
         } else {
           await refundWithdrawal(client, params.id, 'ADMIN_CONFIRMED_NOT_PAID');
         }

@@ -790,6 +790,14 @@ const environmentSchema = z
       .string()
       .regex(/^$|^[0-9]{5,32}$/, 'must be a Discord channel id')
       .default(''),
+    /* The money half of the staff alert feed (lib/staff-alerts.ts), every one of them a dial in the
+     * admin panel. The channel and the role are Discord ids, 0 for none: with no channel the bot
+     * posts to its own DISCORD_ALERT_CHANNEL_ID, and with no role it posts without pinging anyone.
+     * The two bars are the profit on one round and a player's net over 24 hours; 0 turns one off. */
+    STAFF_ALERT_CHANNEL_ID: nonNegativeBigintString.default('0'),
+    STAFF_ALERT_ROLE_ID: nonNegativeBigintString.default('0'),
+    STAFF_ALERT_BIG_WIN_MINOR: nonNegativeBigintString.default('50000000'),
+    STAFF_ALERT_DAILY_PROFIT_MINOR: nonNegativeBigintString.default('100000000'),
     DISCORD_ADMIN_LINK_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     /* Per-operator command budget, enforced in Postgres so it survives a bot restart. */
     DISCORD_COMMAND_RATE_LIMIT: z.coerce.number().int().min(1).max(600).default(30),
@@ -1482,6 +1490,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordRewardMinAccountAgeDays: env.DISCORD_REWARD_MIN_ACCOUNT_AGE_DAYS,
     discordOperators,
     discordAlertChannelId: env.DISCORD_ALERT_CHANNEL_ID,
+    staffAlertChannelId: BigInt(env.STAFF_ALERT_CHANNEL_ID),
+    staffAlertRoleId: BigInt(env.STAFF_ALERT_ROLE_ID),
+    staffAlertBigWinMinor: BigInt(env.STAFF_ALERT_BIG_WIN_MINOR),
+    staffAlertDailyProfitMinor: BigInt(env.STAFF_ALERT_DAILY_PROFIT_MINOR),
     discordAdminLinkTtlSeconds: env.DISCORD_ADMIN_LINK_TTL_SECONDS,
     discordCommandRateLimit: env.DISCORD_COMMAND_RATE_LIMIT,
     discordCommandRateWindowSeconds: env.DISCORD_COMMAND_RATE_WINDOW_SECONDS,

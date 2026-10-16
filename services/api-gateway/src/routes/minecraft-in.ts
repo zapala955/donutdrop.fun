@@ -12,6 +12,7 @@ import {
 import { canonicalJson, safeEqualBuffer, sha256, sha256Hex } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { noticeSoon } from '../lib/notifications.js';
 import { queueVaultSweep, recordBotTransfer } from '../lib/bots.js';
 import { proxyForBot, type BotProxyColumns } from '../lib/bot-proxy.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
@@ -1588,14 +1589,16 @@ async function acceptConfirmedPayout(
       WHERE id = $1`,
     [job.id],
   );
-  await client.query(
+  const paid = await client.query<{ user_id: string }>(
     `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), error_code = NULL,
             updated_at = now()
       WHERE id = $1
         AND (status IN ('queued', 'processing')
-             OR (status = 'manual_review' AND error_code IN ('LEASE_EXPIRED', 'INVALID_JOB_LEASE')))`,
+             OR (status = 'manual_review' AND error_code IN ('LEASE_EXPIRED', 'INVALID_JOB_LEASE')))
+      RETURNING user_id`,
     [job.reference_id],
   );
+  for (const row of paid.rows) noticeSoon(row.user_id);
   await bookPayoutLeg(client, job.id, botId, job.reference_id);
 }
 
@@ -1762,12 +1765,14 @@ async function processJobResult(
     );
     if (job.kind === 'withdrawal') await completeWithdrawal(client, job.reference_id);
     if (job.kind === 'cash_payout') {
-      await client.query(
+      const paid = await client.query<{ user_id: string }>(
         `UPDATE cash_withdrawals SET status = 'paid', paid_at = now(), error_code = NULL,
                 updated_at = now()
-          WHERE id = $1 AND status IN ('queued', 'processing')`,
+          WHERE id = $1 AND status IN ('queued', 'processing')
+          RETURNING user_id`,
         [job.reference_id],
       );
+      for (const row of paid.rows) noticeSoon(row.user_id);
       await bookPayoutLeg(client, job.id, event.botId, job.reference_id);
     }
     /* A bot-to-bot leg. Both sides are booked here rather than on the receiving bot's own

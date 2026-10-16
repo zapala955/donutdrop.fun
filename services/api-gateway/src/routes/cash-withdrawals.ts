@@ -14,6 +14,8 @@ import { findVaultBot, pickBot } from '../lib/bots.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
+import { publishLiveSoon } from '../lib/live-events.js';
+import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import {
   assertWagerRequirementMet,
@@ -136,6 +138,9 @@ export async function refundWithdrawal(
      VALUES ($1, $2, $3, $4, 'cash_withdrawal_refund', $5)`,
     [randomUUID(), row.user_id, row.amount_minor, balanceAfter, withdrawalId],
   );
+  // The money is back: the balance pill and the bell, as creditWallet would tell them.
+  publishLiveSoon('balance', [row.user_id]);
+  noticeSoon(row.user_id);
 }
 
 /**

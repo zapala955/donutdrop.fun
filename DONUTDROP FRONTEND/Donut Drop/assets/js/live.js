@@ -56,6 +56,9 @@ export function initLiveEvents() {
   source.addEventListener('coinflip', () =>
     window.dispatchEvent(new CustomEvent('donut:coinflip')),
   );
+  // Per player: a deposit, a paid or refunded withdrawal, a tip or a reward landed. The bell
+  // (notices.js) re-reads itself and app.js checks for a deposit to announce.
+  source.addEventListener('notice', () => window.dispatchEvent(new CustomEvent('donut:notice')));
   source.addEventListener('settings', () => {
     once('chat', () => refreshChat());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
@@ -74,5 +77,7 @@ export function initLiveEvents() {
     window.dispatchEvent(new CustomEvent('donut:coinflip'));
     window.dispatchEvent(new CustomEvent('donut:minesduel'));
     window.dispatchEvent(new CustomEvent('donut:rain'));
+    // Notices sent while the tab was hidden were dropped by their listeners; look once now.
+    window.dispatchEvent(new CustomEvent('donut:notice'));
   });
 }

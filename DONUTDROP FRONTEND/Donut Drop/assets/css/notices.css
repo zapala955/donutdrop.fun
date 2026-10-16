@@ -1,0 +1,262 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V4
+ * Hallmark · component: notification bell + panel · genre: atmospheric (the site's obsidian + gold) · theme: luxe tokens
+ * states: the bell -- default, hover, :focus-visible, :active, expanded (open), with an unread
+ *         badge; the panel -- loading (skeleton rows), error (with Try again), empty (with
+ *         Deposit), the list (unread rows marked), ready-to-collect rows (default, hover,
+ *         :focus-visible, :active), the foot link; phones -- the panel spans the bar.
+ * signature: the badge is the site's gold coin on the bell, and money waiting to be collected sits
+ *            above the list in gold, the one place in the panel that asks for a click.
+ * motion: none but the skeleton's pulse, and none of that under reduced motion.
+ */
+
+body.lx .notif {
+  /* The panel's own values, lifted so no rule below writes one inline. */
+  --notif-w: 360px;
+  --notif-ico: 32px;
+  --notif-panel-shadow: 0 0 0 1px var(--lx-4), 0 18px 40px -8px rgba(0, 0, 0, .85);
+  --notif-badge-ring: var(--lx-1);
+
+  position: relative;
+}
+body:not([data-auth="in"]) .lxtop .notif { display: none; }
+
+/* ─────────── the bell ─────────── */
+body.lx .notif__btn { position: relative; }
+body.lx .notif__btn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .notif__badge {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  box-shadow: 0 0 0 2px var(--notif-badge-ring);
+  font: 800 .6875rem/18px var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+body.lx .notif__badge[hidden] { display: none; }
+
+/* ─────────── the panel ─────────── */
+body.lx .notif__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  width: var(--notif-w);
+  max-height: min(560px, calc(100dvh - var(--lx-top) - 24px));
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: var(--notif-panel-shadow);
+  overflow: hidden;
+}
+body.lx .notif__panel[hidden] { display: none; }
+/* Focus is moved onto the panel when it opens, so a screen reader announces it; the panel is a
+   container, not a control, and the next Tab lands on a link that shows its own ring. */
+body.lx .notif__panel:is(:focus, :focus-visible) { outline: none; }
+
+body.lx .notif__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--lx-s3);
+  padding: var(--lx-s3) var(--lx-s4);
+  box-shadow: inset 0 -1px 0 var(--lx-3);
+}
+body.lx .notif__title {
+  margin: 0;
+  color: var(--lx-ink);
+  font: 700 .9375rem/1.3 var(--lx-ui);
+  letter-spacing: 0;
+  text-transform: none;
+}
+body.lx .notif__meta { color: var(--lx-gold); font: 700 .8125rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
+
+body.lx .notif__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--lx-s2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--lx-4) transparent;
+}
+
+body.lx .notif__label {
+  margin: var(--lx-s1) var(--lx-s2) var(--lx-s2);
+  color: var(--lx-faint);
+  font: 700 .6875rem/1.2 var(--lx-ui);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+body.lx .notif__group { margin-bottom: var(--lx-s2); padding-bottom: var(--lx-s2); box-shadow: inset 0 -1px 0 var(--lx-3); }
+
+body.lx .notif__list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+
+/* One row: what it was, then what it did to the balance and when. */
+body.lx :is(.notif__item, .notif__ready) {
+  display: grid;
+  grid-template-columns: var(--notif-ico) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--lx-s3);
+  min-height: 56px;
+  padding: var(--lx-s2);
+  border-radius: var(--lx-r-s);
+}
+body.lx .notif__ico {
+  display: grid;
+  place-items: center;
+  width: var(--notif-ico);
+  height: var(--notif-ico);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-3);
+  color: var(--lx-mute);
+}
+body.lx .notif__ico svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+body.lx .notif__ico--gold { background: var(--lx-gold-wash); color: var(--lx-gold); }
+
+body.lx .notif__text { display: grid; gap: 2px; min-width: 0; }
+body.lx .notif__name { color: var(--lx-ink); font: 600 .875rem/1.3 var(--lx-ui); }
+body.lx .notif__detail {
+  margin: 0;
+  overflow: hidden;
+  color: var(--lx-mute);
+  font: 500 .8125rem/1.35 var(--lx-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.lx .notif__side { display: grid; justify-items: end; gap: 2px; }
+body.lx .notif__amt { color: var(--lx-gold-hi); font: 700 .875rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.lx .notif__amt[data-tone="out"] { color: var(--lx-ink); }
+body.lx .notif__amt[data-tone="loss"] { color: var(--lx-loss); }
+body.lx .notif__time { color: var(--lx-faint); font: 500 .75rem/1.3 var(--lx-ui); white-space: nowrap; }
+
+/* New since the panel was last opened: a gold dot by the time, and the row lit a shade. */
+body.lx .notif__item[data-unread="1"] { background: var(--lx-3); }
+body.lx .notif__item[data-unread="1"] .notif__time::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--lx-gold);
+  vertical-align: 1px;
+}
+
+/* Money waiting: the whole row is the link, the gold chip says what it does. */
+body.lx .notif__ready {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+body.lx .notif__ready + .notif__ready { margin-top: 2px; }
+body.lx .notif__ready:hover { background: var(--lx-3); }
+body.lx .notif__ready:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+body.lx .notif__ready:active { background: var(--lx-4); }
+body.lx .notif__claim {
+  padding: 4px 10px;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .75rem/1.2 var(--lx-ui);
+  white-space: nowrap;
+}
+body.lx .notif__ready:hover .notif__claim { background: var(--lx-gold-hi); }
+
+/* Loading: three rows the shape of the real ones. */
+body.lx .notif__item--skel { grid-template-columns: var(--notif-ico) minmax(0, 1fr); grid-template-rows: auto auto; row-gap: 6px; }
+body.lx .notif__item--skel .notif__ico { grid-row: span 2; animation: notif-pulse 1.2s var(--lx-ease-io) infinite alternate; }
+body.lx .notif__bar {
+  height: 10px;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-3);
+  animation: notif-pulse 1.2s var(--lx-ease-io) infinite alternate;
+}
+body.lx .notif__bar--short { width: 55%; }
+@keyframes notif-pulse { from { opacity: 1; } to { opacity: .45; } }
+
+/* Empty, and failed. */
+body.lx .notif__empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--lx-s2);
+  padding: var(--lx-s6) var(--lx-s4);
+  text-align: center;
+}
+body.lx .notif__empty .notif__detail { max-width: 30ch; white-space: normal; }
+body.lx .notif__ico--big { width: 44px; height: 44px; margin-bottom: var(--lx-s1); background: var(--lx-3); color: var(--lx-faint); }
+body.lx .notif__ico--big svg { width: 22px; height: 22px; }
+body.lx .notif__cta {
+  min-width: 120px;
+  height: 40px;
+  margin-top: var(--lx-s2);
+  padding: 0 var(--lx-s5);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 700 .875rem/1 var(--lx-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+body.lx .notif__cta:hover { background: var(--lx-gold-hi); }
+body.lx .notif__cta:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx .notif__cta:active { transform: translateY(1px); }
+body.lx .notif__cta--ghost { background: var(--lx-4); color: var(--lx-ink); }
+body.lx .notif__cta--ghost:hover { background: var(--lx-5); }
+body.lx .notif__body[aria-busy="true"] .notif__cta--ghost { cursor: progress; opacity: .7; }
+
+body.lx .notif__quiet { margin: var(--lx-s3) var(--lx-s2); color: var(--lx-faint); font: 500 .8125rem/1.35 var(--lx-ui); text-align: center; }
+
+body.lx .notif__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  color: var(--lx-mute);
+  font: 700 .8125rem/1 var(--lx-ui);
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 var(--lx-3);
+  transition: color var(--lx-quick) var(--lx-ease), background var(--lx-quick) var(--lx-ease);
+}
+body.lx .notif__foot:hover { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .notif__foot:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+body.lx .notif__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── phones ───────────
+ * The panel spans the bar, eight pixels in from each edge, and stops above the tab bar. It is
+ * placed against the bar itself (.lxtop is the positioned box), not the 44px bell. */
+@media (max-width: 560px) {
+  body.lx .notif { position: static; }
+  body.lx .notif__panel {
+    top: calc(100% + 6px);
+    right: var(--lx-s2);
+    left: var(--lx-s2);
+    width: auto;
+    max-height: calc(100dvh - var(--lx-top) - 64px - 24px - env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.lx :is(.notif__bar, .notif__item--skel .notif__ico) { animation: none; }
+  body.lx :is(.notif__ready, .notif__cta, .notif__foot) { transition: none; }
+}

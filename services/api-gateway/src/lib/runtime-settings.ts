@@ -19,6 +19,7 @@ type SettingGroup =
   | 'chicken'
   | 'plinko'
   | 'discord'
+  | 'alerts'
   | 'duels'
   | 'coinflip'
   | 'minesduel'
@@ -495,6 +496,38 @@ export const runtimeSettingDefinitions = {
     label: 'Minimum Discord account age for the join reward (days)',
     min: 0n,
     max: 3650n,
+  },
+
+  /* ── staff alerts ── Read by the control bot's alert poll each minute (lib/staff-alerts.ts). The
+   * two ids are Discord snowflakes, typed as plain digits; they are stored as bigints because that
+   * is the one kind here wide enough to hold one. */
+  staffAlertChannelId: {
+    kind: 'bigint',
+    group: 'alerts',
+    label: 'Staff alert channel (Discord channel id, 0 = the bot\'s own setting)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  staffAlertRoleId: {
+    kind: 'bigint',
+    group: 'alerts',
+    label: 'Role pinged by a money alert (Discord role id, 0 = no ping)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  staffAlertBigWinMinor: {
+    kind: 'bigint',
+    group: 'alerts',
+    label: 'Alert on one round won with at least this much profit (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  staffAlertDailyProfitMinor: {
+    kind: 'bigint',
+    group: 'alerts',
+    label: 'Alert when a player is this far up over 24 hours (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
   },
 
   /* ── 1v1 skill duels ── */

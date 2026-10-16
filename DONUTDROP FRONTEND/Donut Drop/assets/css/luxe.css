@@ -863,6 +863,18 @@ body.lx .chat__dock { display: none; }
   .lxwallet { margin-left: 0; }
 }
 
+/* The narrowest phones (320-399px) carry the balance, Deposit, Withdraw, the bell and the account
+   button in one row. Each a few pixels tighter, and the decorative coin goes, so a balance in the
+   billions never pushes the account button off the edge. */
+@media (max-width: 399px) {
+  .lxtop__in { gap: 6px; padding: 0 10px; }
+  .lxtop__end { gap: 0; }
+  body.lx .lxbal { padding: 0 8px; gap: 0; }
+  body.lx .lxbal .cashpill__coin { display: none; }
+  body.lx :is(#depositBtn, #withdrawBtn) { padding: 0 8px; font-size: .75rem; }
+  body.lx .lxtop :is(.notif__btn, .acct__btn) { width: 38px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lxside, .lxapp, body.lx .chat, .lxside .lxnav, .lxmode, body.lx .lxbtn, body.lx .lxicon { transition: none; }
   body.lx .view { animation: none; }

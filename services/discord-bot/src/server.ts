@@ -197,7 +197,9 @@ client.on('interactionCreate', (interaction: Interaction) => {
 
 client.once('clientReady', () => {
   log.info({ user: client.user?.tag, guild: config.DISCORD_GUILD_ID }, 'discord bot ready');
-  if (config.alertsEnabled) startAlertFeed(client, config, api, log);
+  /* Always on: the channel can come from the admin panel (the staff alert settings) as well as
+   * from DISCORD_ALERT_CHANNEL_ID, and with neither the feed polls and posts nothing. */
+  startAlertFeed(client, config, api, log);
 });
 
 client.on('error', (error: Error) => log.error({ err: error.message }, 'discord client error'));

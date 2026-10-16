@@ -18,6 +18,7 @@ import {
 } from '../lib/discord-control.js';
 import { parseWith } from '../lib/validation.js';
 import { safeText } from '../lib/sanitize.js';
+import { moneyAlerts } from '../lib/staff-alerts.js';
 
 /**
  * discord-control.ts — the routes the Discord bot is allowed to call, and the one route a browser
@@ -498,11 +499,33 @@ export async function registerDiscordControlRoutes(
            (SELECT count(*) FROM bot_jobs WHERE status = 'dead_letter')::text
              AS jobs_dead_letter,
            (SELECT count(*) FROM withdrawals WHERE status = 'manual_review')::text
-             AS withdrawals_manual_review`,
+             AS withdrawals_manual_review,
+           (SELECT count(*) FROM cash_withdrawals
+             WHERE status IN ('pending_approval', 'manual_review'))::text
+             AS cash_withdrawals_waiting`,
         [[...config.botCredentials.keys()]],
       );
       return result.rows[0] ?? {};
     },
+  );
+
+  /**
+   * The money alerts: a round won for a lot, a player a long way up on the day, a hold anti-drain
+   * has just placed (lib/staff-alerts.ts), and where the admin panel says to post them.
+   *
+   * Unlike the counters above this does name players, and it is still signature-gated rather than
+   * operator-gated, for the same reason: it is the bot's own timer asking, not a person. What it
+   * hands back goes to one place, the staff channel, and it is less than the site already shows:
+   * the wins board prints every one of these wins, and the flex feed posts them to Discord by
+   * name. No balance, no account id beyond the player's own, nothing that could move money.
+   */
+  app.post(
+    '/internal/v1/discord/alerts/money',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      preHandler: async (request: FastifyRequest) => verifyDiscordControlSignature(request, config),
+    },
+    async () => moneyAlerts(db, config),
   );
 
   // ── redemption ────────────────────────────────────────────────────────────

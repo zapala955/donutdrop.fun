@@ -62,6 +62,7 @@ import { initNudge } from './nudge.js';
 import { initPopups } from './popups.js';
 import { initDailyCode } from './daily-code.js';
 import { initTestMode } from './testmode.js';
+import { initNotices } from './notices.js';
 import {
   appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1434,6 +1435,7 @@ initNudge({ openLogin: openLoginModal });
 initPopups({ openLogin: openLoginModal });
 initDailyCode({ openLogin: openLoginModal });
 initTestMode();
+initNotices();
 bootstrap().catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;
@@ -1442,21 +1444,55 @@ setInterval(() => {
   Promise.allSettled(refreshes).catch(() => undefined);
 }, 60_000);
 
-/* Deposits land while the player is staring at the page waiting for them, so they get their own
- * beat rather than sharing the slow one above. Six seconds is the same cadence the chat rail
- * already polls at, and the two together stay well inside the gateway's 120-a-minute budget. */
+/* Deposits land while the player is staring at the page waiting for them. The live stream says so
+ * the moment one is credited -- a 'notice' (live.js) -- and the check runs at once, and once more
+ * a moment later in case the notice beat the database. The poll is the net under that: every six
+ * seconds while the stream is down, every thirty while it is up, in case a notice went missing. */
 const DEPOSIT_POLL_MS = 6000;
+const DEPOSIT_POLL_LIVE_MS = 30_000;
+const DEPOSIT_NOTICE_RETRY_MS = 1500;
+/* The stream counts as up while it has spoken this recently; it beats every 2.5 seconds. */
+const LIVE_FRESH_MS = 10_000;
 /* A backlog is announced, not dumped: if a run of deposits landed while the tab was hidden, the
  * first few are named and the rest are counted. Twenty toasts is not twenty times the information. */
 const MAX_DEPOSIT_TOASTS = 3;
 
-setInterval(async () => {
+let liveAt = 0;
+let lastDepositCheck = 0;
+let depositCheck = null;
+let depositCheckAgain = false;
+let depositRetry = 0;
+window.addEventListener('donut:live-status', (event) => {
+  liveAt = event.detail?.connected ? Date.now() : 0;
+});
+
+/* One check at a time. Two at once would both read the same new row before either moved the
+ * watermark, and the deposit would be announced twice; a check asked for mid-flight runs after. */
+async function checkDeposits() {
   if (document.hidden || !state.authenticated) return;
+  if (depositCheck) {
+    depositCheckAgain = true;
+    return;
+  }
+  lastDepositCheck = Date.now();
+  depositCheck = announceDeposits();
+  try {
+    await depositCheck;
+  } finally {
+    depositCheck = null;
+    if (depositCheckAgain) {
+      depositCheckAgain = false;
+      void checkDeposits();
+    }
+  }
+}
+
+async function announceDeposits() {
   let credited;
   try {
     credited = await pollDeposits();
   } catch (error) {
-    /* A missed tick costs six seconds and the watermark is untouched, so the next one recovers.
+    /* A missed check costs one tick and the watermark is untouched, so the next one recovers.
      * It is still logged: a poll that fails every time looks exactly like a poll that is not
      * running at all, and silence here cost a debugging round trip once already. */
     console.warn('[donutdrop] deposit poll failed', error?.code || error);
@@ -1476,7 +1512,20 @@ setInterval(async () => {
     toast({ kind: 'win', title: 'More deposits credited', body: `and ${hidden} more` });
   }
   playSound('coin');
+}
+
+setInterval(() => {
+  const live = Date.now() - liveAt < LIVE_FRESH_MS;
+  // Half a second of slack, so the thirty-second beat lands on the fifth tick, not the sixth.
+  if (Date.now() - lastDepositCheck >= (live ? DEPOSIT_POLL_LIVE_MS : DEPOSIT_POLL_MS) - 500) {
+    void checkDeposits();
+  }
 }, DEPOSIT_POLL_MS);
+window.addEventListener('donut:notice', () => {
+  void checkDeposits();
+  clearTimeout(depositRetry);
+  depositRetry = setTimeout(() => void checkDeposits(), DEPOSIT_NOTICE_RETRY_MS);
+});
 
 /* the animation test bench — hidden until Ctrl+Alt+D or ?dev=1 */
 initDevMenu(document.getElementById('devRoot'));

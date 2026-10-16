@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DbClient } from './db.js';
 import { publishLiveSoon } from './live-events.js';
+import { isNoticeKind, noticeSoon } from './notifications.js';
 
 /**
  * The cash ledger, on its own.
@@ -141,5 +142,6 @@ export async function creditWallet(
   // browser cannot race the COMMIT and read the old balance; a harmless refresh is the worst case
   // if the surrounding transaction subsequently rolls back.
   publishLiveSoon('balance', [userId]);
+  if (isNoticeKind(kind)) noticeSoon(userId);
   return balanceAfter;
 }

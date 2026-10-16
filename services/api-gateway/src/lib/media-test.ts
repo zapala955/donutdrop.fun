@@ -69,6 +69,8 @@ export const TEST_MODE_ROUTES: ReadonlySet<string> = new Set([
   'POST /v1/crash/cashout',
   'POST /v1/roulette/bets',
   'POST /v1/inventory/:id/sell',
+  // How far the real account has read its notifications; moves no money (routes/notifications.ts).
+  'POST /v1/notifications/read',
 ]);
 
 export function testModeAllows(method: string, routeUrl: string | undefined): boolean {

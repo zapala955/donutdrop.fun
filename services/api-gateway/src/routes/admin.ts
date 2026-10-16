@@ -13,6 +13,8 @@ import { createAuthGuards } from '../lib/auth.js';
 import { canonicalJson, safeEqualText, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
+import { publishLiveSoon } from '../lib/live-events.js';
+import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { recordBotTransfer } from '../lib/bots.js';
 import {
@@ -865,6 +867,9 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           balanceAfterMinor: balanceAfter,
         },
       });
+      // The player's pill and bell: a staff adjustment is news to the account it lands on.
+      publishLiveSoon('balance', [params.id]);
+      noticeSoon(params.id);
       return { balanceMinor: balanceAfter, adjustmentId };
     });
   });
