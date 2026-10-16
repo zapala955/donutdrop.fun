@@ -711,10 +711,6 @@ async function openDepositModal() {
     <div class="auth__field auth__field--static">
       <span class="auth__value auth__value--lg mono">${escapeText(info.command)}</span>
     </div>
-    <p class="auth__note">Round amounts only &mdash; 1M, 250M, 1B. DonutSMP shortens large figures
-      in chat, so a payment of 1,234,567,890 arrives as &ldquo;1.2B&rdquo; and is credited as
-      1,200,000,000. The bot can only credit what the receipt shows.</p>
-    ${depositWagerNote()}
     <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
 
   $('#depositCopy', host).addEventListener('click', async (event) => {
@@ -742,15 +738,6 @@ async function openDepositModal() {
 /** "once", "2×": how a wager multiplier reads in a sentence. */
 function timesWord(multiplier) {
   return multiplier === 1 ? 'once' : `${multiplier}×`;
-}
-
-/* Said on the deposit screen rather than discovered at the withdraw button. Empty when the rule is
- * switched off in the admin panel, or before the promotions have loaded. */
-function depositWagerNote() {
-  const multiple = Number(state.promotions?.depositWagerMultiplier ?? 0);
-  if (!(multiple > 0)) return '';
-  return `<p class="auth__note">Deposits are wagered ${timesWord(multiple)} before they can be
-      withdrawn. Every bet you place counts.</p>`;
 }
 
 /**
