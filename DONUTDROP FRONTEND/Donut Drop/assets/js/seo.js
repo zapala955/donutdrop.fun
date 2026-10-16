@@ -6,10 +6,12 @@
  * result.
  *
  * Every route has an entry, and every title leads with the name: "DonutLuxe Crash", "DonutLuxe
- * Referrals". Another DonutSMP site uses the same name on a .com, so the name has to be on every
- * page before the page's subject, or a search for it finds theirs first. The home title says
- * DonutLuxe.com so the two are told apart in a results list. A test holds this, the sitemap and the
- * router's route list together.
+ * Referrals", so a search result says whose page it is before what the page is. The home title is
+ * the brand and what it is -- "DonutLuxe – DonutSMP Casino" -- then the games, short enough that
+ * Google shows it whole. (It said "DonutLuxe.com" from the days the site was DonutWin, a name another
+ * DonutSMP site uses on a .com; DonutLuxe is the site's own, and the structured data in index.html
+ * no longer lists DonutWin as another name for it.) A test holds this, the sitemap and the router's
+ * route list together.
  *
  * Account pages (PRIVATE_ROUTES) still get a title for the tab, but say noindex: they render
  * nothing but a sign-in prompt to a crawler, and a search result that lands there is a dead end.
@@ -25,10 +27,10 @@ export const SITE_ORIGIN = 'https://donutluxe.com';
 /** Every route, public ones in the order sitemap.xml lists them. `home` is served at `/`. */
 export const ROUTE_META = {
   home: {
-    title: 'DonutLuxe.com — DonutSMP Crash, Mines, Coinflip & Cases',
+    title: 'DonutLuxe – DonutSMP Casino | Crash, Mines, Tower & More',
     description:
-      'Play crash, mines, plinko, coinflip, blackjack, roulette, cases, case battles and the ' +
-      'upgrader with DonutSMP money. Deposit and withdraw in game.',
+      'DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, ' +
+      'roulette, coinflip and case battles. Deposit and withdraw in game.',
   },
   crates: {
     title: 'DonutLuxe Cases — Open DonutSMP Cases',
