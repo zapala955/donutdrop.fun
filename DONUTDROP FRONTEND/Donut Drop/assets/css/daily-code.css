@@ -37,6 +37,10 @@
   text-align: center; text-transform: uppercase;
 }
 .dcode__input::placeholder { color: var(--faint); opacity: .7; }
+/* The wrapper carries the ring (:focus-within above). Without this the skin's own focus ring
+   (luxe.css, `:where(body.lx) :focus-visible`, which loads later at the same weight) drew a second
+   gold box inside the first, 2px off the input. */
+.dcode__input:focus-visible { outline: none; }
 
 .dcode__hint {
   margin: 0;
