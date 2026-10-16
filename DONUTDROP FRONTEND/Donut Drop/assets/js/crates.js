@@ -374,7 +374,6 @@ function paintWall() {
     card.addEventListener('click', () => {
       selected = crate;
       paintAll();
-      playSound('click');
     });
     wall.appendChild(card);
   }
@@ -455,7 +454,6 @@ function paintRail() {
     button.addEventListener('click', () => {
       view.quantity = Number(button.dataset.n);
       paintRail();
-      playSound('click');
     });
   });
 

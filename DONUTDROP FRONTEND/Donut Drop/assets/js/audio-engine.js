@@ -1,28 +1,90 @@
-/* audio-engine.js — synthesized interface sound.
+/* audio-engine.js — the site's game sounds.
  *
- * Every cue is generated from oscillators and noise at call time. No sample files: a dozen short
- * clips is a dozen network requests and a megabyte of payload for sounds that are, in the end,
- * a few sine waves and an envelope.
+ * Real recordings, not oscillators: chips, cards, coins, impacts and three short jingles from
+ * Kenney's CC0 packs (assets/sound/casino, SOURCES.txt). The cues used to be synthesized from
+ * square, sawtooth and triangle waves, and they sounded like it -- a beep standing in for a chip.
  *
- * THREE RULES THIS FILE KEEPS
- * --------------------------
- * 1. The context is created lazily, on the first real gesture. Browsers suspend an AudioContext
- *    built before a user interaction, and a suspended context that nobody resumes is silence
- *    nobody can debug.
- * 2. Nothing plays when the page is muted or the user asked for reduced motion — the same people
- *    who do not want the screen lurching usually do not want it chiming either.
- * 3. Every voice disconnects when it finishes. Leaked oscillator nodes are the classic way a
- *    tab's audio graph grows until the whole page stutters.
+ * THE RULES THIS FILE KEEPS
+ * -------------------------
+ * 1. The context is created on the first real gesture, and the samples (about 250 KB) are fetched
+ *    then too. Browsers suspend an AudioContext built before a user interaction, and a suspended
+ *    context nobody resumes is silence nobody can debug.
+ * 2. Nothing plays when the page is muted or the user asked for reduced motion -- the people who do
+ *    not want the screen lurching usually do not want it chiming either.
+ * 3. Ordinary buttons and hovering make no sound. Sound is for the game: a bet going down, a safe
+ *    step, a card, a win, a loss, a payout landing. A site that clicks at every press is noise.
+ * 4. Every voice disconnects when it finishes, and only so many play at once: leaked nodes are the
+ *    classic way a tab's audio graph grows until the page stutters.
+ * 5. A cue never repeats itself exactly. Each picks another take than last time and drifts a few
+ *    percent in pitch and level, because the same sample twice in a row is what makes a game sound
+ *    cheap by the tenth click.
  */
 
-/* The older sample player in audio.js still drives the reveal, reel and cutscene. Both engines
- * have to answer to one mute control, or muting the site silences half of it and the player has
- * no idea which half. This module owns the control and forwards every change. */
+/* The older sample player in audio.js still drives the crate reveal, reel and cutscene. Both engines
+ * answer to one mute control, or muting the site silences half of it and the player has no idea
+ * which half. This module owns the control and forwards every change. */
 import { setMuted as setLegacyMuted } from './audio.js';
+
+const SAMPLE_BASE = new URL('../sound/casino/', import.meta.url);
+const MASTER_GAIN = 0.55;
+const MAX_VOICES = 24;
+/* A cue asked for before the samples finish loading plays if they arrive this soon, and is dropped
+ * otherwise: a sound landing a second after the thing it belonged to is worse than none. */
+const LATE_MS = 250;
+
+/**
+ * What each cue is made of. A cue is one or more layers played together; a layer picks one take
+ * from `takes` at random (never the same one twice running), at `gain`, after `delay` seconds,
+ * repitched by `rate` and drifted by `jitter`.
+ */
+const CUES = {
+  /** A bet going down: a chip set on the felt. Starting a round, dropping a ball, opening a crate. */
+  click: [{ takes: ['chip-lay-1', 'chip-lay-2', 'chip-lay-3'], gain: 0.9 }],
+  /** A safe step: a mines diamond, a tower floor, a chicken lane. Climbs with stepRate(). */
+  tick: [{ takes: ['gem-1', 'gem-2', 'gem-3'], gain: 0.42 }],
+  /** A card dealt. */
+  card: [{ takes: ['card-1', 'card-2', 'card-3'], gain: 0.8, jitter: 0.04 }],
+  /** A plinko peg, a crate reel passing an item. Fires often, so it is tiny. */
+  reeltick: [{ takes: ['tick-1', 'tick-2'], gain: 0.22, jitter: 0.08 }],
+  /** A win: chips pushed across, and a small bright ding over them. */
+  win: [
+    { takes: ['chips-collide-1', 'chips-collide-2', 'chips-collide-3', 'chips-collide-4'], gain: 0.9 },
+    { takes: ['confirm-1'], gain: 0.3, delay: 0.05, jitter: 0 },
+  ],
+  /** Money landing: a payout, a deposit, a claim. */
+  coin: [{ takes: ['chips-stack-1', 'chips-stack-2', 'chips-handle-1'], gain: 0.85 }],
+  /** A big win: chips, and a rising phrase of plucked strings. */
+  reward: [
+    { takes: ['chips-collide-1', 'chips-collide-3', 'chips-collide-4'], gain: 0.9 },
+    { takes: ['jingle-win'], gain: 0.55, delay: 0.04, jitter: 0 },
+  ],
+  /** The biggest hits only, or it stops meaning anything: chips and a climbing steel-drum run. */
+  jackpot: [
+    { takes: ['chips-stack-1', 'chips-stack-2'], gain: 0.9 },
+    { takes: ['jingle-jackpot'], gain: 0.7, delay: 0.05, jitter: 0 },
+  ],
+  /** A loss: one soft, low thud. Said, not rubbed in. */
+  lose: [{ takes: ['thud-1', 'thud-2', 'thud-3'], gain: 0.32, rate: 0.85 }],
+  /** The mine, the minecart, the bust that ends a run: a heavy hit with metal in it. */
+  slam: [
+    { takes: ['hit-1', 'hit-2'], gain: 0.75 },
+    { takes: ['crash-1', 'crash-2'], gain: 0.4 },
+  ],
+  /** The upgrader's strike, a duel's round, joining a faction. */
+  anvil: [{ takes: ['anvil-1', 'anvil-2', 'anvil-3'], gain: 0.6 }],
+  /** Something good that is not money: a level, a rain claim, a draw. */
+  chime: [{ takes: ['confirm-2'], gain: 0.55, jitter: 0.02 }],
+  /** A VIP level reached. */
+  portal: [{ takes: ['jingle-level'], gain: 0.6, jitter: 0 }],
+};
 
 let context = null;
 let master = null;
 let muted = readMutePreference();
+let voices = 0;
+let samples = null; // Map(take -> { buffer, offset }) once loaded
+let loading = null;
+const lastTake = new Map();
 
 const MUTE_KEY = 'donutdrop.muted';
 
@@ -54,12 +116,93 @@ function ensureContext() {
     const Ctor = window.AudioContext || window.webkitAudioContext;
     if (!Ctor) return null;
     context = new Ctor();
+    /* A limiter last in the chain: a win layered over a payout over a tick must never clip, and
+     * nothing here should ever be louder than the player's own volume setting expects. */
+    const limiter = context.createDynamicsCompressor();
+    limiter.threshold.value = -10;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.12;
     master = context.createGain();
-    master.gain.value = 0.22;
-    master.connect(context.destination);
+    master.gain.value = MASTER_GAIN;
+    master.connect(limiter);
+    limiter.connect(context.destination);
   }
   if (context.state === 'suspended') void context.resume();
+  void loadSamples(context);
   return context;
+}
+
+/** Where the sound starts: the recordings carry a little silence before the hit, and a chip that
+ *  lands 60ms after the click reads as lag. */
+function onsetOf(buffer) {
+  const data = buffer.getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < data.length; i += 1) peak = Math.max(peak, Math.abs(data[i]));
+  const floor = peak * 0.03;
+  for (let i = 0; i < data.length; i += 1) {
+    if (Math.abs(data[i]) > floor) return Math.max(0, i / buffer.sampleRate - 0.004);
+  }
+  return 0;
+}
+
+/** Fetches and decodes every take once. A take that fails is left out; its cue uses the others. */
+function loadSamples(ctx) {
+  if (loading) return loading;
+  const takes = [...new Set(Object.values(CUES).flatMap((layers) => layers.flatMap((layer) => layer.takes)))];
+  loading = Promise.all(
+    takes.map(async (take) => {
+      try {
+        const response = await fetch(new URL(`${take}.ogg`, SAMPLE_BASE));
+        if (!response.ok) return null;
+        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        return [take, { buffer, offset: onsetOf(buffer) }];
+      } catch {
+        return null;
+      }
+    }),
+  ).then((entries) => {
+    samples = new Map(entries.filter(Boolean));
+    return samples;
+  });
+  return loading;
+}
+
+function pickTake(layerKey, takes) {
+  const ready = takes.filter((take) => samples?.has(take));
+  if (!ready.length) return null;
+  if (ready.length === 1) return ready[0];
+  const previous = lastTake.get(layerKey);
+  const choices = ready.filter((take) => take !== previous);
+  const take = choices[Math.floor(Math.random() * choices.length)];
+  lastTake.set(layerKey, take);
+  return take;
+}
+
+function voice(ctx, name, rate) {
+  CUES[name].forEach((layer, index) => {
+    if (voices >= MAX_VOICES) return;
+    const take = pickTake(`${name}:${index}`, layer.takes);
+    if (!take) return;
+    const { buffer, offset } = samples.get(take);
+    const jitter = layer.jitter ?? 0.03;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate * (layer.rate ?? 1) * (1 + (Math.random() * 2 - 1) * jitter);
+    const amp = ctx.createGain();
+    amp.gain.value = layer.gain * (1 - Math.random() * 0.08);
+    source.connect(amp);
+    amp.connect(master);
+    voices += 1;
+    // Release the nodes once the voice is done, or the graph grows for the life of the tab.
+    source.onended = () => {
+      voices -= 1;
+      source.disconnect();
+      amp.disconnect();
+    };
+    source.start(ctx.currentTime + (layer.delay ?? 0), offset);
+  });
 }
 
 export function isMuted() {
@@ -79,7 +222,7 @@ export function setMuted(value) {
     master.gain.cancelScheduledValues(context.currentTime);
     master.gain.setValueAtTime(0, context.currentTime);
   } else if (!muted && master && context) {
-    master.gain.setValueAtTime(0.22, context.currentTime);
+    master.gain.setValueAtTime(MASTER_GAIN, context.currentTime);
   }
   return muted;
 }
@@ -89,233 +232,40 @@ export function toggleMuted() {
 }
 
 /**
- * One tone with an exponential decay.
- *
- * Exponential rather than linear because a linear fade on a short note reads as a click at the
- * end — the amplitude hits zero while the waveform is still mid-cycle.
+ * How much higher the n-th safe step sounds than the first: a little each time, so a run climbs
+ * as it gets riskier, and capped so a long run never squeaks.
  */
-function tone(ctx, { freq, type = 'sine', start = 0, duration = 0.18, gain = 0.5, sweepTo = null }) {
-  const osc = ctx.createOscillator();
-  const amp = ctx.createGain();
-  const at = ctx.currentTime + start;
-
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, at);
-  if (sweepTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), at + duration);
-
-  amp.gain.setValueAtTime(0.0001, at);
-  amp.gain.exponentialRampToValueAtTime(gain, at + 0.008);
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-
-  osc.connect(amp);
-  amp.connect(master);
-  osc.start(at);
-  osc.stop(at + duration + 0.02);
-  // Release the nodes once the voice is done, or the graph grows for the life of the tab.
-  osc.onended = () => {
-    osc.disconnect();
-    amp.disconnect();
-  };
+export function stepRate(step) {
+  return 1 + Math.min(Math.max(Number(step) || 0, 0), 16) * 0.035;
 }
-
-/** Filtered white noise — the transient that makes a clang sound like metal rather than a beep. */
-function noise(ctx, { start = 0, duration = 0.12, gain = 0.25, frequency = 2200, q = 0.8 }) {
-  const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-  const channel = buffer.getChannelData(0);
-  for (let index = 0; index < frames; index += 1) {
-    // Decaying noise: full energy at the transient, gone by the end of the window.
-    channel[index] = (Math.random() * 2 - 1) * (1 - index / frames);
-  }
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = frequency;
-  filter.Q.value = q;
-
-  const amp = ctx.createGain();
-  const at = ctx.currentTime + start;
-  amp.gain.setValueAtTime(gain, at);
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-
-  source.connect(filter);
-  filter.connect(amp);
-  amp.connect(master);
-  source.start(at);
-  source.onended = () => {
-    source.disconnect();
-    filter.disconnect();
-    amp.disconnect();
-  };
-}
-
-/* The cue library. Each one is a tiny arrangement rather than a single beep, because a lone sine
- * reads as a system error and a two-voice cluster reads as an object. */
-const CUES = {
-  /** Soft tick for any ordinary press. Quiet on purpose: it fires constantly. */
-  click(ctx) {
-    tone(ctx, { freq: 660, type: 'triangle', duration: 0.05, gain: 0.16 });
-  },
-  /** Hovering a live control. Almost subliminal. */
-  hover(ctx) {
-    tone(ctx, { freq: 880, type: 'sine', duration: 0.035, gain: 0.05 });
-  },
-  /** Anvil: a broadband strike over two detuned partials. */
-  anvil(ctx) {
-    noise(ctx, { duration: 0.16, gain: 0.34, frequency: 3200, q: 0.6 });
-    tone(ctx, { freq: 320, type: 'square', duration: 0.2, gain: 0.22, sweepTo: 190 });
-    tone(ctx, { freq: 484, type: 'triangle', duration: 0.26, gain: 0.14, sweepTo: 300 });
-  },
-  /** Coins: four quick descending pings with a little randomness in the spacing. */
-  coin(ctx) {
-    [0, 0.045, 0.085, 0.13].forEach((offset, index) => {
-      tone(ctx, {
-        freq: 1180 - index * 90,
-        type: 'triangle',
-        start: offset,
-        duration: 0.13,
-        gain: 0.2 - index * 0.03,
-      });
-    });
-  },
-  /** Portal: a low sweep under a slow beat between two close partials. */
-  portal(ctx) {
-    tone(ctx, { freq: 90, type: 'sine', duration: 1.1, gain: 0.24, sweepTo: 210 });
-    tone(ctx, { freq: 136, type: 'sine', duration: 1.1, gain: 0.12, sweepTo: 272 });
-    tone(ctx, { freq: 139, type: 'sine', duration: 1.1, gain: 0.1, sweepTo: 276 });
-  },
-  /** Win: a major triad, arpeggiated upward. */
-  win(ctx) {
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.06, duration: 0.32, gain: 0.26 });
-    });
-    noise(ctx, { start: 0.02, duration: 0.3, gain: 0.1, frequency: 5200, q: 0.5 });
-  },
-  /** Loss: one falling minor third. Short, not punishing. */
-  lose(ctx) {
-    tone(ctx, { freq: 300, type: 'sawtooth', duration: 0.3, gain: 0.16, sweepTo: 150 });
-    tone(ctx, { freq: 252, type: 'sine', start: 0.05, duration: 0.3, gain: 0.1, sweepTo: 126 });
-  },
-  /** Reward claimed: coins with a bright cap on top. */
-  reward(ctx) {
-    CUES.coin(ctx);
-    tone(ctx, { freq: 1318.5, type: 'sine', start: 0.14, duration: 0.36, gain: 0.2 });
-  },
-  /** The upgrader wheel ticking past a graduation. Pitched by caller. */
-  tick(ctx) {
-    tone(ctx, { freq: 1400, type: 'square', duration: 0.02, gain: 0.07 });
-  },
-  /* ── the high-dopamine set ──
-   * Four cues the platform's loudest moments were missing. Each one is an arrangement rather than a
-   * beep, because a lone sine reads as a system error and a two-voice cluster reads as an object.
-   */
-  /** A heavy anvil hit with a sub-bass drop under it. The big-multiplier upgrader win. */
-  slam(ctx) {
-    noise(ctx, { duration: 0.09, gain: 0.34, frequency: 2600, q: 0.7 });
-    tone(ctx, { freq: 196, type: 'square', duration: 0.13, gain: 0.26, sweepTo: 88 });
-    // The drop: an octave below anything else on the site, and the reason this cue is felt.
-    tone(ctx, { freq: 58, type: 'sine', start: 0.04, duration: 0.9, gain: 0.42, sweepTo: 28 });
-    tone(ctx, { freq: 87, type: 'sine', start: 0.04, duration: 0.7, gain: 0.18, sweepTo: 42 });
-  },
-  /** One click of a crate reel. Pitched by the caller as the reel slows. */
-  reeltick(ctx) {
-    tone(ctx, { freq: 2100, type: 'square', duration: 0.014, gain: 0.05 });
-    noise(ctx, { duration: 0.02, gain: 0.05, frequency: 5200, q: 2.4 });
-  },
-  /** Coins breaking apart. A kill, or a big orb going in. */
-  shatter(ctx) {
-    noise(ctx, { duration: 0.22, gain: 0.16, frequency: 3400, q: 0.5 });
-    [1568, 2093, 2637].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.018, duration: 0.16, gain: 0.12 });
-    });
-    tone(ctx, { freq: 140, type: 'sine', duration: 0.24, gain: 0.16, sweepTo: 70 });
-  },
-  /** A bright portal chime. Level-up, and the lava rain claim. */
-  chime(ctx) {
-    [1318.5, 1760, 2637].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'sine', start: index * 0.05, duration: 0.55, gain: 0.2 });
-    });
-    tone(ctx, { freq: 659.25, type: 'triangle', duration: 0.6, gain: 0.12, sweepTo: 1318.5 });
-  },
-
-  /* ── the arena ──
-   * Three cues for a mode where the player is looking at the floor, not at the interface, and has
-   * to be told what happened without reading anything.
-   */
-  /** Boost: a short rising whoosh under a filtered hiss. Fires on press, never on hold. */
-  boost(ctx) {
-    tone(ctx, { freq: 150, type: 'sawtooth', duration: 0.18, gain: 0.12, sweepTo: 520 });
-    noise(ctx, { duration: 0.16, gain: 0.07, frequency: 1800, q: 0.6 });
-  },
-  /** Orb absorbed. Deliberately tiny: it fires several times a second at speed. */
-  absorb(ctx) {
-    tone(ctx, { freq: 880, type: 'sine', duration: 0.05, gain: 0.08, sweepTo: 1320 });
-  },
-  /** Something died nearby and the floor lit up. A low thud with a bright tail of coins. */
-  spill(ctx) {
-    tone(ctx, { freq: 80, type: 'sine', duration: 0.5, gain: 0.26, sweepTo: 40 });
-    noise(ctx, { start: 0.01, duration: 0.35, gain: 0.14, frequency: 900, q: 0.4 });
-    [1046.5, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: 0.09 + index * 0.06, duration: 0.24, gain: 0.14 });
-    });
-  },
-  /** Something enormous landed. Used sparingly or it stops meaning anything. */
-  jackpot(ctx) {
-    CUES.anvil(ctx);
-    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: 0.1 + index * 0.075, duration: 0.6, gain: 0.24 });
-    });
-    tone(ctx, { freq: 65, type: 'sine', start: 0.1, duration: 1.2, gain: 0.3 });
-  },
-};
 
 /**
- * Plays a cue.
- *
- * `rate` repitches the whole cue — the upgrader uses it to climb the wheel ticks as a spin slows,
- * so the same twenty-millisecond click carries tension without a second sound.
+ * Plays a cue. `rate` repitches the whole cue (a safe step climbs with stepRate()).
  *
  * Never throws. An interface that breaks because a sound failed is worse than a silent interface.
  */
 export function playSound(name, { rate = 1 } = {}) {
-  const cue = CUES[name];
-  if (!cue) return;
-  const ctx = ensureContext();
-  if (!ctx) return;
+  if (!CUES[name]) return;
   try {
-    if (rate === 1) {
-      cue(ctx);
+    const ctx = ensureContext();
+    if (!ctx) return;
+    if (samples) {
+      voice(ctx, name, rate);
       return;
     }
-    // Repitching is applied by temporarily wrapping tone() frequencies through the master detune;
-    // simplest correct approach is to call the cue with a scaled frequency table.
-    const original = context.createOscillator;
-    context.createOscillator = function createScaledOscillator() {
-      const osc = original.call(this);
-      const setValueAtTime = osc.frequency.setValueAtTime.bind(osc.frequency);
-      osc.frequency.setValueAtTime = (value, when) => setValueAtTime(value * rate, when);
-      const rampTo = osc.frequency.exponentialRampToValueAtTime.bind(osc.frequency);
-      osc.frequency.exponentialRampToValueAtTime = (value, when) => rampTo(value * rate, when);
-      return osc;
-    };
-    try {
-      cue(ctx);
-    } finally {
-      context.createOscillator = original;
-    }
+    const asked = performance.now();
+    void loadSamples(ctx).then(() => {
+      if (performance.now() - asked <= LATE_MS && !muted) voice(ctx, name, rate);
+    });
   } catch {
     /* A failed cue must never take an interaction down with it. */
   }
 }
 
 /**
- * Wires the global gesture sounds once.
- *
- * Delegated from the document so controls rendered later still make noise, and scoped to elements
- * that opted in with data-sfx plus the ordinary buttons, so scrolling a list of links is silent.
+ * Unlocks audio on the first gesture and starts loading the samples, so the first real cue -- often
+ * played after a server answer, outside any gesture -- has a running context and its sound ready.
+ * Plays nothing itself: ordinary presses and hovering are silent (rule 3).
  */
 export function initAudioEngine() {
   if (document.body.dataset.sfx === '1') return;
@@ -328,23 +278,11 @@ export function initAudioEngine() {
     /* optional */
   }
 
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      const target = event.target.closest('button, .btn, [data-sfx]');
-      if (!target || target.disabled) return;
-      playSound(target.dataset.sfx || 'click');
-    },
-    { passive: true },
-  );
-
-  document.addEventListener(
-    'pointerover',
-    (event) => {
-      const target = event.target.closest('.btn--go, .cratecard, .qty__b, .quick');
-      if (!target || target.disabled) return;
-      playSound('hover');
-    },
-    { passive: true },
-  );
+  const unlock = () => {
+    if (!ensureContext()) return;
+    document.removeEventListener('pointerdown', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+  };
+  document.addEventListener('pointerdown', unlock, { capture: true, passive: true });
+  document.addEventListener('keydown', unlock, { capture: true, passive: true });
 }

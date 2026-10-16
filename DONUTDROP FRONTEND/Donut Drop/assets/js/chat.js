@@ -165,7 +165,6 @@ function initDock() {
       /* A remembered preference is a convenience, never a correctness requirement. */
     }
     paint();
-    playSound('click');
   });
   rail.appendChild(toggle);
   paint();
@@ -574,7 +573,6 @@ async function onSubmit(event) {
   try {
     await sendChat(body);
     input.value = '';
-    playSound('click');
     startCooldown(Number(state.chat?.slowModeSeconds) || 0);
   } catch (error) {
     if (error?.code === 'CHAT_SLOW_MODE') {

@@ -14,7 +14,7 @@ import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
-import { playSound } from './audio-engine.js';
+import { playSound, stepRate } from './audio-engine.js';
 
 const LANES = 20;
 const EDGE_BPS = 1000n;
@@ -238,7 +238,7 @@ function follow(animate) {
 }
 
 function hop() {
-  playSound('tick');
+  playSound('tick', { rate: stepRate(game?.crossed) });
   if (reduceMotion()) return;
   $('#chickenHen img', root)?.animate(
     [{ transform: 'translateY(0)' }, { transform: 'translateY(-16px)', offset: 0.45 }, { transform: 'translateY(0)' }],

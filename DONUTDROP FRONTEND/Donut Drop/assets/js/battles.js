@@ -942,7 +942,6 @@ function paintPool(panel) {
     chip.addEventListener('click', () => {
       if (view.draft.caseIds.length >= max) return;
       view.draft.caseIds.push(crate.id);
-      playSound('click');
       paintPicks(panel);
     });
     pool.appendChild(chip);
@@ -1352,7 +1351,7 @@ function startAnimation() {
       lastRound = index;
       dress(tracks, byRound, battle, index);
       markRound(index);
-      if (!first) playSound('click');
+      if (!first) playSound('tick');
     }
 
     /* The lead-in holds every reel at the start of the strip, reduced motion included — parking
