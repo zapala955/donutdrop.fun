@@ -7,6 +7,7 @@ import { AppError } from '../lib/errors.js';
 import { maskedName } from '../lib/masked-name.js';
 import { notDemoPredicate } from '../lib/media-test.js';
 import { parseWith } from '../lib/validation.js';
+import { levelFor } from '../lib/vip.js';
 
 /**
  * Leaderboards and personal statistics.
@@ -61,6 +62,35 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
       })),
     };
   });
+
+  /**
+   * The card behind a chat avatar: what a player has played, never what they have won or lost.
+   *
+   * Public, like the chat it opens from, and like the leaderboard it echoes: lifetime wagered (the
+   * figure the VIP ladder runs on), the number of bets, the favourite game, the biggest win (profit
+   * on one round) and the best multiplier. Deliberately absent: profit and loss, the balance,
+   * deposits and withdrawals -- a card anyone can open must not say whether a player is up or down
+   * -- and the name, which the page already has in its masked form and which this route would
+   * otherwise hand out unmasked against a bare id.
+   *
+   * Cached per player for a minute: a busy chat clicks the same few heads over and over, and the
+   * biggest-win scan reads every round the player has played.
+   */
+  const cardCache = new Map<string, { at: number; body: PlayerCard }>();
+  app.get(
+    '/v1/players/:id/card',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      const { id } = parseWith(cardParams, request.params);
+      const cached = cardCache.get(id);
+      if (cached && Date.now() - cached.at < CARD_TTL_MS) return cached.body;
+      const body = await playerCard(db, config, id);
+      if (!body) throw new AppError(404, 'PLAYER_NOT_FOUND', 'That player was not found');
+      if (cardCache.size >= CARD_CACHE_MAX) cardCache.delete(cardCache.keys().next().value!);
+      cardCache.set(id, { at: Date.now(), body });
+      return body;
+    },
+  );
 
   /** One player's own numbers. Private: these are not public in the way a leaderboard rank is. */
   app.get('/v1/statistics', { preHandler: guards.authenticate }, async (request) => {
@@ -241,6 +271,134 @@ async function runBoard(
     [limit],
   );
   return result.rows;
+}
+
+const cardParams = z.object({ id: z.uuid() }).strict();
+const CARD_TTL_MS = 60_000;
+const CARD_CACHE_MAX = 1_000;
+
+/** wager_events.source as a player reads it. */
+const GAME_NAMES: Readonly<Record<string, string>> = {
+  upgrader: 'Upgrader',
+  case: 'Cases',
+  piggy_bank: 'Piggy Bank',
+  skill_duel: 'Duels',
+  slither_arena: 'Slither',
+  roulette: 'Roulette',
+  blackjack: 'Blackjack',
+  crash: 'Crash',
+  mines: 'Mines',
+  plinko: 'Plinko',
+  coinflip: 'Coinflip',
+  dice: 'Dice',
+  mines_duel: 'Mines Duel',
+  tower: 'Tower',
+  chicken: 'Chicken',
+};
+
+export interface PlayerCard {
+  playerId: string;
+  joinedAt: string;
+  staff: boolean;
+  vip: { level: number; tier: string; label: string; isHighRoller: boolean } | null;
+  wageredMinor: string;
+  bets: number;
+  favouriteGame: string | null;
+  biggestWin: { game: string; wagerMinor: string; payoutMinor: string; multiplier: number } | null;
+  bestMultiplier: number | null;
+}
+
+async function playerCard(db: Database, config: AppConfig, userId: string): Promise<PlayerCard | null> {
+  const user = await db.query<{ created_at: Date; role: string; wagered_minor: string | null }>(
+    `SELECT u.created_at, u.role, t.wagered_minor
+       FROM users u LEFT JOIN user_wager_totals t ON t.user_id = u.id
+      WHERE u.id = $1 AND ${notDemoPredicate('u')}`,
+    [userId],
+  );
+  const row = user.rows[0];
+  if (!row) return null;
+
+  const [bets, rounds] = await Promise.all([
+    db.query<{ bets: string; favourite: string | null }>(
+      `SELECT count(*)::text AS bets,
+              (SELECT source FROM wager_events WHERE user_id = $1
+                GROUP BY source ORDER BY count(*) DESC, max(created_at) DESC LIMIT 1) AS favourite
+         FROM wager_events WHERE user_id = $1`,
+      [userId],
+    ),
+    /* Every settled round the player has played, one row per round as the wins board counts them:
+     * a roulette spin is one row however many chips it carried, and a coinflip or a mines duel
+     * counts for its winner. Each branch reads the player's own rows through the table's
+     * per-player index. */
+    db.query<{ game: string | null; wager: string | null; payout: string | null; best: string | null }>(
+      `WITH rounds AS (
+         SELECT 'Cases'::text AS game, price_minor AS wager, payout_minor AS payout
+           FROM case_rounds WHERE user_id = $1
+         UNION ALL
+         SELECT 'Upgrader', stake_value_minor, payout_minor
+           FROM upgrader_rounds WHERE user_id = $1 AND outcome = 'win'
+         UNION ALL
+         SELECT 'Roulette', sum(stake_minor)::bigint, sum(COALESCE(payout_minor, 0))::bigint
+           FROM roulette_bets WHERE user_id = $1 GROUP BY round_id
+         UNION ALL
+         SELECT 'Blackjack', (stake_minor * CASE WHEN doubled THEN 2 ELSE 1 END)::bigint, payout_minor
+           FROM blackjack_hands WHERE user_id = $1 AND status = 'settled'
+         UNION ALL
+         SELECT 'Crash', stake_minor, payout_minor FROM crash_bets WHERE user_id = $1 AND status <> 'active'
+         UNION ALL
+         SELECT 'Mines', stake_minor, payout_minor FROM mines_games WHERE user_id = $1 AND status = 'settled'
+         UNION ALL
+         SELECT 'Tower', stake_minor, payout_minor FROM tower_games WHERE user_id = $1 AND status = 'settled'
+         UNION ALL
+         SELECT 'Chicken', stake_minor, payout_minor FROM chicken_games WHERE user_id = $1 AND status = 'settled'
+         UNION ALL
+         SELECT 'Plinko', stake_minor, payout_minor FROM plinko_bets WHERE user_id = $1
+         UNION ALL
+         SELECT 'Coinflip', stake_minor, payout_minor FROM coinflip_games
+          WHERE (host_user_id = $1 OR opponent_user_id = $1) AND winner_user_id = $1 AND status = 'settled'
+         UNION ALL
+         SELECT 'Mines Duel', stake_minor, payout_minor FROM mines_duel_games
+          WHERE (host_user_id = $1 OR opponent_user_id = $1) AND winner_user_id = $1
+            AND status = 'settled' AND outcome <> 'draw'
+         UNION ALL
+         SELECT 'Case Battles', staked_minor, payout_minor FROM battle_players WHERE user_id = $1
+       ),
+            wins AS (SELECT * FROM rounds WHERE payout > wager AND wager > 0)
+       SELECT top.game, top.wager::text AS wager, top.payout::text AS payout,
+              (SELECT max(payout::numeric / wager) FROM wins)::text AS best
+         FROM (SELECT 1) one
+         LEFT JOIN LATERAL (
+           SELECT game, wager, payout FROM wins ORDER BY payout - wager DESC LIMIT 1
+         ) top ON true`,
+      [userId],
+    ),
+  ]);
+
+  const wagered = BigInt(row.wagered_minor ?? '0');
+  const level = levelFor(wagered);
+  const top = rounds.rows[0];
+  const favourite = bets.rows[0]?.favourite ?? null;
+  return {
+    playerId: userId,
+    joinedAt: new Date(row.created_at).toISOString(),
+    staff: row.role === 'admin',
+    vip: config.vipEnabled
+      ? { level: level.level, tier: level.tier, label: level.label, isHighRoller: level.tier === 'high_roller' }
+      : null,
+    wageredMinor: wagered.toString(),
+    bets: Number(bets.rows[0]?.bets ?? '0'),
+    favouriteGame: favourite ? (GAME_NAMES[favourite] ?? null) : null,
+    biggestWin:
+      top?.game && top.wager && top.payout
+        ? {
+            game: top.game,
+            wagerMinor: top.wager,
+            payoutMinor: top.payout,
+            multiplier: Math.floor((Number(top.payout) / Number(top.wager)) * 100) / 100,
+          }
+        : null,
+    bestMultiplier: top?.best ? Math.floor(Number(top.best) * 100) / 100 : null,
+  };
 }
 
 function requireUserId(value: string | undefined): string {

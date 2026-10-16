@@ -291,34 +291,187 @@
 }
 .modmenu__row:hover { background: rgba(255, 170, 0, .1); color: var(--gold-bright); }
 
-/* ═════════════════════════ the tip sheet ═════════════════════════ */
+/* ═════════════════════════ the player card ═════════════════════════
+ * Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: player card (modal) · genre: atmospheric (the site's obsidian + gold) · theme: luxe tokens
+ * states: stats -- loading (four skeleton tiles the size of the real ones), loaded, empty figures
+ *         ("—", "No wins yet"), failed (with Try again); the tip form -- chips, the amount field and
+ *         the Tip button each default, hover, :focus-visible, :active, disabled (no amount),
+ *         aria-busy (a tip on its way); signed out (Log in) and self (a line, no form).
+ * signature: four figures in a 2×2, the money ones in gold, and nothing anywhere about up or down.
+ * motion: the skeleton's pulse only, and none of that under reduced motion.
+ */
 
-.tipsheet { display: flex; flex-direction: column; gap: var(--ob-gap); align-items: stretch; }
-.tipsheet__who {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--r-panel);
-  background: rgba(18, 18, 22, .8);
-  border: 1px solid var(--ob-line);
+.modal[data-variant='player'] { width: min(420px, calc(100vw - 26px)); }
+
+.pcard {
+  --pcard-skel: var(--lx-3);
+  display: grid;
+  gap: var(--lx-s4);
+  min-width: 0;
 }
-.tipsheet__who b { font-size: .9375rem; }
-.tipsheet__amt {
-  text-align: center;
-  font-size: 1.75rem; font-weight: 800; color: var(--gold-bright);
+
+.pcard__head { display: flex; align-items: center; gap: var(--lx-s3); min-width: 0; }
+.pcard__head .msg__av { border-radius: var(--lx-r-s); background: var(--lx-3); cursor: default; }
+.pcard__head .msg__av i { font-size: 1.25rem; }
+.pcard__who { display: grid; gap: var(--lx-s1); min-width: 0; }
+.pcard__badges { display: flex; flex-wrap: wrap; gap: var(--lx-s1); min-height: 20px; }
+.pcard__badge { padding: 3px 8px; border-radius: var(--lx-r-s); font-size: .6875rem; letter-spacing: .06em; }
+.pcard__meta {
+  margin: 0;
+  color: var(--lx-mute);
+  font: 500 .8125rem/1.35 var(--lx-ui);
+  overflow-wrap: anywhere;
+}
+
+/* Four figures, two by two. The tiles keep their size whether loading, loaded or empty, so nothing
+   under them moves when the numbers arrive. */
+.pcard__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lx-s2);
+  margin: 0;
+}
+.pcard__stat {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 76px;
+  margin: 0;
+  padding: var(--lx-s3);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+}
+.pcard__label {
+  color: var(--lx-faint);
+  font: 700 .6875rem/1.2 var(--lx-ui);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.pcard__value {
+  margin: 0;
+  color: var(--lx-ink);
+  font: 800 1.125rem/1.25 var(--lx-ui);
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 22px rgba(255, 170, 0, .35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.tipsheet__input {
+.pcard__stat:nth-child(1) .pcard__value,
+.pcard__stat:nth-child(3) .pcard__value { color: var(--lx-gold-hi); }
+/* Nothing to show is quiet, not gold. */
+.pcard__stat[data-empty="1"] .pcard__value { color: var(--lx-faint); }
+.pcard__sub {
+  margin: 0;
+  color: var(--lx-mute);
+  font: 500 .75rem/1.3 var(--lx-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pcard__stat--skel { background: var(--pcard-skel); animation: pcard-pulse 1.2s var(--lx-ease-io) infinite alternate; }
+@keyframes pcard-pulse { from { opacity: 1; } to { opacity: .45; } }
+
+.pcard__error,
+.pcard__signin {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-s3);
+  min-height: 76px;
+  padding: var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+}
+/* The failed state keeps the four tiles' footprint, so a successful retry moves nothing below it. */
+.pcard__error { min-height: 160px; }
+.pcard__error p,
+.pcard__signin p,
+.pcard__note { margin: 0; color: var(--lx-text); font: 500 .875rem/1.4 var(--lx-ui); }
+.pcard__note { color: var(--lx-mute); text-align: center; }
+.pcard__retry {
+  flex: none;
+  height: 36px;
+  padding: 0 var(--lx-s4);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pcard__retry:hover { background: var(--lx-5); }
+.pcard__retry:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.pcard__retry:active { transform: translateY(1px); }
+
+/* ── the tip, under the figures ── */
+.pcard__tip {
+  display: grid;
+  gap: var(--lx-s2);
+  padding-top: var(--lx-s4);
+  box-shadow: inset 0 1px 0 var(--lx-3);
+}
+.pcard__tiplabel { color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+.pcard__input {
   width: 100%;
-  padding: 11px 13px;
-  border-radius: var(--r-crisp);
-  background: rgba(10, 10, 12, .9);
-  border: 1px solid var(--ob-line);
-  color: var(--text); font-size: 1rem; font-weight: 700;
+  height: 44px;
+  padding: 0 var(--lx-s3);
+  border: 1px solid var(--lx-4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  color: var(--lx-ink);
+  font: 700 1rem/1 var(--lx-ui);
   font-variant-numeric: tabular-nums;
 }
-.tipsheet__input:focus { outline: none; border-color: var(--gold-bright); }
-.tipsheet__go { width: 100%; justify-content: center; }
+.pcard__input:hover { border-color: var(--lx-5); }
+.pcard__input:focus { outline: none; border-color: var(--lx-gold); }
+.pcard__chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s1); }
+.pcard__chip {
+  height: 36px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pcard__chip:hover { background: var(--lx-5); }
+.pcard__chip:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.pcard__chip:active { transform: translateY(1px); }
+.pcard__go {
+  height: 48px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .9375rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pcard__go:hover:not(:disabled) { background: var(--lx-gold-hi); }
+.pcard__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+.pcard__go:active:not(:disabled) { transform: translateY(1px); }
+.pcard__go:disabled { background: var(--lx-4); color: var(--lx-mute); cursor: not-allowed; }
+.pcard__go[aria-busy="true"] { cursor: progress; }
+
+/* The name on a chat line opens the card as well as the head does. */
+.msg__who--link { cursor: pointer; }
+.msg__who--link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.msg__who--link:focus-visible { outline: 2px solid var(--lx-focus, var(--gold-bright)); outline-offset: 2px; border-radius: 2px; }
+
+@media (max-width: 380px) {
+  .pcard__value { font-size: 1rem; }
+  .pcard__stat { padding: var(--lx-s2) var(--lx-s3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcard__stat--skel { animation: none; }
+  .pcard__chip, .pcard__go, .pcard__retry { transition: none; }
+}
 
 /* ═════════════════════════ the vault jackpot bar ═════════════════════════ */
 

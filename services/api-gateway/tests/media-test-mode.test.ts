@@ -172,7 +172,8 @@ describe('media test mode', () => {
       2,
     );
     const insights = await src('routes/insights.ts');
-    assert.equal(insights.match(/\$\{notDemoPredicate\('u'\)\}/g)?.length, 3);
+    // The three boards, and the player card behind a chat avatar.
+    assert.equal(insights.match(/\$\{notDemoPredicate\('u'\)\}/g)?.length, 4);
     for (const file of ['blackjack.ts', 'mines.ts', 'plinko.ts', 'crash.ts', 'upgrades.ts']) {
       const route = await src(`routes/${file}`);
       assert.doesNotMatch(

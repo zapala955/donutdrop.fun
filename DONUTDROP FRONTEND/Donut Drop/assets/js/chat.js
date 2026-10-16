@@ -31,7 +31,7 @@
  */
 import { state, bus, sendChat, refreshChat, refreshBalance } from './store.js';
 import { censorName, censorText } from './profanity.js';
-import { $, el, money, parseAmount, safeImage } from './util.js';
+import { $, el, money, parseAmount, formatAmountInput, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, API_BASE_URL } from './api.js';
@@ -632,65 +632,206 @@ async function sendTip(username, amountMinor, note, userId) {
   }
 }
 
-/** The modal behind an avatar click. Same endpoint, fewer keystrokes. */
-function openTipSheet(userId, username) {
-  if (!state.authenticated) {
-    toast({ kind: 'lose', title: 'Log in first', body: 'Tips come out of your balance.' });
-    return;
-  }
+/* ═════════════════════════ the player card ═════════════════════════ */
+
+/* A card read in the last minute is drawn from here. The server caches as long, so asking again
+ * sooner would only cost a request. */
+const CARD_TTL_MS = 60_000;
+const cardCache = new Map();
+let tipFieldSeq = 0;
+
+/** An element holding text, set as text: some of what the card shows comes from the server. */
+function textEl(tag, cls, content) {
+  const node = el(tag, cls);
+  node.textContent = content;
+  return node;
+}
+
+async function fetchPlayerCard(userId) {
+  const hit = cardCache.get(userId);
+  if (hit && Date.now() - hit.at < CARD_TTL_MS) return hit.card;
+  const card = await api.get(`/v1/players/${encodeURIComponent(userId)}/card`);
+  cardCache.set(userId, { at: Date.now(), card });
+  return card;
+}
+
+function joinedText(iso) {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? ''
+    : `Joined ${at.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`;
+}
+
+function multiplierText(value) {
+  return `${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`;
+}
+
+/** One figure on the card: what it is, the number, and a line under it when there is one. */
+function stat(label, value, sub = '') {
+  const tile = el('dl', 'pcard__stat');
+  if (value === '—') tile.dataset.empty = '1';
+  tile.append(textEl('dt', 'pcard__label', label), textEl('dd', 'pcard__value mono', value));
+  if (sub) tile.append(textEl('dd', 'pcard__sub', sub));
+  return tile;
+}
+
+function paintCardStats(grid, meta, card) {
+  grid.setAttribute('aria-busy', 'false');
+  const win = card.biggestWin;
+  const profit = win ? Number(win.payoutMinor) - Number(win.wagerMinor) : 0;
+  grid.replaceChildren(
+    stat('Wagered', money(Number(card.wageredMinor) || 0)),
+    stat('Bets', Number(card.bets || 0).toLocaleString('en-US')),
+    stat(
+      'Biggest win',
+      win ? `+${money(profit)}` : '—',
+      win ? `${win.game} · ${multiplierText(win.multiplier)}` : 'No wins yet',
+    ),
+    stat('Best multiplier', card.bestMultiplier ? multiplierText(card.bestMultiplier) : '—'),
+  );
+  const bits = [];
+  if (card.favouriteGame) bits.push(`Plays ${card.favouriteGame} most`);
+  const joined = joinedText(card.joinedAt);
+  if (joined) bits.push(joined);
+  meta.textContent = bits.join(' · ');
+}
+
+function paintCardError(grid, retry) {
+  grid.setAttribute('aria-busy', 'false');
+  const box = el('div', 'pcard__error');
+  box.append(textEl('p', '', 'Their stats did not load.'));
+  const again = textEl('button', 'pcard__retry', 'Try again');
+  again.type = 'button';
+  again.addEventListener('click', retry);
+  box.append(again);
+  grid.replaceChildren(box);
+}
+
+/** The tip form, under the stats. Same endpoint as /tip, fewer keystrokes. */
+function tipForm(userId, username) {
   let amount = 1_000_000;
+  const form = el('form', 'pcard__tip');
+  form.noValidate = true;
+  const label = textEl('label', 'pcard__tiplabel', 'Send a tip');
+  const field = el('input', 'pcard__input mono');
+  field.id = `tipAmount-${++tipFieldSeq}`;
+  label.htmlFor = field.id;
+  field.type = 'text';
+  field.inputMode = 'decimal';
+  field.autocomplete = 'off';
+  field.spellcheck = false;
 
-  openModal('Tip cash', (host) => {
-    const wrap = el('div', 'tipsheet');
+  const go = el('button', 'pcard__go');
+  go.type = 'submit';
+  const paint = ({ retype = true } = {}) => {
+    if (retype) field.value = formatAmountInput(amount);
+    go.textContent = amount > 0 ? `Tip ${money(amount)}` : 'Tip';
+    go.disabled = !(amount > 0);
+  };
 
-    const target = el('div', 'tipsheet__who');
-    target.append(
-      avatarFor(userId, username, 40),
-      Object.assign(el('b'), { textContent: censorName(username) }),
-    );
-
-    const figure = el('b', 'tipsheet__amt mono');
-    const field = el('input', 'tipsheet__input mono');
-    field.type = 'text';
-    field.inputMode = 'numeric';
-    field.setAttribute('aria-label', 'Tip amount');
-
-    const paint = ({ retype = true } = {}) => {
-      figure.textContent = money(amount);
-      if (retype) field.value = String(amount);
-    };
-
-    const chips = el('div', 'qchips');
-    for (const preset of [1_000_000, 5_000_000, 25_000_000]) {
-      const chip = el('button', 'qchip');
-      chip.type = 'button';
-      chip.textContent = `+${money(preset)}`;
-      chip.addEventListener('click', () => {
-        amount += preset;
-        paint();
-      });
-      chips.append(chip);
-    }
-
-    field.addEventListener('input', () => {
-      const parsed = parseAmount(field.value);
-      if (parsed !== null) {
-        amount = parsed;
-        paint({ retype: false });
-      }
+  const chips = el('div', 'pcard__chips');
+  for (const preset of [1_000_000, 5_000_000, 25_000_000]) {
+    const chip = textEl('button', 'pcard__chip mono', `+${money(preset)}`);
+    chip.type = 'button';
+    chip.addEventListener('click', () => {
+      amount += preset;
+      paint();
     });
+    chips.append(chip);
+  }
 
-    const go = el('button', 'btn btn--go tipsheet__go');
-    go.textContent = '💸 TIP CASH';
-    go.addEventListener('click', () => {
-      go.disabled = true;
-      void sendTip(username, amount, undefined, userId).then(closeModal);
-    });
-
-    wrap.append(target, figure, field, chips, go);
-    host.append(wrap);
-    paint();
+  field.addEventListener('input', () => {
+    const parsed = parseAmount(field.value);
+    amount = parsed ?? 0;
+    paint({ retype: false });
   });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!(amount > 0) || go.getAttribute('aria-busy') === 'true') return;
+    go.disabled = true;
+    go.setAttribute('aria-busy', 'true');
+    void sendTip(username, amount, undefined, userId).then(closeModal);
+  });
+
+  form.append(label, field, chips, go);
+  paint();
+  return form;
+}
+
+/**
+ * The modal behind a chat avatar or name: who they are, what they have played, and a tip.
+ *
+ * Never profit or loss -- the server does not send it (routes/insights.ts, /v1/players/:id/card).
+ * The name is masked here as everywhere in chat; the real one only ever goes back to the server,
+ * in the tip.
+ */
+function openPlayerCard(userId, username) {
+  if (!userId) return;
+  const shown = censorName(username);
+
+  openModal(shown, (host) => {
+    const card = el('div', 'pcard');
+
+    const head = el('div', 'pcard__head');
+    const who = el('div', 'pcard__who');
+    const badges = el('div', 'pcard__badges');
+    const meta = el('p', 'pcard__meta');
+    meta.textContent = ' ';
+    who.append(badges, meta);
+    head.append(avatarFor(userId, username, 56), who);
+
+    const grid = el('div', 'pcard__grid');
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-busy', 'true');
+    grid.setAttribute('aria-label', `${shown}'s stats`);
+    for (let i = 0; i < 4; i += 1) grid.append(el('div', 'pcard__stat pcard__stat--skel'));
+
+    card.append(head, grid);
+
+    const self = state.authenticated && state.user?.id === userId;
+    if (self) {
+      card.append(textEl('p', 'pcard__note', 'This is you. Tips go to other players.'));
+    } else if (state.authenticated) {
+      card.append(tipForm(userId, username));
+    } else {
+      const note = el('div', 'pcard__signin');
+      note.append(textEl('p', '', 'Log in to tip this player.'));
+      const login = textEl('button', 'pcard__retry', 'Log in');
+      login.type = 'button';
+      login.addEventListener('click', () => {
+        closeModal();
+        document.querySelector('#loginBtn')?.click();
+      });
+      note.append(login);
+      card.append(note);
+    }
+    host.append(card);
+
+    const load = () => {
+      grid.setAttribute('aria-busy', 'true');
+      grid.replaceChildren(...Array.from({ length: 4 }, () => el('div', 'pcard__stat pcard__stat--skel')));
+      fetchPlayerCard(userId).then(
+        (data) => {
+          /* Gone when another card opened meanwhile: the modal body is reused, and this grid with
+           * it was cleared. A slow answer for the last head clicked never paints over the next. */
+          if (!grid.isConnected) return;
+          // The chat's own badge classes, so a tier wears the same colour here as on the line.
+          if (data.staff) badges.replaceChildren(textEl('i', 'msg__badge msg__badge--staff pcard__badge', 'ADMIN'));
+          else if (data.vip) {
+            const badge = textEl('i', 'msg__badge pcard__badge', data.vip.label.toUpperCase());
+            badge.dataset.tier = data.vip.tier;
+            badges.replaceChildren(badge);
+          }
+          paintCardStats(grid, meta, data);
+        },
+        () => {
+          if (grid.isConnected) paintCardError(grid, load);
+        },
+      );
+    };
+    load();
+  }, { variant: 'player' });
 }
 
 /* ═════════════════════════ rendering ═════════════════════════ */
@@ -868,14 +1009,30 @@ function buildMessage(message) {
   const top = el('div', 'msg__top');
 
   const avatar = avatarFor(message.authorId, message.author);
-  avatar.addEventListener('click', () => openTipSheet(message.authorId, message.author));
-  avatar.title = `Tip ${censorName(message.author)}`;
 
   const who = el('span', 'msg__who');
   /* Masked for display only. `message.author` stays the real Mojang username everywhere it is
    * sent back to the server — tipping and the admin timeout endpoints both resolve it against
    * normalized_username, and a masked name resolves to nobody. */
   who.textContent = censorName(message.author);
+
+  /* The head and the name both open the player card: stats and a tip (openPlayerCard). One of
+   * them is a stop for the keyboard; the head, a picture of the same thing, is not a second one. */
+  if (message.authorId) {
+    const open = () => openPlayerCard(message.authorId, message.author);
+    avatar.addEventListener('click', open);
+    avatar.title = `View ${censorName(message.author)}`;
+    who.classList.add('msg__who--link');
+    who.tabIndex = 0;
+    who.setAttribute('role', 'button');
+    who.setAttribute('aria-label', `View ${censorName(message.author)}`);
+    who.addEventListener('click', open);
+    who.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    });
+  }
 
   top.append(avatar, who);
 
