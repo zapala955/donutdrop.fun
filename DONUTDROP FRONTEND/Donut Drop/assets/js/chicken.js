@@ -10,8 +10,8 @@
  * sideways. Motion is two things: the chicken's hop to the next lane, and the minecart coming down
  * on a hit. With reduced motion both become an instant change of state.
  */
-import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, refreshBalance, state } from './store.js';
+import { api, clientSeed } from './api.js';
+import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -127,12 +127,12 @@ async function start() {
   pressed = 'start';
   paint();
   try {
-    if (!seedHash) await refreshSeed();
-    const response = await api.post(
+    // Sent once more against a fresh commitment if another game or tab spent this one.
+    const response = await betOnCommitment(seedHash, (serverSeedHash, key) => api.post(
       '/v1/chicken/games',
-      { stakeMinor: stakeMinor().toString(), mode, clientSeed: clientSeed(), serverSeedHash: seedHash },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { stakeMinor: stakeMinor().toString(), mode, clientSeed: clientSeed(), serverSeedHash },
+      { idempotencyKey: key },
+    ));
     game = response.game;
     playSound('click');
     say(`Run started on ${MODES[mode].label}. Lane 1 pays ${times(game.nextMultiplierBps)}.`);

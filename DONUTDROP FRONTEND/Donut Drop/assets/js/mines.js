@@ -9,8 +9,8 @@
  * Motion is two things: a diamond settling into its block, and the TNT going off. With reduced
  * motion both become an instant change of state, and nothing shakes.
  */
-import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, refreshBalance, state } from './store.js';
+import { api, clientSeed } from './api.js';
+import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -118,12 +118,12 @@ async function start() {
   pressed = 'start';
   paint();
   try {
-    if (!seedHash) await refreshSeed();
-    const response = await api.post(
+    // Sent once more against a fresh commitment if another game or tab spent this one.
+    const response = await betOnCommitment(seedHash, (serverSeedHash, key) => api.post(
       '/v1/mines/games',
-      { stakeMinor: stakeMinor().toString(), mines: mineCount, clientSeed: clientSeed(), serverSeedHash: seedHash },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { stakeMinor: stakeMinor().toString(), mines: mineCount, clientSeed: clientSeed(), serverSeedHash },
+      { idempotencyKey: key },
+    ));
     game = response.game;
     focusTile = 12;
     playSound('click');

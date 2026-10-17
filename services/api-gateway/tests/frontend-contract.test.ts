@@ -45,6 +45,31 @@ describe('frontend/backend contract', () => {
     assert.match(store, /Authenticated data refresh failed/);
   });
 
+  it('sends a bet again against a fresh commitment instead of failing until a reload', async () => {
+    /* Every bet spends the player's server-seed commitment. The crate and the upgrader held theirs
+     * from login and never re-read it on a refusal, so one round of Mines made every crate after it
+     * fail with FAIRNESS_COMMITMENT_CHANGED until the page was reloaded; the other games showed the
+     * refusal and made the player press again. */
+    const store = await source('assets/js/store.js');
+    assert.match(store, /export async function betOnCommitment\(held, send\)/);
+    assert.match(store, /if \(!COMMITMENT_MOVED\.has\(error\?\.code\)\) throw error;\s*return send\(await fresh\(\), idempotencyKey\(\)\);/);
+    assert.doesNotMatch(store, /if \(!state\.fairness\) state\.fairness = await api\.get/);
+    assert.equal(store.match(/await betOnCommitment\(state\.fairness\?\.serverSeedHash,/g)?.length, 3);
+    for (const [file, route] of [
+      ['assets/js/mines.js', '/v1/mines/games'],
+      ['assets/js/chicken.js', '/v1/chicken/games'],
+      ['assets/js/tower.js', '/v1/tower/games'],
+      ['assets/js/blackjack.js', '/v1/blackjack/hands'],
+    ]) {
+      const game = await source(file);
+      assert.match(
+        game,
+        new RegExp(`betOnCommitment\\(seedHash, \\(serverSeedHash, key\\) => api\\.post\\(\\s*'${route.replaceAll('/', '\\/')}'`),
+        file,
+      );
+    }
+  });
+
   it('never leaves the sign-in window over a signed-in player', async () => {
     /* An invite link opened the window at load, when everybody still looks signed out, so the
      * `?ref=` left in the address bar put it back over every player who had signed up through one.

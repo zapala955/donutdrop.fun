@@ -525,6 +525,36 @@ export async function logout() {
   emit('logout');
 }
 
+/* The server says the commitment a bet quoted is not the player's current one, or that there is none
+ * yet. Either way it placed nothing. */
+const COMMITMENT_MOVED = new Set(['FAIRNESS_COMMITMENT_CHANGED', 'FAIRNESS_COMMITMENT_REQUIRED']);
+
+/**
+ * Sends a bet that quotes the player's server-seed commitment, and sends it once more if the
+ * commitment had moved on.
+ *
+ * Every bet spends the commitment and the server makes the next one, so a hash a page holds goes
+ * stale the moment anything else is played -- another game, another tab. The refusal is the server's
+ * definite answer that nothing was placed, so the same bet goes again against the fresh commitment,
+ * under a new idempotency key because it is now a different request. Plinko has done this since it
+ * shipped. Every other game showed the refusal instead, and the crate and the upgrader kept the stale
+ * hash until the page was reloaded: one round of Mines and every crate after it failed.
+ *
+ * `held` is the hash the caller has, or null to fetch it. `send(hash, key)` makes the request.
+ */
+export async function betOnCommitment(held, send) {
+  const fresh = async () => {
+    state.fairness = await api.get('/v1/fairness/current');
+    return state.fairness.serverSeedHash;
+  };
+  try {
+    return await send(held || (await fresh()), idempotencyKey());
+  } catch (error) {
+    if (!COMMITMENT_MOVED.has(error?.code)) throw error;
+    return send(await fresh(), idempotencyKey());
+  }
+}
+
 /* Opening a crate, with the same separable settlement as runBalanceUpgrade below.
  *
  * The round is decided when the request returns, but the player is told by a reel that runs for
@@ -538,20 +568,19 @@ export async function logout() {
  * caller shows the result. */
 export async function openCase(selectedCase, { defer = false } = {}) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before opening a case');
-  if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
   const release = defer ? holdLiveFigures() : () => {};
   const before = BigInt(state.balanceMinor || '0');
   let result;
   try {
-    result = await api.post(
+    result = await betOnCommitment(state.fairness?.serverSeedHash, (serverSeedHash, key) => api.post(
       '/v1/cases/' + encodeURIComponent(selectedCase.id) + '/open',
       {
         clientSeed: clientSeed(),
-        serverSeedHash: state.fairness.serverSeedHash,
+        serverSeedHash,
         expectedPriceMinor: selectedCase.priceMinor,
       },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { idempotencyKey: key },
+    ));
   } catch (error) {
     release();
     throw error;
@@ -581,12 +610,11 @@ export async function openCase(selectedCase, { defer = false } = {}) {
 
 export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before upgrading');
-  if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
-  const result = await api.post(
+  const result = await betOnCommitment(state.fairness?.serverSeedHash, (serverSeedHash, key) => api.post(
     '/v1/upgrades',
     {
       clientSeed: clientSeed(),
-      serverSeedHash: state.fairness.serverSeedHash,
+      serverSeedHash,
       targetCatalogItemId: targetItem.catalogItemId,
       targetQuantity: 1,
       expectedTargetUnitValueMinor: targetItem.unitValueMinor,
@@ -596,8 +624,8 @@ export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {
         expectedUnitValueMinor: inventoryItem.unitValueMinor,
       }],
     },
-    { idempotencyKey: idempotencyKey() },
-  );
+    { idempotencyKey: key },
+  ));
   await Promise.all([refreshInventory(false), refreshCatalog(false), refreshFairness(false), refreshActivity(false)]);
   emit('upgrade');
   return result;
@@ -620,7 +648,6 @@ export async function runUpgrade(inventoryItem, targetItem, quantity = 1) {
  */
 export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false } = {}) {
   if (!state.authenticated) throw new ApiError(401, 'AUTH_REQUIRED', 'Log in before upgrading');
-  if (!state.fairness) state.fairness = await api.get('/v1/fairness/current');
   /* Taken BEFORE the request, as openCase does. It used to be taken when the answer came back,
    * but the server publishes its balance event while it settles the round, and that event can
    * outrun its own HTTP answer: the wallet pill then moved to the result before the wheel had
@@ -628,18 +655,18 @@ export async function runBalanceUpgrade(stakeMinor, targetItem, { defer = false 
   const release = defer ? holdLiveFigures() : () => {};
   let result;
   try {
-    result = await api.post(
+    result = await betOnCommitment(state.fairness?.serverSeedHash, (serverSeedHash, key) => api.post(
       '/v1/upgrades',
       {
         clientSeed: clientSeed(),
-        serverSeedHash: state.fairness.serverSeedHash,
+        serverSeedHash,
         targetCatalogItemId: targetItem.catalogItemId,
         targetQuantity: 1,
         expectedTargetUnitValueMinor: targetItem.unitValueMinor,
         balanceStake: { balanceMinor: String(stakeMinor) },
       },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { idempotencyKey: key },
+    ));
   } catch (error) {
     release();
     throw error;

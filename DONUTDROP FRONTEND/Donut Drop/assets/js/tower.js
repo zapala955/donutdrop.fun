@@ -13,8 +13,8 @@
  * Motion is two things: a gem settling into its tile, and the TNT going off. With reduced motion
  * both become an instant change of state, and nothing shakes.
  */
-import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, refreshBalance, state } from './store.js';
+import { api, clientSeed } from './api.js';
+import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -126,12 +126,12 @@ async function start() {
   pressed = 'start';
   paint();
   try {
-    if (!seedHash) await refreshSeed();
-    const response = await api.post(
+    // Sent once more against a fresh commitment if another game or tab spent this one.
+    const response = await betOnCommitment(seedHash, (serverSeedHash, key) => api.post(
       '/v1/tower/games',
-      { stakeMinor: stakeMinor().toString(), mode, clientSeed: clientSeed(), serverSeedHash: seedHash },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { stakeMinor: stakeMinor().toString(), mode, clientSeed: clientSeed(), serverSeedHash },
+      { idempotencyKey: key },
+    ));
     game = response.game;
     focusTile = 0;
     playSound('click');

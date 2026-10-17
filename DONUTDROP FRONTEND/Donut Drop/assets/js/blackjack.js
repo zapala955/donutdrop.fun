@@ -9,8 +9,8 @@
  * Motion is kept to what carries information: a card arriving, the hole card turning, one pulse
  * on a win. With reduced motion every one of those becomes a short fade.
  */
-import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, holdLiveFigures, refreshBalance, state } from './store.js';
+import { api, clientSeed } from './api.js';
+import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -351,12 +351,12 @@ async function deal() {
   paintControls();
   const release = holdLiveFigures();
   try {
-    if (!seedHash) await refreshSeed();
-    const response = await api.post(
+    // Sent once more against a fresh commitment if another game or tab spent this one.
+    const response = await betOnCommitment(seedHash, (serverSeedHash, key) => api.post(
       '/v1/blackjack/hands',
-      { stakeMinor: stakeMinor().toString(), clientSeed: clientSeed(), serverSeedHash: seedHash },
-      { idempotencyKey: idempotencyKey() },
-    );
+      { stakeMinor: stakeMinor().toString(), clientSeed: clientSeed(), serverSeedHash },
+      { idempotencyKey: key },
+    ));
     hand = response.hand;
     await animateDeal(hand);
     if (hand.status === 'settled') await settleShown();
