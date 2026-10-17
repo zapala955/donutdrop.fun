@@ -171,16 +171,16 @@ export const SPOTLIGHT_GAMES = [
     line: 'Draw a line. Call over or under. Roll.' },
   { route: '/chicken', name: 'Chicken', art: 'chicken.svg', shipped: '2026-10-15',
     line: 'Cross twenty rails. Dodge the minecarts.' },
-  { route: '/tower', name: 'Tower', art: 'beacon.png', shipped: '2026-10-14',
+  { route: '/tower', name: 'Tower', art: 'game-tower.svg', shipped: '2026-10-14',
     line: 'Climb nine floors. Pick the gem, dodge the TNT.' },
-  { route: '/mines-duel', name: 'Mines Duel', art: 'diamond_pickaxe.svg', shipped: '2026-10-04',
+  { route: '/mines-duel', name: 'Mines Duel', art: 'game-mines-duel.svg', shipped: '2026-10-04',
     line: '1v1 on one hidden field. Most safe tiles takes the pot.' },
-  { route: '/coinflip', name: 'Coinflip', art: 'gold_ingot.png', shipped: '2026-10-04',
+  { route: '/coinflip', name: 'Coinflip', art: 'game-coinflip.svg', shipped: '2026-10-04',
     line: '1v1, heads or tails. The winner takes the pot.' },
-  { route: '/crash', name: 'Crash', art: 'elytra.png', line: 'Cash out before it crashes.' },
-  { route: '/mines', name: 'Mines', art: 'tnt.png', line: 'Dodge the TNT, grow the multiplier.' },
-  { route: '/plinko', name: 'Plinko', art: 'slime_ball.png', line: 'Drop a ball down the pegs.' },
-  { route: '/blackjack', name: 'Blackjack', art: 'enchanted_book.png', line: 'Beat the dealer to 21.' },
+  { route: '/crash', name: 'Crash', art: 'game-crash.svg', line: 'Cash out before it crashes.' },
+  { route: '/mines', name: 'Mines', art: 'game-mines.svg', line: 'Dodge the TNT, grow the multiplier.' },
+  { route: '/plinko', name: 'Plinko', art: 'game-plinko.svg', line: 'Drop a ball down the pegs.' },
+  { route: '/blackjack', name: 'Blackjack', art: 'game-blackjack.svg', line: 'Beat the dealer to 21.' },
 ];
 const NEW_FOR_MS = 30 * 86_400_000;
 export const isNewGame = (game) =>

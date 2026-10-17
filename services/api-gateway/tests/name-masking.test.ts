@@ -23,7 +23,7 @@ describe('the mask itself', () => {
     /* Padding to the real length keeps rows visually distinct and leaks the thing being hidden:
      * among a few hundred regulars an initial plus a length often names somebody outright. */
     const sql = maskedName('u.minecraft_username');
-    assert.match(sql, /left\(u\.minecraft_username, 1\)/);
+    assert.match(sql, /left\(u\.minecraft_username, CASE WHEN left\(u\.minecraft_username, 1\) = '\.' THEN 2 ELSE 1 END\)/);
     assert.match(sql, new RegExp(`repeat\\('\\*', ${MASK_WIDTH}\\)`));
     assert.doesNotMatch(sql, /length\(/);
     assert.doesNotMatch(sql, /greatest\(/);
@@ -34,6 +34,8 @@ describe('the mask itself', () => {
     const source = await profanity();
     assert.match(source, new RegExp(`const MASK_WIDTH = ${MASK_WIDTH};`));
     assert.match(source, /'\*'\.repeat\(MASK_WIDTH\)/);
+    // Bedrock names keep the letter after DonutSMP's dot, on both sides.
+    assert.match(source, /const keep = characters\[0\] === '\.' && characters\.length > 1 \? 2 : 1;/);
     /* The old implementation returned a one-character name untouched, which announced its length
      * by refusing to hide it. */
     assert.doesNotMatch(source, /characters\.length - 1/);

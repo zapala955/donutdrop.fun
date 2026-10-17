@@ -33,13 +33,17 @@
  *
  * Iterating with the spread operator yields whole code points, so a name whose first character is
  * an astral one is not cut in half into a broken surrogate.
+ *
+ * A Bedrock name starts with DonutSMP's `.`, so it keeps the letter after the dot as well
+ * (`.Steve` reads as `.S********`), as the server's mask does.
  */
 const MASK_WIDTH = 8;
 
 export function censorName(value) {
   if (!value) return '';
   const characters = [...String(value)];
-  return characters[0] + '*'.repeat(MASK_WIDTH);
+  const keep = characters[0] === '.' && characters.length > 1 ? 2 : 1;
+  return characters.slice(0, keep).join('') + '*'.repeat(MASK_WIDTH);
 }
 
 /* ─────────── message bodies ─────────── */

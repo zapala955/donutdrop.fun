@@ -58,7 +58,7 @@ describe('the casino-lobby shell', () => {
     // Retro skin: every card wears a real Minecraft item sprite (retro.css draws it pixel-sharp).
     const cardArt = [...html.matchAll(/<img class="lxcard__art retroart" src="([^"]+)"/g)];
     assert.equal(cardArt.length, 13);
-    for (const [, src] of cardArt) assert.match(src ?? '', /^assets\/img\/items\/[a-z_]+\.(png|svg)$/);
+    for (const [, src] of cardArt) assert.match(src ?? '', /^assets\/img\/items\/[a-z_-]+\.(png|svg)$/);
   });
 
   it('keeps the SEO head nginx rewrites per route', async () => {

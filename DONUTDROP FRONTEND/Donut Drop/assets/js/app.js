@@ -255,16 +255,16 @@ function mountHome(view) {
    * want to actually read a line of it. */
   /* The table games' names and the sprites their lobby cards wear (retro.css), for the wins card. */
   const WIN_GAMES = {
-    crash: { name: 'Crash', art: 'assets/img/items/elytra.png' },
-    mines: { name: 'Mines', art: 'assets/img/items/tnt.png' },
-    tower: { name: 'Tower', art: 'assets/img/items/beacon.png' },
+    crash: { name: 'Crash', art: 'assets/img/items/game-crash.svg' },
+    mines: { name: 'Mines', art: 'assets/img/items/game-mines.svg' },
+    tower: { name: 'Tower', art: 'assets/img/items/game-tower.svg' },
     chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
-    plinko: { name: 'Plinko', art: 'assets/img/items/slime_ball.png' },
+    plinko: { name: 'Plinko', art: 'assets/img/items/game-plinko.svg' },
     dice: { name: 'Dice', art: 'assets/img/items/dice.svg' },
-    blackjack: { name: 'Blackjack', art: 'assets/img/items/enchanted_book.png' },
-    roulette: { name: 'Roulette', art: 'assets/img/items/nether_star.png' },
-    coinflip: { name: 'Coinflip', art: 'assets/img/items/gold_ingot.png' },
-    minesduel: { name: 'Mines Duel', art: 'assets/img/items/diamond_pickaxe.svg' },
+    blackjack: { name: 'Blackjack', art: 'assets/img/items/game-blackjack.svg' },
+    roulette: { name: 'Roulette', art: 'assets/img/items/game-roulette.svg' },
+    coinflip: { name: 'Coinflip', art: 'assets/img/items/game-coinflip.svg' },
+    minesduel: { name: 'Mines Duel', art: 'assets/img/items/game-mines-duel.svg' },
   };
   const paintActivity = () => {
     const drops = $('#bigDrops', view);

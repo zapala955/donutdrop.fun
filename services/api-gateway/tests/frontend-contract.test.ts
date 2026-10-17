@@ -84,6 +84,24 @@ describe('frontend/backend contract', () => {
     }
   });
 
+  it('draws every lobby icon as 16px pixel art, at whole-number sizes, with no glow behind it', async () => {
+    /* 2026-10-17: Minecraft item textures (some blurry -- the elytra was 449x696) gave way to game
+     * icons drawn on the 16px grid, and the coloured bloom behind them went: it smudged the pixels.
+     * A fraction of the card's width had scaled them by 4.75, so the sizes are now 96/80/64/48. */
+    const html = await source('index.html');
+    const css = await source('assets/css/retro.css');
+    const art = [...html.matchAll(/<img class="lxcard__art retroart" src="assets\/img\/items\/([a-z-]+\.svg)" alt="" width="96" height="96"/g)];
+    assert.equal(art.length, 13);
+    for (const [, file] of art) {
+      assert.match(await source(`assets/img/items/${file}`), /viewBox="0 0 16 16" shape-rendering="crispEdges"/, file);
+    }
+    assert.doesNotMatch(css, /--card-glow|radial-gradient/);
+    for (const size of css.matchAll(/\.lxcard__art\.retroart \{[^}]*?width: (\d+)px/g)) {
+      assert.equal(Number(size[1]) % 16, 0, `${size[1]}px is not a whole multiple of the 16px grid`);
+    }
+    assert.match(css, /filter: drop-shadow\(0 6px 0 var\(--card-drop\)\);/);
+  });
+
   it('never leaves the sign-in window over a signed-in player', async () => {
     /* An invite link opened the window at load, when everybody still looks signed out, so the
      * `?ref=` left in the address bar put it back over every player who had signed up through one.

@@ -224,7 +224,7 @@ describe('the tower page', () => {
     assert.match(nginx, /\/tower "https:\/\/donutluxe\.com\/tower";/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/tower<\/loc>/);
     assert.match(seo, /tower: \{\s*title: 'DonutLuxe Tower/);
-    assert.match(data, /route: '\/tower', name: 'Tower', art: 'beacon\.png', shipped: '2026-10-14'/);
+    assert.match(data, /route: '\/tower', name: 'Tower', art: 'game-tower\.svg', shipped: '2026-10-14'/);
   });
 
   it('prices the floors with the server’s formula and asks the server for every tile', async () => {

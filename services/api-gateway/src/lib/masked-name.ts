@@ -17,6 +17,13 @@
  * Eight stars for everyone, whatever the name. `q9w` and `AnvilAndy` both read as `x********`, and
  * the only thing that survives is the initial.
  *
+ * ── BEDROCK NAMES ──
+ *
+ * A Bedrock player's name carries DonutSMP's `.` in front, so the "initial" was the dot and every
+ * one of them read as `.********` -- nothing left to tell two of them apart. A name that starts
+ * with the dot keeps the letter after it too: `.Steve` reads as `.S********`. The width is still
+ * eight stars, so the length stays hidden.
+ *
  * ── WHAT THIS IS NOT ──
  *
  * It is not anonymity against someone reading the API. Masking happens in the query, so these
@@ -36,5 +43,5 @@ export const MASK_WIDTH = 8;
  * reader has to check.
  */
 export function maskedName(column: string): string {
-  return `left(${column}, 1) || repeat('*', ${MASK_WIDTH})`;
+  return `left(${column}, CASE WHEN left(${column}, 1) = '.' THEN 2 ELSE 1 END) || repeat('*', ${MASK_WIDTH})`;
 }

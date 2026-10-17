@@ -6,50 +6,23 @@
  *
  * Staged: this pass is the lobby cards. Game pages, account and wallet follow. */
 
-/* The card itself is the site's own dark panel, so the row sits in the page instead of on it.
-   (The first pass restored the old warm lava here; against the obsidian page it read as a brown
-   block, so the warmth now comes only from the light behind the sprite.) Each game is lit in its
-   own colour -- the hue of its drawn card -- low enough that the sprite stays the subject. */
+/* The card is the site's own dark panel and nothing else: no coloured light behind the icon. The
+   glow each game used to cast blurred the pixel art into a smudge, so the icon now stands on the
+   flat panel as a sprite does in an inventory slot. */
 :root {
   --home-shade: rgba(10, 10, 12, .8);
-  --card-glow: rgba(255, 170, 0, .2);            /* the site's gold, for any game not listed */
-  --card-glow-crash: rgba(255, 170, 0, .24);
-  --card-glow-mines: rgba(0, 145, 196, .28);
-  --card-glow-tower: rgba(155, 93, 229, .3);
-  --card-glow-chicken: rgba(242, 165, 26, .24);
-  --card-glow-plinko: rgba(226, 65, 47, .26);
-  --card-glow-dice: rgba(243, 239, 228, .2);
-  --card-glow-blackjack: rgba(181, 124, 255, .2);
-  --card-glow-roulette: rgba(192, 57, 43, .28);
-  --card-glow-upgrader: rgba(80, 220, 120, .2);
-  --card-glow-coinflip: rgba(255, 215, 0, .24);
-  --card-glow-cases: rgba(255, 123, 0, .24);
-  --card-glow-battles: rgba(255, 34, 34, .24);
+  --card-drop: rgba(0, 0, 0, .45);
 }
 
 /* ── lobby game cards: the dark panel, a soft light, the centred MC item ── */
 body.lx .lxcard {
-  background:
-    radial-gradient(70% 48% at 50% 34%, var(--card-glow), transparent 72%),
-    linear-gradient(180deg, var(--lx-3), var(--lx-2) 60%, var(--lx-1));
+  background: linear-gradient(180deg, var(--lx-3), var(--lx-2) 60%, var(--lx-1));
   border: 0;
   border-radius: var(--lx-r);
   box-shadow: inset 0 0 0 1px var(--lx-4), var(--lx-shade);
   isolation: isolate;
   overflow: hidden;
 }
-body.lx .lxcard[data-game="crash"] { --card-glow: var(--card-glow-crash); }
-body.lx .lxcard:is([data-game="mines"], [data-game="mines-duel"]) { --card-glow: var(--card-glow-mines); }
-body.lx .lxcard[data-game="tower"] { --card-glow: var(--card-glow-tower); }
-body.lx .lxcard[data-game="chicken"] { --card-glow: var(--card-glow-chicken); }
-body.lx .lxcard[data-game="plinko"] { --card-glow: var(--card-glow-plinko); }
-body.lx .lxcard[data-game="dice"] { --card-glow: var(--card-glow-dice); }
-body.lx .lxcard[data-game="blackjack"] { --card-glow: var(--card-glow-blackjack); }
-body.lx .lxcard[data-game="roulette"] { --card-glow: var(--card-glow-roulette); }
-body.lx .lxcard[data-game="upgrader"] { --card-glow: var(--card-glow-upgrader); }
-body.lx .lxcard[data-game="coinflip"] { --card-glow: var(--card-glow-coinflip); }
-body.lx .lxcard[data-game="crates"] { --card-glow: var(--card-glow-cases); }
-body.lx .lxcard[data-game="battles"] { --card-glow: var(--card-glow-battles); }
 /* The foot darkens into the page so the name always reads, whatever the light above it. */
 body.lx .lxcard::after {
   content: ""; position: absolute; inset: 50% 0 0; z-index: -1;
@@ -57,23 +30,31 @@ body.lx .lxcard::after {
 }
 body.lx .lxcard:hover { box-shadow: inset 0 0 0 1px var(--lx-gold), var(--lx-shade-hi); }
 
-/* The art no longer fills the card: it is a Minecraft sprite, drawn pixel-sharp, floated over the
-   top of the card with the name on the warm foot below -- the old lobby's arrangement. */
+/* The icon is a 16px pixel sprite and is only ever drawn at a whole multiple of that -- 96px (6x)
+   on a desktop card, stepping down to 80, 64 and 48 as the card narrows -- so every pixel of it is
+   the same size. A fraction of the card's width scaled it by 4.75 and left its pixels uneven. It is
+   centred by margins, not a transform, so it lands on whole pixels too. The shadow is one sprite
+   pixel straight down, hard-edged, the way an inventory draws it. */
 body.lx .lxcard__art.retroart {
   position: absolute;
-  inset: auto auto auto 50%;
-  top: 14%;
-  width: 52%;
-  height: auto;
-  aspect-ratio: 1;
+  inset: 14% 0 auto;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
   object-fit: contain;
   image-rendering: pixelated;
-  transform: translateX(-50%);
-  filter: drop-shadow(0 10px 14px var(--home-shade)) drop-shadow(0 0 18px var(--card-glow));
-  transition: transform .25s var(--ob-ease, ease);
+  filter: drop-shadow(0 6px 0 var(--card-drop));
+  transition: transform .2s var(--lx-ease, ease);
   z-index: 0;
 }
-body.lx .lxcard:hover .lxcard__art.retroart { transform: translateX(-50%) translateY(-4px) scale(1.04); }
+@container (max-width: 139px) { body.lx .lxcard__art.retroart { width: 80px; height: 80px; filter: drop-shadow(0 5px 0 var(--card-drop)); } }
+@container (max-width: 115px) { body.lx .lxcard__art.retroart { width: 64px; height: 64px; filter: drop-shadow(0 4px 0 var(--card-drop)); } }
+@container (max-width: 91px) { body.lx .lxcard__art.retroart { width: 48px; height: 48px; filter: drop-shadow(0 3px 0 var(--card-drop)); } }
+body.lx .lxcard:hover .lxcard__art.retroart { transform: translateY(-4px); }
+@media (prefers-reduced-motion: reduce) {
+  body.lx .lxcard__art.retroart { transition: none; }
+  body.lx .lxcard:hover .lxcard__art.retroart { transform: none; }
+}
 
 /* The name in the pixel display face, warm, on the card's dark foot. */
 body.lx .lxcard__name {
