@@ -9,6 +9,7 @@
  */
 import { state, bus, refreshLeaderboard, refreshStatistics } from './store.js';
 import { tableAvatar } from './table-avatar.js';
+import { linkPlayer } from './player-link.js';
 import { $, el, money, pct } from './util.js';
 
 /* The three boards, and what the two numeric columns mean on each. A board's `value` and `detail`
@@ -131,6 +132,7 @@ function paintBoard() {
     const name = el('span', 'dtable__name');
     name.textContent = entry.username;
     player.append(avatar, name);
+    linkPlayer(entry.playerId, entry.username, avatar, name);
 
     const value = el('td', 'dtable__num mono dtable__prize');
     value.textContent = meta.formatValue(entry.value);

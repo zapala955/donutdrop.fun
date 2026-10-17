@@ -112,6 +112,28 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(board, /WITH volume AS/);
   });
 
+  it('opens the player card from any head or name, not only in chat', async () => {
+    /* 2026-10-17: the card opened from chat only. The feed, the leaderboards, the race, roulette's
+     * bets, Crash's players and the big-win cards draw the same heads. */
+    const link = await source('assets/js/player-link.js');
+    assert.match(link, /import { openPlayerCard } from '.\/chat\.js';/);
+    assert.match(link, /stop\.setAttribute\('role', 'button'\);/);
+    for (const [file, call] of [
+      ['assets/js/ticker.js', 'linkPlayer(playerId, name, head, label);'],
+      ['assets/js/board.js', 'linkPlayer(entry.playerId, entry.username, avatar, name);'],
+      ['assets/js/race.js', 'linkPlayer(entry.playerId, entry.username, avatar, name);'],
+      ['assets/js/roulette.js', 'linkPlayer(bet.playerId, bet.player, head, name);'],
+      ['assets/js/crash.js', 'linkPlayer(bet.playerId, bet.player, head, name);'],
+      ['assets/js/chat.js', 'linkPlayer(activity.playerId, activity.player, hitHead, who);'],
+    ] as const) {
+      assert.ok((await source(file)).includes(call), file);
+    }
+    // A tip from a masked surface names the player by id alone; Bedrock names are allowed.
+    const social = await readFile(path.resolve(import.meta.dirname, '../src/routes/social.ts'), 'utf8');
+    assert.ok(social.includes("toUsername: z.string().regex(/^\\.?[A-Za-z0-9_]{1,16}$/).optional(),"));
+    assert.match(social, /body\.toUsername !== undefined \|\| body\.toUserId !== undefined/);
+  });
+
   it('never leaves the sign-in window over a signed-in player', async () => {
     /* An invite link opened the window at load, when everybody still looks signed out, so the
      * `?ref=` left in the address bar put it back over every player who had signed up through one.

@@ -11,6 +11,7 @@
  */
 import { state, bus, refreshRaces, settleRaces } from './store.js';
 import { tableAvatar } from './table-avatar.js';
+import { linkPlayer } from './player-link.js';
 import { $, el, money } from './util.js';
 
 let root = null;
@@ -216,6 +217,7 @@ function table(race) {
     const name = el('span', 'dtable__name');
     name.textContent = entry.username;
     player.append(avatar, name);
+    linkPlayer(entry.playerId, entry.username, avatar, name);
 
     const wagered = el('td', 'dtable__num mono');
     wagered.textContent = money(Number(entry.wageredMinor));

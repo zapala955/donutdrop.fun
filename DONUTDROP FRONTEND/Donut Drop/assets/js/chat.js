@@ -35,6 +35,7 @@ import { $, el, money, parseAmount, formatAmountInput, safeImage } from './util.
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, API_BASE_URL } from './api.js';
+import { linkPlayer } from './player-link.js';
 
 // Recovery-only fallback. New messages arrive over /v1/live while the connection is healthy.
 const POLL_MS = 30_000;
@@ -611,8 +612,11 @@ async function sendTip(username, amountMinor, note, userId) {
     return;
   }
   try {
+    /* The name only when it is one: the card also opens from the feed and the leaderboards, where
+     * the name is the masked one, and the id then names the player on its own. */
+    const realName = /^\.?[A-Za-z0-9_]{1,16}$/.test(String(username ?? '')) ? username : undefined;
     const result = await api.post('/v1/social/tip', {
-      toUsername: username,
+      ...(realName ? { toUsername: realName } : {}),
       /* Sent when we have it — the avatar path does, the typed command does not. The server
        * prefers it, so clicking a head tips that person rather than whoever holds their name by
        * the time the request lands. */
@@ -767,7 +771,7 @@ function tipForm(userId, username) {
  * The name is masked here as everywhere in chat; the real one only ever goes back to the server,
  * in the tip.
  */
-function openPlayerCard(userId, username) {
+export function openPlayerCard(userId, username) {
   if (!userId) return;
   const shown = censorName(username);
 
@@ -1169,10 +1173,12 @@ function buildHit(activity, value) {
   const line = el('div', isTable ? 'msg msg--hit msg--roulette' : 'msg msg--hit');
 
   const top = el('div', 'msg__top');
-  top.append(avatarFor(activity.playerId, activity.player || 'Steve'));
+  const hitHead = avatarFor(activity.playerId, activity.player || 'Steve');
+  top.append(hitHead);
   const who = el('span', 'msg__who');
   who.textContent = censorName(activity.player) || 'Someone';
   top.append(who);
+  linkPlayer(activity.playerId, activity.player, hitHead, who);
   if (isTable) {
     const game = el('i', 'msg__badge msg__badge--roulette');
     game.textContent = TABLE_GAMES.get(activity.kind).toUpperCase();

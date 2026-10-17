@@ -3,6 +3,7 @@ import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
 import { onNavigate } from './routing.js';
 import { tableAvatar } from './table-avatar.js';
+import { linkPlayer } from './player-link.js';
 import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 
@@ -618,7 +619,9 @@ function paintPublicBets() {
     player.className = 'roulette__player';
     const name = document.createElement('span');
     name.textContent = bet.isViewer ? 'You' : bet.player;
-    player.append(tableAvatar(bet.playerId), name);
+    const head = tableAvatar(bet.playerId);
+    player.append(head, name);
+    linkPlayer(bet.playerId, bet.player, head, name);
 
     const selection = document.createElement('td');
     selection.textContent = labelFor(bet.selection);

@@ -24,6 +24,7 @@
  * or did not catch.
  */
 import { state, bus, refreshActivity } from './store.js';
+import { linkPlayer } from './player-link.js';
 import { $, el } from './util.js';
 import { API_BASE_URL } from './api.js';
 
@@ -251,6 +252,7 @@ function playerCell(play) {
   const label = el('span', 'mono');
   label.textContent = name;
   node.append(head, label);
+  linkPlayer(playerId, name, head, label);
   return node;
 }
 

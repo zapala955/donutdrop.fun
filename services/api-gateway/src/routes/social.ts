@@ -41,8 +41,10 @@ import { assertWagerRequirementMet } from '../lib/wager-requirements.js';
 const tipSchema = z
   .object({
     /* The name stays, because `/tip <name> 5m` is a real command and somebody typing a name means
-     * whoever holds that name. */
-    toUsername: z.string().regex(/^[A-Za-z0-9_]{1,16}$/),
+     * whoever holds that name. A Bedrock name carries DonutSMP's leading dot, so the dot is
+     * allowed; without it no Bedrock player could be tipped at all. Optional when an id is sent:
+     * the card opens from the feed and the leaderboards too, where only the masked name is known. */
+    toUsername: z.string().regex(/^\.?[A-Za-z0-9_]{1,16}$/).optional(),
     /* And an id wins when the caller has one. Clicking a head in chat means "that person", not
      * "whoever is called that now" — and Minecraft names are reassignable, so the two can differ.
      * Optional because only the avatar path knows an id; the typed command never will. */
@@ -57,7 +59,10 @@ const tipSchema = z
      * the Discord embed feed and the admin console. */
     note: safePublicText(1, 80).optional(),
   })
-  .strict();
+  .strict()
+  .refine((body) => body.toUsername !== undefined || body.toUserId !== undefined, {
+    message: 'Name the player to tip',
+  });
 
 /* An operator's form hands over whatever was typed, so the schema takes the ordinary ways of
  * writing the same thing instead of answering with a bare VALIDATION_ERROR: grouping marks in the

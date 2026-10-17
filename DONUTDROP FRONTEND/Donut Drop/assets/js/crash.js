@@ -12,6 +12,7 @@
  * every frame, and the bust does not shake.
  */
 import { API_BASE_URL, api, idempotencyKey } from './api.js';
+import { linkPlayer } from './player-link.js';
 import { bus, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
@@ -414,6 +415,7 @@ function paintPlayers() {
     const name = el('span', 'mono');
     name.textContent = bet.isViewer ? 'You' : bet.player;
     who.append(head, name);
+    linkPlayer(bet.playerId, bet.player, head, name);
     const stake = el('span', 'crash__amt mono');
     stake.textContent = money(Number(bet.stakeMinor));
     const at = el('span', 'crash__at mono');

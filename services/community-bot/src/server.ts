@@ -336,7 +336,7 @@ async function main(): Promise<void> {
       case 'invites':
         return showInvites(db, interaction);
       case 'invite-leaderboard':
-        return inviteLeaderboard(db, interaction);
+        return inviteLeaderboard(db, interaction, config.ownerIds);
       case 'invite-check':
         return whoInvited(db, interaction);
       case 'invite-sync':

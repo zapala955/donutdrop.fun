@@ -1,5 +1,6 @@
 import {
   MessageFlags,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type Guild,
   type GuildMember,
@@ -245,18 +246,49 @@ export async function showInvites(db: Database, interaction: ChatInputCommandInt
   await interaction.reply({ embeds: [card] });
 }
 
-/** `/invite-leaderboard` — the top ten, by people who actually stayed. */
-export async function inviteLeaderboard(db: Database, interaction: ChatInputCommandInteraction) {
-  const rows = await db.query<{ inviter_id: string; total: string; here: string }>(
+/** How many inviters are read before admins are taken out, so ten are left to show. */
+const LEADERBOARD_POOL = 60;
+
+/**
+ * Who the invite board leaves off: the server's owner, anybody holding Administrator, and the
+ * bot's configured owners. The board is a contest for the community, and the people who run the
+ * server bring members in as part of the job. A member who has left cannot be asked about their
+ * permissions, so only the owner list catches them.
+ */
+async function adminsAmong(
+  interaction: ChatInputCommandInteraction,
+  ids: readonly string[],
+  ownerIds: readonly string[],
+): Promise<Set<string>> {
+  const admins = new Set<string>(ownerIds);
+  const guild = interaction.guild;
+  if (!guild) return admins;
+  admins.add(guild.ownerId);
+  const members = ids.length ? await guild.members.fetch({ user: [...ids] }).catch(() => null) : null;
+  for (const member of members?.values() ?? []) {
+    if (member.permissions.has(PermissionFlagsBits.Administrator)) admins.add(member.id);
+  }
+  return admins;
+}
+
+/** `/invite-leaderboard` — the top ten, by people who actually stayed. Admins are not ranked. */
+export async function inviteLeaderboard(
+  db: Database,
+  interaction: ChatInputCommandInteraction,
+  ownerIds: readonly string[] = [],
+) {
+  const pool = await db.query<{ inviter_id: string; total: string; here: string }>(
     `SELECT inviter_id, count(*)::text AS total,
             count(*) FILTER (WHERE left_at IS NULL)::text AS here
        FROM discord_invited_members
       WHERE guild_id = $1 AND inviter_id IS NOT NULL
       GROUP BY inviter_id
       ORDER BY count(*) FILTER (WHERE left_at IS NULL) DESC, count(*) DESC
-      LIMIT 10`,
-    [interaction.guildId],
+      LIMIT $2`,
+    [interaction.guildId, LEADERBOARD_POOL],
   );
+  const admins = await adminsAmong(interaction, pool.rows.map((row) => row.inviter_id), ownerIds);
+  const rows = { rows: pool.rows.filter((row) => !admins.has(row.inviter_id)).slice(0, 10) };
 
   if (rows.rows.length === 0) {
     await interaction.reply({
