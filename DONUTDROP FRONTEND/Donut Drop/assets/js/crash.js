@@ -399,7 +399,7 @@ function paintPlayers() {
     const head = el('span', 'crash__head');
     const initial = () => {
       const letter = el('i');
-      letter.textContent = String(bet.player || '?').slice(0, 1).toUpperCase();
+      letter.textContent = String(bet.player || '?').replace(/^\./, '').slice(0, 1).toUpperCase() || '?';
       head.replaceChildren(letter);
     };
     if (bet.playerId) {

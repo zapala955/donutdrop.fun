@@ -20,7 +20,6 @@ export function linkPlayer(userId, name, head, label = null) {
   };
   if (head) {
     head.classList.add('plink__head');
-    head.title = `View ${shown}`;
     head.addEventListener('click', open);
   }
   const stop = label ?? head;

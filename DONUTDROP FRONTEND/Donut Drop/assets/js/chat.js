@@ -967,7 +967,8 @@ function avatarFor(userId, name, size = 22) {
   /* One letter, matching the masked name beside it. Two would render the first asterisk. */
   const initials = () => {
     const mark = el('i');
-    mark.textContent = (censorName(name) || '?').slice(0, 1).toUpperCase();
+    // A Bedrock name's first character is DonutSMP's dot; the initial is the letter after it.
+    mark.textContent = (censorName(name) || '?').replace(/^\./, '').slice(0, 1).toUpperCase() || '?';
     wrap.appendChild(mark);
     return wrap;
   };
@@ -1026,7 +1027,6 @@ function buildMessage(message) {
   if (message.authorId) {
     const open = () => openPlayerCard(message.authorId, message.author);
     avatar.addEventListener('click', open);
-    avatar.title = `View ${censorName(message.author)}`;
     who.classList.add('msg__who--link');
     who.tabIndex = 0;
     who.setAttribute('role', 'button');

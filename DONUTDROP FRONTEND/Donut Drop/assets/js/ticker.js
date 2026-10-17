@@ -233,7 +233,7 @@ function playerCell(play) {
   const playerId = play.playerId ?? play.player_id;
   const paintInitial = () => {
     const initial = el('i');
-    initial.textContent = name.slice(0, 1).toUpperCase();
+    initial.textContent = name.replace(/^\./, '').slice(0, 1).toUpperCase() || '?';
     head.appendChild(initial);
   };
   if (playerId) {

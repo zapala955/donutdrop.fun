@@ -465,8 +465,10 @@
 .msg__who--link:focus-visible { outline: 2px solid var(--lx-focus, var(--gold-bright)); outline-offset: 2px; border-radius: 2px; }
 /* Any player's head or name outside chat (player-link.js): the same affordance as a chat line --
    a pointer and an underline on the name, a gold ring on the head, the focus ring on the name. */
-.plink__head { cursor: pointer; border-radius: 3px; transition: box-shadow var(--lx-quick, .14s) ease; }
-.plink__head:hover { box-shadow: 0 0 0 2px var(--lx-gold, var(--gold-bright)); }
+/* The ring is drawn inside the head (an inset outline paints over the picture), because the rows
+   these heads sit in clip their overflow for long names -- a ring outside was cut to a sliver. */
+.plink__head { cursor: pointer; outline: 2px solid transparent; outline-offset: -2px; transition: outline-color var(--lx-quick, .14s) ease; }
+.plink__head:hover { outline-color: var(--lx-gold, var(--gold-bright)); }
 .plink { cursor: pointer; }
 .plink:hover { text-decoration: underline; text-underline-offset: 2px; }
 .plink:focus-visible { outline: 2px solid var(--lx-focus, var(--gold-bright)); outline-offset: 2px; border-radius: 2px; }
