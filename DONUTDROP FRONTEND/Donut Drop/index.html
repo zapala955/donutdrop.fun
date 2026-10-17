@@ -24,14 +24,14 @@
      is indexed as the crash page rather than as a second copy of the home page. The old copy here
      still advertised a snake arena and a faction war the site no longer has. -->
 <title>DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More</title>
-<meta name="description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
+<meta name="description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, dice, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://donutluxe.com/" />
 <meta name="theme-color" content="#0a0a0c" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="DonutLuxe" />
 <meta property="og:title" content="DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More" />
-<meta property="og:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
+<meta property="og:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, dice, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <meta property="og:url" content="https://donutluxe.com/" />
 <meta property="og:image" content="https://donutluxe.com/assets/img/brand/og-image.png?v=2" />
 <meta property="og:image:width" content="1200" />
@@ -40,7 +40,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content="https://donutluxe.com/assets/img/brand/og-image.png?v=2" />
 <meta name="twitter:title" content="DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More" />
-<meta name="twitter:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
+<meta name="twitter:description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, dice, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <!-- Structured data: the site's name (and the old one, so searches for DonutDrop find it) and its
      Discord. A data block, never executed, so the script-src policy above does not apply to it. -->
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://donutluxe.com/#website","name":"DonutLuxe","alternateName":["DonutLuxe.com"],"url":"https://donutluxe.com/"},{"@type":"Organization","@id":"https://donutluxe.com/#organization","name":"DonutLuxe","url":"https://donutluxe.com/","logo":"https://donutluxe.com/assets/img/brand/icon-512.png","sameAs":["https://discord.gg/aHfRsUaGgx"]}]}</script>
@@ -92,6 +92,7 @@
 <link rel="stylesheet" href="assets/css/tower.css" />
 <link rel="stylesheet" href="assets/css/chicken.css" />
 <link rel="stylesheet" href="assets/css/plinko.css" />
+<link rel="stylesheet" href="assets/css/dice.css" />
 <!-- after duel.css, whose lobby table the coinflip board reuses and narrows to five columns -->
 <link rel="stylesheet" href="assets/css/coinflip.css" />
 <!-- after mines.css, whose .mtile tiles the duel arena reuses, and duel.css, whose badges and avatars the lobby reuses -->
@@ -142,6 +143,7 @@
 <link rel="modulepreload" href="assets/js/crash.js" />
 <link rel="modulepreload" href="assets/js/mines.js" />
 <link rel="modulepreload" href="assets/js/plinko.js" />
+<link rel="modulepreload" href="assets/js/dice.js" />
 <link rel="modulepreload" href="assets/js/tower.js" />
 <link rel="modulepreload" href="assets/js/chicken.js" />
 <link rel="modulepreload" href="assets/js/coinflip.js" />
@@ -245,6 +247,8 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11.5c0 3.6 2.8 6 7 6s6.5-2.4 6.5-6V7.5a2.5 2.5 0 0 0-5 0V9H8a3 3 0 0 0-3 2.5z"/><path d="M18.5 8.5H21l-2.5 1.5"/><path d="M9.5 17.5v3M14 17.5v3"/><circle class="lxfill" cx="16" cy="7.2" r=".7"/></svg><span>Chicken</span></a></li>
       <li><a class="lxnav" href="/plinko" data-route="plinko" data-tip="Plinko">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="lxfill" cx="12" cy="5" r="1.5"/><circle class="lxfill" cx="9" cy="10" r="1.5"/><circle class="lxfill" cx="15" cy="10" r="1.5"/><circle class="lxfill" cx="6" cy="15" r="1.5"/><circle class="lxfill" cx="12" cy="15" r="1.5"/><circle class="lxfill" cx="18" cy="15" r="1.5"/><path d="M3.5 20h17"/></svg><span>Plinko</span></a></li>
+      <li><a class="lxnav" href="/dice" data-route="dice" data-tip="Dice">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle class="lxfill" cx="8.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="8.5" r="1.4"/><circle class="lxfill" cx="12" cy="12" r="1.4"/><circle class="lxfill" cx="8.5" cy="15.5" r="1.4"/><circle class="lxfill" cx="15.5" cy="15.5" r="1.4"/></svg><span>Dice</span></a></li>
       <li><a class="lxnav" href="/blackjack" data-route="blackjack" data-tip="Blackjack">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="10" height="14" rx="1.75" transform="rotate(-10 8.5 12.5)"/><rect x="10.5" y="4.5" width="10" height="14" rx="1.75" transform="rotate(8 15.5 11.5)"/></svg><span>Blackjack</span></a></li>
       <li><a class="lxnav" href="/roulette" data-route="roulette" data-tip="Roulette">
@@ -587,6 +591,11 @@
             <img class="lxcard__art retroart" src="assets/img/items/slime_ball.png" alt="" width="300" height="400" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Plinko</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
           </a><p class="lxlive" data-live="plinko" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/dice" data-cat="casino" data-game="dice" data-q="dice roll over under line chance multiplier">
+            <span class="gcard__badge lxcard__badge" hidden>New</span>
+            <img class="lxcard__art retroart" src="assets/img/items/dice.svg" alt="" width="300" height="400" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Dice</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="dice" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
           <li><a class="gcard lxcard" href="/blackjack" data-cat="casino" data-game="blackjack" data-q="blackjack 21 cards beat the dealer">
             <span class="gcard__badge lxcard__badge" hidden>New</span>
             <img class="lxcard__art retroart" src="assets/img/items/enchanted_book.png" alt="" width="300" height="400" />
@@ -840,6 +849,21 @@
           data-tip="Pick a risk and how many rows of pegs, then drop balls. Each one bounces down the pegs and pays the slot it lands in: the edges pay the most and are the hardest to reach."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="plinko" id="plinkoRoot"></div>
+    </section>
+
+    <!-- ─────── DICE ─────── -->
+    <section class="view" data-view="dice" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/dice.svg" alt="" width="30" height="30" /></span>
+        <div class="phead__txt">
+          <h1>Dice</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Draw a line anywhere from 0 to 100 and pick a side. Roll under wins when the roll lands below the line; roll over wins at or above it. The less of the rail you take, the more a win pays."
+          data-tip="Draw a line anywhere from 0 to 100 and pick a side. Roll under wins when the roll lands below the line; roll over wins at or above it. The less of the rail you take, the more a win pays."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="dice" id="diceRoot"></div>
     </section>
 
     <!-- ─────── MINES DUEL ─────── -->

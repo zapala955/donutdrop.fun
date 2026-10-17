@@ -84,7 +84,7 @@ export const GAMES: readonly GameDefinition[] = [
   },
   {
     key: 'dice',
-    label: 'Dice (retired)',
+    label: 'Dice',
     stakes: ['dice_stake'],
     payouts: ['dice_payout'],
     refunds: [],

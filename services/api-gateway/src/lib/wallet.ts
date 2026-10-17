@@ -88,9 +88,9 @@ export type WalletKind =
    * written by the route. */
   | 'mines_duel_win'
   | 'mines_duel_refund'
-  /* Dice, retired. It shipped for an afternoon, and the ledger is append-only: every roll's
-   * `dice_stake` and `dice_payout` row is still in somebody's history and still needs a name.
-   * Kept, like the slither kinds above, rather than removed. */
+  /* Dice: a winning roll, stake included. Referenced by the roll's id. Dice shipped for an
+   * afternoon on 2026-10-04, was retired, and came back on 2026-10-17; the kind never left the
+   * ledger. The stake itself is a debit, written by the route. */
   | 'dice_payout'
   /* Discord: the one-off reward for joining the server and linking an account, the daily reward
    * for wearing the server's tag, and the inviter's reward when somebody they brought in links.

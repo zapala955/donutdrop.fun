@@ -54,6 +54,7 @@ import { registerMinesRoutes } from './routes/mines.js';
 import { registerTowerRoutes } from './routes/tower.js';
 import { registerChickenRoutes } from './routes/chicken.js';
 import { registerPlinkoRoutes } from './routes/plinko.js';
+import { registerDiceRoutes } from './routes/dice.js';
 import { registerDiscordRewardRoutes } from './routes/discord-rewards.js';
 import { registerVipRoutes } from './routes/vip.js';
 import { registerMediaTestRoutes } from './routes/media-test.js';
@@ -257,6 +258,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerTowerRoutes(app, db, config);
   await registerChickenRoutes(app, db, config);
   await registerPlinkoRoutes(app, db, config);
+  await registerDiceRoutes(app, db, config);
   await registerDiscordRewardRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
   await registerVipRoutes(app, db, config);

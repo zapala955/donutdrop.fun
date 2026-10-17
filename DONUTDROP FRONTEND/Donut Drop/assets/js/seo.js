@@ -29,7 +29,7 @@ export const ROUTE_META = {
   home: {
     title: 'DonutLuxe – DonutSMP Casino | Crash, Mines, Tower & More',
     description:
-      'DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, blackjack, ' +
+      'DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, dice, blackjack, ' +
       'roulette, coinflip and case battles. Deposit and withdraw in game.',
   },
   crates: {
@@ -77,6 +77,12 @@ export const ROUTE_META = {
   plinko: {
     title: 'DonutLuxe Plinko — DonutSMP Plinko',
     description: 'Play plinko with DonutSMP money on DonutLuxe: drop a ball and win where it lands.',
+  },
+  dice: {
+    title: 'DonutLuxe Dice — DonutSMP Dice',
+    description:
+      'Play dice with DonutSMP money on DonutLuxe: draw a line from 0 to 100, call over or under, ' +
+      'and roll.',
   },
   coinflip: {
     title: 'DonutLuxe Coinflip — DonutSMP Coinflip',

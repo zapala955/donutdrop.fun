@@ -16,12 +16,12 @@
 /* ═════════ the frame ═════════ */
 /* Only a single table gets the bar under it. A lobby (Coinflip, Mines Duel, Cases, Case Battles)
    is a list of tables, and its name goes on top like any page's. */
-body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
+body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
 
 /* the bar under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game {
   display: flex; align-items: center; gap: var(--lx-s3);
   height: 56px; margin: 0; padding: 0 var(--lx-s2) 0 var(--lx-s5);
   border: 0; border-top: 2px solid var(--lx-2);
@@ -52,16 +52,16 @@ body.lx .phead--game .phead__how {
 body.lx .phead--game .phead__how:hover { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .phead--game .phead__how[aria-expanded="true"] { color: var(--lx-gold); }
 /* the bubble opens upward when the bar is under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
   top: auto; bottom: calc(100% + 10px); left: auto; right: 0;
   width: min(360px, 80vw);
   transform: translateY(3px);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
 
 /* ═════════ the single-player tables: Crash · Mines · Plinko ═════════ */
-body.lx :is(.crash, .mines, .tower, .chicken, .plinko) {
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .plinko) {
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
   grid-template-areas: "panel stage";
   gap: 0;
@@ -74,23 +74,23 @@ body.lx .crash {
   grid-template-areas: "panel stage" "players stage";
   grid-template-rows: auto minmax(0, 1fr);
 }
-body.lx :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .plinko__stage) {
+body.lx :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage) {
   min-height: 600px;
   border: 0; border-radius: 0 var(--lx-r) 0 0;
   background: var(--lx-0);
   box-shadow: none;
 }
 body.lx .crash[data-phase="busted"] .crash__stage { border: 0; box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .35); }
-body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .plinko__panel) {
+body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .plinko__panel) {
   padding: var(--lx-s3) var(--lx-s3) var(--lx-s4);
   border: 0; border-radius: var(--lx-r) 0 0 0;
   background: transparent;
   box-shadow: none;
 }
-body.lx :is(.crash__form, .mines__form, .tower__form, .chicken__form, .plinko__form) { gap: var(--lx-s2); }
+body.lx :is(.crash__form, .mines__form, .tower__form, .chicken__form, .dice__form, .plinko__form) { gap: var(--lx-s2); }
 
 /* labels: sentence case, the way a form talks */
-body.lx :is(.crash__label, .mines__label, .tower__label, .chicken__label, .plinko__label, .mduel__label, .bj__label, .bj__stakelabel) {
+body.lx :is(.crash__label, .mines__label, .tower__label, .chicken__label, .dice__label, .plinko__label, .mduel__label, .bj__label, .bj__stakelabel) {
   margin: var(--lx-s2) 0 0;
   color: var(--lx-mute);
   font: 600 .8125rem/1.2 var(--lx-ui);
@@ -98,27 +98,27 @@ body.lx :is(.crash__label, .mines__label, .tower__label, .chicken__label, .plink
 }
 
 /* the stake field: a dark well, ½ and 2× bolted to its right edge */
-body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .plinko__field, .mduel__field) {
+body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .plinko__field, .mduel__field) {
   height: 44px; padding: 0 0 0 var(--lx-s3); gap: 0;
   border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
   background: var(--lx-0);
   box-shadow: none;
   overflow: hidden;
 }
-body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .plinko__field, .mduel__field):hover { border-color: var(--lx-5); }
-body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .plinko__field, .mduel__field):focus-within { border-color: var(--lx-gold); box-shadow: none; }
-body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .plinko__field, .mduel__field) span { color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); padding-right: var(--lx-s2); }
-body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .plinko__field, .mduel__field) input {
+body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .plinko__field, .mduel__field):hover { border-color: var(--lx-5); }
+body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .plinko__field, .mduel__field):focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .plinko__field, .mduel__field) span { color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); padding-right: var(--lx-s2); }
+body.lx :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .plinko__field, .mduel__field) input {
   color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); font-variant-numeric: tabular-nums;
 }
-body.lx :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .plinko__adj, .mduel__adj, .bj__adj) {
+body.lx :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .plinko__adj, .mduel__adj, .bj__adj) {
   align-self: stretch;
   min-width: 46px; height: auto;
   border: 0; border-left: 2px solid var(--lx-2); border-radius: 0;
   background: var(--lx-4); color: var(--lx-ink);
   font: 700 .875rem var(--lx-ui);
 }
-body.lx :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .plinko__adj, .mduel__adj, .bj__adj):hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); }
+body.lx :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .plinko__adj, .mduel__adj, .bj__adj):hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); }
 
 /* quick picks and steppers: grey buttons, gold when chosen */
 body.lx :is(.crash__pick, .mines__pick, .plinko__risk, .mines__step, .plinko__step) {
@@ -143,7 +143,7 @@ body.lx :is(.mines__stepper, .plinko__stepper) output,
 body.lx :is(.mines__stepper, .plinko__stepper) input { color: var(--lx-ink); font: 700 1rem var(--lx-ui); background: none; border: 0; }
 
 /* the one button, flat gold; its phase still decides its words and its state */
-body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .plinko .plinko__go) {
+body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .plinko .plinko__go) {
   height: 52px; margin-top: var(--lx-s3);
   border: 0; border-radius: var(--lx-r-s);
   background: var(--lx-gold); color: var(--lx-on-gold);
@@ -151,14 +151,14 @@ body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .c
   box-shadow: var(--lx-shade);
   filter: none;
 }
-body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .plinko .plinko__go):hover:not(:disabled) { background: var(--lx-gold-hi); filter: none; }
+body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .plinko .plinko__go):hover:not(:disabled) { background: var(--lx-gold-hi); filter: none; }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="cash"] { background: var(--lx-gold-hi); box-shadow: 0 0 0 3px rgba(255, 215, 0, .22), var(--lx-shade); }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="idle"] { background: var(--lx-4); color: var(--lx-mute); }
 body.lx .crash .crash__go[data-tone="won"] { background: var(--lx-gold-wash); color: var(--lx-gold-hi); box-shadow: inset 0 0 0 2px rgba(255, 215, 0, .45); }
 body.lx .crash .crash__go[data-tone="lost"] { background: rgba(255, 34, 34, .1); color: var(--lx-loss); box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .4); }
-body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .plinko .plinko__go):disabled { filter: none; opacity: .55; }
-body.lx :is(.crash__go, .mines__go, .tower__go, .chicken__go, .plinko__go) kbd { border-color: currentColor; font-family: var(--lx-ui); }
-body.lx :is(.crash__hint, .mines__hint, .tower__hint, .chicken__hint, .plinko__hint, .plinko__falling) { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
+body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .plinko .plinko__go):disabled { filter: none; opacity: .55; }
+body.lx :is(.crash__go, .mines__go, .tower__go, .chicken__go, .dice__go, .plinko__go) kbd { border-color: currentColor; font-family: var(--lx-ui); }
+body.lx :is(.crash__hint, .mines__hint, .tower__hint, .chicken__hint, .dice__hint, .plinko__hint, .plinko__falling) { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
 body.lx :is(.crash__mine) { border: 0; border-radius: var(--lx-r-s); background: var(--lx-0); }
 body.lx .mines__random {
   border: 0; border-radius: var(--lx-r-s);
@@ -256,7 +256,7 @@ body.lx .roulette__stage { background: var(--lx-0); }
 
 /* a lobby's title reads as a page title */
 body.lx .phead--game h1 { font-size: 1.375rem; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
 
 /* ═════════ Blackjack: controls left, the felt right ═════════ */
 body.lx .bj {
@@ -406,14 +406,14 @@ body.lx .feedrow__mult { text-shadow: none; }
 
 /* ═════════ phones ═════════ */
 @media (max-width: 1023px) {
-  body.lx :is(.crash, .mines, .tower, .chicken, .plinko) {
+  body.lx :is(.crash, .mines, .tower, .chicken, .dice, .plinko) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "stage" "panel";
   }
   body.lx .crash { grid-template-areas: "stage" "panel" "players"; grid-template-rows: none; }
-  body.lx :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .plinko__stage) { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  body.lx :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage) { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
   body.lx .crash__stage { min-height: 340px; }
-  body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .plinko__panel) { border-radius: 0; }
+  body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .plinko__panel) { border-radius: 0; }
   body.lx .mines__stage { padding: var(--lx-s3); }
   body.lx .phead--game { padding-left: var(--lx-s4); }
   body.lx .phead--game .phead__tag { display: none; }

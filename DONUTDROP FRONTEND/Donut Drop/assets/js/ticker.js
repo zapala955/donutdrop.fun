@@ -202,6 +202,7 @@ function gameCell(play) {
                 : kind === 'tower' ? '\u25A4'
                 : kind === 'chicken' ? '\u25BA'
                 : kind === 'plinko' ? '\u25CF'
+                : kind === 'dice' ? '\u2684'
                 : kind === 'coinflip' ? '\u25D0'
                 : kind === 'minesduel' ? '\u25A6'
                 : '\u2694';
@@ -278,6 +279,7 @@ function gameLabel(play) {
   if (kind === 'tower') return 'Tower';
   if (kind === 'chicken') return 'Chicken';
   if (kind === 'plinko') return 'Plinko';
+  if (kind === 'dice') return 'Dice';
   if (kind === 'coinflip') return 'Coinflip';
   if (kind === 'minesduel') return 'Mines Duel';
   return play.sourceName || play.source_name || 'Round';

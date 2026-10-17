@@ -20,6 +20,7 @@ import { parseWith } from '../lib/validation.js';
  *   tower     a climb cashed out or hit TNT.
  *   chicken   a run across the rails cashed out or met a minecart.
  *   plinko    a ball landed in a slot.
+ *   dice      a roll landed over or under its line.
  *   minesduel a mines duel was decided, as one row for its winner.
  *   faction   a wager was credited to a team in the running faction war.
  *
@@ -237,6 +238,24 @@ export async function registerActivityRoutes(
                 1 AS quantity, 0 AS chance_ppm,
                 NULL::smallint AS game_result
            FROM (SELECT * FROM plinko_bets ORDER BY created_at DESC LIMIT $1) b
+           JOIN users u ON u.id = b.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
+         UNION ALL
+         /* A dice roll: the stake, and what it paid (nothing on a miss). Rolls come as fast as balls,
+            so this branch reads only the newest $1 too. */
+         SELECT b.id, 'dice'::text AS kind, b.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Dice'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM (SELECT * FROM dice_bets ORDER BY created_at DESC LIMIT $1) b
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
          UNION ALL
@@ -497,6 +516,21 @@ export async function registerActivityRoutes(
           WHERE u.id = b.user_id AND b.created_at >= day.at
             AND b.payout_minor > b.stake_minor
          UNION ALL
+         SELECT b.id, 'dice'::text AS kind, b.created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Dice'::text AS source_name,
+                NULL::char(7) AS accent,
+                b.stake_minor AS wager_minor,
+                b.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM dice_bets b, day, users u
+          WHERE u.id = b.user_id AND b.created_at >= day.at
+            AND b.payout_minor > b.stake_minor
+         UNION ALL
          /* A coinflip or a mines duel, as one row for its winner: their stake against the pot. */
          SELECT g.id, 'coinflip'::text AS kind, g.settled_at AS created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
@@ -570,6 +604,8 @@ export async function registerActivityRoutes(
           WHERE g.created_at > since.at OR g.settled_at > since.at
          UNION ALL
          SELECT 'plinko', b.user_id FROM plinko_bets b, since WHERE b.created_at > since.at
+         UNION ALL
+         SELECT 'dice', b.user_id FROM dice_bets b, since WHERE b.created_at > since.at
          UNION ALL
          SELECT 'blackjack', h.user_id FROM blackjack_hands h, since
           WHERE h.created_at > since.at OR h.settled_at > since.at

@@ -234,7 +234,7 @@ describe('the chicken page', () => {
       front('assets/css/chicken.css'),
       front('assets/img/items/chicken.svg'),
     ]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.plinko\) \{/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, [^)]*\.plinko\) \{/);
     assert.match(css, /\.chicken__road \{[^}]*overflow-x: auto;/);
     assert.match(css, /\.chicken__road:focus-visible/);
     const rules = css.slice(css.indexOf('/* ─────────── the road'));

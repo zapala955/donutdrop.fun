@@ -354,6 +354,8 @@ async function playerCard(db: Database, config: AppConfig, userId: string): Prom
          UNION ALL
          SELECT 'Plinko', stake_minor, payout_minor FROM plinko_bets WHERE user_id = $1
          UNION ALL
+         SELECT 'Dice', stake_minor, payout_minor FROM dice_bets WHERE user_id = $1
+         UNION ALL
          SELECT 'Coinflip', stake_minor, payout_minor FROM coinflip_games
           WHERE (host_user_id = $1 OR opponent_user_id = $1) AND winner_user_id = $1 AND status = 'settled'
          UNION ALL

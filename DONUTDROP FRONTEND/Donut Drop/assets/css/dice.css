@@ -1,0 +1,341 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: dice table · genre: atmospheric (the site's obsidian + gold) · theme: luxe tokens
+ * states: the line -- default, hover, :focus-visible (a ring on the thumb), :active (the thumb pressed
+ *         in), disabled (a roll in the air); the two sides of it -- the winning side solid gold and
+ *         taller, the losing side a thinner red, so the sides differ in shape as well as colour; the
+ *         marker -- won (a gold die), lost (a dark die ringed in red); the recent strip -- won, lost,
+ *         fresh; the Roll button -- default, hover, :focus-visible, :active, disabled, aria-busy.
+ *         The stake field and the three dials share the frame's well (luxe-games.css).
+ * signature: a 0-100 rail in a dark well with the line drawn through it; the roll lands on it as a
+ *            die showing the number, gold when it won, ringed in red when it did not.
+ * motion: the marker sliding to the roll (420ms, in dice.js) and the newest chip settling into the
+ *         strip (240ms). Reduced motion: neither -- both are simply there.
+ */
+
+.dice {
+  /* The table's own measures and the two colours of the rail, lifted so no rule writes one inline. */
+  --dice-thumb: 32px;
+  --dice-marker: 64px;
+  --dice-win: var(--lx-gold);
+  --dice-lose: rgba(255, 34, 34, .62);
+  --dice-well: var(--lx-1);
+  --dice-grip: rgba(10, 10, 12, .55);
+
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the stage ─────────── */
+.dice__stage {
+  grid-area: stage;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--lx-s6);
+  padding: var(--lx-s6);
+  min-width: 0;
+}
+
+.dice__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--lx-s3) var(--lx-s4);
+  min-width: 0;
+}
+.dice__readout { display: grid; gap: 2px; min-width: 0; }
+.dice__readout b { color: var(--lx-ink); font: 800 1.25rem/1.2 var(--lx-display); font-variant-numeric: tabular-nums; }
+.dice__readout b[data-tone="won"] { color: var(--lx-gold-hi); }
+.dice__readout b[data-tone="lost"] { color: var(--lx-loss); }
+.dice__readout span { color: var(--lx-mute); font: 600 .8125rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
+
+/* The last eight rolls, newest first. A win is filled, a loss is not: the difference is in the
+   shape of the chip as well as its colour. */
+.dice__recent {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--lx-s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.dice__chip {
+  min-width: 52px;
+  padding: 6px var(--lx-s2);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-2);
+  box-shadow: inset 0 0 0 1px var(--lx-4);
+  color: var(--lx-mute);
+  font: 700 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.dice__chip[data-tone="won"] { background: var(--lx-gold-wash); box-shadow: inset 0 0 0 1px var(--lx-gold-lo); color: var(--lx-gold-hi); }
+.dice__chip[data-fresh="1"] { animation: dice-chip-in var(--lx-slide) var(--lx-ease) both; }
+@keyframes dice-chip-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ─────────── the rail ─────────── */
+.dice__board {
+  align-self: center;
+  display: grid;
+  gap: var(--lx-s2);
+  padding: var(--lx-s5) var(--lx-s5) var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--dice-well);
+  box-shadow: inset 0 0 0 1px var(--lx-3);
+  min-width: 0;
+}
+.dice__rail {
+  position: relative;
+  padding-top: calc(var(--dice-marker) * .75 + var(--lx-s4));
+}
+
+/* The roll, as a die over the number it landed on. Placed in pixels by dice.js (translateX), so the
+   only thing that ever moves is a transform. */
+.dice__marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--dice-marker);
+  height: calc(var(--dice-marker) * .75);
+  margin-left: calc(var(--dice-marker) / -2);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: inset 0 0 0 2px var(--lx-loss), var(--lx-shade);
+  color: var(--lx-loss);
+  pointer-events: none;
+  will-change: transform;
+}
+.dice__marker[hidden] { display: none; }
+.dice__marker b { font: 800 1.1875rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+.dice__marker::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: inherit;
+  box-shadow: inset -2px -2px 0 0 var(--lx-loss);
+  transform: rotate(45deg);
+}
+.dice__marker[data-tone="won"] { background: var(--lx-gold); box-shadow: var(--lx-shade); color: var(--lx-on-gold); }
+.dice__marker[data-tone="won"]::after { box-shadow: none; }
+
+.dice__track {
+  position: relative;
+  height: 44px;
+}
+/* The two sides of the line, inset half a thumb at each end so the line and the thumb agree (and
+   dice.js places the marker the same way). Under: the low side wins. Over: the high side does. */
+.dice__zone {
+  position: absolute;
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+  background: var(--dice-lose);
+  pointer-events: none;
+}
+.dice__zone--lo {
+  left: calc(var(--dice-thumb) / 2);
+  width: calc((100% - var(--dice-thumb)) * var(--line-ratio, .5));
+  border-radius: var(--lx-r-pill) 0 0 var(--lx-r-pill);
+}
+.dice__zone--hi {
+  right: calc(var(--dice-thumb) / 2);
+  width: calc((100% - var(--dice-thumb)) * (1 - var(--line-ratio, .5)));
+  border-radius: 0 var(--lx-r-pill) var(--lx-r-pill) 0;
+}
+.dice__track[data-side="under"] .dice__zone--lo,
+.dice__track[data-side="over"] .dice__zone--hi {
+  height: 14px;
+  margin-top: -7px;
+  background: var(--dice-win);
+}
+
+/* The slider itself: native, transparent, a square block for a thumb. */
+.dice__range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dice__range:focus { outline: none; }
+.dice__range:disabled { cursor: progress; }
+.dice__range::-webkit-slider-runnable-track { height: 100%; background: none; border: 0; }
+.dice__range::-moz-range-track { height: 100%; background: none; border: 0; }
+.dice__range::-webkit-slider-thumb {
+  width: var(--dice-thumb);
+  height: var(--dice-thumb);
+  margin-top: calc((44px - var(--dice-thumb)) / 2);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  /* Three grip lines, drawn, on the gold block. */
+  background:
+    linear-gradient(90deg, transparent 30%, var(--dice-grip) 30% 36%, transparent 36% 47%, var(--dice-grip) 47% 53%,
+      transparent 53% 64%, var(--dice-grip) 64% 70%, transparent 70%) center / 100% 45% no-repeat,
+    var(--lx-gold-hi);
+  box-shadow: 0 0 0 3px var(--lx-1), var(--lx-shade);
+  transition: transform var(--lx-quick) var(--lx-ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dice__range::-moz-range-thumb {
+  width: var(--dice-thumb);
+  height: var(--dice-thumb);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background:
+    linear-gradient(90deg, transparent 30%, var(--dice-grip) 30% 36%, transparent 36% 47%, var(--dice-grip) 47% 53%,
+      transparent 53% 64%, var(--dice-grip) 64% 70%, transparent 70%) center / 100% 45% no-repeat,
+    var(--lx-gold-hi);
+  box-shadow: 0 0 0 3px var(--lx-1), var(--lx-shade);
+  transition: transform var(--lx-quick) var(--lx-ease);
+}
+.dice__range:hover:not(:disabled)::-webkit-slider-thumb { background-color: var(--lx-ink); }
+.dice__range:hover:not(:disabled)::-moz-range-thumb { background-color: var(--lx-ink); }
+.dice__range:active:not(:disabled)::-webkit-slider-thumb { transform: scale(.94); }
+.dice__range:active:not(:disabled)::-moz-range-thumb { transform: scale(.94); }
+.dice__range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--lx-1), 0 0 0 5px var(--lx-focus); }
+.dice__range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--lx-1), 0 0 0 5px var(--lx-focus); }
+.dice__range:disabled::-webkit-slider-thumb { opacity: .6; }
+.dice__range:disabled::-moz-range-thumb { opacity: .6; }
+
+.dice__scale {
+  position: relative;
+  height: 1.1em;
+  margin: 0 calc(var(--dice-thumb) / 2);
+  color: var(--lx-faint);
+  font: 600 .75rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+.dice__scale span { position: absolute; top: 0; transform: translateX(-50%); }
+.dice__scale span:nth-child(1) { left: 0; }
+.dice__scale span:nth-child(2) { left: 25%; }
+.dice__scale span:nth-child(3) { left: 50%; }
+.dice__scale span:nth-child(4) { left: 75%; }
+.dice__scale span:nth-child(5) { left: 100%; }
+
+/* ─────────── the three dials ─────────── */
+.dice__dials {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lx-s3);
+  min-width: 0;
+}
+.dice__dial { display: grid; gap: var(--lx-s1); min-width: 0; }
+.dice__dial .dice__label { margin: 0; }
+.dice__field--dial { padding-right: 0; }
+.dice__field--dial span { padding: 0 var(--lx-s3) 0 var(--lx-s2); }
+.dice__swap {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 46px;
+  padding: 0;
+  border: 0;
+  border-left: 2px solid var(--lx-2);
+  background: var(--lx-4);
+  color: var(--lx-gold-hi);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.dice__swap svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dice__swap:hover:not(:disabled) { background: var(--lx-5); }
+.dice__swap:active:not(:disabled) svg { transform: rotate(180deg); }
+.dice__swap:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+.dice__swap:disabled { cursor: progress; color: var(--lx-faint); }
+
+/* ─────────── the panel ─────────── */
+.dice__panel { grid-area: panel; min-width: 0; }
+.dice__form { display: grid; grid-template-columns: minmax(0, 1fr); }
+.dice__field { display: flex; align-items: center; min-width: 0; }
+.dice__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.dice__field input:focus { outline: none; }
+.dice__field input:disabled { color: var(--lx-mute); cursor: progress; }
+.dice__adj { cursor: pointer; }
+.dice__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* What a win would add, read off the line and the stake; not a field anybody types in. */
+.dice__field--read { background: var(--lx-1); }
+body.lx .dice__field--read:hover { border-color: var(--lx-4); }
+.dice__field--read output {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--lx-s3);
+  overflow: hidden;
+  color: var(--lx-gold-hi);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Roll: the frame's gold button (luxe-games.css). Its shape here. */
+.dice .dice__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--lx-quick) var(--lx-ease), transform 90ms var(--lx-ease);
+}
+.dice .dice__go:active:not(:disabled) { transform: translateY(1px); }
+.dice .dice__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+.dice .dice__go[aria-busy="true"] { cursor: progress; }
+
+.dice__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.dice__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .dice { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .dice__stage { gap: var(--lx-s4); padding: var(--lx-s4) var(--lx-s3); }
+}
+@media (max-width: 560px) {
+  .dice { --dice-marker: 56px; }
+  .dice__board { padding: var(--lx-s4) var(--lx-s3) var(--lx-s3); }
+  .dice__recent { justify-content: flex-start; }
+  .dice__chip { min-width: 46px; }
+  /* Six fit one row at phone width; eight would wrap into a second. */
+  .dice__chip:nth-child(n + 7) { display: none; }
+  /* The line's own dial across the top, the two it trades against side by side under it. */
+  .dice__dials { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dice__dial:nth-child(2) { grid-column: 1 / -1; grid-row: 1; }
+  .dice__readout b { font-size: 1.0625rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dice__chip[data-fresh="1"] { animation: none; }
+  /* One rule per engine: a selector list with a pseudo-element the browser does not know is dropped whole. */
+  .dice__range::-webkit-slider-thumb { transition: none; }
+  .dice__range::-moz-range-thumb { transition: none; }
+  .dice__swap,
+  .dice .dice__go { transition: none; }
+  .dice__swap:active:not(:disabled) svg { transform: none; }
+}

@@ -18,6 +18,7 @@ type SettingGroup =
   | 'tower'
   | 'chicken'
   | 'plinko'
+  | 'dice'
   | 'discord'
   | 'alerts'
   | 'duels'
@@ -470,6 +471,30 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'plinko',
     label: 'Plinko maximum payout per ball (a stake whose best slot would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── dice ── The edge is fixed in lib/dice.ts; these are the limits. */
+  diceEnabled: { kind: 'boolean', group: 'dice', label: 'Dice open' },
+  diceMinStakeMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  diceMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  diceMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'dice',
+    label: 'Dice maximum payout per roll (a stake whose win would pay more is refused)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -989,6 +1014,8 @@ function assertInvariants(view: AppConfig): void {
     ['Chicken maximum stake', view.chickenMaxStakeMinor, 'the maximum payout', view.chickenMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
+    ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
+    ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
