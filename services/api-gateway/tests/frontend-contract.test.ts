@@ -102,6 +102,16 @@ describe('frontend/backend contract', () => {
     assert.match(css, /filter: drop-shadow\(0 6px 0 var\(--card-drop\)\);/);
   });
 
+  it('ranks the wagered board on every game, not three of them', async () => {
+    /* 2026-10-17: the board unioned the upgrader, crates and battles by hand, so ten games -- two
+     * thirds of the volume -- never reached it. It reads wager_events, which every bet writes. */
+    const insights = await readFile(path.resolve(import.meta.dirname, '../src/routes/insights.ts'), 'utf8');
+    const board = insights.slice(insights.indexOf('async function runBoard'), insights.indexOf('const cardParams'));
+    assert.match(board, /FROM wager_events w JOIN users u ON u\.id = w\.user_id/);
+    assert.match(board, /sum\(w\.amount_minor\)::text AS value/);
+    assert.doesNotMatch(board, /WITH volume AS/);
+  });
+
   it('never leaves the sign-in window over a signed-in player', async () => {
     /* An invite link opened the window at load, when everybody still looks signed out, so the
      * `?ref=` left in the address bar put it back over every player who had signed up through one.

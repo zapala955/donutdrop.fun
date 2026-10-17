@@ -246,27 +246,19 @@ async function runBoard(
     return result.rows;
   }
 
-  /* Total wagered spans three games, so the three are unioned before being summed. A player who
-   * only opens crates and a player who only pulls the upgrader are on the same board. */
+  /* Total wagered, every game: read from wager_events, the one row recordWager writes for every
+   * bet on the site (crates and battle seats as 'case'), which is what VIP, rakeback and the races
+   * already count. It used to union three game tables by hand -- the upgrader, crates and battles
+   * -- so Crash, Mines, Tower, Chicken, Plinko, Dice, Blackjack, Roulette, Coinflip and Mines Duel
+   * never reached the board: two thirds of the volume, and most of the players on it. */
   const result = await db.query<BoardRow>(
-    `WITH volume AS (
-       SELECT user_id, stake_value_minor AS amount, created_at FROM upgrader_rounds
-       UNION ALL
-       SELECT user_id, price_minor, created_at FROM case_rounds
-       UNION ALL
-       -- Bot seats stake nothing and have no user, so they are excluded rather than summed as
-       -- zero against a null id.
-       SELECT p.user_id, p.staked_minor, b.created_at
-         FROM battle_players p JOIN battles b ON b.id = p.battle_id
-        WHERE p.user_id IS NOT NULL
-     )
-     SELECT v.user_id, ${maskedName('u.minecraft_username')} AS username,
-            sum(v.amount)::text AS value,
+    `SELECT w.user_id, ${maskedName('u.minecraft_username')} AS username,
+            sum(w.amount_minor)::text AS value,
             count(*)::text AS detail
-       FROM volume v JOIN users u ON u.id = v.user_id
-      WHERE v.created_at >= ${window} AND ${notDemoPredicate('u')}
-      GROUP BY v.user_id, u.minecraft_username
-      ORDER BY sum(v.amount) DESC
+       FROM wager_events w JOIN users u ON u.id = w.user_id
+      WHERE w.created_at >= ${window} AND ${notDemoPredicate('u')}
+      GROUP BY w.user_id, u.minecraft_username
+      ORDER BY sum(w.amount_minor) DESC
       LIMIT $1`,
     [limit],
   );
