@@ -301,7 +301,7 @@ body.lx-anim .lxapp { transition: margin var(--lx-slide) var(--lx-ease); }
 /* The lockup: the pixel donut (the favicon) and the name in pixel letters, both drawn on whole
    pixels (assets/img/brand/*.svg) and scaled only by whole numbers, so no edge ever blurs: the donut
    at 2px a pixel, the letters at 3px (2px on a phone, where the two then match). */
-.lxbrand { flex: none; display: inline-flex; align-items: center; gap: 10px; height: 40px; }
+.lxbrand { flex: none; display: inline-flex; align-items: center; gap: 14px; height: 40px; }
 .lxbrand img { display: block; flex: none; image-rendering: pixelated; }
 .lxbrand__mark { width: 32px; height: 32px; }
 .lxbrand__word { width: 186px; height: 24px; }
@@ -808,7 +808,7 @@ body.lx .chat__dock { display: none; }
   .lxtip { display: none; }
 
   .lxtop__in { gap: var(--lx-s2); }
-  .lxbrand { gap: 8px; }
+  .lxbrand { gap: 12px; }
   .lxbrand__word { width: 124px; height: 16px; }
   .lxwallet { gap: var(--lx-s1); }
   body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3); }
