@@ -42,12 +42,34 @@ const MAX_IMAGE_BYTES = 128 * 1024;
 
 /* A day for a head that resolved. Skins change rarely and a stale one is a cosmetic non-event. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-/* Five minutes for one that did not. A Bedrock player has no Mojang head and never will, and
- * mc-heads being down should cost one upstream attempt per five minutes, not one per render. */
+/* Five minutes for one that did not. A Bedrock player GeyserMC does not know has no head to fetch,
+ * and mc-heads being down should cost one upstream attempt per five minutes, not one per render. */
 const NEGATIVE_TTL_MS = 5 * 60 * 1000;
 /* Bounded so a flood of ids cannot grow this without limit. Chat shows a few dozen distinct
  * players; this holds far more than that and evicts oldest-first when it does not. */
 const MAX_ENTRIES = 512;
+
+/*
+ * ── BEDROCK HEADS ──
+ *
+ * A Bedrock player has no Mojang profile, but DonutSMP lets them in through Geyser, and GeyserMC's
+ * global API knows every Bedrock player who has joined a Geyser server: their Xbox id from their
+ * gamertag, and the skin texture that id wears. mc-heads draws a head from a texture id as readily
+ * as from a UUID. So a `bedrock:.<gamertag>` identity resolves in two server-side lookups --
+ * gamertag to xuid, xuid to texture -- and the head is fetched by texture id.
+ *
+ * The gamertag leaves this server only towards GeyserMC, from this server, once a day per player;
+ * never from a viewer's browser, which still asks for nothing but an opaque id. mc-heads sees a
+ * texture hash, which names nobody. Floodgate turns spaces into underscores, so a gamertag that
+ * misses as written is tried once more with spaces.
+ */
+const GEYSER_API = 'https://api.geysermc.org/v2/';
+const SKIN_TTL_MS = 24 * 60 * 60 * 1000;
+/* A gamertag GeyserMC does not know yet (a player who has never joined a Geyser server, or a name
+ * Floodgate cut short) is asked about again in an hour, not on every render. */
+const SKIN_MISS_TTL_MS = 60 * 60 * 1000;
+const BEDROCK_IDENTITY = /^bedrock:\.([a-z0-9_]{2,15})$/;
+const TEXTURE_ID = /^[a-f0-9]{32,64}$/;
 
 interface CacheEntry {
   readonly expiresAt: number;
@@ -63,6 +85,65 @@ const querySchema = z
 
 export async function registerAvatarRoutes(app: FastifyInstance, db: Database) {
   const cache = new Map<string, CacheEntry>();
+  /* Per gamertag, not per size: one lookup serves the 22px and the 40px head alike. */
+  const skins = new Map<string, { expiresAt: number; textureId: string | null }>();
+  const pending = new Map<string, Promise<string | null | undefined>>();
+
+  async function geyser(path: string): Promise<Record<string, unknown> | null | undefined> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${GEYSER_API}${path}`, {
+        headers: { accept: 'application/json', 'user-agent': 'DonutLuxe avatar proxy' },
+        signal: controller.signal,
+      });
+      if (response.status === 404 || response.status === 400) return null;
+      if (!response.ok) return undefined;
+      return (await response.json()) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /**
+   * The skin texture a Bedrock gamertag wears: an id, null when GeyserMC has none, or undefined
+   * when it could not be asked (a network blip is not cached as a miss). Concurrent renders of the
+   * same head share one lookup.
+   */
+  function bedrockTexture(gamertag: string): Promise<string | null | undefined> {
+    const known = skins.get(gamertag);
+    if (known && known.expiresAt > Date.now()) return Promise.resolve(known.textureId);
+    const inFlight = pending.get(gamertag);
+    if (inFlight) return inFlight;
+    const lookup = (async () => {
+      let xuid: unknown;
+      for (const candidate of new Set([gamertag, gamertag.replace(/_/g, ' ')])) {
+        const found = await geyser(`xbox/xuid/${encodeURIComponent(candidate)}`);
+        if (found === undefined) return undefined;
+        xuid = found?.['xuid'];
+        if (xuid) break;
+      }
+      let textureId: string | null = null;
+      if (typeof xuid === 'number' || (typeof xuid === 'string' && /^\d{1,20}$/.test(xuid))) {
+        const skin = await geyser(`skin/${String(xuid)}`);
+        if (skin === undefined) return undefined;
+        const id = skin?.['texture_id'];
+        textureId = typeof id === 'string' && TEXTURE_ID.test(id) ? id : null;
+      }
+      skins.delete(gamertag);
+      skins.set(gamertag, { expiresAt: Date.now() + (textureId ? SKIN_TTL_MS : SKIN_MISS_TTL_MS), textureId });
+      while (skins.size > MAX_ENTRIES) {
+        const oldest = skins.keys().next();
+        if (oldest.done) break;
+        skins.delete(oldest.value);
+      }
+      return textureId;
+    })().finally(() => pending.delete(gamertag));
+    pending.set(gamertag, lookup);
+    return lookup;
+  }
 
   function remember(key: string, entry: CacheEntry): void {
     /* Insertion-ordered, so the first key is the oldest. Deleting before setting keeps a refreshed
@@ -100,11 +181,16 @@ export async function registerAvatarRoutes(app: FastifyInstance, db: Database) {
         [params.id],
       );
       const identity = user.rows[0]?.minecraft_identity ?? '';
-      /* Java accounts only. A Bedrock identity is `bedrock:<name>` — there is no Mojang UUID to ask
-       * for, and putting the name in an upstream URL is the exact thing this route exists to stop.
-       * They get the initials treatment, which is what the client already falls back to. */
+      /* A Java account is fetched by its Mojang UUID; a Bedrock one by the skin texture GeyserMC
+       * knows for it (see BEDROCK HEADS above). Either way the upstream URL is built only from a
+       * value checked against a hex pattern, so nothing a caller supplies can reach it. A Bedrock
+       * player GeyserMC does not know still gets the initials the client falls back to. */
       const uuid = /^mc:([a-f0-9]{32})$/.exec(identity)?.[1];
-      if (!uuid) {
+      const gamertag = uuid ? undefined : BEDROCK_IDENTITY.exec(identity)?.[1];
+      const texture = gamertag ? await bedrockTexture(gamertag) : null;
+      if (texture === undefined) return notFound(reply);
+      const subject = uuid ?? texture;
+      if (!subject) {
         remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
         return notFound(reply);
       }
@@ -113,7 +199,7 @@ export async function registerAvatarRoutes(app: FastifyInstance, db: Database) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
       try {
-        upstream = await fetch(`${UPSTREAM}${uuid}/${size}`, {
+        upstream = await fetch(`${UPSTREAM}${subject}/${size}`, {
           method: 'GET',
           headers: { accept: 'image/png,image/*' },
           signal: controller.signal,

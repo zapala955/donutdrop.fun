@@ -42,16 +42,21 @@ describe('avatar proxy', () => {
     /* The upstream URL is built from a 32-hex UUID extracted by regex, so nothing a caller
        supplies can reach it. */
     assert.match(source, /\/\^mc:\(\[a-f0-9\]\{32\}\)\$\//);
-    assert.match(source, /\$\{UPSTREAM\}\$\{uuid\}\/\$\{size\}/);
+    assert.match(source, /\$\{UPSTREAM\}\$\{subject\}\/\$\{size\}/);
   });
 
-  it('refuses to put a Bedrock name upstream', async () => {
-    /* A Bedrock identity is `bedrock:<name>`. It has no Mojang UUID, and the only way to ask
-       mc-heads for one would be to send the name — the exact thing this route prevents. */
+  it('sends a Bedrock gamertag only to GeyserMC, and mc-heads only a texture id', async () => {
+    /* 2026-10-17: Bedrock players get heads. Their gamertag goes from this server to GeyserMC's
+       API (gamertag to xuid, xuid to skin texture), never from a browser; mc-heads is asked by the
+       texture id, checked against a hex pattern, so no name reaches it. */
     const source = await route();
+    assert.match(source, /const BEDROCK_IDENTITY = \/\^bedrock:\\\.\(\[a-z0-9_\]\{2,15\}\)\$\/;/);
+    assert.match(source, /const TEXTURE_ID = \/\^\[a-f0-9\]\{32,64\}\$\/;/);
+    assert.match(source, /TEXTURE_ID\.test\(id\)/);
+    assert.match(source, /`xbox\/xuid\/\$\{encodeURIComponent\(candidate\)\}`/);
     const guard = source.slice(source.indexOf('const uuid ='), source.indexOf('let upstream'));
-    assert.match(guard, /if \(!uuid\)/);
-    assert.match(guard, /return notFound\(reply\)/);
+    assert.match(guard, /const subject = uuid \?\?  ?texture;/);
+    assert.match(guard, /if \(!subject\)/);
   });
 
   it('bounds the sizes it will fetch', async () => {
