@@ -496,7 +496,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('tag')
-      .setDescription('Claim today’s reward for wearing the server tag'),
+      .setDescription('Claim your reward for wearing the server tag (then one per 24 hours worn)'),
   );
 
   add(

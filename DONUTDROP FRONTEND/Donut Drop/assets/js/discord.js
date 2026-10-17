@@ -124,6 +124,23 @@ function row(label, value, done = false) {
   return item;
 }
 
+/* The tag reward: the first is paid the moment the tag is on, every one after it needs the tag worn
+ * for 24 hours straight. Kept short, because it sits in the value column of a one-line row. */
+const tagWaiting = (tag) => Boolean(tag?.nextAt && Date.parse(tag.nextAt) > Date.now());
+
+function tagValue(amount, tag) {
+  if (!tag?.days) return `${amount} at once, then per 24h worn`;
+  if (tag.nextAt) {
+    const left = Date.parse(tag.nextAt) - Date.now();
+    if (left <= 0) return `${amount} · ready now`;
+    const hours = Math.floor(left / 3_600_000);
+    const label = hours ? `${hours}h` : `${Math.max(1, Math.ceil(left / 60_000))}m`;
+    return `${amount} · next in ${label}`;
+  }
+  // Collected before, and the tag is not seen on: the next 24 hours start when it goes back on.
+  return `${amount} per 24h worn`;
+}
+
 function paintRewards() {
   if (!rewards) return;
   rewards.replaceChildren();
@@ -152,10 +169,8 @@ function paintRewards() {
     ),
     row(
       'Wear the server tag, then /tag in Discord',
-      Number(amounts.tagMinor) > 0
-        ? `${money(Number(amounts.tagMinor))} a day${status.tag?.claimedToday ? ' · collected today' : ''}`
-        : 'off',
-      Boolean(status.tag?.claimedToday),
+      Number(amounts.tagMinor) > 0 ? tagValue(money(Number(amounts.tagMinor)), status.tag) : 'off',
+      tagWaiting(status.tag),
     ),
   );
   /* The daily code is delivered by the bot and redeemed here. */

@@ -83,7 +83,17 @@ export interface RewardStatus {
   };
   readonly minAccountAgeDays: number;
   readonly join: { claimed: boolean } | null;
-  readonly tag: { claimedToday: boolean; days: number } | null;
+  readonly tag: {
+    claimedToday: boolean;
+    days: number;
+    /** When the next tag reward opens, while the tag is seen on after a first reward. Absent on an older gateway. */
+    nextAt?: string | null;
+  } | null;
+}
+
+export interface TagSighting {
+  readonly discordUserId: string;
+  readonly wearing: boolean;
 }
 
 /** The signup and invite figures the site advertises (GET /v1/promotions, which is public). */
@@ -126,11 +136,27 @@ export class PlatformApi {
     return this.post<LinkResult>('/internal/v1/community/link', body);
   }
 
-  /** `/tag`: today's reward for wearing the server's tag, as far as this bot can see. */
+  /** `/tag`: the reward for wearing the server's tag, as far as this bot can see. */
   async claimTag(discordUserId: string, wearingTag: boolean): Promise<TagResult> {
     return this.post<TagResult>('/internal/v1/community/rewards/tag', {
       discordUserId,
       wearingTag,
+    });
+  }
+
+  /** Whose tag to keep checking: everybody who has collected a tag reward lately. */
+  async tagWatchList(): Promise<string[]> {
+    const result = await this.post<{ discordUserIds: string[] }>(
+      '/internal/v1/community/rewards/tag-watch',
+      {},
+    );
+    return result.discordUserIds;
+  }
+
+  /** What this bot saw on those profiles, which the 24-hour rule is judged on. */
+  async reportTagSightings(sightings: readonly TagSighting[]): Promise<void> {
+    await this.post('/internal/v1/community/rewards/tag-seen', {
+      sightings: sightings.map((s) => ({ discordUserId: s.discordUserId, wearing: s.wearing })),
     });
   }
 

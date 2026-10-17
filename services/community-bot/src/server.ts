@@ -64,6 +64,7 @@ import {
 } from './features/invites.js';
 import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
+import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import {
   DAILY_ON_BUTTON,
@@ -135,6 +136,7 @@ async function main(): Promise<void> {
   });
 
   const wrongGuild = (guildId: string | null): boolean => guildId !== config.guildId;
+  let stopTagWatch: () => void = () => undefined;
 
   client.once(Events.ClientReady, (ready) => {
     log.info({ tag: ready.user.tag, guilds: ready.guilds.cache.size }, 'connected');
@@ -150,6 +152,13 @@ async function main(): Promise<void> {
           }
         },
         (error: unknown) => log.error({ error }, 'invite snapshot failed'),
+      );
+    }
+    /* The 24 hours behind every tag reward after the first: a sweep of everybody who has claimed,
+     * every ten minutes. */
+    if (api) {
+      stopTagWatch = startTagWatch(ready, api, config.guildId, (error, message) =>
+        log.error({ error }, message),
       );
     }
     // The daily codes go out from here, once a minute checking who is due.
@@ -205,6 +214,16 @@ async function main(): Promise<void> {
       member.guild.name,
       member.guild.channels.cache,
     ).catch((error) => log.error({ error }, 'member leave failed'));
+  });
+
+  /* A member's profile changed. If they are being watched for the tag reward and the tag went on or
+   * off, that is reported now rather than at the next sweep. */
+  client.on(Events.UserUpdate, (before, after) => {
+    if (api) {
+      onUserUpdate(api, config.guildId, before, after, (error, message) =>
+        log.error({ error }, message),
+      );
+    }
   });
 
   client.on(Events.InviteCreate, (invite) => {
@@ -453,6 +472,7 @@ async function main(): Promise<void> {
     log.info({ signal }, 'shutting down');
     stopGiveaways();
     stopAutomod();
+    stopTagWatch();
     await client.destroy().catch(() => undefined);
     await db.close().catch(() => undefined);
     process.exit(0);

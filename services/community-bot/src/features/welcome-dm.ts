@@ -100,8 +100,9 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
 
   const tagLine =
     'Set this server’s tag as your own (User Settings → Profiles → Server Tag), ' +
-    'then run `/tag` once a day' +
-    (rewardsOn && tag ? ` for **${tag}**.` : ' for a reward.');
+    'then run `/tag`' +
+    (rewardsOn && tag ? ` for **${tag}**` : ' for a reward') +
+    ' straight away, and again for every 24 hours you keep it on.';
 
   const friends =
     'Bring your friends from DonutSMP.' +

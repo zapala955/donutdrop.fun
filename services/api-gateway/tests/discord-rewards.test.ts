@@ -61,6 +61,8 @@ describe('discord rewards', () => {
       '/internal/v1/community/link',
       '/internal/v1/community/rewards/tag',
       '/internal/v1/community/rewards/status',
+      '/internal/v1/community/rewards/tag-watch',
+      '/internal/v1/community/rewards/tag-seen',
     ]) {
       const at = bot.indexOf(`'${route}'`);
       assert.ok(at > 0, route);
@@ -72,6 +74,27 @@ describe('discord rewards', () => {
     }
     // And the whole set disappears when the community bot is switched off.
     assert.match(bot, /if \(!config\.communityBotEnabled\) return;/);
+  });
+
+  /* 2026-10-17, at the operator's request: the first tag reward is instant, every one after it
+   * needs the tag worn for 24 hours straight. Checked end to end against a real Postgres when it
+   * was built; these pin the pieces that make it hold. */
+  it('pays the first tag reward at once and the rest only after 24 hours straight', async () => {
+    const lib = await read('services/api-gateway/src/lib/discord-rewards.ts');
+    assert.match(lib, /export const TAG_STREAK_HOURS = 24;/);
+    // The sighting is recorded before anything is decided, so a claim with the tag off ends a streak.
+    const claim = lib.slice(lib.indexOf('export async function claimTagReward'));
+    assert.ok(claim.indexOf('recordTagSightings(client') < claim.indexOf('INSERT INTO discord_rewards'));
+    // Only a previous tag reward, on either side of the link, makes the wait apply.
+    assert.match(claim, /WHERE kind = 'tag' AND \(user_id = \$1 OR discord_user_id = \$2\)/);
+    assert.match(claim, /if \(lastClaim\) \{\s*const due = tagDueAt\(since, lastClaim\);\s*if \(due > now\)/);
+    assert.match(lib, /Math\.max\(wearingSince\.getTime\(\), lastClaim\.getTime\(\)\) \+ TAG_STREAK_MS/);
+    // A streak survives a sighting only while the tag is on and the last sighting was recent.
+    assert.match(lib, /WHEN EXCLUDED\.wearing_since IS NULL THEN NULL/);
+    assert.match(lib, /AND w\.observed_at >= now\(\) - make_interval\(mins => \$3\) THEN w\.wearing_since/);
+    const sql = await read('packages/db/migrations/071_discord_tag_wear.sql');
+    assert.match(sql, /CREATE TABLE discord_tag_wear \(/);
+    assert.match(sql, /GRANT SELECT, INSERT, UPDATE ON TABLE discord_tag_wear TO donut_api_runtime;/);
   });
 });
 

@@ -3,7 +3,13 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
-import { claimTagReward, linkWithCode, rewardStatus } from '../lib/discord-rewards.js';
+import {
+  claimTagReward,
+  linkWithCode,
+  recordTagSightings,
+  rewardStatus,
+  tagWatchList,
+} from '../lib/discord-rewards.js';
 import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
 import { vipStandingFor } from '../lib/vip.js';
@@ -17,9 +23,9 @@ import { vipStandingFor } from '../lib/vip.js';
  * The community bot runs in a server anyone can join, moderating messages from strangers, invited
  * by whoever holds Manage Server. Everything it can call is something a compromise of that
  * process can call. So the surface is: a read of what is public about a linked account, a link
- * made with a code the SITE issued, the daily tag reward, and a reward status read. Every payment
- * it can trigger is once per account (or once per account per day) and capped -- see
- * lib/discord-rewards.ts, which holds the rules.
+ * made with a code the SITE issued, the tag reward and the tag sightings it is judged on, and a
+ * reward status read. Every payment it can trigger is once per account (or once per account per
+ * 24 hours of wearing the tag) and capped -- see lib/discord-rewards.ts, which holds the rules.
  *
  * WHAT IS DELIBERATELY NOT RETURNED, even though the query is one join away:
  *
@@ -80,6 +86,17 @@ const linkSchema = z
   .strict();
 
 const tagSchema = z.object({ discordUserId: snowflake, wearingTag: z.boolean() }).strict();
+
+const watchSchema = z.object({}).strict();
+
+const sightingsSchema = z
+  .object({
+    sightings: z
+      .array(z.object({ discordUserId: snowflake, wearing: z.boolean() }).strict())
+      .min(1)
+      .max(500),
+  })
+  .strict();
 
 export async function registerCommunityBotRoutes(
   app: FastifyInstance,
@@ -158,6 +175,31 @@ export async function registerCommunityBotRoutes(
       verifyCommunityBotSignature(request, config);
       const body = parseWith(tagSchema, request.body);
       return claimTagReward(db, config, body);
+    },
+  );
+
+  /* Who the bot should keep an eye on for the 24-hour rule: linked accounts that have collected a
+   * tag reward lately. Snowflakes only -- no names, no site ids. */
+  app.post(
+    '/internal/v1/community/rewards/tag-watch',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      parseWith(watchSchema, request.body);
+      return { discordUserIds: await tagWatchList(db) };
+    },
+  );
+
+  /* What the bot saw on those profiles: tag on or off. It pays nothing by itself; it is what the
+   * next /tag is judged against. */
+  app.post(
+    '/internal/v1/community/rewards/tag-seen',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(sightingsSchema, request.body);
+      const recorded = await db.transaction((client) => recordTagSightings(client, body.sightings));
+      return { recorded: recorded.size };
     },
   );
 
