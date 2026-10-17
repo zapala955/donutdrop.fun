@@ -298,15 +298,14 @@ body.lx-anim .lxapp { transition: margin var(--lx-slide) var(--lx-ease); }
   margin: 0 auto; padding: 0 var(--lx-gut);
 }
 
-.lxbrand { flex: none; display: inline-flex; align-items: center; height: 40px; }
-.lxbrand__word {
-  font: 900 1.625rem/1 var(--lx-display);
-  font-stretch: 112%;
-  letter-spacing: -.02em;
-  color: var(--lx-ink);
-  white-space: nowrap;
-}
-.lxbrand__word b { color: var(--lx-gold); font-weight: inherit; }
+/* The lockup: the pixel donut (the favicon) and the name in pixel letters, both drawn on whole
+   pixels (assets/img/brand/*.svg) and scaled only by whole numbers, so no edge ever blurs: the donut
+   at 2px a pixel, the letters at 3px (2px on a phone, where the two then match). */
+.lxbrand { flex: none; display: inline-flex; align-items: center; gap: 10px; height: 40px; }
+.lxbrand img { display: block; flex: none; image-rendering: pixelated; }
+.lxbrand__mark { width: 32px; height: 32px; }
+.lxbrand__word { width: 186px; height: 24px; }
+.lxbrand:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 4px; border-radius: var(--lx-r-s); }
 
 /* the wallet: balance, Deposit, Withdraw — signed in only */
 .lxwallet { flex: none; display: flex; align-items: center; gap: var(--lx-s2); margin: 0 auto; }
@@ -809,7 +808,8 @@ body.lx .chat__dock { display: none; }
   .lxtip { display: none; }
 
   .lxtop__in { gap: var(--lx-s2); }
-  .lxbrand__word { font-size: 1.25rem; }
+  .lxbrand { gap: 8px; }
+  .lxbrand__word { width: 124px; height: 16px; }
   .lxwallet { gap: var(--lx-s1); }
   body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3); }
   /* Withdraw stays on a phone: the way out is never harder to find than the way in. */

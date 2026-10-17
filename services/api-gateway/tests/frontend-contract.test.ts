@@ -70,6 +70,20 @@ describe('frontend/backend contract', () => {
     }
   });
 
+  it('wears the pixel lockup in the header: the donut and the name in pixel letters, never blurred', async () => {
+    /* 2026-10-17: the text wordmark ("Donut" + gold "Luxe" in Archivo) gave way to the site's own
+     * art -- the favicon's pixel donut beside the name drawn on whole pixels, Minecraft's bold. */
+    const html = await source('index.html');
+    const css = await source('assets/css/luxe.css');
+    assert.match(html, /<img class="lxbrand__mark" src="assets\/img\/brand\/donut\.svg\?v=\d+" alt="" width="32" height="32" \/>/);
+    assert.match(html, /<img class="lxbrand__word" src="assets\/img\/brand\/wordmark\.svg\?v=\d+" alt="DonutLuxe"/);
+    assert.match(html, /<a class="lxbrand" href="\/" aria-label="DonutLuxe home">/);
+    assert.match(css, /\.lxbrand img \{[^}]*image-rendering: pixelated;/);
+    for (const file of ['donut.svg', 'wordmark.svg']) {
+      assert.match(await source(`assets/img/brand/${file}`), /shape-rendering="crispEdges"/, file);
+    }
+  });
+
   it('never leaves the sign-in window over a signed-in player', async () => {
     /* An invite link opened the window at load, when everybody still looks signed out, so the
      * `?ref=` left in the address bar put it back over every player who had signed up through one.
