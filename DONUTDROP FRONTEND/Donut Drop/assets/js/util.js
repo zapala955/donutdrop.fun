@@ -94,7 +94,11 @@ export const pct = (x, d = 1) => (x * 100).toFixed(d) + '%';
 export const rnd = (a, b) => a + Math.random() * (b - a);
 export const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* The device's reduced-motion setting, or the site's own switch on /settings (prefs-boot.js), which
+ * asks for the same thing for a player whose device does not. */
+export const reduceMotion = () =>
+  globalThis.document?.documentElement.dataset.motion === 'reduce' ||
+  matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* Weighted draw from a pool of item objects, using rarity weight. */
 export function drawItem(items) {

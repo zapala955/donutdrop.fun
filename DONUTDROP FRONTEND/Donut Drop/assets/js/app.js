@@ -1358,6 +1358,8 @@ initTicker(document.getElementById('tickerRoot'));
       muteButton.title = label;
     };
     muteButton.addEventListener('click', () => { setMuted(!isMuted()); paintMute(); });
+    // The settings page has the same switch.
+    window.addEventListener('lx:mute', paintMute);
     paintMute();
   }
 }

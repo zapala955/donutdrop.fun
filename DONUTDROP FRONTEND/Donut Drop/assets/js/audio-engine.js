@@ -23,8 +23,21 @@ import { setMuted as setLegacyMuted } from './audio.js';
 let context = null;
 let master = null;
 let muted = readMutePreference();
+/* The volume slider on /settings, 0 to 100, kept with the other display settings (prefs-boot.js).
+ * 100 is the level every cue was tuned at. */
+let volume = readVolume();
 
 const MUTE_KEY = 'donutdrop.muted';
+const MASTER_GAIN = 0.22;
+
+function readVolume() {
+  const stored = Number(globalThis.DonutPrefs?.get?.().volume);
+  return Number.isFinite(stored) ? Math.min(100, Math.max(0, Math.round(stored))) : 100;
+}
+
+function masterGain() {
+  return (MASTER_GAIN * volume) / 100;
+}
 
 function readMutePreference() {
   try {
@@ -55,7 +68,7 @@ function ensureContext() {
     if (!Ctor) return null;
     context = new Ctor();
     master = context.createGain();
-    master.gain.value = 0.22;
+    master.gain.value = masterGain();
     master.connect(context.destination);
   }
   if (context.state === 'suspended') void context.resume();
@@ -79,9 +92,29 @@ export function setMuted(value) {
     master.gain.cancelScheduledValues(context.currentTime);
     master.gain.setValueAtTime(0, context.currentTime);
   } else if (!muted && master && context) {
-    master.gain.setValueAtTime(0.22, context.currentTime);
+    master.gain.setValueAtTime(masterGain(), context.currentTime);
+  }
+  // The top bar's button and the settings page both show this; either can change it.
+  try {
+    globalThis.dispatchEvent?.(new Event('lx:mute'));
+  } catch {
+    /* nothing listening is fine */
   }
   return muted;
+}
+
+export function getVolume() {
+  return volume;
+}
+
+/** 0 to 100. Applied to anything already sounding, and remembered with the other settings. */
+export function setVolume(value) {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return volume;
+  volume = Math.min(100, Math.max(0, Math.round(next)));
+  if (master && context && !muted) master.gain.setValueAtTime(masterGain(), context.currentTime);
+  globalThis.DonutPrefs?.update?.({ volume });
+  return volume;
 }
 
 export function toggleMuted() {

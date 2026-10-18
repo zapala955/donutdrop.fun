@@ -358,9 +358,10 @@ describe('frontend/backend contract', () => {
     const roulette = await source('assets/css/roulette.css');
 
     // The skin loads after every other sheet, so it has the last word, phones included; the retro
-    // skin (the old Minecraft theme) comes last of all, after the luxe sheets it repaints.
+    // skin (the old Minecraft theme) comes after the luxe sheets it repaints. The player's own
+    // settings (prefs.css: their theme, and the settings page) come last of all, over both.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(sheets.slice(-4), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css']);
+    assert.deepEqual(sheets.slice(-5), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'prefs.css']);
 
     // The drawer opens from the chat button only, closed on arrival, and a tap off it closes it.
     assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);

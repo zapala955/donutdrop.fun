@@ -20,6 +20,7 @@ import {
 } from './store.js';
 import { $, el, money, pct } from './util.js';
 import { toast } from './ui.js';
+import { buildPreferences } from './settings.js';
 
 /* Wallet ledger kinds, in the words a player would use. The API returns the column value, which
  * is a schema identifier and not a label — rendering `upgrade_stake` at somebody is asking them
@@ -439,10 +440,19 @@ export function mountSettings(view) {
 function paintSettings() {
   if (!settingsRoot?.isConnected) return;
   const root = ensureShell(settingsRoot, 'Settings', 'settingsRoot');
-  root.innerHTML = '';
+  /* The preferences (settings.js) are built once and left alone. This repaints on every login,
+   * account and referral event, and rebuilding them each time would take the focus, and a volume
+   * slider half-way through a drag, out from under the player. Only the account part below is
+   * redrawn. They come first and need no login: a theme or the volume is this browser's. */
+  let mine = root.querySelector('.acct__mine');
+  if (!mine) {
+    mine = el('div', 'acct__mine');
+    root.replaceChildren(buildPreferences(), mine);
+  }
+  mine.innerHTML = '';
 
   if (!state.authenticated) {
-    root.appendChild(notice('Log in to manage your account.'));
+    mine.appendChild(notice('Log in to see your account and invite code here.'));
     return;
   }
   const account = state.account;
@@ -466,10 +476,10 @@ function paintSettings() {
       ],
     ]),
   );
-  root.appendChild(identity);
+  mine.appendChild(identity);
 
   const invite = inviteCodePanel();
-  if (invite) root.appendChild(invite);
+  if (invite) mine.appendChild(invite);
 }
 
 const INVITE_CODE = /^[A-Z0-9]{6,16}$/;

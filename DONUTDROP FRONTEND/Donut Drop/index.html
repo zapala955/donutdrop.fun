@@ -126,6 +126,11 @@
 <link rel="stylesheet" href="assets/css/luxe-games.css" />
 <!-- retro skin: the old Minecraft theme over the new layout. Last, so it wins. -->
 <link rel="stylesheet" href="assets/css/retro.css" />
+<!-- The player's settings: the theme, reduced motion, chat and balance options, and the settings
+     page. The script is a plain blocking one on purpose: it puts the saved theme on <html> before
+     the first paint, so a themed page never flashes obsidian first. -->
+<link rel="stylesheet" href="assets/css/prefs.css" />
+<script src="assets/js/prefs-boot.js"></script>
 <!-- Every module the page runs, named up front so the browser fetches them together instead of
      finding them three imports deep, one round trip per level (scripts/module-preload.mjs). After
      the stylesheets, so the CSS the first paint waits on is asked for first. -->
@@ -186,6 +191,7 @@
 <link rel="modulepreload" href="assets/js/player-link.js" />
 <link rel="modulepreload" href="assets/js/mystery.js" />
 <link rel="modulepreload" href="assets/js/fx.js" />
+<link rel="modulepreload" href="assets/js/settings.js" />
 <link rel="modulepreload" href="assets/js/profanity.js" />
 <link rel="modulepreload" href="assets/js/audio.js" />
 <!-- ── end module preloads ── -->
@@ -278,6 +284,8 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path class="lxfill" d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg><span>Discord</span></a></li>
       <li><a class="lxnav" href="/support" data-route="support" data-tip="Live Support">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3.5" y="13" width="4" height="6" rx="1.5"/><rect x="16.5" y="13" width="4" height="6" rx="1.5"/><path d="M20.5 19c0 1.5-2 2.5-5 2.5"/></svg><span>Live Support</span></a></li>
+      <li><a class="lxnav" href="/settings" data-route="settings" data-tip="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Settings</span></a></li>
     </ul>
   </nav>
 </aside>
