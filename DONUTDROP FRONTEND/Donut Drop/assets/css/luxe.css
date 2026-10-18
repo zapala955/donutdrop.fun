@@ -36,6 +36,7 @@
   --lx-on-gold: #0a0a0c;   /* 9.6:1 on --lx-gold                  */
   --lx-gold-wash: rgba(255, 170, 0, .12);
   --lx-loss:  #ff2222;
+  --lx-loss-text: #ff5c5c;   /* small red words: 5.6:1 on --lx-2    */
   --lx-red:   #c0392b;
   --lx-discord: #5865f2;
   --lx-scrim: rgba(5, 5, 7, .72);
@@ -748,6 +749,7 @@ body.lx .chat .msg__body { color: var(--lx-text); font: 500 .875rem/1.45 var(--l
 body.lx .chat .msg__t { color: var(--lx-faint); font: 500 .6875rem var(--lx-ui); }
 body.lx .chat .msg[data-staff="1"] { box-shadow: inset 3px 0 0 var(--lx-gold); }
 body.lx .chat__send {
+  position: relative;
   display: flex; gap: var(--lx-s2); flex: none;
   padding: var(--lx-s3); border: 0;
   background: var(--lx-1);
@@ -766,6 +768,55 @@ body.lx .chat__send .btn {
   background: var(--lx-gold); color: var(--lx-on-gold);
 }
 body.lx .chat__send .btn:hover:not(:disabled) { background: var(--lx-gold-hi); }
+/* The command panel: typing "/" in the box opens it over the foot of the log (chat.js, commands). */
+body.lx .chatcmd {
+  position: absolute; left: var(--lx-s3); right: var(--lx-s3); bottom: calc(100% - var(--lx-s1)); z-index: 2;
+  display: grid; gap: var(--lx-s1);
+  padding: var(--lx-s2);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: 0 0 0 1px var(--lx-4), var(--lx-shade-hi);
+  animation: lx-cmd-in var(--lx-quick) var(--lx-ease);
+}
+body.lx .chatcmd[hidden] { display: none; }
+@keyframes lx-cmd-in { from { opacity: 0; transform: translateY(4px); } }
+body.lx .chatcmd__head {
+  margin: 0; padding: var(--lx-s1) var(--lx-s2) 0;
+  color: var(--lx-faint); font: 700 .6875rem var(--lx-ui); letter-spacing: .08em; text-transform: uppercase;
+}
+body.lx .chatcmd__list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+body.lx .chatcmd__opt {
+  display: grid; align-content: center; gap: 2px; min-height: 44px;
+  padding: var(--lx-s2); border-radius: var(--lx-r-s);
+  cursor: pointer;
+}
+body.lx .chatcmd__opt:hover { background: var(--lx-3); }
+body.lx .chatcmd__opt[aria-selected="true"] { background: var(--lx-gold-wash); box-shadow: inset 2px 0 0 var(--lx-gold); }
+body.lx .chatcmd__usage { min-width: 0; color: var(--lx-mute); font: 500 .8125rem var(--lx-ui); overflow-wrap: anywhere; }
+body.lx .chatcmd__name { color: var(--lx-gold); font-weight: 800; }
+/* The argument being typed: brighter, and underlined so it is not told by colour alone. */
+body.lx .chatcmd__arg[data-now] {
+  color: var(--lx-ink); font-weight: 700;
+  text-decoration: underline 2px var(--lx-gold); text-underline-offset: 3px;
+}
+body.lx .chatcmd__about { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
+body.lx .chatcmd__say {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2);
+  margin: 0; padding: var(--lx-s2) var(--lx-s2) var(--lx-s1);
+  border-top: 1px solid var(--lx-4);
+  color: var(--lx-text); font: 600 .75rem/1.4 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx .chatcmd__say span { min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+body.lx .chatcmd__say[data-tone="error"] { color: var(--lx-loss-text); }
+body.lx .chatcmd__key {
+  flex: none; padding: 1px 6px;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-text);
+  font: 700 .6875rem var(--lx-ui);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .45);
+}
+/* No Tab or Enter key to point at on a touch screen. */
+@media (hover: none) { body.lx .chatcmd__key { display: none; } }
 body.lx .chatscrim { display: none; }
 /* chat.js's own dock handle belongs to the old rail; this panel has the bar's chat button and its
    own close. luxe.js also clears the collapsed flag the handle used to set (see there). */
@@ -877,5 +928,5 @@ body.lx .chat__dock { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .lxside, .lxapp, body.lx .chat, .lxside .lxnav, .lxmode, body.lx .lxbtn, body.lx .lxicon { transition: none; }
-  body.lx .view { animation: none; }
+  body.lx .view, body.lx .chatcmd { animation: none; }
 }

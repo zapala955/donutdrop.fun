@@ -31,7 +31,7 @@
  */
 import { state, bus, sendChat, refreshChat, refreshBalance } from './store.js';
 import { censorName, censorText } from './profanity.js';
-import { $, el, money, parseAmount, formatAmountInput, safeImage } from './util.js';
+import { $, el, money, grouped, parseAmount, formatAmountInput, safeImage } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, API_BASE_URL } from './api.js';
@@ -112,6 +112,7 @@ export function initChat() {
   if (form) {
     form.addEventListener('submit', onSubmit);
     input.maxLength = 240;
+    initCommands();
   }
 
   paintAuthState();
@@ -509,7 +510,8 @@ function paintAuthState() {
   const online = state.authenticated;
   input.disabled = !online;
   paintSendButton();
-  input.placeholder = online ? 'Say something, or /tip name amount' : 'Log in to chat';
+  input.placeholder = online ? 'Message, or / for commands' : 'Log in to chat';
+  paintCommands();
 }
 
 /** Marks the viewer's own lines, again on every login and logout since the viewer changed. */
@@ -559,12 +561,11 @@ async function onSubmit(event) {
     return;
   }
 
-  /* `/tip name amount` is handled here rather than being sent to the chat endpoint. A slash command
-   * that reaches the message table is a message that says "/tip" in public and moves no money. */
-  const tip = /^\/tip\s+([A-Za-z0-9_]{1,16})\s+(\S+)\s*(.{0,80})$/.exec(body);
-  if (tip) {
-    input.value = '';
-    await sendTip(tip[1], parseAmount(tip[2]), tip[3]?.trim() || undefined);
+  /* Anything starting with "/" is a command, handled here and never sent to the chat endpoint,
+   * including one that is misspelled or unknown. A slash command that reaches the message table is
+   * a message that says "/tip" in public and moves no money. */
+  if (body.startsWith('/')) {
+    await runCommand(body);
     return;
   }
   // Slow mode is a chat rule; a tip is not a message and is not held back by it.
@@ -606,10 +607,11 @@ async function onSubmit(event) {
 
 /* ═════════════════════════ tipping ═════════════════════════ */
 
+/** Whether the tip went through: the typed command keeps its text when it did not. */
 async function sendTip(username, amountMinor, note, userId) {
   if (!amountMinor || amountMinor <= 0) {
     toast({ kind: 'lose', title: 'BAD AMOUNT', body: 'Try /tip name 5m' });
-    return;
+    return false;
   }
   try {
     /* The name only when it is one: the card also opens from the feed and the leaderboards, where
@@ -632,9 +634,235 @@ async function sendTip(username, amountMinor, note, userId) {
     });
     appendLine(buildTip(result.toUsername, Number(result.amountMinor), note), Date.now());
     await refreshBalance();
+    return true;
   } catch (error) {
     toast({ kind: 'lose', title: 'NOT SENT', body: error?.message || 'Try again' });
+    return false;
   }
+}
+
+/* ═════════════════════════ commands ═════════════════════════ */
+
+/* Typing "/" opens a panel above the box listing the commands. Each shows its arguments with the
+ * one being typed picked out, and a line under the list says what the command will do, so a
+ * command can be found and got right without knowing it already. The placeholder used to name
+ * `/tip` and nothing else answered it.
+ *
+ * Player names are not suggested: most of the names this page holds are the masked ones from the
+ * feed and the boards. */
+const COMMANDS = [
+  {
+    name: 'tip',
+    args: [{ name: 'player' }, { name: 'amount' }, { name: 'note', optional: true }],
+    about: 'Send a player money from your balance',
+    example: '/tip Steve 5m',
+    hint: tipHint,
+  },
+];
+const TIP_NOTE_MAX = 80;
+/* DonutSMP's names: a Bedrock one carries a leading dot. */
+const PLAYER_NAME = /^\.?[A-Za-z0-9_]{1,16}$/;
+
+let cmdPanel = null;
+let cmdList = null;
+let cmdSay = null;
+/* The commands Tab and Enter can complete: only while the command's own name is being typed. */
+let cmdChoices = [];
+let cmdActive = 0;
+/* Escape put the panel away. It stays away until the box stops holding a command. */
+let cmdDismissed = false;
+/* A tip in flight, so a second Enter does not send it twice. */
+let cmdBusy = false;
+
+function initCommands() {
+  cmdPanel = el('div', 'chatcmd');
+  cmdPanel.hidden = true;
+  cmdList = el('ul', 'chatcmd__list');
+  cmdList.id = 'chatCmdList';
+  cmdList.setAttribute('role', 'listbox');
+  cmdList.setAttribute('aria-label', 'Chat commands');
+  cmdSay = el('p', 'chatcmd__say');
+  cmdSay.setAttribute('role', 'status');
+  cmdPanel.append(textEl('p', 'chatcmd__head', 'Commands'), cmdList, cmdSay);
+  form.prepend(cmdPanel);
+
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', cmdList.id);
+  input.setAttribute('aria-expanded', 'false');
+  input.addEventListener('input', () => {
+    if (!input.value.startsWith('/')) cmdDismissed = false;
+    paintCommands();
+  });
+  input.addEventListener('focus', () => paintCommands());
+  input.addEventListener('blur', () => showCommands(false));
+  input.addEventListener('keydown', onCommandKey);
+  // Pressing the panel must not take the caret out of the box.
+  cmdPanel.addEventListener('pointerdown', (event) => event.preventDefault());
+}
+
+function commandWord(value) {
+  return (/^\/(\S*)/.exec(value)?.[1] ?? '').toLowerCase();
+}
+
+function showCommands(open) {
+  if (!cmdPanel) return;
+  cmdPanel.hidden = !open;
+  input.setAttribute('aria-expanded', String(open));
+  if (!open) input.removeAttribute('aria-activedescendant');
+}
+
+/** Redraws the panel from what is in the box. `error` is a refused command, said in red. */
+function paintCommands(error = '') {
+  if (!cmdPanel) return;
+  const value = input.value;
+  if (!state.authenticated || !value.startsWith('/') || (cmdDismissed && !error)) {
+    showCommands(false);
+    return;
+  }
+  const word = commandWord(value);
+  const typingName = !/\s/.test(value);
+  const found = COMMANDS.filter((cmd) => (typingName ? cmd.name.startsWith(word) : cmd.name === word));
+  // The command whose arguments are being typed, once its name is followed by a space.
+  const command = typingName ? null : found[0];
+  cmdChoices = typingName ? found : [];
+  cmdActive = Math.min(cmdActive, Math.max(0, cmdChoices.length - 1));
+
+  // An unknown name still lists every command, so the right one is a press away.
+  const shown = found.length ? found : COMMANDS;
+  cmdList.replaceChildren(
+    ...shown.map((cmd) =>
+      commandOption(cmd, cmd === command ? argumentAt(value, cmd) : -1, cmd === cmdChoices[cmdActive]),
+    ),
+  );
+  if (cmdChoices.length) input.setAttribute('aria-activedescendant', `chatCmd-${cmdChoices[cmdActive].name}`);
+  else input.removeAttribute('aria-activedescendant');
+
+  let say;
+  if (error) say = { text: error, tone: 'error' };
+  else if (!found.length) say = { text: `There's no /${word.slice(0, 16)}. Pick one above.` };
+  else if (!command) say = { text: `e.g. ${cmdChoices[cmdActive].example}`, key: 'Tab' };
+  else say = command.hint(value, argumentAt(value, command));
+  const keys = say.key ? [textEl('kbd', 'chatcmd__key', say.key)] : [];
+  cmdSay.replaceChildren(textEl('span', '', say.text), ...keys);
+  cmdSay.dataset.tone = say.tone ?? '';
+  showCommands(true);
+}
+
+function commandOption(cmd, current, active) {
+  const option = el('li', 'chatcmd__opt');
+  option.id = `chatCmd-${cmd.name}`;
+  option.setAttribute('role', 'option');
+  option.setAttribute('aria-selected', String(active));
+  const usage = el('span', 'chatcmd__usage');
+  usage.append(textEl('b', 'chatcmd__name', `/${cmd.name}`));
+  cmd.args.forEach((arg, i) => {
+    const part = textEl('span', 'chatcmd__arg', arg.optional ? `[${arg.name}]` : `<${arg.name}>`);
+    if (i === current) part.dataset.now = '1';
+    usage.append(' ', part);
+  });
+  option.append(usage, textEl('span', 'chatcmd__about', cmd.about));
+  option.addEventListener('click', () => completeCommand(cmd));
+  return option;
+}
+
+/** Which of the command's arguments is being typed, counted from the end of the line. */
+function argumentAt(value, cmd) {
+  const rest = value.replace(/^\/\S*\s+/, '');
+  const words = rest.split(/\s+/).filter(Boolean);
+  const at = !rest || /\s$/.test(rest) ? words.length : words.length - 1;
+  return Math.min(at, cmd.args.length - 1);
+}
+
+function completeCommand(cmd) {
+  // Pressing the command while its arguments are typed keeps them.
+  if (commandWord(input.value) !== cmd.name || !/\s/.test(input.value)) input.value = `/${cmd.name} `;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  paintCommands();
+}
+
+function onCommandKey(event) {
+  if (!cmdPanel || cmdPanel.hidden || event.isComposing) return;
+  if (event.key === 'Escape') {
+    // The panel goes first; the next Escape is the page's, which closes the chat drawer.
+    event.preventDefault();
+    event.stopPropagation();
+    cmdDismissed = true;
+    showCommands(false);
+    return;
+  }
+  if (!cmdChoices.length) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    cmdActive = (cmdActive + step + cmdChoices.length) % cmdChoices.length;
+    paintCommands();
+  } else if ((event.key === 'Tab' && !event.shiftKey) || event.key === 'Enter') {
+    // "/ti" + Enter means "/tip", not a message reading "/ti".
+    event.preventDefault();
+    completeCommand(cmdChoices[cmdActive]);
+  }
+}
+
+/** A refused command keeps its text and says what is wrong right above the box. */
+function refuseCommand(text) {
+  cmdDismissed = false;
+  input.focus();
+  paintCommands(text);
+}
+
+async function runCommand(body) {
+  if (cmdBusy) return;
+  const word = commandWord(body);
+  if (word !== 'tip') {
+    refuseCommand(word ? `There's no /${word.slice(0, 16)}. Pick one above.` : 'Pick a command above.');
+    return;
+  }
+  const tip = readTip(body);
+  if (tip.error) {
+    refuseCommand(tip.error);
+    return;
+  }
+  cmdBusy = true;
+  try {
+    if (await sendTip(tip.player, tip.amountMinor, tip.note)) {
+      input.value = '';
+      showCommands(false);
+    }
+  } finally {
+    cmdBusy = false;
+  }
+}
+
+/** `/tip name amount [note]`, read loosely enough to say which part is wrong. */
+function readTip(body) {
+  const [, name = '', amount = '', note = ''] =
+    /^\/tip(?:\s+(\S+))?(?:\s+(\S+))?(?:\s+([\s\S]*))?$/i.exec(body.trim()) ?? [];
+  // "@Steve" is a habit from elsewhere; the name is the same.
+  const player = name.replace(/^@/, '');
+  const amountMinor = parseAmount(amount);
+  if (!player) return { field: 'player', error: 'Who to? /tip name amount' };
+  if (!PLAYER_NAME.test(player)) return { field: 'player', error: `"${player.slice(0, 20)}" isn't a Minecraft name` };
+  if (!amount) return { field: 'amount', error: `How much? Like /tip ${player} 5m` };
+  if (!(amountMinor > 0)) {
+    return { field: 'amount', error: `"${amount.slice(0, 16)}" isn't an amount. Try 5m, 250k or 1.5b` };
+  }
+  if (note.trim().length > TIP_NOTE_MAX) return { field: 'note', error: `A note is ${TIP_NOTE_MAX} characters at most` };
+  return { player, amountMinor, note: note.trim() || undefined };
+}
+
+/* The line under /tip: what the argument being typed wants, then exactly what will be sent. The
+ * amount is written out in full, since "5m" and "5k" are one key apart. */
+function tipHint(value, at) {
+  if (at === 0) return { text: 'Their in-game name, with the dot on Bedrock' };
+  const tip = readTip(value);
+  if (tip.field === 'player') return { text: tip.error, tone: 'error' };
+  if (at === 1 && tip.field === 'amount') return { text: 'How much? Like 5m, 250k or 1.5b' };
+  if (tip.error) return { text: tip.error, tone: 'error' };
+  const sends = `Sends $${grouped(tip.amountMinor)} to ${tip.player}`;
+  const noted = at === 2 ? ` · note ${(tip.note ?? '').length}/${TIP_NOTE_MAX}` : '';
+  return { text: sends + noted, key: 'Enter' };
 }
 
 /* ═════════════════════════ the player card ═════════════════════════ */

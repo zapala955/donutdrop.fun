@@ -159,7 +159,7 @@ describe('chat housekeeping', () => {
       chat.indexOf('/* ═════════════════════════ tipping'),
     );
     assert.ok(
-      submit.indexOf('Date.now() < cooldownUntil') > submit.indexOf('await sendTip('),
+      submit.indexOf('Date.now() < cooldownUntil') > submit.indexOf('await runCommand('),
       'a tip must not wait out the chat slow mode',
     );
   });
