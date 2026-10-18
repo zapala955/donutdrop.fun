@@ -110,6 +110,8 @@ describe('frontend/backend contract', () => {
     assert.match(board, /FROM wager_events w JOIN users u ON u\.id = w\.user_id/);
     assert.match(board, /sum\(w\.amount_minor\)::text AS value/);
     assert.doesNotMatch(board, /WITH volume AS/);
+    // 2026-10-18: admins, the dev login, system accounts and test twins are on none of the boards.
+    assert.equal(board.match(/AND NOT \$\{staffPredicate\('u'\)\}/g)?.length, 3);
   });
 
   it('opens the player card from any head or name, not only in chat', async () => {

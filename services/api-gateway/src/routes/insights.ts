@@ -5,6 +5,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 import { maskedName } from '../lib/masked-name.js';
+import { staffPredicate } from '../lib/admin-stats.js';
 import { notDemoPredicate } from '../lib/media-test.js';
 import { parseWith } from '../lib/validation.js';
 import { levelFor } from '../lib/vip.js';
@@ -195,7 +196,9 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
 }
 
 /**
- * The three boards.
+ * The three boards. Staff are not on any of them -- admins, the developer login, system accounts and
+ * media test twins (staffPredicate, the same rule the admin figures use): a board is a contest for
+ * players, and an admin testing a game is not one.
  *
  * Written as three separate statements rather than one parameterised query: the tables, the
  * aggregate and the ordering all differ, and a single query branching on a column name would be
@@ -221,7 +224,7 @@ async function runBoard(
                 r.target_value_minor::text AS detail
            FROM upgrader_rounds r JOIN users u ON u.id = r.user_id
           WHERE r.outcome = 'win' AND r.created_at >= ${window} AND r.stake_value_minor > 0
-            AND ${notDemoPredicate('u')}
+            AND ${notDemoPredicate('u')} AND NOT ${staffPredicate('u')}
           ORDER BY r.user_id, (r.target_value_minor::numeric / nullif(r.stake_value_minor, 0)) DESC
        ) best
        ORDER BY value::numeric DESC
@@ -237,7 +240,7 @@ async function runBoard(
               count(*)::text AS value,
               sum(cr.price_minor)::text AS detail
          FROM case_rounds cr JOIN users u ON u.id = cr.user_id
-        WHERE cr.created_at >= ${window} AND ${notDemoPredicate('u')}
+        WHERE cr.created_at >= ${window} AND ${notDemoPredicate('u')} AND NOT ${staffPredicate('u')}
         GROUP BY cr.user_id, u.minecraft_username
         ORDER BY count(*) DESC, sum(cr.price_minor) DESC
         LIMIT $1`,
@@ -256,7 +259,7 @@ async function runBoard(
             sum(w.amount_minor)::text AS value,
             count(*)::text AS detail
        FROM wager_events w JOIN users u ON u.id = w.user_id
-      WHERE w.created_at >= ${window} AND ${notDemoPredicate('u')}
+      WHERE w.created_at >= ${window} AND ${notDemoPredicate('u')} AND NOT ${staffPredicate('u')}
       GROUP BY w.user_id, u.minecraft_username
       ORDER BY sum(w.amount_minor) DESC
       LIMIT $1`,
