@@ -82,6 +82,7 @@ export const GAMES: readonly GameDefinition[] = [
     payouts: ['plinko_payout'],
     refunds: [],
   },
+  { key: 'slots', label: 'Slots', stakes: ['slots_stake'], payouts: ['slots_payout'], refunds: [] },
   {
     key: 'dice',
     label: 'Dice',

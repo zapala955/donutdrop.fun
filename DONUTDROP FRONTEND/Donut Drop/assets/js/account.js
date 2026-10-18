@@ -64,6 +64,8 @@ const KIND_LABEL = {
   chicken_payout: 'Chicken cash-out',
   plinko_stake: 'Plinko ball',
   plinko_payout: 'Plinko payout',
+  slots_stake: 'Slots spin',
+  slots_payout: 'Slots payout',
   daily_code_reward: 'Daily code',
   mines_duel_stake: 'Mines Duel stake',
   mines_duel_win: 'Mines Duel win',

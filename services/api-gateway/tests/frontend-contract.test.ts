@@ -321,7 +321,7 @@ describe('frontend/backend contract', () => {
      * Originals" list, each one an ordinary routed link, and a card in the lobby row. */
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
     const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
-    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
+    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'slots', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
       assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
       assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
       assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);
@@ -341,12 +341,14 @@ describe('frontend/backend contract', () => {
     assert.match(app, /chicken: mountChicken/);
     assert.match(html, /data-view="plinko"/);
     assert.match(app, /plinko: mountPlinko/);
+    assert.match(html, /data-view="slots"/);
+    assert.match(app, /slots: mountSlots/);
     assert.match(html, /data-view="coinflip"/);
     assert.match(app, /coinflip: mountCoinflip/);
     assert.match(html, /data-view="mines-duel"/);
     assert.match(app, /'mines-duel': mountMinesDuel/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
-    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|mines-duel\|coinflip\|/);
+    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|mines-duel\|coinflip\|slots\|/);
     assert.match(html, /data-view="dice"/);
     assert.match(app, /dice: mountDice/);
   });
@@ -400,7 +402,7 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(crash, /id="crashBig"[^>]*aria-live/);
     // Table games are item-less rows in the feed, not phantom drops.
     const store = await source('assets/js/store.js');
-    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
+    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'slots' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
   });
 
   it('puts a hand in play back on the table after a refresh', async () => {

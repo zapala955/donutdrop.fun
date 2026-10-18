@@ -289,6 +289,7 @@ const GAME_NAMES: Readonly<Record<string, string>> = {
   mines_duel: 'Mines Duel',
   tower: 'Tower',
   chicken: 'Chicken',
+  slots: 'Slots',
 };
 
 export interface PlayerCard {
@@ -348,6 +349,8 @@ async function playerCard(db: Database, config: AppConfig, userId: string): Prom
          SELECT 'Chicken', stake_minor, payout_minor FROM chicken_games WHERE user_id = $1 AND status = 'settled'
          UNION ALL
          SELECT 'Plinko', stake_minor, payout_minor FROM plinko_bets WHERE user_id = $1
+         UNION ALL
+         SELECT 'Slots', stake_minor, payout_minor FROM slots_spins WHERE user_id = $1
          UNION ALL
          SELECT 'Dice', stake_minor, payout_minor FROM dice_bets WHERE user_id = $1
          UNION ALL

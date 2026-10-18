@@ -29,7 +29,7 @@ const RETRY_MS = 10_000;
 
 /* Pages with a live table on them. */
 const TABLES = new Set([
-  'upgrader', 'roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'coinflip', 'mines-duel',
+  'upgrader', 'roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'slots', 'monument', 'coinflip', 'mines-duel',
   'battles', 'crates', 'duel', 'studio',
 ]);
 

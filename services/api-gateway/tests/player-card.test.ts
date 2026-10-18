@@ -30,7 +30,7 @@ describe('the player card behind a chat avatar', () => {
   it('reads every game the wins board does', async () => {
     const insights = await read('services/api-gateway/src/routes/insights.ts');
     const rounds = insights.slice(insights.indexOf('async function playerCard'), insights.indexOf('function requireUserId'));
-    for (const table of ['case_rounds', 'upgrader_rounds', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'coinflip_games', 'mines_duel_games', 'battle_players']) {
+    for (const table of ['case_rounds', 'upgrader_rounds', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'slots_spins', 'coinflip_games', 'mines_duel_games', 'battle_players']) {
       assert.ok(rounds.includes(`FROM ${table}`), table);
     }
   });

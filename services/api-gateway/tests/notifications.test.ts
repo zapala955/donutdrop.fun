@@ -199,7 +199,7 @@ describe('staff money alerts', () => {
     const client = fakeClient([]);
     await moneyAlerts(client, baseConfig);
     const wins = client.sent.find((q) => /FROM \(/.test(q.text))?.text ?? '';
-    for (const table of ['case_rounds', 'upgrader_rounds', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'coinflip_games', 'mines_duel_games']) {
+    for (const table of ['case_rounds', 'upgrader_rounds', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'slots_spins', 'coinflip_games', 'mines_duel_games']) {
       assert.ok(wins.includes(`FROM ${table}`) || wins.includes(`JOIN ${table}`), table);
     }
     assert.match(wins, /WHERE w\.payout_minor - w\.wager_minor >= \$2::bigint\n\s+AND NOT \(u\.role = 'admin'/);

@@ -84,6 +84,18 @@ export const ROUTE_META = {
       'Play dice with DonutSMP money on DonutLuxe: draw a line from 0 to 100, call over or under, ' +
       'and roll.',
   },
+  slots: {
+    title: 'DonutLuxe Slots — DonutSMP Slots',
+    description:
+      'Play slots with DonutSMP money on DonutLuxe: five reels of Minecraft ore, ten lines, a wild ' +
+      'Totem and free spins.',
+  },
+  monument: {
+    title: 'DonutLuxe Ocean Monument — DonutSMP Slots',
+    description:
+      'Play the Ocean Monument slot with DonutSMP money on DonutLuxe: guardians that double every ' +
+      'line they touch, and Elder Guardian free spins.',
+  },
   coinflip: {
     title: 'DonutLuxe Coinflip — DonutSMP Coinflip',
     description: 'Coinflip against other players for DonutSMP money on DonutLuxe.',

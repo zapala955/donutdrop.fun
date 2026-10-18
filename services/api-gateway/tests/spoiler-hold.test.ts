@@ -258,6 +258,7 @@ describe('the pages that hold for their own rounds', LIMIT, () => {
     const holds: Record<string, RegExp> = {
       'blackjack.js': /const release = holdLiveFigures\(\);\s*try \{[\s\S]*?api\.post\(\s*'\/v1\/blackjack\/hands'/,
       'plinko.js': /release: holdLiveFigures\(\)/,
+      'slots.js': /const release = holdLiveFigures\(\);[\s\S]*?await send\(stake\)/,
       'coinflip.js': /hold = holdLiveFigures\(\)/,
       'mines-duel.js': /hold = holdLiveFigures\(\)/,
       'battles.js': /seatHold = holdLiveFigures\(\)/,

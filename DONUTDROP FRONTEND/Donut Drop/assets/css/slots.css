@@ -1,0 +1,756 @@
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V5
+ * Hallmark · component: slot machine · genre: atmospheric, Minecraft-literal · theme: luxe tokens, plus
+ *           Minecraft's own chat colours lifted into the token block below
+ * states: reels -- idle, spin (blurred), settle, tease (two books down, the rest spin longer);
+ *         cells -- rest, win (lit in the line's colour), win-rest (part of another win), dim;
+ *         the Spin button -- go, free (the round plays itself), busy, disabled, and the frame's
+ *         hover / :focus-visible / :active; Auto and Turbo -- pressed or not, disabled.
+ * signature: the cabinet is built from the game's own blocks -- polished blackstone with gold-block
+ *            corners -- every reel cell is an inventory slot, wins are written in Minecraft chat
+ *            colours with the game's hard text shadow, a big win gets the title screen's yellow
+ *            splash, and free spins turn the window to crying obsidian with the enchantment glint
+ *            running over every item.
+ * type: the site's faces only. Pixelify Sans was retired from this site for legibility (app.css);
+ *       the pixel identity is the sprites and the block textures, drawn pixel-sharp.
+ * motion: reels scroll their real strips and land with a bounce, lit cells bob, orbs rise, the splash
+ *         pulses, glint sweeps. Reduced motion: reels land at once and nothing loops.
+ */
+
+:is(.slots, .slotspay) {
+  /* Minecraft's chat colours, and their shadows (each the colour at a quarter). */
+  --mc-yellow: #ffff55;  --mc-yellow-sh: #3f3f15;
+  --mc-gold: #ffaa00;    --mc-gold-sh: #2a2a00;
+  --mc-green: #55ff55;   --mc-green-sh: #153f15;
+  --mc-aqua: #55ffff;    --mc-aqua-sh: #153f3f;
+  --mc-pink: #ff55ff;    --mc-pink-sh: #3f153f;
+  --mc-red: #ff5555;     --mc-red-sh: #3f1515;
+  --mc-blue: #5555ff;
+  --mc-white: #ffffff;
+  --mc-teal: #00aaaa;
+  --mc-leaf: #00aa00;
+  --mc-ink: #000000;
+
+  /* The machine's surfaces. */
+  --slots-slot: #1b1b21;
+  --slots-slot-hi: #3a3a44;
+  --slots-slot-lo: #08080a;
+  --slots-reel: #111115;
+  --slots-veil: rgba(0, 0, 0, .55);
+  --slots-veil-deep: rgba(0, 0, 0, .62);
+  --slots-veil-free: rgba(10, 0, 20, .55);
+  --slots-drum: rgba(0, 0, 0, .5);
+  --slots-lit-edge: rgba(255, 255, 255, .14);
+  --slots-dim-edge: rgba(0, 0, 0, .55);
+  --slots-rest-ring: rgba(255, 255, 255, .25);
+  --slots-item-shadow: rgba(0, 0, 0, .55);
+  --slots-text-shadow: rgba(0, 0, 0, .8);
+  --slots-cast: 0 30px 60px -28px rgba(0, 0, 0, .95);
+  --slots-tip: #100010;
+  --slots-tip-e1: #5000ff;
+  --slots-tip-e2: #28007f;
+  --slots-glint-a: rgba(196, 120, 255, .75);
+  --slots-glint-b: rgba(120, 70, 255, .45);
+  --slots-orb-core: #f4ff9a;
+  --slots-orb-mid: #9be22d;
+  --slots-orb-edge: #3e8c12;
+  --slots-stick: #6b4a2b;
+  --slots-stick-lo: #47301b;
+  --slots-stick-hi: #8f6a3c;
+  --slots-knob-hi: rgba(255, 255, 255, .3);
+  --slots-stone-hi: rgba(255, 255, 255, .18);
+  --slots-stone-lo: rgba(0, 0, 0, .4);
+  --slots-hud: rgba(8, 6, 8, .74);
+  --slots-hud-shade: rgba(6, 4, 5, .82);
+
+  --slots-font: var(--lx-display, "Archivo", system-ui, sans-serif);
+  --slots-ui: var(--lx-ui, system-ui, sans-serif);
+  --slots-ease: cubic-bezier(.22, 1, .36, 1);
+  --slots-px: 3px; /* one Minecraft GUI pixel at this scale */
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* The line a win was paid on picks its colour here: the drawn line, the action bar, the lit cells
+ * (through the window) and the paytable's line diagrams. */
+:is(.slots, .slotspay) [data-line="0"] { --line: var(--mc-yellow); }
+:is(.slots, .slotspay) [data-line="1"] { --line: var(--mc-aqua); }
+:is(.slots, .slotspay) [data-line="2"] { --line: var(--mc-green); }
+:is(.slots, .slotspay) [data-line="3"] { --line: var(--mc-pink); }
+:is(.slots, .slotspay) [data-line="4"] { --line: var(--mc-gold); }
+:is(.slots, .slotspay) [data-line="5"] { --line: var(--mc-red); }
+:is(.slots, .slotspay) [data-line="6"] { --line: var(--mc-blue); }
+:is(.slots, .slotspay) [data-line="7"] { --line: var(--mc-white); }
+:is(.slots, .slotspay) [data-line="8"] { --line: var(--mc-teal); }
+:is(.slots, .slotspay) [data-line="9"] { --line: var(--mc-leaf); }
+.slots [data-line="scatter"] { --line: var(--mc-pink); }
+
+/* The Ocean Monument's machine: the same build in prismarine, its HUD in deep water, its free spins
+ * in the elder's violet. */
+.slots[data-machine="monument"] {
+  --slots-veil-free: rgba(16, 0, 34, .5);
+  --slots-hud: rgba(2, 14, 20, .74);
+  --slots-hud-shade: rgba(2, 10, 14, .82);
+  --slots-glint-a: rgba(120, 255, 240, .7);
+  --slots-glint-b: rgba(60, 200, 220, .45);
+}
+
+/* ─────────── the machine ─────────── */
+.slots__stage {
+  grid-area: stage;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--lx-s2, 8px);
+  padding: var(--lx-s6, 24px);
+  min-width: 0;
+}
+
+.slots__cabinet {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  width: min(100%, 640px);
+  margin: 0 auto;
+  padding: 16px;
+  background: url("../img/block/polished_blackstone.png") 0 0 / 48px 48px;
+  image-rendering: pixelated;
+  /* Minecraft GUI framing: a black outline, a lit top-left edge, a dark bottom-right one. */
+  box-shadow:
+    0 0 0 var(--slots-px) var(--mc-ink),
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-lit-edge),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-dim-edge),
+    var(--slots-cast);
+  min-width: 0;
+}
+
+.slots__corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: url("../img/block/gold_block.png") 0 0 / 24px 24px;
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 2px var(--mc-ink);
+  pointer-events: none;
+}
+.slots__corner[data-at="tl"] { left: -6px; top: -6px; }
+.slots__corner[data-at="tr"] { right: -6px; top: -6px; }
+.slots__corner[data-at="bl"] { left: -6px; bottom: -6px; }
+.slots__corner[data-at="br"] { right: -6px; bottom: -6px; }
+
+.slots__marquee {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 12px;
+  background:
+    linear-gradient(var(--slots-veil), var(--slots-veil)),
+    url("../img/block/gilded_blackstone.png") 0 0 / 48px 48px;
+  box-shadow:
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-veil-deep),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-lit-edge);
+}
+.slots__marquee img { width: 32px; height: 32px; image-rendering: pixelated; }
+.slots__marquee img[data-flip] { transform: scaleX(-1); }
+.slots__title {
+  font: 900 clamp(1.5rem, 3.6vw, 2.125rem)/1 var(--slots-font);
+  font-stretch: 110%;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--mc-gold);
+  text-shadow: .09em .09em 0 var(--mc-gold-sh);
+  white-space: nowrap;
+}
+
+/* The free-spin round's status, in the enchanting table's purple. */
+.slots__free {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 10px;
+  font: 700 .9375rem/1.2 var(--slots-ui);
+  color: var(--mc-pink);
+  text-shadow: 2px 2px 0 var(--mc-pink-sh);
+  background: var(--slots-tip);
+  box-shadow: inset 0 0 0 2px var(--slots-tip-e2), inset 0 0 0 4px var(--slots-tip);
+}
+.slots__free[hidden] { display: none; }
+.slots__free img { width: 22px; height: 22px; image-rendering: pixelated; }
+.slots__free b { color: var(--mc-yellow); text-shadow: 2px 2px 0 var(--mc-yellow-sh); font-weight: 800; }
+
+/* ─────────── the window and the reels ─────────── */
+.slots__window {
+  position: relative;
+  padding: 8px;
+  background:
+    linear-gradient(var(--slots-veil-deep), var(--slots-veil-deep)),
+    url("../img/block/deepslate_top.png") 0 0 / 48px 48px;
+  box-shadow:
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-slot-lo),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-slot-hi);
+}
+.slots[data-mode="free"] .slots__window {
+  background:
+    linear-gradient(var(--slots-veil-free), var(--slots-veil-free)),
+    url("../img/block/crying_obsidian.png") 0 0 / 48px 48px;
+}
+
+.slots__reels {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.slots__reel {
+  position: relative;
+  aspect-ratio: 1 / 3;
+  overflow: hidden;
+  background: var(--slots-reel);
+  box-shadow: 0 0 0 2px var(--mc-ink);
+  min-width: 0;
+}
+/* The drum's curve: the top and bottom rows sit a little in shadow. */
+.slots__reel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, var(--slots-drum), transparent 22%, transparent 78%, var(--slots-drum));
+  pointer-events: none;
+}
+.slots__reel[data-tease="1"] {
+  box-shadow: 0 0 0 2px var(--mc-pink), 0 0 22px color-mix(in srgb, var(--mc-pink) 55%, transparent);
+  animation: slots-tease 500ms ease-in-out infinite alternate;
+}
+@keyframes slots-tease { to { box-shadow: 0 0 0 2px var(--mc-pink), 0 0 34px color-mix(in srgb, var(--mc-pink) 80%, transparent); } }
+
+.slots__strip { display: grid; will-change: transform; }
+
+/* Every cell is an inventory slot: square, recessed, the item centred in it. */
+.slots__cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  margin: 3px;
+  background: var(--slots-slot);
+  box-shadow:
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-slot-lo),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-slot-hi);
+  transition: opacity 200ms var(--slots-ease), filter 200ms var(--slots-ease);
+}
+.slots__cell img {
+  width: 66%;
+  height: 66%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 3px 0 var(--slots-item-shadow));
+  pointer-events: none;
+  user-select: none;
+}
+.slots__reel[data-state="spin"] .slots__cell img { filter: blur(1.4px) brightness(.85); transform: scaleY(1.12); }
+.slots__reel[data-state="settle"] .slots__cell img { transition: filter 120ms linear, transform 120ms linear; }
+
+/* A win: the slot lights up the way a hovered inventory slot does, in the line's colour. */
+.slots__cell[data-win="1"] {
+  z-index: 1;
+  background: color-mix(in srgb, var(--line, var(--mc-yellow)) 16%, var(--slots-slot));
+  box-shadow:
+    inset 0 0 0 var(--slots-px) var(--line, var(--mc-yellow)),
+    0 0 18px color-mix(in srgb, var(--line, var(--mc-yellow)) 45%, transparent);
+}
+.slots__cell[data-win="1"] img { animation: slots-bob 900ms var(--slots-ease) infinite; }
+.slots__cell[data-win="rest"] { box-shadow: inset 0 0 0 2px var(--slots-rest-ring); }
+.slots__cell[data-dim] { opacity: .38; filter: grayscale(.5); }
+@keyframes slots-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-6%) scale(1.1); }
+}
+
+/* Free spins: the enchantment glint, masked to each item's own pixels. */
+.slots[data-mode="free"] .slots__cell::after {
+  content: "";
+  position: absolute;
+  inset: 17%;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+  background: linear-gradient(115deg, transparent 32%, var(--slots-glint-a) 46%, var(--slots-glint-b) 54%, transparent 68%) 0 0 / 300% 300%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: slots-glint 2.6s linear infinite;
+}
+@keyframes slots-glint {
+  from { background-position: 100% 100%; }
+  to { background-position: 0 0; }
+}
+
+/* The paid lines, drawn across the reels. */
+.slots__lines {
+  position: absolute;
+  inset: 8px;
+  z-index: 3;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(2px 2px 0 var(--slots-text-shadow));
+}
+.slots__path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 5px;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+  animation: slots-line-in 260ms var(--slots-ease);
+}
+@keyframes slots-line-in { from { opacity: 0; } }
+
+.slots__fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.slots__orb {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: radial-gradient(circle, var(--slots-orb-core) 0 25%, var(--slots-orb-mid) 26% 60%, var(--slots-orb-edge) 61%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--slots-orb-mid) 80%, transparent);
+  opacity: 0;
+}
+
+/* The title screen's splash text, for a big win. */
+.slots__splash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  margin: 0;
+  font: 900 clamp(1.75rem, 5.5vw, 3.25rem)/1 var(--slots-font);
+  color: var(--mc-yellow);
+  text-shadow: .08em .08em 0 var(--mc-yellow-sh);
+  white-space: nowrap;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  pointer-events: none;
+  animation: slots-splash 520ms ease-in-out infinite alternate;
+}
+.slots__splash[hidden] { display: none; }
+@keyframes slots-splash {
+  from { transform: translate(-50%, -50%) rotate(-14deg) scale(1); }
+  to { transform: translate(-50%, -50%) rotate(-14deg) scale(1.1); }
+}
+
+/* Enchanted, re-enchanted and the round's total: a Minecraft item tooltip. */
+.slots__banner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: min(84%, 300px);
+  padding: 16px 22px;
+  background: var(--slots-tip);
+  box-shadow:
+    0 0 0 var(--slots-px) var(--slots-tip),
+    inset 0 0 0 var(--slots-px) var(--slots-tip-e1),
+    inset 0 calc(var(--slots-px) * -2) 0 var(--slots-tip-e2),
+    var(--slots-cast);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  animation: slots-pop 320ms var(--slots-ease);
+}
+.slots__banner[hidden] { display: none; }
+.slots__banner b {
+  font: 900 clamp(1.4rem, 4vw, 2rem)/1.05 var(--slots-font);
+  color: var(--mc-pink);
+  text-shadow: .08em .08em 0 var(--mc-pink-sh);
+}
+.slots__banner span { font: 700 1rem/1.25 var(--slots-ui); color: var(--mc-aqua); text-shadow: 2px 2px 0 var(--mc-aqua-sh); }
+.slots__banner[data-kind="summary"] b { color: var(--mc-gold); text-shadow: .08em .08em 0 var(--mc-gold-sh); }
+.slots__banner[data-kind="summary"] span { color: var(--mc-yellow); text-shadow: 2px 2px 0 var(--mc-yellow-sh); }
+@keyframes slots-pop { from { transform: translate(-50%, -50%) scale(.85); opacity: 0; } }
+
+/* The action bar: what the line being shown paid, in its colour. */
+.slots__action {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-height: 1.6rem;
+  font: 700 1rem/1.3 var(--slots-ui);
+  color: var(--line, var(--mc-white));
+  text-shadow: 2px 2px 0 var(--slots-text-shadow);
+  text-align: center;
+}
+.slots__action b { font-weight: 800; color: var(--mc-yellow); }
+.slots__action[data-line=""] { color: var(--lx-faint); font-weight: 500; text-shadow: none; }
+
+.slots__meter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--slots-veil-deep);
+  box-shadow:
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-slot-lo),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-slot-hi);
+}
+.slots__meter span {
+  font: 800 .75rem/1 var(--slots-ui);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--lx-faint);
+}
+.slots__meter b {
+  font: 900 clamp(1.4rem, 3.4vw, 1.875rem)/1 var(--slots-font);
+  color: var(--lx-faint);
+  font-variant-numeric: tabular-nums;
+}
+.slots__meter b[data-on="1"] { color: var(--mc-yellow); text-shadow: .08em .08em 0 var(--mc-yellow-sh); }
+
+/* The lever: a stick on a stone block, as it is in the game. Pulling it flips the stick down
+ * through the block toward the player, the way a slot machine's arm comes forward. */
+.slots__lever {
+  position: relative;
+  width: 56px;
+  height: 260px;
+  cursor: pointer;
+}
+.slots__arm {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  z-index: 1;
+  width: 12px;
+  height: 110px;
+  margin-left: -6px;
+  background: linear-gradient(90deg, var(--slots-stick-lo) 0 33%, var(--slots-stick) 33% 67%, var(--slots-stick-hi) 67%);
+  box-shadow: 0 0 0 2px var(--mc-ink);
+  transform: rotate(8deg);
+  transform-origin: 50% 100%;
+}
+.slots__arm i {
+  position: absolute;
+  left: -4px;
+  top: -8px;
+  width: 20px;
+  height: 16px;
+  background: linear-gradient(180deg, var(--mc-red), var(--mc-red-sh));
+  box-shadow: 0 0 0 2px var(--mc-ink), inset 3px 3px 0 var(--slots-knob-hi);
+}
+.slots__base {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 48px;
+  height: 36px;
+  margin-top: -18px;
+  background: url("../img/block/stone.png") 0 0 / 48px 48px;
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 2px var(--mc-ink), inset 3px 3px 0 var(--slots-stone-hi), inset -3px -3px 0 var(--slots-stone-lo);
+}
+.slots__lever:hover .slots__arm { filter: brightness(1.15); }
+
+/* ─────────── the 3D machine (slots3d.js) ───────────
+ * The canvas is the whole stage: the room, the machine, its marquee, lever and buttons. The flat
+ * reels stay in the DOM, out of sight, because they are what a screen reader reads. The free-spin
+ * bar, what the line paid and the meter float over the canvas as a HUD; the banner and the splash
+ * sit on top of everything. */
+.slots[data-render="3d"] .slots__stage {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+.slots[data-render="3d"] :is(.slots__lever, .slots__corner, .slots__marquee, .slots__lines, .slots__fx) { display: none; }
+.slots[data-render="3d"] .slots__cabinet {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.slots[data-render="3d"] .slots__window {
+  height: 100%;
+  min-height: 600px;
+  padding: 0;
+  overflow: hidden;
+  background: none;
+  box-shadow: none;
+}
+.slots[data-render="3d"] .slots__window::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 1;
+  height: 28%;
+  background: linear-gradient(transparent, var(--slots-hud-shade));
+  pointer-events: none;
+}
+.slots[data-render="3d"] .slots__reels {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.slots__gl {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.slots[data-render="3d"] .slots__free {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 7;
+  max-width: calc(100% - 28px);
+  padding: 6px 16px;
+  border-radius: var(--lx-r-pill, 999px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.slots[data-render="3d"] .slots__action {
+  position: absolute;
+  left: 20px;
+  right: 230px;
+  bottom: 22px;
+  z-index: 7;
+  justify-content: flex-start;
+  min-height: 0;
+  text-align: left;
+}
+.slots[data-render="3d"] .slots__meter {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 7;
+  min-width: 190px;
+  background: var(--slots-hud);
+}
+
+/* ─────────── the panel (the frame in luxe-games.css styles the stake field and Spin) ─────────── */
+.slots__panel { grid-area: panel; min-width: 0; }
+.slots__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.slots__field { display: flex; align-items: center; }
+.slots__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.slots__field input:focus { outline: none; }
+.slots__adj { cursor: pointer; }
+.slots__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+.slots .slots__go { display: flex; align-items: center; justify-content: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Free spins play themselves: the button turns the enchanting table's purple (body.lx outweighs the
+ * frame's flat gold, which is written the same way). */
+body.lx .slots .slots__go[data-tone="free"],
+.slots .slots__go[data-tone="free"] {
+  background: linear-gradient(180deg, var(--slots-tip-e1), var(--slots-tip-e2));
+  color: var(--mc-white);
+  text-shadow: 2px 2px 0 var(--mc-pink-sh);
+}
+.slots .slots__go:active:not(:disabled) { transform: translateY(1px); }
+.slots .slots__go:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; }
+.slots .slots__go[aria-busy="true"] { cursor: progress; }
+
+.slots__toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
+.slots__toggle,
+.slots__paytable {
+  height: 40px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .875rem/1 var(--slots-ui);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+.slots__toggle:hover:not(:disabled),
+.slots__paytable:hover { background: var(--lx-5); }
+.slots__toggle:active:not(:disabled),
+.slots__paytable:active { transform: translateY(1px); }
+.slots__toggle:focus-visible,
+.slots__paytable:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.slots__toggle[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.slots__toggle:disabled { cursor: not-allowed; opacity: .5; }
+.slots__paytable { background: transparent; box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-mute); }
+
+.slots__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.slots__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lx-s2);
+  margin: 0;
+}
+.slots__stats div { padding: var(--lx-s2) 6px; border-radius: var(--lx-r-s); background: var(--lx-0); text-align: center; min-width: 0; }
+.slots__stats dt { color: var(--lx-faint); font: 600 .6875rem/1.2 var(--slots-ui); }
+.slots__stats dd { margin: 3px 0 0; color: var(--lx-ink); font: 800 .875rem/1.2 var(--slots-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.slots__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── the paytable, in the site's modal ─────────── */
+.slotspay { display: grid; gap: var(--lx-s3, 12px); }
+.slotspay__sub { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--slots-ui); }
+.slotspay__h3 {
+  margin: var(--lx-s2, 8px) 0 0;
+  color: var(--mc-gold);
+  font: 800 1rem/1.2 var(--slots-ui);
+  font-style: normal;
+  text-shadow: 2px 2px 0 var(--mc-gold-sh);
+}
+.slotspay__pays {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: var(--lx-s2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.slotspay__pay {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon name" "icon r5" "icon r4" "icon r3";
+  column-gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--slots-tip);
+  box-shadow: inset 0 0 0 2px var(--slots-tip-e2);
+}
+.slotspay__icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  background: var(--slots-slot);
+  box-shadow:
+    inset var(--slots-px) var(--slots-px) 0 var(--slots-slot-lo),
+    inset calc(var(--slots-px) * -1) calc(var(--slots-px) * -1) 0 var(--slots-slot-hi);
+}
+.slotspay__pay .slotspay__icon { grid-area: icon; }
+.slotspay__icon img { width: 70%; height: 70%; object-fit: contain; image-rendering: pixelated; }
+.slotspay__name { grid-area: name; color: var(--mc-aqua); font: 800 .875rem/1.2 var(--slots-ui); text-shadow: 2px 2px 0 var(--mc-aqua-sh); }
+.slotspay__row { color: var(--lx-ink); font: 700 .75rem/1.4 var(--slots-ui); font-variant-numeric: tabular-nums; }
+.slotspay__row:nth-of-type(3) { grid-area: r5; }
+.slotspay__row:nth-of-type(4) { grid-area: r4; }
+.slotspay__row:nth-of-type(5) { grid-area: r3; }
+.slotspay__row b { margin-right: 6px; color: var(--lx-faint); font-weight: 500; }
+
+.slotspay__specials { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--lx-s2, 8px); }
+.slotspay__special {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--slots-tip);
+  box-shadow: inset 0 0 0 2px var(--slots-tip-e1);
+}
+.slotspay__special p { margin: 0; color: var(--lx-text); font: 500 .8125rem/1.45 var(--slots-ui); }
+.slotspay__special b { color: var(--mc-yellow); font-weight: 800; }
+.slotspay__special[data-kind="scatter"] b { color: var(--mc-pink); }
+
+.slotspay__minis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: var(--lx-s2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.slotspay__mini {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--lx-r-s, 4px);
+  background: var(--lx-0);
+}
+.slotspay__mini span { min-width: 1.2em; color: var(--line); font: 800 .875rem/1 var(--slots-ui); }
+.slotspay__mini div { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+.slotspay__mini i { aspect-ratio: 1; background: var(--line); opacity: .14; }
+.slotspay__mini i[data-on] { opacity: 1; }
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .slots { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .slots[data-render="3d"] .slots__window { height: auto; min-height: 0; aspect-ratio: 4 / 3.3; }
+}
+@media (max-width: 640px) {
+  .slots[data-render="3d"] .slots__window { aspect-ratio: 4 / 4.6; }
+  .slots[data-render="3d"] .slots__action { left: 12px; right: 12px; bottom: 62px; justify-content: center; text-align: center; font-size: .875rem; }
+  .slots[data-render="3d"] .slots__meter { left: 12px; right: 12px; bottom: 10px; min-width: 0; padding: 6px 12px; }
+  .slots[data-render="3d"] .slots__free { top: 10px; font-size: .8125rem; }
+}
+@media (max-width: 640px) {
+  .slots__stage { grid-template-columns: minmax(0, 1fr); padding: var(--lx-s3, 12px); }
+  .slots__lever { display: none; }
+  .slots__cabinet { gap: 8px; padding: 10px; }
+  .slots__corner { width: 16px; height: 16px; background-size: 16px 16px; }
+  .slots__corner[data-at="tl"] { left: -4px; top: -4px; }
+  .slots__corner[data-at="tr"] { right: -4px; top: -4px; }
+  .slots__corner[data-at="bl"] { left: -4px; bottom: -4px; }
+  .slots__corner[data-at="br"] { right: -4px; bottom: -4px; }
+  .slots__marquee { min-height: 46px; gap: 8px; }
+  .slots__marquee img { width: 22px; height: 22px; }
+  .slots__window { padding: 5px; }
+  .slots__lines { inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); }
+  .slots__reels { gap: 4px; }
+  .slots__cell { margin: 2px; --slots-px: 2px; }
+}
+
+/* ─────────── the Ocean Monument ─────────── */
+.slots[data-machine="monument"] .slots__cabinet { background-image: url("../img/block/prismarine_bricks.png"); }
+.slots[data-machine="monument"] .slots__marquee {
+  background:
+    linear-gradient(var(--slots-veil), var(--slots-veil)),
+    url("../img/block/dark_prismarine.png") 0 0 / 48px 48px;
+}
+.slots[data-machine="monument"] .slots__title { color: var(--mc-aqua); text-shadow: .09em .09em 0 var(--mc-aqua-sh); }
+.slots[data-machine="monument"] .slots__window,
+.slots[data-machine="monument"][data-mode="free"] .slots__window {
+  background:
+    linear-gradient(var(--slots-veil-deep), var(--slots-veil-deep)),
+    url("../img/block/dark_prismarine.png") 0 0 / 48px 48px;
+}
+.slots[data-machine="monument"][data-mode="free"] .slots__window {
+  background:
+    linear-gradient(var(--slots-veil-free), var(--slots-veil-free)),
+    url("../img/block/dark_prismarine.png") 0 0 / 48px 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slots__cell,
+  .slots__toggle,
+  .slots__paytable { transition: none; }
+  .slots__reel[data-tease="1"],
+  .slots__cell[data-win="1"] img,
+  .slots[data-mode="free"] .slots__cell::after,
+  .slots__splash,
+  .slots__banner,
+  .slots__path { animation: none; }
+}

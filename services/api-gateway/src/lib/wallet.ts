@@ -78,6 +78,8 @@ export type WalletKind =
   | 'chicken_payout'
   // A plinko ball's slot paying out, stake included. Referenced by the bet's id.
   | 'plinko_payout'
+  // A slots round paying out, free spins and stake included. Referenced by the spin's id.
+  | 'slots_payout'
   /* Coinflip: the pot less the rake paid to the winner, and the host's stake handed back when a
    * game is cancelled or nobody takes it in time. The stake itself is a debit, written by the
    * route, like a duel's. */

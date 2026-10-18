@@ -73,6 +73,7 @@ describe('media test mode', () => {
       'POST /v1/chicken/games/:id/step',
       'POST /v1/dice/bets',
       'POST /v1/plinko/bets',
+      'POST /v1/slots/spins',
       'POST /v1/blackjack/hands/:id/actions',
       'POST /v1/crash/bets',
       'POST /v1/roulette/bets',
@@ -175,7 +176,7 @@ describe('media test mode', () => {
     const insights = await src('routes/insights.ts');
     // The three boards, and the player card behind a chat avatar.
     assert.equal(insights.match(/\$\{notDemoPredicate\('u'\)\}/g)?.length, 4);
-    for (const file of ['blackjack.ts', 'mines.ts', 'plinko.ts', 'crash.ts', 'upgrades.ts']) {
+    for (const file of ['blackjack.ts', 'mines.ts', 'plinko.ts', 'slots.ts', 'crash.ts', 'upgrades.ts']) {
       const route = await src(`routes/${file}`);
       assert.doesNotMatch(
         route,

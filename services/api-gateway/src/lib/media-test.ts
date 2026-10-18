@@ -63,6 +63,7 @@ export const TEST_MODE_ROUTES: ReadonlySet<string> = new Set([
   'POST /v1/chicken/games/:id/step',
   'POST /v1/chicken/games/:id/cashout',
   'POST /v1/plinko/bets',
+  'POST /v1/slots/spins',
   'POST /v1/dice/bets',
   'POST /v1/blackjack/hands',
   'POST /v1/blackjack/hands/:id/actions',

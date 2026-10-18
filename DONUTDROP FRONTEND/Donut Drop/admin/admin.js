@@ -3570,6 +3570,7 @@ const GROUP_LABELS = {
   tower: 'Tower',
   chicken: 'Chicken',
   plinko: 'Plinko',
+  slots: 'Slots',
   dice: 'Dice',
   discord: 'Discord rewards',
   alerts: 'Staff alerts (Discord)',

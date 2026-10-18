@@ -562,6 +562,16 @@ const environmentSchema = z
     PLINKO_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     PLINKO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     PLINKO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Slots. The strips, the pays and the 1,000x round ceiling are fixed in lib/slots.ts. A spin
+     * whose 1,000x ceiling would pay more than the maximum payout is refused, so the payout sets the
+     * largest stake: 50B allows 50M. */
+    SLOTS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    SLOTS_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    SLOTS_MAX_STAKE_MINOR: positiveBigintString.default('50000000'),
+    SLOTS_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     /* Dice. The edge is fixed in lib/dice.ts. A roll whose win would pay more than the ceiling is
      * refused, so the ceiling sets the largest stake at each multiplier. */
     DICE_ENABLED: z
@@ -1094,6 +1104,20 @@ const environmentSchema = z
         message: 'must be at least PLINKO_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.SLOTS_MIN_STAKE_MINOR) > BigInt(env.SLOTS_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SLOTS_MAX_STAKE_MINOR'],
+        message: 'must be at least SLOTS_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.SLOTS_MAX_PAYOUT_MINOR) < BigInt(env.SLOTS_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SLOTS_MAX_PAYOUT_MINOR'],
+        message: 'must be at least SLOTS_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.CRASH_MIN_STAKE_MINOR) > BigInt(env.CRASH_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1562,6 +1586,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     plinkoMinStakeMinor: BigInt(env.PLINKO_MIN_STAKE_MINOR),
     plinkoMaxStakeMinor: BigInt(env.PLINKO_MAX_STAKE_MINOR),
     plinkoMaxPayoutMinor: BigInt(env.PLINKO_MAX_PAYOUT_MINOR),
+    slotsEnabled: env.SLOTS_ENABLED,
+    slotsMinStakeMinor: BigInt(env.SLOTS_MIN_STAKE_MINOR),
+    slotsMaxStakeMinor: BigInt(env.SLOTS_MAX_STAKE_MINOR),
+    slotsMaxPayoutMinor: BigInt(env.SLOTS_MAX_PAYOUT_MINOR),
     diceEnabled: env.DICE_ENABLED,
     diceMinStakeMinor: BigInt(env.DICE_MIN_STAKE_MINOR),
     diceMaxStakeMinor: BigInt(env.DICE_MAX_STAKE_MINOR),

@@ -18,6 +18,7 @@ type SettingGroup =
   | 'tower'
   | 'chicken'
   | 'plinko'
+  | 'slots'
   | 'dice'
   | 'discord'
   | 'alerts'
@@ -471,6 +472,34 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'plinko',
     label: 'Plinko maximum payout per ball (a stake whose best slot would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── slots ── The strips, pays and the 1,000x round ceiling are fixed in lib/slots.ts. */
+  slotsEnabled: {
+    kind: 'boolean',
+    group: 'slots',
+    label: 'Slots open',
+  },
+  slotsMinStakeMinor: {
+    kind: 'bigint',
+    group: 'slots',
+    label: 'Slots minimum stake per spin',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  slotsMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'slots',
+    label: 'Slots maximum stake per spin',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  slotsMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'slots',
+    label: 'Slots maximum payout per spin (a stake whose 1,000x ceiling would pay more is refused)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -1014,6 +1043,8 @@ function assertInvariants(view: AppConfig): void {
     ['Chicken maximum stake', view.chickenMaxStakeMinor, 'the maximum payout', view.chickenMaxPayoutMinor],
     ['Plinko minimum stake', view.plinkoMinStakeMinor, 'the maximum', view.plinkoMaxStakeMinor],
     ['Plinko maximum stake', view.plinkoMaxStakeMinor, 'the maximum payout', view.plinkoMaxPayoutMinor],
+    ['Slots minimum stake', view.slotsMinStakeMinor, 'the maximum', view.slotsMaxStakeMinor],
+    ['Slots maximum stake', view.slotsMaxStakeMinor, 'the maximum payout', view.slotsMaxPayoutMinor],
     ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
     ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],

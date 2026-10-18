@@ -59,6 +59,7 @@ export type ContributionSource =
   | 'chicken'
   | 'plinko'
   | 'dice'
+  | 'slots'
   | 'coinflip'
   | 'mines_duel';
 

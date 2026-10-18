@@ -24,6 +24,7 @@ import { mountCrash } from './crash.js';
 import { mountMines } from './mines.js';
 import { mountPlinko } from './plinko.js';
 import { mountDice } from './dice.js';
+import { mountMonument, mountSlots } from './slots.js';
 import { mountTower } from './tower.js';
 import { mountChicken } from './chicken.js';
 import { mountCoinflip } from './coinflip.js';
@@ -261,6 +262,8 @@ function mountHome(view) {
     chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
     plinko: { name: 'Plinko', art: 'assets/img/items/game-plinko.svg' },
     dice: { name: 'Dice', art: 'assets/img/items/dice.svg' },
+    slots: { name: 'Slots', art: 'assets/img/items/diamond.png' },
+    monument: { name: 'Ocean Monument', art: 'assets/img/items/heart_of_the_sea.png' },
     blackjack: { name: 'Blackjack', art: 'assets/img/items/game-blackjack.svg' },
     roulette: { name: 'Roulette', art: 'assets/img/items/game-roulette.svg' },
     coinflip: { name: 'Coinflip', art: 'assets/img/items/game-coinflip.svg' },
@@ -291,7 +294,8 @@ function mountHome(view) {
       const { item, player, sourceName } = entry;
       const wager = BigInt(entry.wagerMinor ?? '0');
       const payout = BigInt(entry.payoutMinor ?? '0');
-      const game = WIN_GAMES[entry.kind];
+      // Both slot machines come in as slots; the Monument's rows carry its own name.
+      const game = entry.kind === 'slots' && sourceName === 'Ocean Monument' ? WIN_GAMES.monument : WIN_GAMES[entry.kind];
       if (!item && !game) continue;
       const row = el('li');
       /* An item's rarity drives the edge, so a Netherite pull still stands out from a Diamond one;
@@ -1109,6 +1113,8 @@ const VIEWS = {
   chicken: mountChicken,
   plinko: mountPlinko,
   dice: mountDice,
+  slots: mountSlots,
+  monument: mountMonument,
   coinflip: mountCoinflip,
   'mines-duel': mountMinesDuel,
   quests: mountQuests,
@@ -1290,7 +1296,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'slots', 'monument', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);
