@@ -47,11 +47,12 @@
 <!-- Empty means same origin. A local split-origin preview may override this with
      window.DONUTDROP_API_URL before the module graph loads. -->
 <meta name="api-base-url" content="" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Figtree carries the interface, Archivo (wide, black) the game names. Rubik and JetBrains Mono
-     stay requested for anything that still names them; a face no element uses is never downloaded. -->
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,700..900&family=Figtree:wght@400..800&family=JetBrains+Mono:wght@400;500;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!-- Figtree carries the interface, Archivo (wide, black) the game names. Served from the site
+     (fonts.css) rather than Google Fonts, which was a render-blocking
+     stylesheet from another origin on every cold visit. The interface face is asked for up front: it
+     is on every page, and without this the browser only learns it is needed once the CSS is parsed. -->
+<link rel="preload" href="assets/fonts/figtree-400-800-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="assets/css/fonts.css" />
 <link rel="stylesheet" href="assets/css/app.css" />
 <!-- Owns every large surface. Must load after app.css: it replaces four
      inconsistent panel treatments in there with one material system. -->

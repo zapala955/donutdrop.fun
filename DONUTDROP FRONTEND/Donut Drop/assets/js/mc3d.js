@@ -18,7 +18,10 @@
 
 import { dePurple } from './fx.js';
 
-const THREE_URL = new URL('../vendor/three.module.min.js', import.meta.url).href;
+/* Against the page, not this module: the build bundles this file into a chunk under /b/<id>/, where
+ * a path relative to the module would point nowhere. Every route is one segment deep, so the page's
+ * own directory is the site root. */
+const THREE_URL = new URL('assets/vendor/three.module.min.js', document.baseURI).href;
 export const PX = 1 / 16;                // one Minecraft pixel in world units
 
 let THREE = null;

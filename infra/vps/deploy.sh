@@ -108,6 +108,13 @@ done
 #
 # The frontend does not have this problem: it is mounted as a directory, and directory mounts
 # track their contents.
+#
+# Its build (the bundle nginx serves under /b/) is made from this checkout first. Best-effort, like
+# the snapshots above: if it fails, the previous build keeps being served, whole and consistent,
+# and the deploy carries on, saying on stderr that the new frontend is not live.
+if ! "$repo_root/infra/vps/build-frontend.sh"; then
+  echo "FRONTEND BUILD FAILED: the site keeps serving the previous frontend build." >&2
+fi
 "${compose[@]}" up -d --force-recreate nginx
 
 for attempt in $(seq 1 60); do

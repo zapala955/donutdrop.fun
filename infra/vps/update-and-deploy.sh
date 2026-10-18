@@ -23,6 +23,8 @@ fi
 
 echo "Deployment failed; restoring repository and static frontend to $previous_commit." >&2
 git reset --hard "$previous_commit"
+# The served frontend is a build of the checkout: rebuild it, or nginx keeps the rolled-back release.
+"$repo_root/infra/vps/build-frontend.sh" || echo "Frontend rebuild failed during rollback." >&2
 docker compose --env-file "$env_file" -f "$compose_file" up -d --force-recreate --no-deps nginx
 
 for attempt in $(seq 1 30); do

@@ -13,6 +13,10 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+# The frontend build nginx serves under /b/ (scripts/build-frontend.mjs), made on the server at
+# every deploy. Never committed: a build in git goes stale the first time someone edits a source
+# file without rebuilding.
+DONUTDROP FRONTEND/Donut Drop/build/
 
 # Live Microsoft/Xbox auth tokens for the bot account. Committing these is account takeover.
 .minecraft-auth/

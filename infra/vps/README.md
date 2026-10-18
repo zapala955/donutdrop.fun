@@ -130,9 +130,17 @@ sudo COMPOSE_ENV_FILE=/opt/donutdrop/shared/donutdrop.env ./infra/vps/deploy.sh
 ```
 
 The migrator is a one-shot dependency and applies each checksummed migration before the API is
-allowed to start. The readiness route is pinned to the newest schema marker. Static assets use
-revalidation because their filenames are not content-hashed, so a deploy cannot strand browsers
-on a week-old JavaScript file.
+allowed to start. The readiness route is pinned to the newest schema marker.
+
+`deploy.sh` also builds the frontend (`infra/vps/build-frontend.sh`, which runs
+`scripts/build-frontend.mjs` in the API's pinned Node image): one minified stylesheet and a few
+script chunks under `/b/<id>/`, where the id is a hash of what was built, and a `build/index.html`
+that points at them. nginx serves `/b/` as immutable and prefers the built page, falling back to
+the source `index.html` when there is no build. A release that never changes can be cached for a
+year, and a new one has a new id, so no browser can mix two releases. If you check out a commit
+any other way than through `deploy.sh`, run `./infra/vps/build-frontend.sh` afterwards, or the
+site keeps serving the previous build. Images, sounds and fonts stay under `/assets/` and are
+revalidated as before.
 
 The complete update command, including the admin-console migration, is:
 
