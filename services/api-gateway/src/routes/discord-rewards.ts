@@ -39,6 +39,7 @@ export async function registerDiscordRewardRoutes(
     enabled: config.dailyCodesEnabled,
     maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
     minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
+    firstPrizeMinor: config.dailyCodeFirstPrizeMinor.toString(),
   };
 
   app.get('/v1/discord/rewards', { preHandler: softAuth }, async (request) => {

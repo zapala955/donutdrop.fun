@@ -137,12 +137,41 @@ describe('the daily code settings', () => {
     );
   });
 
+  it('pay a 5M welcome prize on a first code, and 0 turns it off', () => {
+    assert.equal(loadConfig(baseEnv).dailyCodeFirstPrizeMinor, 5_000_000n);
+    assert.equal(
+      loadConfig({ ...baseEnv, DAILY_CODE_FIRST_PRIZE_MINOR: '0' }).dailyCodeFirstPrizeMinor,
+      0n,
+    );
+    for (const bad of ['-1', '1.5', 'five million', '']) {
+      assert.throws(
+        () => loadConfig({ ...baseEnv, DAILY_CODE_FIRST_PRIZE_MINOR: bad }),
+        /DAILY_CODE_FIRST_PRIZE_MINOR/,
+        bad,
+      );
+    }
+  });
+
+  it('refuse a welcome prize the daily budget cannot cover', () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...baseEnv,
+          DAILY_CODE_MAX_PRIZE_MINOR: '100',
+          DAILY_CODE_DAILY_BUDGET_MINOR: '100',
+          DAILY_CODE_FIRST_PRIZE_MINOR: '101',
+        }),
+      /DAILY_CODE_FIRST_PRIZE_MINOR/,
+    );
+  });
+
   it('can be changed live from the System tab', () => {
     for (const key of [
       'dailyCodesEnabled',
       'dailyCodeMaxPrizeMinor',
       'dailyCodeBudgetMinor',
       'dailyCodeMinWagerMinor',
+      'dailyCodeFirstPrizeMinor',
     ] as const) {
       assert.ok(key in runtimeSettingDefinitions, key);
       assert.equal(runtimeSettingDefinitions[key].group, 'dailycodes');
@@ -191,6 +220,38 @@ describe('how it is wired', () => {
       'the window can show how far they are',
     );
     assert.match(route, /minWagerMinor: config\.dailyCodeMinWagerMinor\.toString\(\)/);
+  });
+
+  it('floors only a first code, under the budget lock, and never clips it below the floor', async () => {
+    const source = await read('../src/lib/daily-codes.ts');
+    const before = source.indexOf(
+      'WHERE redeemed_at IS NOT NULL AND (user_id = $1 OR discord_user_id = $2)',
+    );
+    assert.ok(before > 0, 'first means neither the account nor the Discord has redeemed one');
+    assert.ok(
+      source.indexOf("pg_advisory_xact_lock(hashtextextended('daily-code-budget', 0))") < before,
+      'checked under the same lock as the budget',
+    );
+    assert.ok(
+      before < source.indexOf('pickPrize(config.dailyCodeMaxPrizeMinor'),
+      'before the draw',
+    );
+    assert.match(
+      source,
+      /if \(remaining <= 0n \|\| remaining < floor\) \{/,
+      'waits instead of clipping',
+    );
+    assert.match(source, /const floored = drawn < floor \? floor : drawn;/);
+    assert.match(source, /welcome: floor > 0n,/);
+    for (const route of ['../src/routes/community-bot.ts', '../src/routes/discord-rewards.ts']) {
+      assert.match(
+        await read(route),
+        /firstPrizeMinor: config\.dailyCodeFirstPrizeMinor\.toString\(\)/,
+        `${route} says what a first code is worth`,
+      );
+    }
+    const js = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/daily-code.js');
+    assert.match(js, /result\.welcome \? 'Welcome prize' : 'Daily code redeemed'/);
   });
 
   it('gives the bot no way to redeem a code', async () => {

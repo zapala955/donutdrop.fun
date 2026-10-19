@@ -321,6 +321,7 @@ describe('the welcome message and daily codes', () => {
     assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, rewards), {
       maxPrizeMinor: '100000000',
       minWagerMinor: '2000000',
+      firstPrizeMinor: null,
     });
     assert.equal(dailyOffer({ daily_codes_enabled: false }, rewards), null);
     assert.equal(
@@ -333,11 +334,61 @@ describe('the welcome message and daily codes', () => {
     assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, null), {
       maxPrizeMinor: null,
       minWagerMinor: null,
+      firstPrizeMinor: null,
     });
     const { dailyCodes: _omitted, ...older } = rewards; // a gateway too old to report daily codes
     assert.deepEqual(dailyOffer({ daily_codes_enabled: true }, older), {
       maxPrizeMinor: null,
       minWagerMinor: null,
+      firstPrizeMinor: null,
+    });
+  });
+
+  describe('the welcome prize', () => {
+    const withWelcome: RewardStatus = {
+      ...rewards,
+      dailyCodes: { ...rewards.dailyCodes!, firstPrizeMinor: '5000000' },
+    };
+
+    it('passes the platform’s figure through to the offer', () => {
+      assert.equal(
+        dailyOffer({ daily_codes_enabled: true }, withWelcome)?.firstPrizeMinor,
+        '5000000',
+      );
+    });
+
+    it('is in the welcome message, the one-line offer and the invitation', () => {
+      const { fields } = read(
+        facts({ dailyCodes: dailyOffer({ daily_codes_enabled: true }, withWelcome) }),
+      );
+      const field = fields.find((entry) => /Daily codes/.test(entry.name));
+      assert.match(field!.value, /Your first one is worth at least \*\*\$5m\*\*/);
+      assert.match(
+        dailyPitch('100000000', '2000000', '5000000'),
+        /Your first one is worth at least \*\*\$5m\*\*\. Wager \*\*\$2m\*\*/,
+      );
+      const invite = JSON.stringify(
+        buildDailyInviteDm({
+          siteUrl: SITE,
+          maxPrizeMinor: '100000000',
+          firstPrizeMinor: '5000000',
+        }).embeds[0]!.toJSON(),
+      );
+      assert.match(invite, /Your first code is worth at least \*\*\$5m\*\*/);
+    });
+
+    it('says nothing when it is off, absent or unreadable', () => {
+      for (const none of [null, undefined, '0', 'five million']) {
+        assert.doesNotMatch(dailyPitch('100000000', '2000000', none), /first one/, String(none));
+        const invite = JSON.stringify(
+          buildDailyInviteDm({
+            siteUrl: SITE,
+            maxPrizeMinor: '100000000',
+            firstPrizeMinor: none,
+          }).embeds[0]!.toJSON(),
+        );
+        assert.doesNotMatch(invite, /first code is worth/, String(none));
+      }
     });
   });
 

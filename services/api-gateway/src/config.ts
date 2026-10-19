@@ -634,6 +634,10 @@ const environmentSchema = z
      * the code to playing, and is why a code costs the house less than its average prize looks like.
      * 0 turns the bar off. */
     DAILY_CODE_MIN_WAGER_MINOR: nonNegativeBigintString.default('2000000'),
+    /* The welcome prize: a player's first daily code ever pays at least this, so turning codes on
+     * is worth something on day one. It still waits for the day's bar and counts against the
+     * budget like any prize. 0 turns it off and the first code is an ordinary draw. */
+    DAILY_CODE_FIRST_PRIZE_MINOR: nonNegativeBigintString.default('5000000'),
     /* Media test mode: approved creators and staff play the house games with play money on a
      * separate test account, for clips (lib/media-test.ts). The balance is what the account is
      * filled back up to; it is play money and never leaves that account. */
@@ -991,6 +995,18 @@ const environmentSchema = z
         path: ['DAILY_CODE_DAILY_BUDGET_MINOR'],
         message:
           'must be at least DAILY_CODE_MAX_PRIZE_MINOR: a budget smaller than the top prize clips every big win',
+      });
+    }
+    if (
+      // A malformed figure already has its own issue; this compares only two readable ones.
+      nonNegativeBigintPattern.test(env.DAILY_CODE_FIRST_PRIZE_MINOR) &&
+      BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR) < BigInt(env.DAILY_CODE_FIRST_PRIZE_MINOR)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DAILY_CODE_FIRST_PRIZE_MINOR'],
+        message:
+          'must not exceed DAILY_CODE_DAILY_BUDGET_MINOR: a welcome prize the day cannot cover is never paid',
       });
     }
     if (env.MINES_DUEL_ENABLED && env.VIP_ENABLED && env.MINES_DUEL_RAKE_BPS <= 200) {
@@ -1477,6 +1493,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
     dailyCodeMinWagerMinor: BigInt(env.DAILY_CODE_MIN_WAGER_MINOR),
+    dailyCodeFirstPrizeMinor: BigInt(env.DAILY_CODE_FIRST_PRIZE_MINOR),
     mediaTestModeEnabled: env.MEDIA_TEST_MODE_ENABLED,
     mediaTestBalanceMinor: BigInt(env.MEDIA_TEST_BALANCE_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,

@@ -89,6 +89,9 @@ function barText(minWagerMinor: string | null | undefined): string | null {
   return null;
 }
 
+/** The welcome prize (a first code's floor) as a figure, or null when it is off or unknown. */
+const welcomeText = (firstPrizeMinor: string | null | undefined) => barText(firstPrizeMinor);
+
 /** The ceiling as a figure, or plain words when the platform could not say. Never a guess. */
 function ceilingText(maxPrizeMinor: string | null): string {
   try {
@@ -169,11 +172,17 @@ export const dailyOnButton = () =>
     .setLabel('Get my daily code');
 
 /** The one-line offer, shared by the welcome DM and the invitation so they never disagree. */
-export function dailyPitch(maxPrizeMinor: string | null, minWagerMinor?: string | null): string {
+export function dailyPitch(
+  maxPrizeMinor: string | null,
+  minWagerMinor?: string | null,
+  firstPrizeMinor?: string | null,
+): string {
   const bar = barText(minWagerMinor);
+  const welcome = welcomeText(firstPrizeMinor);
   return (
     'A personal code in your DMs every day, worth anything from nothing up to ' +
     `**${ceilingText(maxPrizeMinor)}**. ` +
+    (welcome ? `Your first one is worth at least **${welcome}**. ` : '') +
     (bar ? `Wager **${bar}** on the site that day to unlock it. ` : '') +
     'Tap **Get my daily code** or run `/daily on`.'
   );
@@ -185,14 +194,18 @@ export interface DailyInviteFacts {
   readonly maxPrizeMinor: string | null;
   /** The day's wagering bar, or null/absent when there is none or it could not be read. */
   readonly minWagerMinor?: string | null | undefined;
+  /** The welcome prize, or null/absent when it is off or could not be read. */
+  readonly firstPrizeMinor?: string | null | undefined;
 }
 
 /** The first message a member gets about daily codes: what it is, and a button that turns it on. */
 export function buildDailyInviteDm(facts: DailyInviteFacts) {
+  const welcome = welcomeText(facts.firstPrizeMinor);
   const message = embed(
     'A free code in your DMs, every day',
     'Turn on daily codes and I will send you one personal code a day. Redeem it for a prize from ' +
-      `nothing up to **${ceilingText(facts.maxPrizeMinor)}**, playable on the site straight away.`,
+      `nothing up to **${ceilingText(facts.maxPrizeMinor)}**, playable on the site straight away.` +
+      (welcome ? ` Your first code is worth at least **${welcome}**.` : ''),
   )
     .addFields(
       {

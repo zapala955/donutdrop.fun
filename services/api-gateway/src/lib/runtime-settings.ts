@@ -723,6 +723,13 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: BIGINT_MAX,
   },
+  dailyCodeFirstPrizeMinor: {
+    kind: 'bigint',
+    group: 'dailycodes',
+    label: 'A player’s first daily code pays at least this (0 = ordinary draw)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
 
   /* ── media test mode ──
    *

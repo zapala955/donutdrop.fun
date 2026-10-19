@@ -291,6 +291,7 @@ export async function dailyInviteCommand(
     siteUrl: options.siteUrl,
     maxPrizeMinor: daily?.maxPrizeMinor ?? null,
     minWagerMinor: daily?.minWagerMinor ?? null,
+    firstPrizeMinor: daily?.firstPrizeMinor ?? null,
   });
 
   if (sub === 'preview') {

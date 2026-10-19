@@ -80,6 +80,8 @@ export interface RewardStatus {
     readonly maxPrizeMinor: string;
     /** What must be wagered on the site that day before a code opens. Absent on an older gateway. */
     readonly minWagerMinor?: string;
+    /** What a player's first code pays at least ('0' = off). Absent on an older gateway. */
+    readonly firstPrizeMinor?: string;
   };
   readonly minAccountAgeDays: number;
   readonly join: { claimed: boolean } | null;

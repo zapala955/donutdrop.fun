@@ -43,6 +43,14 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  *     edge, and farming codes with alts pays nothing out;
  *   - one code per person per day, and a person is a verified Minecraft account.
  *
+ * The one exception to "from nothing" is the WELCOME PRIZE: the first code a site account ever
+ * redeems pays at least `dailyCodeFirstPrizeMinor` (5M by default), so turning codes on is worth
+ * something on day one. "First" means neither that site account nor that Discord account has ever
+ * redeemed a code, a code that won nothing included, so players who were already redeeming do not
+ * get it and one Discord cannot collect it for a string of Minecraft accounts. It is never clipped
+ * below the floor: if the day's pool cannot cover it, the code waits like any other, and because
+ * nothing was redeemed the next code is still the first.
+ *
  * Every draw uses the operating system's CSPRNG, and the prize is stored on the code row in the
  * same transaction that credits it, so the row is the whole record of what was won.
  */
@@ -89,7 +97,7 @@ export function normalizeDailyCode(raw: string): string | null {
 }
 
 export type RedeemResult =
-  | { status: 'paid'; prizeMinor: string; username: string; wagerMinor: string }
+  | { status: 'paid'; prizeMinor: string; username: string; wagerMinor: string; welcome: boolean }
   | { status: 'nothing'; username: string }
   | { status: 'locked'; wageredMinor: string; requiredMinor: string }
   | { status: 'refused'; reason: string; keepCode: boolean };
@@ -203,19 +211,37 @@ export async function redeemDailyCode(
       }
     }
 
+    /* The welcome prize's floor, for an account and a Discord that have never redeemed a code.
+     * Capped at the budget, so a floor set above it live cannot hold every first code forever. */
+    let floor = 0n;
+    if (config.dailyCodeFirstPrizeMinor > 0n) {
+      const before = await client.query(
+        `SELECT 1 FROM discord_daily_codes
+          WHERE redeemed_at IS NOT NULL AND (user_id = $1 OR discord_user_id = $2) LIMIT 1`,
+        [user.id, input.discordUserId],
+      );
+      if (!before.rows[0]) {
+        floor =
+          config.dailyCodeFirstPrizeMinor < config.dailyCodeBudgetMinor
+            ? config.dailyCodeFirstPrizeMinor
+            : config.dailyCodeBudgetMinor;
+      }
+    }
+
     const spent = await client.query<{ spent: string }>(
       `SELECT COALESCE(SUM(prize_minor), 0)::text AS spent
          FROM discord_daily_codes WHERE redeemed_at >= ${UTC_DAY_START}`,
     );
     const remaining = config.dailyCodeBudgetMinor - BigInt(spent.rows[0]?.spent ?? '0');
-    if (remaining <= 0n) {
+    if (remaining <= 0n || remaining < floor) {
       return settled(
         refused('Today’s prize pool is used up. Your code stays valid until it expires', true),
       );
     }
 
     const drawn = pickPrize(config.dailyCodeMaxPrizeMinor, roll);
-    const prize = drawn > remaining ? remaining : drawn;
+    const floored = drawn < floor ? floor : drawn;
+    const prize = floored > remaining ? remaining : floored;
 
     const marked = await client.query(
       `UPDATE discord_daily_codes
@@ -238,6 +264,7 @@ export async function redeemDailyCode(
         prizeMinor: prize.toString(),
         username: user.minecraft_username,
         wagerMinor: owed.toString(),
+        welcome: floor > 0n,
       },
       user.id,
     );

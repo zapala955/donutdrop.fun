@@ -450,7 +450,11 @@ function paintResult(card) {
   if (result.status === 'paid') {
     card.append(
       art('ender_chest_open.png'),
-      ...heading('Daily code redeemed', ['+', money(Number(result.prizeMinor)), '']),
+      ...heading(result.welcome ? 'Welcome prize' : 'Daily code redeemed', [
+        '+',
+        money(Number(result.prizeMinor)),
+        '',
+      ]),
     );
     card.appendChild(
       paragraph(
