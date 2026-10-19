@@ -423,13 +423,15 @@ describe('the slots page', () => {
     assert.match(html, /href="assets\/css\/slots\.css"/);
     assert.match(html, /<link rel="modulepreload" href="assets\/js\/slots\.js" \/>/);
     assert.match(app, /'ore-rush': mountSlots,/);
-    assert.match(app, /slots: \{ name: 'Ore Rush', art: 'assets\/img\/items\/diamond\.png' \}/);
+    // Its icon is pixel art of the machine itself, like every other game's (assets/img/items/game-*.svg).
+    assert.match(app, /slots: \{ name: 'Ore Rush', art: 'assets\/img\/items\/game-ore-rush\.svg' \}/);
+    assert.match(html, /<img class="lxcard__art retroart" src="assets\/img\/items\/game-ore-rush\.svg" alt="" width="96" height="96" \/>/);
     assert.match(nginx, /\|coinflip\|ore-rush\|/);
     assert.match(nginx, /\/ore-rush "https:\/\/donutluxe\.com\/ore-rush";/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/ore-rush<\/loc>/);
     assert.doesNotMatch(sitemap, /donutluxe\.com\/slots</);
     assert.match(seo, /'ore-rush': \{\s*title: 'DonutLuxe Ore Rush/);
-    assert.match(data, /route: '\/ore-rush', name: 'Ore Rush', art: 'diamond\.png', shipped: '2026-10-17'/);
+    assert.match(data, /route: '\/ore-rush', name: 'Ore Rush', art: 'game-ore-rush\.svg', shipped: '2026-10-17'/);
     // The admin figures are for slots as a whole, both machines together.
     assert.match(admin, /slots: 'Slots',/);
     // The old address carries on: nginx for a full load, the router for a link inside the page.
@@ -568,7 +570,8 @@ describe('the slots page', () => {
     assert.match(nginx, /\/monument "index, follow";/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/monument<\/loc>/);
     assert.match(seo, /monument: \{\s*title: 'DonutLuxe Ocean Monument/);
-    assert.match(data, /route: '\/monument', name: 'Ocean Monument', art: 'heart_of_the_sea\.png', shipped: '2026-10-18'/);
+    assert.match(data, /route: '\/monument', name: 'Ocean Monument', art: 'game-monument\.svg', shipped: '2026-10-18'/);
+    assert.match(html, /<img class="lxcard__art retroart" src="assets\/img\/items\/game-monument\.svg" alt="" width="96" height="96" \/>/);
     for (const list of [nudge, popups]) assert.match(list, /'ore-rush', 'monument', 'coinflip'/);
     // One page per machine: its own state and its own element ids, its machine named to the server.
     assert.match(page, /function createSlotsGame\(game\) \{\n  const P = game\.prefix;/);
