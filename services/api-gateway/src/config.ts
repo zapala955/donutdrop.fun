@@ -775,6 +775,18 @@ const environmentSchema = z
         z.literal(''),
       ])
       .default(''),
+    /* Sign in with a Discord that is already linked to an account. Its own callback, so its own
+     * pinned redirect (registered on the same Discord application beside the one above); empty
+     * leaves the "Log in with Discord" button off. */
+    DISCORD_LOGIN_REDIRECT_URI: z
+      .union([
+        z
+          .string()
+          .url()
+          .refine((value) => /^https?:\/\//.test(value), 'must be an HTTP(S) URL'),
+        z.literal(''),
+      ])
+      .default(''),
     /* ── the Discord control plane ──
      *
      * A private guild acts as a remote control for the platform: read commands, moderation
@@ -1542,6 +1554,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordClientId: env.DISCORD_CLIENT_ID,
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,
+    discordLoginRedirectUri: env.DISCORD_LOGIN_REDIRECT_URI,
     discordControlEnabled: env.DISCORD_CONTROL_ENABLED,
     discordBotToken: env.DISCORD_BOT_TOKEN,
     discordGuildId: env.DISCORD_GUILD_ID,

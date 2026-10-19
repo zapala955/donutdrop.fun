@@ -494,6 +494,31 @@ export async function completeLogin(challengeId) {
   return result.user;
 }
 
+/* Log in with Discord, for accounts that already linked one (routes/discord-login.ts).
+ *
+ * The round trip leaves the page: start hands back Discord's consent URL, Discord sends the browser
+ * to the API's callback, and the callback lands on `/?discord-login=<outcome>`. Only then does the
+ * page ask for the session, with the cookie start set, so the session goes to this browser alone. */
+export async function discordLoginAvailable() {
+  try {
+    return Boolean((await api.get('/v1/auth/discord'))?.available);
+  } catch {
+    return false; // A button that cannot work is not offered.
+  }
+}
+
+export async function startDiscordLogin() {
+  return api.post('/v1/auth/discord/start', {});
+}
+
+/* Session only. bootstrap() runs after it and loads everything a signed-in page needs, so this does
+ * not touch `state`: a 401 from a bootstrap racing it would otherwise sign the player straight out. */
+export async function completeDiscordLogin() {
+  const result = await api.post('/v1/auth/discord/complete', {});
+  setCsrfToken(result.csrfToken);
+  return result.user;
+}
+
 /* Developer login. Skips the pay-login challenge so the site can be worked on with no custody
  * bot online, and returns a real session — everything after it is the genuine server path, not a
  * mock. The endpoint only exists when the backend was started with DEV_LOGIN_ENABLED, and the

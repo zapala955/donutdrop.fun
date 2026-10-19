@@ -18,7 +18,11 @@ import {
   referralStanding,
 } from '../lib/referral-network.js';
 import { parseWith } from '../lib/validation.js';
-import { containsMarkup, containsUnsafeCharacters } from '../lib/sanitize.js';
+import {
+  discordAuthorizeUrl,
+  exchangeDiscordCode,
+  OAUTH_STATE_PATTERN,
+} from '../lib/discord-oauth.js';
 
 /**
  * Invite & Earn.
@@ -99,15 +103,11 @@ const RESERVED_FRAGMENTS = [
 const callbackSchema = z
   .object({
     code: z.string().min(8).max(512),
-    state: z.string().regex(/^[a-f0-9]{64}$/),
+    state: z.string().regex(OAUTH_STATE_PATTERN),
   })
   .strict();
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-const DISCORD_AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
-
-const DISCORD_TOKEN_URL = 'https://discord.com/api/oauth2/token';
-const DISCORD_USER_URL = 'https://discord.com/api/users/@me';
 
 interface InviteRow {
   referee_id: string;
@@ -554,16 +554,10 @@ export async function registerReferralRoutes(
         [sha256Hex(state), userId, OAUTH_STATE_TTL_MS],
       );
 
-      const authorize = new URL(DISCORD_AUTHORIZE_URL);
-      authorize.searchParams.set('client_id', config.discordClientId);
-      authorize.searchParams.set('redirect_uri', config.discordRedirectUri);
-      authorize.searchParams.set('response_type', 'code');
-      // identify alone. The programme needs to know the account is real and unique; it has no
-      // business reading an email address or a guild list to do that.
-      authorize.searchParams.set('scope', 'identify');
-      authorize.searchParams.set('state', state);
-      authorize.searchParams.set('prompt', 'consent');
-      return { authorizeUrl: authorize.toString(), expiresInMs: OAUTH_STATE_TTL_MS };
+      return {
+        authorizeUrl: discordAuthorizeUrl(config, config.discordRedirectUri, state),
+        expiresInMs: OAUTH_STATE_TTL_MS,
+      };
     },
   );
 
@@ -598,7 +592,7 @@ export async function registerReferralRoutes(
 
       let identity: { id: string; username: string };
       try {
-        identity = await exchangeDiscordCode(config, query.code);
+        identity = await exchangeDiscordCode(config, query.code, config.discordRedirectUri);
       } catch {
         // Never surface Discord's own error text: it echoes back request parameters, and one of
         // those is the client secret's counterpart.
@@ -632,61 +626,6 @@ export async function registerReferralRoutes(
       return reply.redirect(`${config.appOrigin}/referrals?discord=${outcome}`);
     },
   );
-}
-
-/**
- * Trades the authorization code for a token, then reads the account behind it.
- *
- * The token is used once and dropped on the floor — the programme needs an identifier, not
- * ongoing access — so nothing is persisted and there is no refresh to manage.
- */
-async function exchangeDiscordCode(
-  config: AppConfig,
-  code: string,
-): Promise<{ id: string; username: string }> {
-  const tokenResponse = await fetch(DISCORD_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: config.discordClientId,
-      client_secret: config.discordClientSecret,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: config.discordRedirectUri,
-    }),
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!tokenResponse.ok) throw new Error('Discord rejected the authorization code');
-  const token = (await tokenResponse.json()) as { access_token?: unknown; token_type?: unknown };
-  if (typeof token.access_token !== 'string' || typeof token.token_type !== 'string') {
-    throw new Error('Discord returned an unusable token');
-  }
-
-  const userResponse = await fetch(DISCORD_USER_URL, {
-    headers: { Authorization: `${token.token_type} ${token.access_token}` },
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!userResponse.ok) throw new Error('Discord refused the identity lookup');
-  const user = (await userResponse.json()) as { id?: unknown; username?: unknown };
-  if (typeof user.id !== 'string' || !/^[0-9]{5,32}$/.test(user.id)) {
-    throw new Error('Discord returned an unusable account id');
-  }
-  /* The display name is cosmetic, attacker-chosen, and rendered on the referrals dashboard —
-   * three properties that together mean it cannot be stored as it arrives. A Discord username is
-   * whatever its owner typed, so truncation alone let control characters, bidi overrides and
-   * tag-shaped text into a column that is read back into other people's pages.
-   *
-   * Rejecting is wrong here, unlike everywhere else this platform validates text: the user did not
-   * type this into our form and cannot fix it without renaming themselves on another service, so a
-   * refusal would strand a legitimate account mid-verification. The identifier is what the
-   * programme actually needs; the label is decoration, so decoration that cannot be displayed
-   * safely is replaced rather than allowed to block a verification. */
-  const raw = typeof user.username === 'string' ? user.username.normalize('NFC').trim() : '';
-  const username =
-    raw.length > 0 && raw.length <= 64 && !containsUnsafeCharacters(raw) && !containsMarkup(raw)
-      ? raw
-      : 'discord user';
-  return { id: user.id, username };
 }
 
 function requireUserId(value: string | undefined): string {

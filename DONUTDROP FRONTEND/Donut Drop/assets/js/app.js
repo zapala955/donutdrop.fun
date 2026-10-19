@@ -5,6 +5,7 @@ import {
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
+  discordLoginAvailable, startDiscordLogin, completeDiscordLogin,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
   refreshUpgradeConfig, refreshPromotions,
@@ -356,6 +357,9 @@ const PERSON_ICON =
   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 
+const DISCORD_ICON =
+  '<svg class="auth__dcicon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg>';
+
 /**
  * Loads Cloudflare's Turnstile script, once per page.
  *
@@ -394,6 +398,11 @@ function openLoginModal() {
       <div class="auth__bonus" id="linkBonus" hidden>
         <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> free for new players</p>
         <p class="auth__bonusfine" id="linkBonusFine"></p>
+      </div>
+      <div class="auth__discord" id="linkDiscord" hidden>
+        <button class="btn auth__dcgo" type="button" id="linkDiscordGo">${DISCORD_ICON}<span>Log in with Discord</span></button>
+        <p class="auth__note">Already linked your Discord? Sign in with one click, no payment.</p>
+        <p class="auth__err" id="linkDiscordError" role="alert" hidden></p>
       </div>
       <hr class="auth__rule">
       <form id="linkForm" novalidate>
@@ -465,6 +474,29 @@ function openLoginModal() {
     };
     paintBonus();
     if (!state.promotions) void refreshPromotions(false).then(paintBonus);
+
+    /* Log in with Discord, for accounts that already linked one. Hidden until the server says it is
+     * set up; it leaves the page for Discord, and the return is handled by finishDiscordReturn. */
+    const discordBox = $('#linkDiscord', body);
+    const discordGo = $('#linkDiscordGo', body);
+    const discordError = $('#linkDiscordError', body);
+    void discordLoginAvailable().then((available) => {
+      if (available && discordBox.isConnected && !$('#linkForm', body).hidden) discordBox.hidden = false;
+    });
+    discordGo.addEventListener('click', async () => {
+      discordGo.disabled = true;
+      discordGo.dataset.state = 'loading';
+      discordError.hidden = true;
+      try {
+        const { authorizeUrl } = await startDiscordLogin();
+        location.assign(authorizeUrl);
+      } catch (error) {
+        discordGo.disabled = false;
+        discordGo.dataset.state = '';
+        discordError.textContent = error?.message || 'Could not start the Discord sign-in.';
+        discordError.hidden = false;
+      }
+    });
 
     /* An invite link fills the field and opens the disclosure it lives in.
      *
@@ -598,6 +630,7 @@ function openLoginModal() {
         const challenge = await startLogin(username, challengeToken, code || undefined);
         go.dataset.state = 'success';
         form.hidden = true;
+        discordBox.hidden = true;
         /* The command, the amount, and one button that copies it.
          *
          * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
@@ -1422,6 +1455,50 @@ $('#loginHead')?.addEventListener('error', (event) => {
 bus.addEventListener('change', paintAuthChrome);
 paintAuthChrome();
 
+/* ─────────── coming back from "Log in with Discord" ───────────
+ *
+ * The API's callback lands on `/?discord-login=<outcome>`. The outcome is read once and stripped so
+ * a reload does not replay it. On `ok` the session is collected BEFORE bootstrap, so bootstrap finds
+ * the player signed in instead of racing the completion with a 401. Never rejects: the page loads
+ * either way. Anything but `ok` says why and reopens the sign-in card, since signing in is what the
+ * player was doing. */
+const DISCORD_LOGIN_NOTICES = {
+  'not-linked': {
+    kind: 'lose',
+    title: 'Discord not linked',
+    body: 'Sign in with Minecraft once, then link your Discord with /link in our server.',
+  },
+  admin: { kind: 'lose', title: 'Admins sign in with Minecraft', body: 'Your account needs its MFA code.' },
+  expired: { kind: 'lose', title: 'Sign-in expired', body: 'Press Log in with Discord again.' },
+  cancelled: { kind: 'lose', title: 'Discord sign-in cancelled' },
+  failed: { kind: 'lose', title: 'Discord declined', body: 'Try again in a moment.' },
+};
+
+async function finishDiscordReturn() {
+  const params = new URLSearchParams(location.search);
+  const outcome = params.get('discord-login');
+  if (!outcome) return;
+  params.delete('discord-login');
+  const rest = params.toString();
+  history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}`);
+  if (outcome === 'ok') {
+    try {
+      const user = await completeDiscordLogin();
+      toast({ kind: 'win', title: 'Signed in with Discord', body: user.minecraftUsername });
+      return;
+    } catch (error) {
+      showApiError(error);
+    }
+  } else if (DISCORD_LOGIN_NOTICES[outcome]) {
+    toast(DISCORD_LOGIN_NOTICES[outcome]);
+  }
+  bus.addEventListener('change', function reopenSignIn(event) {
+    if (event.detail !== 'ready') return;
+    bus.removeEventListener('change', reopenSignIn);
+    if (!state.authenticated && !$('#modal').open) openLoginModal();
+  });
+}
+
 /* Convert old #/ links before anything reads route state, then capture an invite code from the
  * ordinary query string so shared links and login round trips no longer depend on a fragment. */
 migrateLegacyHashRoute();
@@ -1459,7 +1536,7 @@ initPopups({ openLogin: openLoginModal });
 initDailyCode({ openLogin: openLoginModal });
 initTestMode();
 initNotices();
-bootstrap().catch(showApiError);
+finishDiscordReturn().then(bootstrap).catch(showApiError);
 setInterval(() => {
   if (document.hidden) return;
   const refreshes = [refreshActivity()];

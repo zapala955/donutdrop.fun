@@ -409,7 +409,8 @@ describe('frontend/backend contract', () => {
     const app = await source('assets/js/app.js');
     const table = await source('assets/js/blackjack.js');
     // The view mounts before the session is known, so the first load sees a signed-out player.
-    assert.match(app, /bootstrap\(\)\.catch\(showApiError\);/);
+    // (Bootstrap runs once a "Log in with Discord" return, if any, has collected its session.)
+    assert.match(app, /finishDiscordReturn\(\)\.then\(bootstrap\)\.catch\(showApiError\);/);
     // It loads again once the session is in, which fetches the active hand.
     assert.match(table, /\['ready', 'login'\]\.includes\(event\.detail\)\) \{\s*if \(!busy\) void load\(\);/);
     assert.match(table, /api\.get\('\/v1\/blackjack\/hands\/active'\)/);

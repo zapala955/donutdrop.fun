@@ -28,6 +28,11 @@ export function linkCookieName(config: AppConfig): string {
   return config.secureCookies ? '__Host-du_link' : 'du_link';
 }
 
+/** Binds a "Log in with Discord" attempt to the browser that started it (routes/discord-login.ts). */
+export function discordLoginCookieName(config: AppConfig): string {
+  return config.secureCookies ? '__Host-du_dlogin' : 'du_dlogin';
+}
+
 /**
  * The CSRF cookie is deliberately readable by the browser application, which makes it the one
  * cookie a sibling subdomain could otherwise overwrite for the parent domain. Overwriting it

@@ -349,6 +349,42 @@
   }
 }
 
+/* ─────────── log in with Discord ───────────
+ *
+ * Above the Minecraft form, for players who already linked a Discord. Discord's own blurple, so it
+ * reads as Discord's door rather than a second gold call to action competing with Continue. */
+
+.auth__discord {
+  margin-top: 18px;
+}
+.auth__dcgo {
+  width: 100%;
+  height: 48px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #fff; /* 4.61:1 on --discord, measured in app.css */
+  background: var(--discord);
+  border-color: transparent;
+}
+.auth__dcgo:hover:not([disabled]) {
+  background: var(--discord-hi);
+  border-color: transparent;
+}
+.auth__dcgo:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 3px;
+}
+.auth__dcgo[data-state='loading'] {
+  cursor: progress;
+  opacity: 0.8;
+}
+.auth__dcicon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: currentColor;
+}
+
 /* Spatial motion collapses; the spinner keeps turning because it is a progress readout, not
    decoration — freezing it would claim the request had stalled. */
 @media (prefers-reduced-motion: reduce) {
