@@ -369,7 +369,7 @@ describe('frontend/backend contract', () => {
     const css = await source('assets/css/dopamine.css');
 
     assert.match(app, /import \{ initWinFx \} from '\.\/winfx\.js';/);
-    assert.match(app, /initWallet\(\);\ninitWinFx\(\);/);
+    assert.match(app, /initWallet\(\);\r?\ninitWinFx\(\);/);
     // The player's own rounds from the live feed, which store.js holds back while a game animates.
     assert.match(fx, /const kind = event\.detail;/);
     assert.match(fx, /if \(kind !== 'activity'\) return;/);
