@@ -415,6 +415,10 @@ body.lx .feedrow__mult { text-shadow: none; }
   body.lx .crash__stage { min-height: 340px; }
   body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .slots__panel, .plinko__panel) { border-radius: 0; }
   body.lx .mines__stage { padding: var(--lx-s3); }
+  /* Blackjack was left out of the one-column layout: on a phone its 260px controls kept their column
+     and the felt was squeezed into what was left. The table goes on top, as every game's stage does. */
+  body.lx .bj { grid-template-columns: minmax(0, 1fr); grid-template-areas: "table" "controls"; }
+  body.lx .bj__table { min-height: 480px; border-radius: var(--lx-r) var(--lx-r) 0 0; }
   body.lx .phead--game { padding-left: var(--lx-s4); }
   body.lx .phead--game .phead__tag { display: none; }
 }

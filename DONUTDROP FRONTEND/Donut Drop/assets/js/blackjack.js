@@ -8,6 +8,13 @@
  *
  * Motion is kept to what carries information: a card arriving, the hole card turning, one pulse
  * on a win. With reduced motion every one of those becomes a short fade.
+ *
+ * The table can also be drawn in 3D (blackjack3d.js): a village library's card room, the librarian
+ * dealing from a shoe, the bet a stack of emeralds. It is the default where WebGL works, a 2D/3D
+ * switch on the table picks between them, and the choice is remembered with the other display
+ * settings (prefs-boot.js, `bjView`). In 3D every card still goes into the DOM, out of sight,
+ * because that is what a screen reader reads; the 3D table only waits for its own villager to land
+ * each card where the flat one would have flown it.
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './store.js';
@@ -49,6 +56,9 @@ let busy = false;
 let pressed = null; // which control is waiting on the server, for its label
 let stakeText = '1m';
 let shown = { player: 0, dealer: 0 };
+let table3d = null; // the WebGL table, while it is up
+let starting3d = null;
+let no3d = false; // this browser cannot draw it
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -134,10 +144,15 @@ function flyIn(slot, delay = 0) {
   ], { duration: DEAL_MS, delay, easing: EASE, fill: 'backwards' }), delay + DEAL_MS);
 }
 
-/** Turns a face-down card over to show `face`. */
-async function flip(slot, face) {
+/** Turns a face-down card over to show `face`; `index` is its place in the dealer's hand. */
+async function flip(slot, face, index) {
   const card = $('.bjcard', slot);
   paintFace(card, face);
+  if (table3d) {
+    delete card.dataset.down;
+    await table3d.flip(index, face);
+    return;
+  }
   if (reduceMotion()) {
     delete card.dataset.down;
     return;
@@ -171,12 +186,13 @@ function paintTotal(which, faces, { final = false } = {}) {
   node.dataset.state = total > 21 ? 'bust' : total === 21 ? 'twentyone' : '';
 }
 
-function paintBet() {
+function paintBet({ animate = true } = {}) {
   const bet = $('#bjBet', root);
-  if (!hand) { bet.hidden = true; return; }
+  if (!hand) { bet.hidden = true; table3d?.setBet(0, false); return; }
   const onTable = BigInt(hand.stakeMinor) * (hand.doubled ? 2n : 1n);
   bet.hidden = false;
   bet.textContent = `Bet ${money(Number(onTable))}`;
+  table3d?.setBet(onTable, animate);
 }
 
 function clearTable() {
@@ -201,7 +217,8 @@ function drawStatic(current) {
   shown = { player: current.player.cards.length, dealer: current.dealer.cards.length };
   paintTotal('Player', current.player.cards, { final: settled });
   paintTotal('Dealer', current.dealer.cards.filter((face) => face !== null), { final: settled });
-  paintBet();
+  table3d?.setHands({ player: current.player.cards, dealer: current.dealer.cards, doubled: current.doubled });
+  paintBet({ animate: false });
   if (settled) paintResult(current, { animate: false });
 }
 
@@ -209,13 +226,16 @@ function drawStatic(current) {
 async function deliver(which, face, { delay = 0, sideways = false, faces }) {
   const slot = makeCard(face, { sideways });
   seat(which).cards.append(slot);
-  await flyIn(slot, delay);
+  if (table3d) await table3d.deal(which.toLowerCase(), face, { delay, sideways });
+  else await flyIn(slot, delay);
   playSound('tick');
   if (faces) paintTotal(which, faces);
   return slot;
 }
 
 async function animateDeal(current) {
+  // In 3D the last hand is swept off the felt first, as a dealer would.
+  if (table3d) await table3d.collect();
   clearTable();
   paintBet();
   const [p1, p2] = current.player.cards;
@@ -240,7 +260,7 @@ async function finish(current) {
   const hole = seat('Dealer').cards.children[1];
   if (hole && $('.bjcard', hole)?.dataset.down) {
     await wait(reduceMotion() ? 0 : 220);
-    await flip(hole, dealerCards[1]);
+    await flip(hole, dealerCards[1], 1);
     paintTotal('Dealer', dealerCards.slice(0, 2));
   }
   for (let index = shown.dealer; index < dealerCards.length; index += 1) {
@@ -266,10 +286,13 @@ function paintResult(current, { animate }) {
   box.hidden = false;
   $('.bj__seat--player', root).dataset.result = result.tone;
   $('.bj__table', root).dataset.result = result.tone;
+  table3d?.result(result.tone, { blackjack: current.outcome === 'blackjack', animate });
   if (!animate) return;
   playSound(result.tone === 'win' ? (current.outcome === 'blackjack' ? 'reward' : 'win') : result.tone === 'lose' ? 'lose' : 'chime');
   if (!reduceMotion()) {
-    box.animate([{ opacity: 0, transform: 'translate(-50%, -50%) scale(.94)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }], {
+    // Over the 3D table the box sits at the foot of the felt rather than its centre (blackjack.css).
+    const at = table3d ? 'translateX(-50%)' : 'translate(-50%, -50%)';
+    box.animate([{ opacity: 0, transform: `${at} scale(.94)` }, { opacity: 1, transform: `${at} scale(1)` }], {
       duration: 240, easing: EASE,
     });
   }
@@ -312,6 +335,7 @@ function paintControls() {
     hint.textContent = problem;
   }
   deal.setAttribute('aria-busy', String(busy && pressed === 'deal'));
+  paintView();
 
   if (inPlay) {
     const stake = BigInt(hand.stakeMinor);
@@ -348,6 +372,8 @@ async function deal() {
   if (busy || stakeProblem()) return;
   busy = true;
   pressed = 'deal';
+  paintControls();
+  if (starting3d) await starting3d;
   paintControls();
   const release = holdLiveFigures();
   try {
@@ -391,6 +417,8 @@ async function act(action, buttonId) {
   busy = true;
   pressed = buttonId;
   paintControls();
+  // A 3D table still loading takes the hand over first, so no card lands on the wrong table.
+  if (starting3d) await starting3d;
   const release = holdLiveFigures();
   try {
     const response = await api.post(`/v1/blackjack/hands/${hand.id}/actions`, {
@@ -434,11 +462,85 @@ async function reload() {
   }
 }
 
+/* ─────────── the 3D table ─────────── */
+
+const wants3d = () => globalThis.DonutPrefs?.get?.().bjView !== '2d';
+
+/** The 2D/3D switch: which is on, and that it cannot change in the middle of a deal. */
+function paintView() {
+  const group = root && $('#bjView', root);
+  if (!group) return;
+  group.hidden = no3d;
+  const on = Boolean(table3d) || (Boolean(starting3d) && wants3d());
+  for (const button of group.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String((button.dataset.mode === '3d') === on));
+    button.disabled = busy;
+  }
+}
+
+function start3d() {
+  if (table3d || starting3d || no3d) return starting3d;
+  const host = $('.bj__table', root);
+  starting3d = (async () => {
+    let built = null;
+    try {
+      const { createTable3d } = await import('./blackjack3d.js');
+      built = await createTable3d(host);
+    } catch {
+      built = null;
+    }
+    starting3d = null;
+    if (!built) {
+      no3d = true;
+      paintView();
+      return;
+    }
+    // Switched back to 2D while it was loading.
+    if (!wants3d()) {
+      built.dispose();
+      paintView();
+      return;
+    }
+    table3d = built;
+    table3d.onLost = () => {
+      table3d = null;
+      delete host.dataset.render;
+      paintView();
+    };
+    if (config) table3d.setLimits(config.minStakeMinor);
+    host.dataset.render = '3d';
+    if (hand) drawStatic(hand);
+    paintView();
+  })();
+  paintView();
+  return starting3d;
+}
+
+function stop3d() {
+  if (!table3d) return;
+  table3d.dispose();
+  table3d = null;
+  delete $('.bj__table', root).dataset.render;
+  paintView();
+}
+
+function chooseView(mode) {
+  if (busy) return;
+  globalThis.DonutPrefs?.update?.({ bjView: mode === '2d' ? '2d' : undefined });
+  if (mode === '2d') stop3d();
+  else void start3d();
+  paintView();
+}
+
 /* ─────────── build ─────────── */
 
 function build() {
   root.innerHTML = `
     <div class="bj__table">
+      <div class="bj__view" id="bjView" role="group" aria-label="Table view">
+        <button type="button" data-mode="3d" aria-pressed="false">3D</button>
+        <button type="button" data-mode="2d" aria-pressed="true">2D</button>
+      </div>
       <div class="bj__shoe" aria-hidden="true"><span></span></div>
       <section class="bj__seat bj__seat--dealer" aria-label="Dealer">
         <div class="bj__label"><span>Dealer</span><output class="bj__total" id="bjDealerTotal" hidden></output></div>
@@ -489,6 +591,9 @@ function build() {
   $('#bjHit', root).addEventListener('click', () => void act('hit', 'bjHit'));
   $('#bjStand', root).addEventListener('click', () => void act('stand', 'bjStand'));
   $('#bjDouble', root).addEventListener('click', () => void act('double', 'bjDouble'));
+  for (const button of root.querySelectorAll('#bjView button')) {
+    button.addEventListener('click', () => chooseView(button.dataset.mode));
+  }
 
   /* H, S, D while a hand is live -- unless the player is typing, or the page is not showing. */
   document.addEventListener('keydown', (event) => {
@@ -515,6 +620,7 @@ function build() {
       hand = null;
       seedHash = null;
       clearTable();
+      table3d?.clear();
       paintBet();
     }
     // Every balance change can change what the controls allow.
@@ -528,6 +634,7 @@ async function load() {
   } catch {
     config = null;
   }
+  if (config) table3d?.setLimits(config.minStakeMinor);
   if (state.authenticated) {
     await refreshSeed();
     if (!busy) await reload();
@@ -541,6 +648,7 @@ export function mountBlackjack(view) {
   if (!root.dataset.built) {
     build();
     root.dataset.built = '1';
+    if (wants3d()) void start3d();
   }
   void load();
 }

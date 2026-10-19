@@ -346,3 +346,88 @@
   .bj__stake,
   .bj__adj { transition: none; }
 }
+
+/* ─────────── the 3D table (blackjack3d.js) ───────────
+ * The canvas is the whole felt: the library, the table, the librarian. The cards stay in the DOM,
+ * out of sight, because they are what a screen reader reads; each seat's name and total, the bet,
+ * the result and the 2D/3D switch float over the canvas. */
+.bj__view {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--lx-r, 8px);
+  background: var(--bj-hud, rgba(10, 10, 12, .72));
+}
+.bj__view[hidden] { display: none; }
+.bj__view button {
+  min-width: 44px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--lx-r-s, 4px);
+  background: transparent;
+  color: var(--lx-mute, #9096a0);
+  font: 700 .8125rem var(--lx-ui, inherit);
+  cursor: pointer;
+}
+.bj__view button:hover:not(:disabled) { color: var(--lx-ink, #fff); }
+.bj__view button[aria-pressed="true"] { background: var(--lx-4, #2f2f38); color: var(--lx-ink, #fff); }
+.bj__view button:disabled { cursor: default; opacity: .55; }
+.bj__view button:focus-visible { outline: 2px solid var(--lx-focus, #ffd700); outline-offset: 1px; }
+/* The flat table's shoe sits in the same corner; the switch moves it along. */
+.bj__table:not([data-render="3d"]) .bj__shoe { right: 120px; }
+
+.bj__gl {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.bj__gl:active { cursor: grabbing; }
+.bj__table[data-render="3d"] {
+  --bj-hud: rgba(10, 10, 12, .72);
+  padding: 0;
+  background: var(--lx-0, #0a0a0c);
+}
+.bj__table[data-render="3d"] :is(.bj__shoe, .bj__felt, .bj__rules) { display: none; }
+.bj__table[data-render="3d"] .bj__cards {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.bj__table[data-render="3d"] .bj__seat {
+  position: absolute;
+  left: 12px;
+  right: auto;
+  z-index: 3;
+  width: auto;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.bj__table[data-render="3d"] .bj__seat--dealer { top: 12px; }
+.bj__table[data-render="3d"] .bj__seat--player { bottom: 12px; }
+.bj__table[data-render="3d"] .bj__label {
+  padding: 6px 10px;
+  border-radius: var(--lx-r, 8px);
+  background: var(--bj-hud);
+}
+/* Over the dark front of the table, clear of both hands. */
+.bj__table[data-render="3d"] .bj__result { top: auto; bottom: 64px; z-index: 5; transform: translateX(-50%); }
+@media (max-width: 560px) {
+  .bj__table[data-render="3d"] { min-height: 460px; }
+  /* No room beside the switch on a phone: the flat table's shoe goes under it. */
+  .bj__table:not([data-render="3d"]) .bj__shoe { top: 56px; right: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bj__view button { transition: none; }
+}
