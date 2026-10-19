@@ -66,6 +66,8 @@ import { initPopups } from './popups.js';
 import { initDailyCode } from './daily-code.js';
 import { initTestMode } from './testmode.js';
 import { initNotices } from './notices.js';
+import { initWinFx } from './winfx.js';
+import { initBlockArt } from './blockart.js';
 import {
   appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1368,6 +1370,8 @@ initHints();
 initTabDrop('casesDrop', 'casesBtn', 'casesMenu');
 initTabDrop('casinoDrop', 'casinoBtn', 'casinoMenu');
 initWallet();
+initWinFx();
+initBlockArt();
 $('#skipToMain')?.addEventListener('click', () => {
   const main = $('#main');
   main?.focus();

@@ -128,8 +128,10 @@ function buildRound(play) {
   mult.dataset.band = multiple < 1 ? 'down' : multiple > 1.5 ? 'hot' : 'flat';
   mult.dataset.up = multiple > 1 ? '1' : '0';
 
-  const swing = money('feedrow__delta mono', Math.abs(delta), won ? '+' : '−');
-  swing.dataset.up = won ? '1' : '0';
+  /* A round that paid back exactly its stake neither won nor lost: it reads as a plain 0, not as
+   * "−0" in the loss colour. */
+  const swing = money('feedrow__delta mono', Math.abs(delta), won ? '+' : delta < 0 ? '−' : '');
+  swing.dataset.up = won ? '1' : delta < 0 ? '0' : 'even';
 
   row.append(mult, swing);
   return row;
@@ -174,7 +176,8 @@ function cell(className, text) {
 function money(className, value, sign = '') {
   const node = el('span', className);
   node.setAttribute('role', 'cell');
-  node.append(coin(), document.createTextNode(`${sign}${compact(value)}`));
+  /* Uppercased like the wager chip beside it, so one row never prints 1M and −1m. */
+  node.append(coin(), document.createTextNode(`${sign}${compact(value).toUpperCase()}`));
   return node;
 }
 
@@ -298,7 +301,8 @@ function clock(value) {
 /* 588.28k / 1.42m / 5.9m — the feed's own compact form.
  *
  * Deliberately not money(): this table has a coin glyph in front of every figure, so a currency
- * symbol as well would be saying it twice, and lowercase suffixes keep a dense column quiet. */
+ * symbol as well would be saying it twice. Every cell that shows it uppercases it (150M), so the
+ * wager and the result in one row are written the same way. */
 function compact(value) {
   const n = Math.abs(Math.round(Number(value) || 0));
   if (n >= 1e12) return trim(n / 1e12) + 't';

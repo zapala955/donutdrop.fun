@@ -173,6 +173,34 @@ function land(bet) {
   return animation.finished.then(() => undefined, () => undefined);
 }
 
+/* ─────────── the animation test bench (devmenu.js) ───────────
+ *
+ * The marker's landing for a roll the bench asked for: the line and side on the page now, a win or
+ * a miss as asked, priced from the page's stake. No request, no balance, and it stays out of the
+ * recent rolls. `u` is the bench's own random number in [0, 1) that places the roll inside the
+ * winning or the losing stretch: this module holds no source of chance. */
+export async function playTestRoll({ won, u }) {
+  if (!root || busy) return;
+  busy = true;
+  paintControls();
+  playSound('click');
+  try {
+    // Under wins below the line, over wins at or above it; a miss is the other stretch.
+    const [from, size] = won === (direction === 'under') ? [0, target] : [target, SPAN - target];
+    const roll = Math.min(SPAN - 1, from + Math.floor(u * size));
+    const bps = multiplierBps(chanceOf(direction, target));
+    const stake = stakeMinor() ?? 1_000_000n;
+    await land({
+      id: 'test', roll, direction, target, win: won, multiplierBps: bps,
+      stakeMinor: stake.toString(), payoutMinor: (won ? payoutMinor(stake) : 0n).toString(),
+    });
+    playSound(won ? (bps / 10_000 >= 10 ? 'reward' : 'win') : 'lose');
+  } finally {
+    busy = false;
+    paint();
+  }
+}
+
 /* One polite, whole sentence per roll. */
 function say(text) {
   const node = $('#diceSay', root);

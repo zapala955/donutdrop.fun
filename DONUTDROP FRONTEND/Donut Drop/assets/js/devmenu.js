@@ -21,6 +21,8 @@ import { state, bus, devLogin, logout, refreshUpgradeConfig } from './store.js';
 import { $, el, money, pct, parseAmount } from './util.js';
 import { currentRouteName, navigate } from './routing.js';
 import { playTestSpin, quoteTestSpin } from './upgrader.js';
+import { playTestRoll } from './dice.js';
+import { playWinFx } from './winfx.js';
 
 /* The developer login token is NEVER persisted.
  *
@@ -130,7 +132,51 @@ const TESTS = [
     accent: 'var(--crimson)',
     run: (opts) => fakeUpgraderSpin(false, opts),
   },
+  {
+    id: 'dice-hit',
+    n: '8',
+    name: 'Dice · hit',
+    sub: 'dice.js · 0.42s · the marker lands inside the winning stretch of the line on the page',
+    accent: 'var(--amber)',
+    run: () => fakeDiceRoll(true),
+  },
+  {
+    id: 'dice-miss',
+    n: '9',
+    name: 'Dice · miss',
+    sub: 'dice.js · 0.42s · the marker lands on the losing side',
+    accent: 'var(--crimson)',
+    run: () => fakeDiceRoll(false),
+  },
+  {
+    id: 'winfx',
+    n: '10',
+    name: 'Wallet win chip',
+    sub: 'winfx.js · 1.8s · "+$X" off the balance and the gold ring, profit = FAKE STAKE or 25m',
+    accent: 'var(--amber)',
+    run: () => playWinFx(typedStake(25_000_000) ?? 25_000_000),
+  },
 ];
+
+/* The FAKE STAKE box for the rows that are not about an item: what is typed, or the fallback. */
+function typedStake(fallback) {
+  const typed = $('#devStake', root).value;
+  if (typed.trim() === '') return fallback;
+  const stake = parseAmount(typed);
+  return stake > 0 ? stake : null;
+}
+
+/* Go to a game's page and let the freshly shown view lay out before it measures itself. */
+async function visit(route) {
+  if (currentRouteName() !== route) navigate(`/${route}`);
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+/* ─────────── dice: the roll is drawn here, dice.js places it ─────────── */
+async function fakeDiceRoll(won) {
+  await visit('dice');
+  return playTestRoll({ won, u: Math.random() });
+}
 
 /* The stake the upgrader rows play with: whatever is typed in FAKE STAKE, or a quarter of the
  * item when the box is empty. null when the box holds something that is not an amount. */
@@ -211,9 +257,9 @@ export function initDevMenu(mount) {
       </label>
 
       <label class="devpanel__field" data-staff-only>
-        <span class="devpanel__label mono">FAKE STAKE · UPGRADER ROWS</span>
+        <span class="devpanel__label mono">FAKE STAKE · UPGRADER &amp; WALLET ROWS</span>
         <input class="devpanel__sel mono" id="devStake" inputmode="text" autocomplete="off"
-               spellcheck="false" placeholder="empty = a quarter of the item · 10m, 1.5b…">
+               spellcheck="false" placeholder="empty = ¼ of the item · wallet 25m · 10m, 1.5b…">
         <span class="devpanel__quote mono" id="devQuote" aria-live="polite"></span>
       </label>
 

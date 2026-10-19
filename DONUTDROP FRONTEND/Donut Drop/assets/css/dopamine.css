@@ -1,0 +1,210 @@
+/* dopamine.css — the crates page's material, everywhere, and a small flourish when you win.
+ *
+ * Loaded LAST, after retro.css, so it wins over every sheet above it without rewriting any of
+ * them. It changes paint only: backgrounds, edge colours, shadows, and motion on transform and
+ * opacity. No width, height, padding, margin, gap, grid or border width is touched anywhere in
+ * this file, so every box sits exactly where luxe.css put it.
+ *
+ * The crates page already had the look: warm obsidian panels that fade from a lit top to a dark
+ * foot, a gold hairline for an edge, a gold ramp for whatever is picked, and a soft gold light on
+ * the one thing that is chosen (platform.css .rail, .cratecard, .qty__b). This sheet lends that
+ * material to every panel on the site, one notch quieter: no loops, no light on anything that is
+ * not being pointed at, picked, or won.
+ *
+ * The win flourish (.winfx, assets/js/winfx.js) is the only new motion: a "+$X" chip off the
+ * wallet and a short gold ring on it, when a round of yours paid back more than it cost. */
+
+:root {
+  /* The controls' steps of the luxe ladder (luxe.css --lx-3..5), warmed a few degrees so a button
+     on a warm panel reads as the same material rather than a grey patch. The page, the rail and
+     the wells (--lx-0..2) keep their obsidian, as the crates page does. */
+  --lx-3: #27231b;
+  --lx-4: #322c21;
+  --lx-5: #3e3729;
+
+  /* The calmer palette. Pure #ffaa00 on near-black, with #ffd700 for hover and #fff for titles,
+     glared: every button, the deposit, the active rail icon and each figure shouted at the same
+     volume. The gold is now a deeper amber, the hover a soft gold rather than a lemon, and titles
+     a warm off-white, so the page reads the same with less light coming off it. Every sheet takes
+     these through var(--lx-gold…) and var(--lx-ink); delete this block to go back. */
+  --lx-gold: #e3a13a;
+  --lx-gold-hi: #f0c35a;
+  --lx-gold-lo: #b97c22;
+  --lx-gold-wash: rgba(227, 161, 58, .12);
+  --lx-focus: #f0c35a;
+  --lx-ink: #f2eee6;
+
+  /* the crate card's body, and its lit variant for a pointer */
+  --dd-panel: linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9));
+  --dd-panel-hi: linear-gradient(180deg, rgba(40, 33, 19, .78), rgba(14, 12, 8, .92));
+  /* the crate rail's body, for the larger frames a game sits in */
+  --dd-frame: linear-gradient(180deg, rgba(34, 29, 18, .72), rgba(11, 10, 8, .92));
+  /* the gold hairline, drawn as an inset shadow so no box changes size */
+  --dd-edge: inset 0 0 0 1px rgba(227, 161, 58, .09);
+  --dd-edge-hi: inset 0 0 0 1px rgba(227, 161, 58, .32);
+  --dd-glow: 0 0 22px -10px rgba(227, 161, 58, .4);
+  /* the quantity button's gold ramp, for anything picked */
+  --dd-ramp: linear-gradient(135deg, #8f5a17 0%, #e3a13a 50%, #f0c35a 100%);
+  --dd-ramp-glow: 0 0 16px -7px rgba(227, 161, 58, .7);
+  /* the account menu and toasts; the top of a modal or pop-up; the bar under a game */
+  --dd-pop: linear-gradient(180deg, #211c12, #131109);
+  --dd-sheet: #1c1810;
+  --dd-foot: linear-gradient(180deg, rgba(12, 11, 8, .92), #0a0a0c);
+  /* Mines and Tower tiles, at rest and pointed at (Tower: the floor being played) */
+  --dd-tile: linear-gradient(180deg, #2e2819, #211c12);
+  --dd-tile-hi: linear-gradient(180deg, #3b3320, #2a2416);
+  --dd-ttile: linear-gradient(180deg, #2a2418, #1e1a11);
+  --dd-ttile-now: linear-gradient(180deg, #3a3220, #2a2416);
+}
+
+/* A theme picked in Settings (prefs.css puts data-lxtheme on <html>). The warm obsidian above is
+   the default look, not a theme of its own: once the player picks one, every material here is
+   drawn from that theme's ladder instead, so a Sculk or a Cherry Grove page does not wear brown
+   panels. The ladder itself is the theme's (prefs.css wins on specificity), and the gold, the
+   hairlines and the motion stay. */
+:root[data-lxtheme] {
+  --dd-panel: linear-gradient(180deg, var(--lx-3), var(--lx-1));
+  --dd-panel-hi: linear-gradient(180deg, var(--lx-4), var(--lx-2));
+  --dd-frame: linear-gradient(180deg, var(--lx-2), var(--lx-0));
+  --dd-pop: linear-gradient(180deg, var(--lx-3), var(--lx-1));
+  --dd-sheet: var(--lx-3);
+  --dd-foot: linear-gradient(180deg, var(--lx-1), var(--lx-0));
+  --dd-tile: linear-gradient(180deg, var(--lx-4), var(--lx-3));
+  --dd-tile-hi: linear-gradient(180deg, var(--lx-5), var(--lx-4));
+  --dd-ttile: linear-gradient(180deg, var(--lx-4), var(--lx-2));
+  --dd-ttile-now: linear-gradient(180deg, var(--lx-5), var(--lx-4));
+}
+
+/* ═════════ panels: the crate card's body ═════════ */
+body.lx :is(
+  .lxpromo, .lxperk, .lxnone, .card, .crate, .ucard, .mduel__panel, .lxgated,
+  .vip__notice, .acct__notice, .rake__notice, .daily__notice, .stats__notice, .creator__notice, .race__notice
+) {
+  background: var(--dd-panel);
+  box-shadow: var(--dd-edge), var(--lx-shade);
+}
+body.lx .lxdrops li {
+  background: var(--dd-panel);
+  box-shadow: inset 3px 0 0 var(--rar, var(--lx-gold)), var(--dd-edge);
+}
+body.lx .lxtop .acct .menu,
+body.lx .toast {
+  background: var(--dd-pop);
+  box-shadow: var(--dd-edge), var(--lx-shade-hi);
+}
+body.lx .modal { background: linear-gradient(180deg, var(--dd-sheet) 0, var(--lx-1) 220px); }
+body.lx :is(.popup__card, .nudge) { background: linear-gradient(180deg, var(--dd-sheet) 0, var(--lx-1) 220px); }
+
+/* Pointed at, a card that goes somewhere lights its hairline, as a crate card does. */
+body.lx :is(a.lxpromo, .lxperk, .crate):hover,
+body.lx .lxpromo:has(.lxpromo__cover:hover) {
+  background: var(--dd-panel-hi);
+  box-shadow: var(--dd-edge-hi), var(--dd-glow), var(--lx-shade);
+}
+
+/* ═════════ the game frames: the crate rail's body around every game ═════════ */
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette) {
+  background: var(--dd-frame);
+  box-shadow: var(--dd-edge);
+}
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game {
+  background: var(--dd-foot);
+}
+
+/* Mines and Tower tiles: crate-card bodies, and a gold hairline on the one being pointed at. */
+body.lx .mtile {
+  background: var(--dd-tile);
+  box-shadow: 0 5px 0 #0d0b07, inset 0 0 0 1px rgba(227, 161, 58, .07);
+}
+body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover {
+  background: var(--dd-tile-hi);
+  box-shadow: 0 8px 0 #0d0b07, inset 0 0 0 1px rgba(227, 161, 58, .36), 0 0 20px -10px rgba(227, 161, 58, .45);
+}
+body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:active { box-shadow: 0 2px 0 #0d0b07, inset 0 0 0 1px rgba(227, 161, 58, .36); }
+body.lx .ttile[data-kind="hidden"] { background: var(--dd-ttile); }
+body.lx .tfloor[data-state="now"] .ttile[data-kind="hidden"] { background: var(--dd-ttile-now); }
+
+/* ═════════ the lobby: game cards on the crate card's body ═════════
+   No light behind the icon: retro.css stands the pixel icons on a hard drop shadow instead of a
+   bloom, and --card-glow is gone with it. (A var() that no longer exists would void the whole
+   background, leaving the card see-through.) */
+body.lx .lxcard {
+  background: var(--dd-panel);
+  box-shadow: var(--dd-edge), var(--lx-shade);
+}
+body.lx .lxcard:hover { box-shadow: var(--dd-edge-hi), var(--dd-glow), var(--lx-shade-hi); }
+
+/* ═════════ picked: the gold ramp ═════════ */
+body.lx .chips .btn[aria-pressed="true"],
+body.lx .btl__chip[aria-pressed="true"],
+body.lx :is(.tower__mode, .chicken__mode)[aria-checked="true"],
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-pressed="true"],
+body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-checked="true"] {
+  background: var(--dd-ramp);
+  color: #0a0a0c;
+  box-shadow: var(--dd-ramp-glow);
+}
+
+/* ═════════ the money buttons: the crate's flat gold, with its light on hover ═════════ */
+body.lx :is(
+  .lxbtn--gold, .main .btn--go, .modal .btn--go,
+  .crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go,
+  .plinko .plinko__go
+):hover:not(:disabled):not(.lxpromo__go) {
+  box-shadow: 0 6px 20px -9px rgba(227, 161, 58, .5);
+}
+body.lx .upg #pullBtn:hover:not(:disabled) { box-shadow: 0 6px 20px -9px rgba(227, 161, 58, .5); }
+
+/* The calmer palette, for Dice's own colours: its losing stretch takes the site's red instead of a
+   signal red. */
+body.lx .dice { --dice-lose: rgba(192, 57, 43, .72); }
+/* The Discord banner's art is a full field of Discord blurple, the brightest thing on the home
+   page once the gold came down; it keeps its hue at a lower light. */
+body.lx .lxpromo__art img[src$="promo-discord.svg"] { filter: saturate(.72) brightness(.82); }
+
+/* ═════════ the live feed: a round that paid back exactly its stake is neither ═════════ */
+body.lx .feedrow__delta[data-up="even"] { color: var(--lx-faint); }
+
+/* ═════════ the win flourish (assets/js/winfx.js) ═════════
+   The wallet is a positioned box only so the chip has something to hang from; relative with no
+   offset moves nothing. */
+body.lx .lxbal { position: relative; }
+body.lx .lxbal.is-won { animation: dd-won 1.1s var(--lx-ease) 1; }
+.winfx {
+  position: absolute; left: 50%; top: 100%; z-index: 2;
+  padding: 3px 8px;
+  border-radius: var(--lx-r-pill, 999px);
+  background: var(--dd-ramp);
+  color: #0a0a0c;
+  font: 800 .75rem/1.2 var(--lx-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: var(--dd-ramp-glow);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px) scale(.85);
+  animation: dd-chip 1.8s var(--lx-ease) 1 forwards;
+}
+
+@keyframes dd-won {
+  0%   { box-shadow: 0 0 0 0 rgba(240, 195, 90, .55); }
+  35%  { box-shadow: 0 0 0 4px rgba(240, 195, 90, .28), 0 0 22px 2px rgba(227, 161, 58, .32); }
+  100% { box-shadow: 0 0 0 8px rgba(240, 195, 90, 0); }
+}
+@keyframes dd-chip {
+  0%   { opacity: 0; transform: translate(-50%, -4px) scale(.85); }
+  18%  { opacity: 1; transform: translate(-50%, 6px) scale(1.06); }
+  30%  { transform: translate(-50%, 6px) scale(1); }
+  75%  { opacity: 1; transform: translate(-50%, 10px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 18px) scale(.96); }
+}
+
+/* Less motion: the chip only fades in and out where it lands, and the ring does not run. */
+@media (prefers-reduced-motion: reduce) {
+  body.lx .lxbal.is-won { animation: none; }
+  .winfx { animation-name: dd-chip-still; }
+  @keyframes dd-chip-still {
+    0%, 100% { opacity: 0; transform: translate(-50%, 6px); }
+    15%, 80% { opacity: 1; transform: translate(-50%, 6px); }
+  }
+}

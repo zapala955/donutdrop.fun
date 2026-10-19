@@ -353,6 +353,27 @@ describe('frontend/backend contract', () => {
     assert.match(app, /dice: mountDice/);
   });
 
+  it('marks a won round at the wallet with its profit, never its payout, and only after the reveal', async () => {
+    const app = await source('assets/js/app.js');
+    const fx = await source('assets/js/winfx.js');
+    const css = await source('assets/css/dopamine.css');
+
+    assert.match(app, /import \{ initWinFx \} from '\.\/winfx\.js';/);
+    assert.match(app, /initWallet\(\);\ninitWinFx\(\);/);
+    // The player's own rounds from the live feed, which store.js holds back while a game animates.
+    assert.match(fx, /const kind = event\.detail;/);
+    assert.match(fx, /if \(kind !== 'activity'\) return;/);
+    assert.match(fx, /row\.playerId !== me/);
+    // Profit, netted over everything that settled together, and nothing unless it is above zero.
+    assert.match(fx, /net \+= row\.payout - row\.wager;/);
+    assert.match(fx, /mine > 0 && net > 0/);
+    // Rounds already on the feed at load or sign-in are seen, not celebrated.
+    assert.match(fx, /kind === 'ready' \|\| kind === 'login' \|\| kind === 'logout'/);
+    // The chip is decoration: the wallet's own status region already announces the new balance.
+    assert.match(fx, /chip\.setAttribute\('aria-hidden', 'true'\)/);
+    assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  });
+
   it('lays the phone out with the chat closed, a five-slot bottom bar and no sideways scroll', async () => {
     const html = await source('index.html');
     const app = await source('assets/js/app.js');
@@ -360,10 +381,11 @@ describe('frontend/backend contract', () => {
     const roulette = await source('assets/css/roulette.css');
 
     // The skin loads after every other sheet, so it has the last word, phones included; the retro
-    // skin (the old Minecraft theme) comes after the luxe sheets it repaints. The player's own
-    // settings (prefs.css: their theme, and the settings page) come last of all, over both.
+    // skin (the old Minecraft theme) comes after the luxe sheets it repaints, and the dopamine skin
+    // (the crates page's material on every panel, paint only) after that. The player's own settings
+    // (prefs.css: their theme, and the settings page) come last of all, over every skin.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(sheets.slice(-5), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'prefs.css']);
+    assert.deepEqual(sheets.slice(-6), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'dopamine.css', 'prefs.css']);
 
     // The drawer opens from the chat button only, closed on arrival, and a tap off it closes it.
     assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);

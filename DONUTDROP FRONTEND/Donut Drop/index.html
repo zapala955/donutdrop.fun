@@ -126,8 +126,12 @@
 <link rel="stylesheet" href="assets/css/luxe.css" />
 <link rel="stylesheet" href="assets/css/luxe-home.css" />
 <link rel="stylesheet" href="assets/css/luxe-games.css" />
-<!-- retro skin: the old Minecraft theme over the new layout. Last, so it wins. -->
+<!-- retro skin: the old Minecraft theme over the new layout. -->
 <link rel="stylesheet" href="assets/css/retro.css" />
+<!-- dopamine skin: the crates page's warm obsidian and gold on every panel, and the small win
+     flourish at the wallet (assets/js/winfx.js). Paint only, same layout. After the luxe and retro
+     sheets it repaints; before prefs.css, so a theme the player picks still has the last word. -->
+<link rel="stylesheet" href="assets/css/dopamine.css" />
 <!-- The player's settings: the theme, reduced motion, chat and balance options, and the settings
      page. The script is a plain blocking one on purpose: it puts the saved theme on <html> before
      the first paint, so a themed page never flashes obsidian first. -->
@@ -187,6 +191,8 @@
 <link rel="modulepreload" href="assets/js/daily-code.js" />
 <link rel="modulepreload" href="assets/js/testmode.js" />
 <link rel="modulepreload" href="assets/js/notices.js" />
+<link rel="modulepreload" href="assets/js/winfx.js" />
+<link rel="modulepreload" href="assets/js/blockart.js" />
 <link rel="modulepreload" href="assets/js/routing.js" />
 <link rel="modulepreload" href="assets/js/reveal.js" />
 <link rel="modulepreload" href="assets/js/wheel.js" />

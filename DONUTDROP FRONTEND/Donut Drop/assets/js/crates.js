@@ -388,7 +388,7 @@ function paintRail() {
     rail.innerHTML = `
       <div class="rail__empty">
         <span class="rail__label">Selected crate</span>
-        <p>&mdash;</p>
+        <p>Pick a crate to see every item in it and its odds, then open it here.</p>
       </div>`;
     return;
   }
