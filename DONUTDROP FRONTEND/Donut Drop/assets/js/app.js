@@ -77,9 +77,10 @@ function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
 
-  /* The lobby. Every card is in the markup; this filters the row, names it after the tab, drives
-   * the arrows and sets the "New" tags. A card shows when it is in the chosen category and its
-   * name or its keywords contain every word typed. */
+  /* The lobby. Every card is in the markup; this filters the rows, names the first after the tab,
+   * drives the arrows and sets the "New" tags. A card shows when it is in the chosen category and
+   * its name or its keywords contain every word typed. The Originals come first; the slot machines
+   * have a row of their own under them, which goes when nothing in it matches. */
   const search = $('#lobbySearch', view);
   const none = $('#lobbyNone', view);
   const tabs = $$('.lobby__tab', view);
@@ -88,6 +89,10 @@ function mountHome(view) {
   const title = $('#lobbyTitle', view);
   const prev = $('#lobbyPrev', view);
   const next = $('#lobbyNext', view);
+  const mainHead = $('#lobbyH', view).closest('.lxrow__head');
+  const more = $('.lxmore', view);
+  const slotsRow = $('#slotsRow', view);
+  const slotsTrack = $('#slotsTrack', view);
   let category = 'all';
 
   for (const card of cards) {
@@ -95,36 +100,53 @@ function mountHome(view) {
     $('.gcard__badge', card).hidden = !(game && isNewGame(game));
   }
 
-  // Each arrow is live only while there is more row to see on its side.
+  // Each arrow is live only while there is more of its row to see on its side.
+  const wireRow = (row, back, forward) => {
+    const paint = () => {
+      const end = row.scrollWidth - row.clientWidth;
+      back.disabled = row.scrollLeft <= 2;
+      forward.disabled = row.scrollLeft >= end - 2;
+    };
+    const scrollRow = (direction) => {
+      row.scrollBy({
+        left: direction * row.clientWidth * 0.85,
+        behavior: reduceMotion() ? 'auto' : 'smooth',
+      });
+    };
+    back.addEventListener('click', () => scrollRow(-1));
+    forward.addEventListener('click', () => scrollRow(1));
+    row.addEventListener('scroll', paint, { passive: true });
+    new ResizeObserver(paint).observe(row);
+    return paint;
+  };
+  const paintMainArrows = wireRow(track, prev, next);
+  const paintSlotArrows = wireRow(slotsTrack, $('#slotsPrev', view), $('#slotsNext', view));
   const paintArrows = () => {
-    const end = track.scrollWidth - track.clientWidth;
-    prev.disabled = track.scrollLeft <= 2;
-    next.disabled = track.scrollLeft >= end - 2;
+    paintMainArrows();
+    paintSlotArrows();
   };
-  const scrollRow = (direction) => {
-    track.scrollBy({
-      left: direction * track.clientWidth * 0.85,
-      behavior: reduceMotion() ? 'auto' : 'smooth',
-    });
-  };
-  prev.addEventListener('click', () => scrollRow(-1));
-  next.addEventListener('click', () => scrollRow(1));
-  track.addEventListener('scroll', paintArrows, { passive: true });
-  new ResizeObserver(paintArrows).observe(track);
 
   const filterLobby = () => {
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
+    let slots = 0;
     for (const card of cards) {
       const inCategory = category === 'all' || card.dataset.cat.split(' ').includes(category);
       const text = `${$('.gcard__name', card).textContent} ${card.dataset.q}`.toLowerCase();
       const match = inCategory && words.every((word) => text.includes(word));
       card.parentElement.hidden = !match;
       if (match) shown += 1;
+      if (match && slotsTrack.contains(card)) slots += 1;
     }
+    const originals = shown - slots;
     none.hidden = shown > 0;
-    track.hidden = shown === 0;
+    track.hidden = originals === 0;
+    // With only slots left, the Originals heading goes too; with nothing left it stays over the note.
+    mainHead.hidden = originals === 0 && slots > 0;
+    more.hidden = originals === 0;
+    slotsRow.hidden = slots === 0;
     track.scrollLeft = 0;
+    slotsTrack.scrollLeft = 0;
     paintArrows();
   };
   const pickCategory = (code) => {
@@ -265,7 +287,7 @@ function mountHome(view) {
     chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
     plinko: { name: 'Plinko', art: 'assets/img/items/game-plinko.svg' },
     dice: { name: 'Dice', art: 'assets/img/items/dice.svg' },
-    slots: { name: 'Slots', art: 'assets/img/items/diamond.png' },
+    slots: { name: 'Ore Rush', art: 'assets/img/items/diamond.png' },
     monument: { name: 'Ocean Monument', art: 'assets/img/items/heart_of_the_sea.png' },
     blackjack: { name: 'Blackjack', art: 'assets/img/items/game-blackjack.svg' },
     roulette: { name: 'Roulette', art: 'assets/img/items/game-roulette.svg' },
@@ -1148,7 +1170,7 @@ const VIEWS = {
   chicken: mountChicken,
   plinko: mountPlinko,
   dice: mountDice,
-  slots: mountSlots,
+  'ore-rush': mountSlots,
   monument: mountMonument,
   coinflip: mountCoinflip,
   'mines-duel': mountMinesDuel,
@@ -1314,10 +1336,18 @@ function initTabDrop(wrapId, buttonId, menuId) {
    * to tell the player it does not go anywhere. */
 }
 
+/* Pages that moved, so old bookmarks and links keep working: the account menu's Rakeback page became
+ * Rewards, and the first slot machine, at /slots, became Ore Rush when slots got a category of
+ * their own (2026-10-19). nginx sends a full load of the old address on too (308). */
+const RENAMED = { rakeback: 'rewards', slots: 'ore-rush' };
+
 function route() {
   const requested = currentRouteName();
-  // Old bookmarks keep working after the account menu's Rakeback page became Rewards.
-  const seg = requested === 'rakeback' ? 'rewards' : requested;
+  if (RENAMED[requested]) {
+    navigate(`/${RENAMED[requested]}${location.search}`, { replace: true });
+    return;
+  }
+  const seg = requested;
   if (!VIEWS[seg]) {
     navigate('/', { replace: true });
     return;
@@ -1331,7 +1361,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'slots', 'monument', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'ore-rush', 'monument', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);
@@ -1713,7 +1743,7 @@ document.addEventListener('click', (event) => {
   const segments = appPath(target.pathname).split('/').filter(Boolean);
   if (segments.length > 1) return;
   const requested = segments[0] || 'home';
-  if (!VIEWS[requested] && requested !== 'rakeback') return;
+  if (!VIEWS[requested] && !RENAMED[requested]) return;
 
   event.preventDefault();
   navigate(target.pathname + target.search);

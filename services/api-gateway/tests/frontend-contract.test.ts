@@ -226,7 +226,7 @@ describe('frontend/backend contract', () => {
     assert.match(html, /href="\/rewards" data-route="rewards"/);
     assert.match(html, /data-view="rewards"/);
     assert.doesNotMatch(html, />Rakeback<\/span>/);
-    assert.match(app, /requested === 'rakeback' \? 'rewards' : requested/);
+    assert.match(app, /const RENAMED = \{ rakeback: 'rewards', slots: 'ore-rush' \};/);
     assert.match(store, /api\.post\('\/v1\/referrals\/claim', \{\}\)/);
     assert.match(rewards, /claimReferralRewards\(\)/);
     const referralCard = rewards.slice(
@@ -321,10 +321,20 @@ describe('frontend/backend contract', () => {
      * Originals" list, each one an ordinary routed link, and a card in the lobby row. */
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
     const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
-    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'slots', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
+    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
       assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
       assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
       assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);
+    }
+    // The slot machines are a category of their own: a sidebar group and a row under the Originals.
+    const slotsSide = side.slice(side.indexOf('<p class="lxside__label">Slots</p>'));
+    const slotsRow = html.slice(html.indexOf('<ul class="lxrow" id="slotsTrack"'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
+    assert.ok(html.indexOf('id="slotsRow"') > html.indexOf('id="lobbyTrack"'), 'the slots row sits under the Originals');
+    for (const route of ['ore-rush', 'monument']) {
+      assert.match(slotsSide, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the Slots group`);
+      assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
+      assert.match(slotsRow, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no card in the Slots row`);
+      assert.doesNotMatch(lobby, new RegExp(`href="/${route}"`), `${route} is still among the Originals`);
     }
     // A game still to come would be announced, readable and never a link; none is, today.
     assert.doesNotMatch(side, /tabdrop__row--soon|aria-disabled="true"/);
@@ -341,14 +351,14 @@ describe('frontend/backend contract', () => {
     assert.match(app, /chicken: mountChicken/);
     assert.match(html, /data-view="plinko"/);
     assert.match(app, /plinko: mountPlinko/);
-    assert.match(html, /data-view="slots"/);
-    assert.match(app, /slots: mountSlots/);
+    assert.match(html, /data-view="ore-rush"/);
+    assert.match(app, /'ore-rush': mountSlots/);
     assert.match(html, /data-view="coinflip"/);
     assert.match(app, /coinflip: mountCoinflip/);
     assert.match(html, /data-view="mines-duel"/);
     assert.match(app, /'mines-duel': mountMinesDuel/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
-    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|mines-duel\|coinflip\|slots\|/);
+    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|mines-duel\|coinflip\|ore-rush\|/);
     assert.match(html, /data-view="dice"/);
     assert.match(app, /dice: mountDice/);
   });

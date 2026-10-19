@@ -175,6 +175,10 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
   scrollbar-width: none;
 }
 .lxrow::-webkit-scrollbar { display: none; }
+/* A search or a tab can empty a row, or every row: then it goes, heading and all. */
+.lxrow[hidden], .lxrow__head[hidden], .lxslots[hidden] { display: none; }
+/* The slot machines' row, under the Originals and their "See all games". */
+.lxslots { margin-top: var(--lx-s6); }
 .lxrow > li { scroll-snap-align: start; min-width: 0; }
 .lxrow > li[hidden] { display: none; }
 .lxlobby[data-all="1"] .lxrow {

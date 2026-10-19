@@ -84,8 +84,8 @@ export const ROUTE_META = {
       'Play dice with DonutSMP money on DonutLuxe: draw a line from 0 to 100, call over or under, ' +
       'and roll.',
   },
-  slots: {
-    title: 'DonutLuxe Slots — DonutSMP Slots',
+  'ore-rush': {
+    title: 'DonutLuxe Ore Rush — DonutSMP Slots',
     description:
       'Play slots with DonutSMP money on DonutLuxe: five reels of Minecraft ore, ten lines, a wild ' +
       'Totem and free spins.',

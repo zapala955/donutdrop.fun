@@ -391,7 +391,7 @@ describe('slots routes', () => {
     const migration = await read('packages/db/migrations/072_slots.sql');
     assert.match(migration, /machine text NOT NULL DEFAULT 'ore-rush' CHECK \(machine IN \('ore-rush', 'monument'\)\),/);
     const activity = await read('services/api-gateway/src/routes/activity.ts');
-    assert.equal(activity.split("CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Slots' END AS source_name").length - 1, 2);
+    assert.equal(activity.split("CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Ore Rush' END AS source_name").length - 1, 2);
   });
 
   it('reads only the newest spins into the live feed', async () => {
@@ -403,7 +403,7 @@ describe('slots routes', () => {
 });
 
 describe('the slots page', () => {
-  it('is a routed, indexed page with a lobby card and a sidebar link', async () => {
+  it('is a routed, indexed page, Ore Rush at /ore-rush, with a card in the Slots row and a sidebar link', async () => {
     const [html, app, nginx, sitemap, seo, data, admin] = await Promise.all([
       front('index.html'),
       front('assets/js/app.js'),
@@ -413,20 +413,31 @@ describe('the slots page', () => {
       front('assets/js/data.js'),
       front('admin/admin.js'),
     ]);
-    assert.match(html, /<section class="view" data-view="slots" hidden>/);
+    assert.match(html, /<section class="view" data-view="ore-rush" hidden>/);
+    assert.match(html, /<h1>Ore Rush<\/h1>\s*<span class="phead__tag">DonutLuxe Slots<\/span>/);
     assert.match(html, /<div class="slots" id="slotsRoot"><\/div>/);
-    assert.match(html, /<a class="gcard lxcard" href="\/slots" data-cat="casino" data-game="slots"/);
-    assert.match(html, /<a class="lxnav" href="\/slots" data-route="slots" data-tip="Slots">/);
+    assert.match(html, /<a class="gcard lxcard" href="\/ore-rush" data-cat="casino" data-game="ore-rush"/);
+    // Its player count is still keyed by the game id the server counts it under.
+    assert.match(html, /<p class="lxlive" data-live="slots" hidden>/);
+    assert.match(html, /<a class="lxnav" href="\/ore-rush" data-route="ore-rush" data-tip="Ore Rush">/);
     assert.match(html, /href="assets\/css\/slots\.css"/);
     assert.match(html, /<link rel="modulepreload" href="assets\/js\/slots\.js" \/>/);
-    assert.match(app, /slots: mountSlots,/);
-    assert.match(app, /slots: \{ name: 'Slots', art: 'assets\/img\/items\/diamond\.png' \}/);
-    assert.match(nginx, /\|coinflip\|slots\|/);
-    assert.match(nginx, /\/slots "https:\/\/donutluxe\.com\/slots";/);
-    assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/slots<\/loc>/);
-    assert.match(seo, /slots: \{\s*title: 'DonutLuxe Slots/);
-    assert.match(data, /route: '\/slots', name: 'Slots', art: 'diamond\.png', shipped: '2026-10-17'/);
+    assert.match(app, /'ore-rush': mountSlots,/);
+    assert.match(app, /slots: \{ name: 'Ore Rush', art: 'assets\/img\/items\/diamond\.png' \}/);
+    assert.match(nginx, /\|coinflip\|ore-rush\|/);
+    assert.match(nginx, /\/ore-rush "https:\/\/donutluxe\.com\/ore-rush";/);
+    assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/ore-rush<\/loc>/);
+    assert.doesNotMatch(sitemap, /donutluxe\.com\/slots</);
+    assert.match(seo, /'ore-rush': \{\s*title: 'DonutLuxe Ore Rush/);
+    assert.match(data, /route: '\/ore-rush', name: 'Ore Rush', art: 'diamond\.png', shipped: '2026-10-17'/);
+    // The admin figures are for slots as a whole, both machines together.
     assert.match(admin, /slots: 'Slots',/);
+    // The old address carries on: nginx for a full load, the router for a link inside the page.
+    assert.match(nginx, /location = \/slots \{\s*include \/etc\/nginx\/security-headers\.conf;\s*return 308 \/ore-rush\$is_args\$args;\s*\}/);
+    assert.match(app, /if \(RENAMED\[requested\]\) \{\s*navigate\(`\/\$\{RENAMED\[requested\]\}\$\{location\.search\}`, \{ replace: true \}\);/);
+    const [lib, page] = await Promise.all([read('services/api-gateway/src/lib/slots.ts'), front('assets/js/slots.js')]);
+    assert.match(lib, /name: 'Ore Rush',\n  label: 'Ore Rush',\n  path: '\/ore-rush',/);
+    assert.match(page, /title: 'Ore Rush',\n    label: 'Ore Rush',/);
   });
 
   it('asks the server for every spin, and holds the wallet from the click until the reels stop', async () => {
@@ -551,14 +562,14 @@ describe('the slots page', () => {
     }
     assert.match(app, /import \{ mountMonument, mountSlots \} from '\.\/slots\.js';/);
     assert.match(app, /monument: mountMonument,/);
-    assert.match(app, /'dice', 'slots', 'monument', 'mines-duel', 'coinflip'\]\]/);
-    assert.match(nginx, /\|coinflip\|slots\|monument\|/);
+    assert.match(app, /'dice', 'ore-rush', 'monument', 'mines-duel', 'coinflip'\]\]/);
+    assert.match(nginx, /\|coinflip\|ore-rush\|monument\|/);
     assert.match(nginx, /\/monument "https:\/\/donutluxe\.com\/monument";/);
     assert.match(nginx, /\/monument "index, follow";/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/monument<\/loc>/);
     assert.match(seo, /monument: \{\s*title: 'DonutLuxe Ocean Monument/);
     assert.match(data, /route: '\/monument', name: 'Ocean Monument', art: 'heart_of_the_sea\.png', shipped: '2026-10-18'/);
-    for (const list of [nudge, popups]) assert.match(list, /'slots', 'monument', 'coinflip'/);
+    for (const list of [nudge, popups]) assert.match(list, /'ore-rush', 'monument', 'coinflip'/);
     // One page per machine: its own state and its own element ids, its machine named to the server.
     assert.match(page, /function createSlotsGame\(game\) \{\n  const P = game\.prefix;/);
     assert.match(page, /export const mountMonument = createSlotsGame\(GAMES\.monument\);/);

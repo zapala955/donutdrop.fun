@@ -36,7 +36,7 @@ const GAMES = {
     machine: 'ore-rush',
     prefix: 'slots',
     title: 'Ore Rush',
-    label: 'Slots',
+    label: 'Ore Rush',
     art: {
       redstone: 'redstone', iron: 'iron_ingot', gold: 'gold_ingot', emerald: 'emerald', apple: 'golden_apple',
       diamond: 'diamond', netherite: 'netherite_ingot', star: 'nether_star', totem: 'totem', book: 'enchanted_book',

@@ -286,7 +286,8 @@ function gameLabel(play) {
   if (kind === 'chicken') return 'Chicken';
   if (kind === 'plinko') return 'Plinko';
   if (kind === 'dice') return 'Dice';
-  if (kind === 'slots') return 'Slots';
+  // Both machines report as slots; the row carries which one (Ore Rush or Ocean Monument).
+  if (kind === 'slots') return play.sourceName || play.source_name || 'Ore Rush';
   if (kind === 'coinflip') return 'Coinflip';
   if (kind === 'minesduel') return 'Mines Duel';
   return play.sourceName || play.source_name || 'Round';

@@ -61,10 +61,15 @@ const TABLE_GAMES = new Map([
   ['chicken', 'Chicken'],
   ['dice', 'Dice'],
   ['plinko', 'Plinko'],
-  ['slots', 'Slots'],
+  ['slots', 'Ore Rush'],
   ['coinflip', 'Coinflip'],
   ['minesduel', 'Mines Duel'],
 ]);
+/* Both slot machines report as `slots`; a round on the Ocean Monument carries its own name. */
+function tableGameName(activity) {
+  if (activity.kind === 'slots') return activity.sourceName ?? activity.source_name ?? TABLE_GAMES.get('slots');
+  return TABLE_GAMES.get(activity.kind);
+}
 const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
 /** Remembered across sessions so the rail opens the way the player left it. */
@@ -1410,7 +1415,7 @@ function buildHit(activity, value) {
   linkPlayer(activity.playerId, activity.player, hitHead, who);
   if (isTable) {
     const game = el('i', 'msg__badge msg__badge--roulette');
-    game.textContent = TABLE_GAMES.get(activity.kind).toUpperCase();
+    game.textContent = tableGameName(activity).toUpperCase();
     top.append(game);
   }
   if (activity.vip) {
@@ -1451,7 +1456,7 @@ function buildHit(activity, value) {
   } else if (isTable) {
     // Blackjack and crash: the multiple is what came back over what was risked.
     const multiple = activity.wager > 0 ? activity.payout / activity.wager : 0;
-    from.textContent = `${TABLE_GAMES.get(activity.kind)} · ${multiple.toFixed(2)}×`;
+    from.textContent = `${tableGameName(activity)} · ${multiple.toFixed(2)}×`;
   } else {
     from.textContent = activity.item?.displayName || activity.item?.name || 'a round';
   }

@@ -86,8 +86,8 @@ export interface SlotMachine {
 export const ORE_RUSH: SlotMachine = {
   id: 'ore-rush',
   name: 'Ore Rush',
-  label: 'Slots',
-  path: '/slots',
+  label: 'Ore Rush',
+  path: '/ore-rush',
   symbols: [
     { id: 'redstone', name: 'Redstone', pays: [4, 10, 40] },
     { id: 'iron', name: 'Iron Ingot', pays: [5, 12, 50] },

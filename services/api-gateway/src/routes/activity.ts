@@ -247,7 +247,7 @@ export async function registerActivityRoutes(
          SELECT s.id, 'slots'::text AS kind, s.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 t.wagered_minor AS wagered_minor,
-                CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Slots' END AS source_name,
+                CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Ore Rush' END AS source_name,
                 NULL::char(7) AS accent,
                 s.stake_minor AS wager_minor,
                 s.payout_minor AS payout_minor,
@@ -537,7 +537,7 @@ export async function registerActivityRoutes(
          UNION ALL
          SELECT s.id, 'slots'::text AS kind, s.created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
-                CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Slots' END AS source_name,
+                CASE s.machine WHEN 'monument' THEN 'Ocean Monument' ELSE 'Ore Rush' END AS source_name,
                 NULL::char(7) AS accent,
                 s.stake_minor AS wager_minor,
                 s.payout_minor AS payout_minor,
