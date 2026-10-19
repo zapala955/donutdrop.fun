@@ -86,8 +86,13 @@ export async function createTable3d(host) {
   } catch {
     return null;
   }
-  const MAX_RATIO = Math.min(1.5, devicePixelRatio || 1);
+  /* The screen's own resolution, up to 2 for a high-density one: pixel art blurs the moment it is
+   * drawn below that. A struggling machine gives up the glow first, and resolution only after,
+   * never below the floor (see `adapt`). */
+  const MAX_RATIO = Math.min(2, devicePixelRatio || 1);
+  const MIN_RATIO = Math.max(0.75, Math.min(1, MAX_RATIO) * 0.75);
   let ratio = MAX_RATIO;
+  canvas.dataset.ratio = String(ratio);
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -134,7 +139,7 @@ export async function createTable3d(host) {
       const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: renderer.capabilities.isWebGL2 ? 4 : 0 });
       composer = new addons.EffectComposer(renderer, target);
       composer.addPass(new addons.RenderPass(scene, camera));
-      bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.42, 0.45, 1.35);
+      bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.38, 0.4, 1.7);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
     } catch {
@@ -275,10 +280,12 @@ export async function createTable3d(host) {
     return cardTexture(c);
   })();
   const cardGeo = new THREE.BoxGeometry(CARD.w, CARD.t, CARD.h);
-  const edgeMat = mat(null, { color: 0xd8d1c0, roughness: 0.9 });
-  const backMat = mat(backTexture, { roughness: 0.85 });
+  // Card stock, not glass: a matte material with no highlight for the lantern to catch.
+  const cardMat = (map, color = 0xffffff) => new THREE.MeshLambertMaterial({ map, color });
+  const edgeMat = cardMat(null, 0xc8c1b0);
+  const backMat = cardMat(backTexture, 0xd0d0d0);
   function makeCard(face) {
-    const front = mat(face === null ? backTexture : faceTexture(face), { roughness: 0.95, color: 0xd2ccc0 });
+    const front = cardMat(face === null ? backTexture : faceTexture(face), face === null ? 0xd0d0d0 : 0xc4beb2);
     // BoxGeometry's faces: +x, -x, +y (the face), -y (the back), +z, -z.
     const mesh = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, front, backMat, edgeMat, edgeMat]);
     mesh.castShadow = true;
@@ -397,7 +404,7 @@ export async function createTable3d(host) {
   /* ── the lantern over the table ── */
   const LANTERN_Y = 1.45;
   const lanternTex = (x, y, w, h) => pixel(img.lantern, 1, 1, x, y, w, h);
-  const lanternGlow = { color: 0xffffff, emissive: new THREE.Color(0xffc070), emissiveIntensity: 1.6, roughness: 0.6 };
+  const lanternGlow = { color: 0xffffff, emissive: new THREE.Color(0xffc070), emissiveIntensity: 2.6, roughness: 0.6 };
   const lantern = new THREE.Group();
   {
     const sideBody = mat(lanternTex(0, 2, 6, 7), { ...lanternGlow, emissiveMap: lanternTex(0, 2, 6, 7) });
@@ -423,8 +430,8 @@ export async function createTable3d(host) {
   scene.add(halo);
 
   /* ── light ── */
-  scene.add(new THREE.HemisphereLight(0xffe2c0, 0x1a0e06, 0.45));
-  const spot = new THREE.SpotLight(0xffc888, 17, 7, 1.05, 0.6, 1.6);
+  scene.add(new THREE.HemisphereLight(0xffe2c0, 0x1a0e06, 0.62));
+  const spot = new THREE.SpotLight(0xffc888, 11, 7, 1.1, 0.9, 1.6);
   spot.position.set(0, LANTERN_Y - 0.12, -0.1);
   spot.target.position.set(0, 0, 0.05);
   spot.castShadow = true;
@@ -436,7 +443,7 @@ export async function createTable3d(host) {
   warm.position.set(0, LANTERN_Y + 0.2, -0.4);
   scene.add(warm);
   // A cool fill from where the player sits, so the dealer's face is not lost against the shelves.
-  const fill = new THREE.DirectionalLight(0xcfd8ff, 0.32);
+  const fill = new THREE.DirectionalLight(0xcfd8ff, 0.5);
   fill.position.set(1.5, 2.2, 4);
   scene.add(fill);
 
@@ -599,19 +606,24 @@ export async function createTable3d(host) {
   /* ── framing and resolution ── */
   let lastW = 0; let lastH = 0;
   let slowFor = 0; let fastFor = 0;
+  /* Dynamic quality, gentler than the slot machine's: a table that is only dealing cards does not
+   * need 60 frames a second, so "slow" is under 28 (a browser held to 30 is fine), held for 2.5s.
+   * What goes first is the bloom, then the post chain, and only then resolution, a quarter step at a
+   * time and never below MIN_RATIO. A machine with room again gets its resolution back. */
   function adapt(elapsed) {
     if (elapsed > 0.5) return;
-    if (elapsed > 1 / 40) { slowFor += elapsed; fastFor = 0; } else if (elapsed < 1 / 55) { fastFor += elapsed; slowFor = 0; }
+    if (elapsed > 1 / 28) { slowFor += elapsed; fastFor = 0; } else if (elapsed < 1 / 50) { fastFor += elapsed; slowFor = 0; }
     let next = ratio;
-    if (slowFor > 1.2 && ratio > 0.6) { next = Math.max(0.6, ratio - 0.25); slowFor = 0; }
-    if (fastFor > 5 && ratio < MAX_RATIO) { next = Math.min(MAX_RATIO, ratio + 0.25); fastFor = 0; }
-    if (slowFor > 1.2 && ratio <= 0.6 && composer) {
-      if (bloom?.enabled) bloom.enabled = false;
-      else { composer.dispose(); composer = null; }
+    if (slowFor > 2.5) {
       slowFor = 0;
+      if (bloom?.enabled) bloom.enabled = false;
+      else if (composer) { composer.dispose(); composer = null; }
+      else if (ratio > MIN_RATIO) next = Math.max(MIN_RATIO, ratio - 0.25);
     }
+    if (fastFor > 4 && ratio < MAX_RATIO) { next = Math.min(MAX_RATIO, ratio + 0.25); fastFor = 0; }
     if (next !== ratio) {
       ratio = next;
+      canvas.dataset.ratio = String(ratio);
       renderer.setPixelRatio(ratio);
       composer?.setPixelRatio(ratio);
       lastW = 0;
@@ -671,6 +683,7 @@ export async function createTable3d(host) {
   let last = performance.now();
   let clock = 0;
   let lastRender = 0;
+  let idleFrame = false;
   const tmp = new THREE.Vector3();
   function stepFlights(now) {
     for (let i = flights.length - 1; i >= 0; i -= 1) {
@@ -759,13 +772,18 @@ export async function createTable3d(host) {
     camera.lookAt(cam.target);
     stepDealer(now, dt, clock);
     // The lantern breathes, as a flame does.
-    const flicker = reduce ? 1 : 1 + Math.sin(clock * 7.3) * 0.04 + Math.sin(clock * 13.1) * 0.03;
-    spot.intensity = 17 * flicker;
+    const flicker = reduce ? 1 : 1 + Math.sin(clock * 7.3) * 0.025 + Math.sin(clock * 13.1) * 0.02;
+    spot.intensity = 11 * flicker;
     warm.intensity = 6 * flicker;
     halo.lookAt(camera.position);
     halo.material.opacity = 0.5 * flicker;
     happy.step(dt);
     if (reduce && !resized && now - lastRender < 200 && !flights.length && !loose.length) return;
+    /* A table at rest -- nothing in the air, nobody dragging -- is drawn every other frame: the lantern
+     * and the villager's idling read the same at 30, and the GPU it frees is what keeps the resolution
+     * up (see `adapt`) on a machine without much of it. */
+    idleFrame = !idleFrame;
+    if (!resized && idleFrame && !flights.length && !loose.length && !drag.on) return;
     lastRender = now;
     if (composer) composer.render(dt);
     else renderer.render(scene, camera);
