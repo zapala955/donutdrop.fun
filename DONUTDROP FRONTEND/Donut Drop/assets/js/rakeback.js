@@ -235,7 +235,15 @@ async function claimReferrals() {
   try {
     const result = await claimReferralRewards();
     playSound('coin');
-    toast({ kind: 'gold', title: 'Referral rewards claimed', body: money(Number(result.claimedMinor)) });
+    // An invite on the player's own network is voided at the claim and left out of it.
+    const voided = Number(result.voidedInvites) || 0;
+    toast({
+      kind: 'gold',
+      title: 'Referral rewards claimed',
+      body: money(Number(result.claimedMinor)) + (voided
+        ? ` · ${voided === 1 ? 'an invite' : `${voided} invites`} on your own network voided and left out`
+        : ''),
+    });
   } catch (error) {
     toast({ kind: 'lose', title: 'Nothing to claim', body: error?.message || '' });
     await refreshReferrals(false).catch(() => undefined);

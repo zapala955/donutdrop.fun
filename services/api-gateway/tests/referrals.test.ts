@@ -211,7 +211,7 @@ describe('referral revenue share', () => {
 
     const claim = await claimReferralRewards(client, settings, REFERRER);
     assert.equal(claim.blocked, false);
-    assert.equal(claim.blocked ? null : claim.claimedMinor, expected.toString());
+    assert.equal(claim.blocked || claim.empty ? null : claim.claimedMinor, expected.toString());
     assert.equal(client.state.claimable, 0n);
     assert.equal(client.state.paid, expected);
     const paid = client.credits.filter((entry) => entry.kind === 'referral_revshare');

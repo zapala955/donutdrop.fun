@@ -423,14 +423,12 @@ function linkField(data) {
   return wrap;
 }
 
-/** What a player blocked from invite rewards sees here: the reason, and the way to dispute it. */
+/** What a player an administrator blocked from invite rewards sees here, and how to dispute it.
+ * The same-network check no longer blocks anybody: it voids the one invite, so it never lands here. */
 function blockedNotice() {
   const wrap = gate('This account can’t earn invite rewards.');
   const line = el('p', 'refer__gate');
-  line.append(
-    'An invite was made between two accounts on the same network, and the programme does not pay '
-      + 'for that. If it was a family member or a shared connection, ',
-  );
+  line.append('Our team has stopped this account earning from invites. If you think that’s a mistake, ');
   const support = document.createElement('a');
   support.href = '/support';
   support.textContent = 'contact support';

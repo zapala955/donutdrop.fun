@@ -3719,7 +3719,8 @@ async function loadReferrals() {
       'Blocked accounts',
       totals.blocked_accounts ?? '0',
       Number(totals.blocked_accounts ?? 0) > 0,
-      'Accounts that cannot earn from invites: blocked by the same-network check or by hand.',
+      'Accounts an administrator has blocked from earning from invites. The same-network check ' +
+        'only voids the invite; it blocks nobody.',
     ],
     ['Wagered by referees', compactAmount(totals.wagered_minor ?? '0')],
     ['Revenue share paid', compactAmount(totals.revshare_paid_minor ?? '0')],
@@ -3827,8 +3828,7 @@ async function voidReferral(row) {
           'paid out is reversed.'
       : `Restore ${row.referee_username}'s referral by ${row.referrer_username}? It starts ` +
           `earning again and ${claimable} becomes claimable once more. The same-network check ` +
-          'will leave this pair alone from now on. A blocked account stays blocked until you ' +
-          'Unblock it.',
+          'will leave this pair alone from now on.',
   );
   if (!reason) return;
   await api.patch(`/v1/admin/referrals/${row.referee_id}/void`, { voided: voiding, reason });
@@ -3850,8 +3850,9 @@ function blockedCell(username, blockedAt, reason) {
 /**
  * Lifts the invite block from whichever accounts in this row carry one.
  *
- * Both sides are blocked together by the same-network check, so both are lifted together here. It
- * does not restore the referral itself; that is Restore, and the dialog says so.
+ * Blocks are set by hand now (the same-network check stopped setting them in migration 074), but
+ * either side may carry one, so both are lifted together here. It does not restore the referral
+ * itself; that is Restore, and the dialog says so.
  */
 async function unblockReferral(row) {
   const blocked = [

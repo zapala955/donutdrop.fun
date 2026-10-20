@@ -10,8 +10,8 @@ import { networkHash, networkOf, SAME_NETWORK_REASON } from '../src/lib/referral
 import { claimReferralRewards, tryUnlockMilestone } from '../src/lib/referrals.js';
 
 /* Inviting your own second account: an invite between two accounts that have used the same network
- * is voided and both are blocked from the referral programme, at the invite and again before any
- * referral money is paid. */
+ * is voided, at the invite and again before any referral money is paid. Only that invite: neither
+ * account is blocked, and both go on earning from the other players they invite. */
 
 const repo = path.resolve(import.meta.dirname, '../../..');
 // Line endings normalised: a checkout on Windows has CRLF, and the markers below are written with LF.
@@ -41,21 +41,26 @@ const config = loadConfig({
 
 const REFEREE = '20000000-0000-4000-8000-000000000002';
 const REFERRER = '30000000-0000-4000-8000-000000000003';
+const GENUINE = '40000000-0000-4000-8000-000000000004';
 
 function result<R extends QueryResultRow>(rows: R[], rowCount = rows.length): QueryResult<R> {
   return { command: '', rowCount, oid: 0, fields: [], rows };
 }
 
-/** One referral past its milestone with a balance to claim, and what the standing check answers. */
+/**
+ * One referral past its milestone with a balance to claim, and what the standing check answers.
+ * With `genuine`, the referrer also has a second invitee, on another network, with 7000 to claim.
+ */
 class Programme implements DbClient {
   readonly statements: Array<{ text: string; values: unknown[] }> = [];
-  readonly credits: string[] = [];
+  readonly credits: Array<{ kind: string; amount: string }> = [];
   voided = false;
   blocked = new Set<string>();
 
   constructor(
     private readonly standing: { referrerBlocked: boolean; sharedNetwork: boolean },
     private readonly reviewed = false,
+    private readonly genuine = false,
   ) {
     if (standing.referrerBlocked) this.blocked.add(REFERRER);
   }
@@ -67,10 +72,14 @@ class Programme implements DbClient {
     this.statements.push({ text, values });
     const rows = (list: unknown[]) => result(list as R[]);
     if (text.includes('AS shared_network')) {
-      return rows([{ referrer_blocked: this.blocked.has(REFERRER), shared_network: this.standing.sharedNetwork }]);
+      const shared = values[0] === REFEREE && this.standing.sharedNetwork;
+      return rows([{ referrer_blocked: this.blocked.has(REFERRER), shared_network: shared }]);
     }
     if (text.includes('FROM referrals') && text.includes('WHERE referrer_id = $1') && text.includes('FOR UPDATE')) {
-      return rows([{ referee_id: REFEREE, revshare_claimable_minor: '5000', network_reviewed_at: this.reviewed ? new Date() : null }]);
+      return rows([
+        { referee_id: REFEREE, revshare_claimable_minor: '5000', network_reviewed_at: this.reviewed ? new Date() : null },
+        ...(this.genuine ? [{ referee_id: GENUINE, revshare_claimable_minor: '7000', network_reviewed_at: null }] : []),
+      ]);
     }
     if (text.includes('FROM referrals') && text.includes('FOR UPDATE')) {
       return rows([{ referrer_id: REFERRER, wagered_minor: String(config.referralBonusWagerMinor), bonus_unlocked_at: null, network_reviewed_at: this.reviewed ? new Date() : null }]);
@@ -79,14 +88,13 @@ class Programme implements DbClient {
       this.voided = true;
       return rows([{ revshare_claimable_minor: '5000' }]);
     }
-    if (text.includes('UPDATE users') && text.includes('referral_blocked_at = now()')) {
-      for (const id of values[0] as string[]) this.blocked.add(id);
-      return rows([]);
+    if (text.includes('UPDATE users') && text.includes('referral_blocked_at')) {
+      throw new Error('the same-network check must not block an account');
     }
     if (text.includes('INSERT INTO referral_earnings')) return result([], 1);
     if (text.includes('UPDATE user_wallets')) return rows([{ balance_minor: '1' }]);
     if (text.includes('INSERT INTO wallet_transactions')) {
-      this.credits.push(String(values[4]));
+      this.credits.push({ kind: String(values[4]), amount: String(values[2]) });
       return result([], 1);
     }
     return rows([]);
@@ -127,12 +135,12 @@ describe('what counts as one network', () => {
 });
 
 describe('the milestone bonus', () => {
-  it('is not paid to an inviter whose invite shares their network: voided, both blocked, audited', async () => {
+  it('is not paid to an inviter whose invite shares their network: voided, audited, nobody blocked', async () => {
     const client = new Programme({ referrerBlocked: false, sharedNetwork: true });
     assert.equal(await tryUnlockMilestone(client, config, REFEREE), false);
     assert.deepEqual(client.credits, []);
     assert.equal(client.voided, true);
-    assert.deepEqual([...client.blocked].sort(), [REFEREE, REFERRER].sort());
+    assert.deepEqual([...client.blocked], []);
     assert.deepEqual(client.audited(), ['referral.same_network']);
     const voiding = client.statements.find(({ text }) => text.includes('voided_at = now()'))!;
     assert.match(voiding.text, /voided_by = NULL/);
@@ -149,31 +157,49 @@ describe('the milestone bonus', () => {
   it('pays a pair an administrator has restored, network or not', async () => {
     const client = new Programme({ referrerBlocked: false, sharedNetwork: true }, true);
     assert.equal(await tryUnlockMilestone(client, config, REFEREE), true);
-    assert.deepEqual(client.credits, ['referral_bonus']);
+    assert.deepEqual(client.credits.map(({ kind }) => kind), ['referral_bonus']);
     assert.equal(client.voided, false);
   });
 
   it('pays an ordinary invite exactly as before', async () => {
     const client = new Programme({ referrerBlocked: false, sharedNetwork: false });
     assert.equal(await tryUnlockMilestone(client, config, REFEREE), true);
-    assert.deepEqual(client.credits, ['referral_bonus']);
+    assert.deepEqual(client.credits.map(({ kind }) => kind), ['referral_bonus']);
   });
 });
 
 describe('claiming revenue share', () => {
-  it('pays nothing once an invite being paid turns out to share the network, and blocks both', async () => {
-    const client = new Programme({ referrerBlocked: false, sharedNetwork: true });
-    assert.deepEqual(await claimReferralRewards(client, config, REFERRER, '83.21.4.9'), { blocked: true });
-    assert.deepEqual(client.credits, []);
+  it('voids an invite that turns out to share the network, and pays the genuine ones', async () => {
+    const client = new Programme({ referrerBlocked: false, sharedNetwork: true }, false, true);
+    const claim = await claimReferralRewards(client, config, REFERRER, '83.21.4.9');
+    assert.equal(claim.blocked || claim.empty ? null : claim.claimedMinor, '7000');
+    assert.equal(claim.blocked ? null : claim.voidedInvites, 1);
+    assert.deepEqual(client.credits, [{ kind: 'referral_revshare', amount: '7000' }]);
     assert.equal(client.voided, true);
-    assert.ok(client.blocked.has(REFERRER) && client.blocked.has(REFEREE));
+    assert.deepEqual([...client.blocked], []);
+    // Only the genuine invite's balance moves to paid; the voided one keeps its frozen figure.
+    const paid = client.statements.find(({ text }) => text.includes('revshare_claimable_minor = 0'))!;
+    assert.deepEqual(paid.values, [REFERRER, [GENUINE]]);
     // The network the claim came from is recorded before anything is compared.
     const first = client.statements.findIndex(({ text }) => text.includes('INSERT INTO user_networks'));
     const compared = client.statements.findIndex(({ text }) => text.includes('AS shared_network'));
     assert.ok(first >= 0 && first < compared);
   });
 
-  it('pays nothing to a blocked inviter, and voids nothing more', async () => {
+  it('pays nothing when the only balance was the self-invite, and keeps the void', async () => {
+    const client = new Programme({ referrerBlocked: false, sharedNetwork: true });
+    // Returned, not thrown: thrown inside the transaction, the void would roll back with it.
+    assert.deepEqual(await claimReferralRewards(client, config, REFERRER), {
+      blocked: false,
+      empty: true,
+      voidedInvites: 1,
+    });
+    assert.deepEqual(client.credits, []);
+    assert.equal(client.voided, true);
+    assert.deepEqual([...client.blocked], []);
+  });
+
+  it('pays nothing to an inviter an administrator blocked, and voids nothing more', async () => {
     const client = new Programme({ referrerBlocked: true, sharedNetwork: false });
     assert.deepEqual(await claimReferralRewards(client, config, REFERRER), { blocked: true });
     assert.deepEqual(client.credits, []);
@@ -184,7 +210,7 @@ describe('claiming revenue share', () => {
     const client = new Programme({ referrerBlocked: false, sharedNetwork: false });
     const claim = await claimReferralRewards(client, config, REFERRER);
     assert.equal(claim.blocked, false);
-    assert.deepEqual(client.credits, ['referral_revshare']);
+    assert.deepEqual(client.credits, [{ kind: 'referral_revshare', amount: '5000' }]);
   });
 });
 
@@ -194,7 +220,7 @@ describe('the invite itself', () => {
     const signup = auth.slice(auth.indexOf('The invite code is redeemed HERE'), auth.indexOf('The signup bonus'));
     assert.match(signup, /referralStanding\(client, row\.id, referrerId\)/);
     assert.match(signup, /if \(!standing\.referrerBlocked\) \{/);
-    assert.match(signup, /if \(bound\.rowCount && standing\.sharedNetwork\) \{\s*await blockSameNetworkReferral\(client, config, row\.id, referrerId, 'invite'\);/);
+    assert.match(signup, /if \(bound\.rowCount && standing\.sharedNetwork\) \{\s*await voidSameNetworkReferral\(client, config, row\.id, referrerId, 'invite'\);/);
     // The network is on record before the comparison is made.
     assert.ok(auth.indexOf('await recordNetwork(client, config, row.id, request.ip);') < auth.indexOf('referralStanding(client, row.id'));
   });
@@ -205,9 +231,20 @@ describe('the invite itself', () => {
     assert.match(attach, /if \(await referralBlocked\(client, userId\)\) throw blockedError\(\);/);
     assert.match(attach, /'REFERRAL_CODE_BLOCKED'/);
     assert.match(attach, /return \{ sameNetwork: true as const \};/);
-    // Thrown after the transaction: thrown inside, the block would roll back with it.
+    // Thrown after the transaction: thrown inside, the void would roll back with it.
     const after = attach.slice(attach.indexOf('      });\n      // Thrown after the commit'));
     assert.match(after, /'REFERRAL_SAME_NETWORK'/);
+    assert.match(after, /Both accounts can still earn from inviting other players\./);
+    // So is the claim's, when the self-invite was all there was to collect.
+    const claim = routes.slice(routes.indexOf("'/v1/referrals/claim'"), routes.indexOf('// ── choosing your own code'));
+    assert.match(claim, /if \(claim\.empty\) \{\s*throw new AppError\(\s*409,\s*'REFERRAL_SAME_NETWORK',/);
+  });
+
+  it('blocks nobody: the only write to the block columns is the administrator\'s', async () => {
+    for (const file of ['lib/referral-network.ts', 'lib/referrals.ts', 'routes/referrals.ts', 'routes/auth.ts']) {
+      const code = await read(`services/api-gateway/src/${file}`);
+      assert.doesNotMatch(code, /referral_blocked_at =|blockSameNetworkReferral/, file);
+    }
   });
 
   it('is shown to a blocked player as a reason and a way to dispute it, not as an offer', async () => {
@@ -232,7 +269,17 @@ describe('what an administrator can do about it', () => {
   });
 });
 
-describe('the migration', () => {
+describe('the migrations', () => {
+  it('lifts only the blocks the check set, and leaves the voids and hand-set blocks alone', async () => {
+    const sql = await read('packages/db/migrations/074_referral_network_unblock.sql');
+    const update = sql.slice(sql.indexOf('UPDATE users'), sql.indexOf(';', sql.indexOf('UPDATE users')));
+    assert.match(update, /SET referral_blocked_at = NULL,\s*referral_block_reason = NULL,/);
+    // The exact text the check wrote, so no administrator's own reason can match it.
+    assert.ok(update.includes(`AND referral_block_reason = '${SAME_NETWORK_REASON}'`));
+    assert.doesNotMatch(sql, /UPDATE referrals|DELETE FROM/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v74\(\) RETURNS boolean/);
+  });
+
   it('adds the block, the network table and an automatic void, without rewriting anything', async () => {
     const sql = await read('packages/db/migrations/066_referral_same_network.sql');
     assert.match(sql, /ADD COLUMN referral_blocked_at timestamptz/);

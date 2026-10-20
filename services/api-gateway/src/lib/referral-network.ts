@@ -9,9 +9,10 @@ import type { DbClient } from './db.js';
  *
  * The referral bonus is worth more than the wager that unlocks it, so the cheapest way to collect
  * it is to invite yourself. Two accounts that have used the same connection are, far more often
- * than not, one person: when an invite joins two such accounts it is voided and BOTH accounts are
- * blocked from the referral programme. Nothing else about them changes; they play, deposit and
- * withdraw as before. An administrator can restore the invite and lift the blocks.
+ * than not, one person: when an invite joins two such accounts, that invite is voided and pays
+ * nothing, ever. Only that invite: both accounts stay in the programme and go on earning from every
+ * other player they invite (until 2026-10-20 both were blocked as well; migration 074 lifted those
+ * blocks). An administrator can restore the invite.
  *
  * It is checked when the invite is made (sign-up link, or the code entered in Settings) and again
  * at each moment referral money moves (the milestone bonus, a revenue-share claim), because the
@@ -24,7 +25,7 @@ import type { DbClient } from './db.js';
 /** Two accounts' use of one network counts when it falls within this many days of each other. */
 export const SAME_NETWORK_WINDOW_DAYS = 30;
 
-/** What an automatic void and block say about themselves, for the admin console and the audit. */
+/** What an automatic void says about itself, for the admin console and the audit. */
 export const SAME_NETWORK_REASON = 'Automatic: the invited account shares a network with its inviter';
 
 /**
@@ -123,8 +124,8 @@ export async function recordNetwork(
 }
 
 /**
- * Whether an inviter may still earn from invites, and whether the two accounts have shared a
- * network within the window. A missing answer reads as "no" on both counts.
+ * Whether an administrator has blocked the inviter from earning from invites, and whether the two
+ * accounts have shared a network within the window. A missing answer reads as "no" on both counts.
  */
 export async function referralStanding(
   client: Queryable,
@@ -147,7 +148,7 @@ export async function referralStanding(
   return { referrerBlocked: row?.referrer_blocked === true, sharedNetwork: row?.shared_network === true };
 }
 
-/** Whether this account is blocked from the referral programme. */
+/** Whether an administrator has blocked this account from the referral programme. */
 export async function referralBlocked(client: Queryable, userId: string): Promise<boolean> {
   const result = await client.query<{ blocked: boolean }>(
     'SELECT referral_blocked_at IS NOT NULL AS blocked FROM users WHERE id = $1',
@@ -157,13 +158,14 @@ export async function referralBlocked(client: Queryable, userId: string): Promis
 }
 
 /**
- * Voids the invite and blocks both accounts from the programme, in the caller's transaction.
+ * Voids the invite, in the caller's transaction. Neither account is blocked: each goes on earning
+ * from the other players it invites.
  *
  * Marked, not deleted, as every void is: the row keeps who invited whom and what it had banked, so
  * the decision can be reviewed. Nothing already paid is taken back; that is a wallet adjustment an
  * administrator makes on purpose, never a side effect.
  */
-export async function blockSameNetworkReferral(
+export async function voidSameNetworkReferral(
   client: DbClient,
   config: AppConfig,
   refereeId: string,
@@ -176,12 +178,6 @@ export async function blockSameNetworkReferral(
       WHERE referee_id = $1 AND voided_at IS NULL
       RETURNING revshare_claimable_minor`,
     [refereeId, SAME_NETWORK_REASON],
-  );
-  await client.query(
-    `UPDATE users
-        SET referral_blocked_at = now(), referral_block_reason = $2, updated_at = now()
-      WHERE id = ANY($1::uuid[]) AND referral_blocked_at IS NULL`,
-    [[refereeId, referrerId], SAME_NETWORK_REASON],
   );
   await appendAudit(client, config, {
     actorUserId: null,

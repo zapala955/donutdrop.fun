@@ -12,10 +12,10 @@ import {
 } from '../lib/referrals.js';
 import { maskedName } from '../lib/masked-name.js';
 import {
-  blockSameNetworkReferral,
   recordNetwork,
   referralBlocked,
   referralStanding,
+  voidSameNetworkReferral,
 } from '../lib/referral-network.js';
 import { parseWith } from '../lib/validation.js';
 import {
@@ -56,8 +56,7 @@ function blockedError(): AppError {
   return new AppError(
     403,
     'REFERRAL_BLOCKED',
-    'This account is blocked from invite rewards because an invite was made between accounts on ' +
-      'the same network. Contact support if you think this is a mistake.',
+    'This account is blocked from invite rewards. Contact support if you think this is a mistake.',
   );
 }
 
@@ -201,7 +200,7 @@ export async function registerReferralRoutes(
     const accountAgeMs = Date.now() - (self.rows[0]?.created_at.getTime() ?? 0);
     const inboundRow = inbound.rows[0];
     const entryLocked = inboundRow ? referralIsLocked(inboundRow) : false;
-    // A blocked account is offered no code entry: the attach would refuse it.
+    // An account an administrator has blocked is offered no code entry: the attach would refuse it.
     const blocked = !!self.rows[0]?.referral_blocked_at;
     const entryAvailable =
       !entryUsed && windowMs > 0 && accountAgeMs >= 0 && accountAgeMs < windowMs && !entryLocked &&
@@ -285,7 +284,7 @@ export async function registerReferralRoutes(
         discordVerified: !!self.rows[0]?.discord_verified_at,
         discordUsername: self.rows[0]?.discord_username ?? null,
         referredBy: inbound.rows[0]?.referrer_username ?? null,
-        // Blocked from the programme: no bonus, no claims, until an administrator lifts it.
+        // Blocked from the programme by an administrator: no bonus, no claims, until it is lifted.
         referralBlocked: blocked,
         codeEntry: {
           available: entryAvailable,
@@ -321,13 +320,25 @@ export async function registerReferralRoutes(
     async (request) => {
       requireProgramme();
       const userId = requireUserId(request.authUser?.id);
-      /* The block is decided and written inside the transaction; the refusal is thrown after it
-       * commits, because throwing inside would roll the block back with it. */
+      /* A same-network invite is voided inside the transaction; a refusal is thrown after it
+       * commits, because throwing inside would roll the void back with it. */
       const claim = await db.transaction((client) =>
         claimReferralRewards(client, config, userId, request.ip),
       );
       if (claim.blocked) throw blockedError();
-      return { claimedMinor: claim.claimedMinor, balanceMinor: claim.balanceMinor };
+      if (claim.empty) {
+        throw new AppError(
+          409,
+          'REFERRAL_SAME_NETWORK',
+          'Those rewards came from an account on your own network, so that invite was voided ' +
+            'and pays nothing. Rewards from the other players you invite are not affected.',
+        );
+      }
+      return {
+        claimedMinor: claim.claimedMinor,
+        balanceMinor: claim.balanceMinor,
+        voidedInvites: claim.voidedInvites,
+      };
     },
   );
 
@@ -468,7 +479,7 @@ export async function registerReferralRoutes(
         if (inviter.user_id === userId) {
           throw new AppError(400, 'REFERRAL_OWN_CODE', 'That is your own invite code');
         }
-        // Neither side of an invite may be an account already blocked from the programme.
+        // Neither side of an invite may be an account an administrator has blocked.
         if (await referralBlocked(client, userId)) throw blockedError();
         if (await referralBlocked(client, inviter.user_id)) {
           throw new AppError(403, 'REFERRAL_CODE_BLOCKED', 'That invite code can no longer be used');
@@ -506,10 +517,10 @@ export async function registerReferralRoutes(
           [userId],
         );
         /* Bound first, then judged, so a self-invite leaves its voided row behind as the record of
-         * what was tried, and the one entry is spent on it. */
+         * what was tried, and the one entry is spent on it. Neither account is blocked. */
         const standing = await referralStanding(client, userId, inviter.user_id);
         if (standing.sharedNetwork) {
-          await blockSameNetworkReferral(client, config, userId, inviter.user_id, 'invite');
+          await voidSameNetworkReferral(client, config, userId, inviter.user_id, 'invite');
           return { sameNetwork: true as const };
         }
         return { attached: true, changed: !!existing, code: body.code, inviter: inviter.name };
@@ -519,8 +530,8 @@ export async function registerReferralRoutes(
         throw new AppError(
           403,
           'REFERRAL_SAME_NETWORK',
-          'That code belongs to an account on your own network. Inviting yourself is not allowed, ' +
-            'so both accounts are now blocked from invite rewards.',
+          'That code belongs to an account on your own network, so this invite was voided and ' +
+            'earns nothing. Both accounts can still earn from inviting other players.',
         );
       }
       return outcome;

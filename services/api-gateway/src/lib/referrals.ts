@@ -3,7 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { ContributionSource } from './cash-settlement.js';
 import type { DbClient } from './db.js';
 import { conflict } from './errors.js';
-import { blockSameNetworkReferral, recordNetwork, referralStanding } from './referral-network.js';
+import { recordNetwork, referralStanding, voidSameNetworkReferral } from './referral-network.js';
 import { countedWagerMinor } from './rewards.js';
 import { creditWallet } from './wallet.js';
 
@@ -57,8 +57,11 @@ interface ClaimableReferralRow {
 }
 
 /** A claim either pays, or finds the referrer blocked from the programme and pays nothing. */
+/* `voidedInvites` counts the invites this claim found on the referrer's own network and voided. When
+ * they were all there was, nothing is paid (`empty`), and the void still has to commit. */
 export type ReferralClaimResult =
-  | { blocked: false; claimedMinor: string; balanceMinor: string }
+  | { blocked: false; empty: false; claimedMinor: string; balanceMinor: string; voidedInvites: number }
+  | { blocked: false; empty: true; voidedInvites: number }
   | { blocked: true };
 
 /**
@@ -164,26 +167,27 @@ export async function claimReferralRewards(
     [referrerId],
   );
   /* Every invite being paid is checked, not only new ones: an alt that signed up elsewhere and
-   * later played on its inviter's connection shows itself here. One found blocks the referrer, and
-   * a blocked referrer collects nothing -- including from invites that were genuine, which is what
-   * "blocked from the programme" means. An administrator can lift it; the balances wait. */
-  let blocked = false;
+   * later played on its inviter's connection shows itself here. That invite is voided and its
+   * balance left out; the genuine ones are paid as usual. A referrer an administrator has blocked
+   * collects nothing until the block is lifted; the balances wait. */
+  const paying: ClaimableReferralRow[] = [];
+  let voidedInvites = 0;
   for (const row of locked.rows) {
     const standing = await referralStanding(client, row.referee_id, referrerId);
-    if (standing.referrerBlocked) {
-      blocked = true;
-      break;
-    }
+    if (standing.referrerBlocked) return { blocked: true };
     if (standing.sharedNetwork && !row.network_reviewed_at) {
-      await blockSameNetworkReferral(client, config, row.referee_id, referrerId, 'claim');
-      blocked = true;
+      await voidSameNetworkReferral(client, config, row.referee_id, referrerId, 'claim');
+      voidedInvites += 1;
+    } else {
+      paying.push(row);
     }
   }
-  if (blocked) return { blocked: true };
-  const amount = locked.rows.reduce(
+  const amount = paying.reduce(
     (sum, row) => sum + BigInt(row.revshare_claimable_minor),
     0n,
   );
+  // Returned rather than thrown, so the voids above commit; the route words the refusal.
+  if (amount <= 0n && voidedInvites > 0) return { blocked: false, empty: true, voidedInvites };
   if (amount <= 0n) conflict('REFERRAL_REWARDS_EMPTY', 'No referral rewards are ready to claim');
 
   const claimId = randomUUID();
@@ -194,13 +198,16 @@ export async function claimReferralRewards(
     'referral_revshare',
     claimId,
   );
+  /* Exactly the rows summed above, which this transaction holds locked. Matching on "claimable > 0"
+   * instead would also clear an invite whose first commission landed after the snapshot, moving
+   * money that was never credited into the paid column. */
   await client.query(
     `UPDATE referrals
         SET revshare_paid_minor = revshare_paid_minor + revshare_claimable_minor,
             revshare_claimable_minor = 0,
             updated_at = now()
-      WHERE referrer_id = $1 AND revshare_claimable_minor > 0 AND voided_at IS NULL`,
-    [referrerId],
+      WHERE referrer_id = $1 AND referee_id = ANY($2::uuid[]) AND voided_at IS NULL`,
+    [referrerId, paying.map((row) => row.referee_id)],
   );
   await client.query(
     `INSERT INTO referral_claims
@@ -209,7 +216,13 @@ export async function claimReferralRewards(
     [claimId, referrerId, amount.toString(), balanceAfter],
   );
 
-  return { blocked: false, claimedMinor: amount.toString(), balanceMinor: balanceAfter };
+  return {
+    blocked: false,
+    empty: false,
+    claimedMinor: amount.toString(),
+    balanceMinor: balanceAfter,
+    voidedInvites,
+  };
 }
 
 /**
@@ -255,11 +268,11 @@ export async function tryUnlockMilestone(
   /* Last look before the bonus is paid. A blocked referrer is simply not paid yet: the gate stays
    * shut, the next wager asks again, and if an administrator has lifted the block by then it pays.
    * Two accounts that have shared a network are the self-invite this bonus attracts, unless an
-   * administrator has already looked at this pair and restored it. */
+   * administrator has already looked at this pair and restored it: that invite is voided. */
   const standing = await referralStanding(client, refereeId, referral.referrer_id);
   if (standing.referrerBlocked) return false;
   if (standing.sharedNetwork && !referral.network_reviewed_at) {
-    await blockSameNetworkReferral(client, config, refereeId, referral.referrer_id, 'milestone');
+    await voidSameNetworkReferral(client, config, refereeId, referral.referrer_id, 'milestone');
     return false;
   }
 

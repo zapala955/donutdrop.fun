@@ -1061,10 +1061,10 @@ export async function registerAdminOperationRoutes(
   /**
    * Blocks an account from the referral programme, or lifts the block.
    *
-   * The same-network check sets these on its own; this is how an administrator undoes one that
-   * caught a family or a shared flat, or sets one by hand. A blocked account plays as normal and
-   * keeps whatever it has banked, but is paid no bonus and can claim nothing until it is lifted.
-   * Lifting it does not restore a voided invite: that is the referral's own Restore.
+   * Set only by hand: the same-network check voids the one invite and blocks nobody (it blocked
+   * both accounts until migration 074). A blocked account plays as normal and keeps whatever it has
+   * banked, but is paid no bonus and can claim nothing until it is lifted. Lifting it does not
+   * restore a voided invite: that is the referral's own Restore.
    */
   app.patch(
     '/v1/admin/referral-blocks/:id',

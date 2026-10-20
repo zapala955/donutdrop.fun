@@ -27,7 +27,7 @@ describe('voiding a referral actually stops it earning', () => {
      * while still paying out everything the relationship had already banked would make it a
      * formality. */
     const claim = code.slice(code.indexOf('export async function claimReferralRewards'));
-    const body = claim.slice(0, claim.indexOf('return { blocked: false, claimedMinor'));
+    const body = claim.slice(0, claim.indexOf('empty: false,'));
     const guards = body.split('voided_at IS NULL').length - 1;
     assert.equal(guards, 2, 'the claim must filter voided referrals when reading AND when paying');
   });

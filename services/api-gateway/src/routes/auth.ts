@@ -18,7 +18,7 @@ import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { verifyAdminTotp } from '../lib/totp.js';
 import { creditWallet } from '../lib/wallet.js';
-import { blockSameNetworkReferral, recordNetwork, referralStanding } from '../lib/referral-network.js';
+import { recordNetwork, referralStanding, voidSameNetworkReferral } from '../lib/referral-network.js';
 import {
   addDepositRequirement,
   addWagerRequirement,
@@ -365,10 +365,10 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
            * code. It is here because that is a property of today's insert order rather than a rule
            * anybody stated, and the cost of asserting it is one comparison. */
           if (referrerId && referrerId !== row.id) {
-            /* An inviter blocked from the programme recruits nobody: the account is created
+            /* An inviter an administrator has blocked recruits nobody: the account is created
              * without one, as for a code that matched nothing. A new account on the inviter's own
-             * network is bound and then voided at once, which blocks both, and keeps the row as
-             * the record. Either way the sign-up itself goes ahead. */
+             * network is bound and then voided at once, keeping the row as the record; neither
+             * account is blocked. Either way the sign-up itself goes ahead. */
             const standing = await referralStanding(client, row.id, referrerId);
             if (!standing.referrerBlocked) {
               const bound = await client.query(
@@ -377,7 +377,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
                 [row.id, referrerId, challenge.referral_code],
               );
               if (bound.rowCount && standing.sharedNetwork) {
-                await blockSameNetworkReferral(client, config, row.id, referrerId, 'invite');
+                await voidSameNetworkReferral(client, config, row.id, referrerId, 'invite');
               }
             }
           }
