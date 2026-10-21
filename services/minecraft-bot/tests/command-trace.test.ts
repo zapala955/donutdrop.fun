@@ -2,11 +2,45 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { describeTracedPacket } from '../src/worker.js';
+import type { Bot } from 'mineflayer';
+import { describeTracedPacket, sendPlainCommand } from '../src/worker.js';
 
 /* 2026-10-20, about 20:05 UTC: DonutSMP moved to 26.3 and from then on neither bot's /pay or /bal got
  * any reply in chat, while payments to them still arrived. The trace records what the server sends
  * back instead, so the fix can be written from what it actually does. */
+
+describe('a command the bot sends', () => {
+  const fakeBot = (features: boolean | undefined) => {
+    const written: Array<[string, unknown]> = [];
+    const chatted: string[] = [];
+    const bot = {
+      supportFeature: features === undefined ? undefined : () => features,
+      _client: { write: (name: string, data: unknown) => written.push([name, data]) },
+      chat: (text: string) => chatted.push(text),
+    } as unknown as Bot;
+    return { bot, written, chatted };
+  };
+
+  it('goes as the plain chat_command packet, as the game client sends /pay and /bal', () => {
+    const { bot, written, chatted } = fakeBot(true);
+    sendPlainCommand(bot, '/pay Sfouga55 24000000');
+    sendPlainCommand(bot, '/bal');
+    assert.deepEqual(written, [
+      ['chat_command', { command: 'pay Sfouga55 24000000' }],
+      ['chat_command', { command: 'bal' }],
+    ]);
+    assert.deepEqual(chatted, []);
+  });
+
+  it('keeps mineflayer\'s own path on versions without the separate signed packet', () => {
+    for (const features of [false, undefined]) {
+      const { bot, written, chatted } = fakeBot(features);
+      sendPlainCommand(bot, '/bal');
+      assert.deepEqual(written, []);
+      assert.deepEqual(chatted, ['/bal']);
+    }
+  });
+});
 
 describe('what the server sends after a command', () => {
   it('is logged as one bounded line, whatever the packet holds', () => {

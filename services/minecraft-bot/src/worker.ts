@@ -47,6 +47,9 @@ const TRACE_DETAIL = new Set([
   'set_slot',
   'open_book',
   'open_sign_entity',
+  // What a sign the server puts up says, and where it puts it.
+  'tile_entity_data',
+  'block_change',
   'show_dialog',
   'clear_dialog',
   'set_title_text',
@@ -1101,7 +1104,7 @@ export class MinecraftWorker {
   private sendCommand(bot: Bot, command: string): void {
     this.lastCommandAt = Date.now();
     this.traceReplies(command.split(' ')[0] ?? command);
-    bot.chat(command);
+    sendPlainCommand(bot, command);
   }
 
   /** Starts counting what the server sends for COMMAND_TRACE_MS, then logs the tally once. */
@@ -1558,6 +1561,23 @@ function coversRequestedAmount(displayed: string, requestedMinor: string): boole
     return false;
   }
   return requested >= bounds.low && requested < bounds.low + bounds.step;
+}
+
+/**
+ * Sends a command the way the game's own client sends one with nothing to sign: the plain
+ * `chat_command` packet, which carries only the text.
+ *
+ * Mineflayer sends every command as `chat_command_signed` whenever it holds chat keys, even /pay and
+ * /bal, which have no signed argument, and adds its own count of seen messages and a checksum of
+ * them. From DonutSMP's 26.3 update (2026-10-20, about 20:05 UTC) neither command got any answer
+ * sent that way. Versions without the separate signed packet keep mineflayer's own path.
+ */
+export function sendPlainCommand(bot: Bot, command: string): void {
+  if (command.startsWith('/') && bot.supportFeature?.('seperateSignedChatCommandPacket')) {
+    bot._client.write('chat_command', { command: command.slice(1) });
+    return;
+  }
+  bot.chat(command);
 }
 
 /** A traced packet as one bounded line: chat as its text, anything else as its JSON. */
