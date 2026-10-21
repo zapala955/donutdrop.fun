@@ -60,6 +60,27 @@ describe('what search engines are given', () => {
     assert.match(robots, /^Disallow: \/v1\/$/m);
   });
 
+  it('serves the IndexNow key that the submission names, at the root, for every sitemap page', async () => {
+    const indexnow = (await import(pathToFileURL(path.join(repo, 'scripts/indexnow.mjs')).href)) as {
+      KEY: string;
+      sitemapUrls(xml: string): string[];
+      submission(urls: string[]): { host: string; key: string; keyLocation: string; urlList: string[] };
+    };
+    assert.match(indexnow.KEY, /^[0-9a-f]{32}$/);
+    assert.equal((await readFrontend(`${indexnow.KEY}.txt`)).trim(), indexnow.KEY);
+    const nginx = await read('infra/nginx/nginx.conf');
+    assert.ok(
+      nginx.includes(`location = /${indexnow.KEY}.txt {`) && nginx.includes(`try_files /${indexnow.KEY}.txt =404;`),
+      'nginx must serve the key file at the root',
+    );
+    const body = indexnow.submission(indexnow.sitemapUrls(await readFrontend('sitemap.xml')));
+    assert.equal(body.keyLocation, `https://donutluxe.com/${indexnow.KEY}.txt`);
+    assert.deepEqual(
+      body.urlList.map((url) => new URL(url).pathname),
+      sitemapPaths(await readFrontend('sitemap.xml')),
+    );
+  });
+
   it('keeps titles and descriptions short enough not to be cut off', async () => {
     const { ROUTE_META } = await seo();
     for (const [route, meta] of Object.entries(ROUTE_META)) {
