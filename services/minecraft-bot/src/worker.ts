@@ -33,6 +33,34 @@ const MIN_DEPOSIT_TRANSFER_WINDOW_MS = 20_000;
 const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
 /** How long after a payout the server's reply is worth logging. */
 const PAYOUT_CHAT_CAPTURE_MS = 8_000;
+/* What the server sends back after each of this bot's commands: every packet counted for this long,
+ * and the ones that could carry an answer logged in full. Added 2026-10-21, when DonutSMP's move to
+ * 26.3 (about 20:05 UTC the day before) left both bots' /pay and /bal with no reply in chat at all,
+ * while payments to them still arrived. It is how the new answer -- a menu, a dialog, a title, or
+ * nothing -- gets seen, instead of guessed. */
+const COMMAND_TRACE_MS = 6_000;
+/* Packets that arrive by the hundred whatever the bot does; counted, never logged. */
+const TRACE_DETAIL = new Set([
+  'open_window',
+  'close_window',
+  'window_items',
+  'set_slot',
+  'open_book',
+  'open_sign_entity',
+  'show_dialog',
+  'clear_dialog',
+  'set_title_text',
+  'set_subtitle_text',
+  'action_bar',
+  'set_action_bar_text',
+  'profileless_chat',
+  'disguised_chat',
+  'player_chat',
+  'system_chat',
+  'kick_disconnect',
+  'start_configuration',
+  'transfer',
+]);
 /** How long to wait for the server to confirm a payout before giving up on knowing. */
 const PAYOUT_CONFIRM_MS = 8_000;
 /**
@@ -280,6 +308,8 @@ export class MinecraftWorker {
   private claimBlockReason: string | undefined = 'startup';
   /** While set, system chat is logged verbatim so a payout's server reply can be read back. */
   private payoutChatCaptureUntil = 0;
+  /** The command whose reply is being traced; see COMMAND_TRACE_MS. */
+  private commandTrace: { command: string; until: number; counts: Map<string, number> } | undefined;
   /* The bot's balance as /bal last reported it, sent to the gateway on every heartbeat. DonutSMP's
    * stats API is gone, so this is the only place the platform learns what a bot really holds. */
   private observedBalance: (BalanceReading & { observedAt: string }) | undefined;
@@ -463,6 +493,12 @@ export class MinecraftWorker {
       // respawned session, even if no inventory event was observed during the disconnect.
       this.invalidateSnapshotState();
       this.log.info({ username: bot.username, version: bot.version }, 'Mineflayer bot spawned');
+      // Where the server put it, and what it says on arrival: a lobby or a holding area shows here.
+      this.log.info(
+        { dimension: bot.game?.dimension, gameMode: bot.game?.gameMode, position: bot.entity?.position },
+        'where the bot spawned',
+      );
+      this.traceReplies('join');
       this.run(this.heartbeat(true), 'heartbeat');
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
@@ -504,6 +540,17 @@ export class MinecraftWorker {
     // Cash deposits and login by payment. The structured system-chat message is the source for
     // ordinary deposits; the separate payment-login flow performs its own exact verification.
     bot._client.on('packet', (data: unknown, meta: unknown) => {
+      const trace = this.commandTrace;
+      if (trace && Date.now() < trace.until) {
+        const name = packetName(meta);
+        trace.counts.set(name, (trace.counts.get(name) ?? 0) + 1);
+        if (TRACE_DETAIL.has(name)) {
+          this.log.info(
+            { command: trace.command, packet: name, data: describeTracedPacket(name, data) },
+            'server packet after a command',
+          );
+        }
+      }
       if (packetName(meta) !== 'system_chat') return;
       /* Everything the server says in the seconds after a payout, whether or not this bot can
        * parse it. A payout is not confirmed today — see sendCashPayout — and these lines are how
@@ -1053,7 +1100,21 @@ export class MinecraftWorker {
   /** Every command this bot sends goes through here, so the gap before a /pay can be measured. */
   private sendCommand(bot: Bot, command: string): void {
     this.lastCommandAt = Date.now();
+    this.traceReplies(command.split(' ')[0] ?? command);
     bot.chat(command);
+  }
+
+  /** Starts counting what the server sends for COMMAND_TRACE_MS, then logs the tally once. */
+  private traceReplies(command: string): void {
+    const trace = { command, until: Date.now() + COMMAND_TRACE_MS, counts: new Map<string, number>() };
+    this.commandTrace = trace;
+    setTimeout(() => {
+      this.log.info(
+        { command, packets: Object.fromEntries([...trace.counts].sort((a, b) => b[1] - a[1])) },
+        'packets after a command',
+      );
+      if (this.commandTrace === trace) this.commandTrace = undefined;
+    }, COMMAND_TRACE_MS).unref();
   }
 
   /**
@@ -1497,6 +1558,24 @@ function coversRequestedAmount(displayed: string, requestedMinor: string): boole
     return false;
   }
   return requested >= bounds.low && requested < bounds.low + bounds.step;
+}
+
+/** A traced packet as one bounded line: chat as its text, anything else as its JSON. */
+export function describeTracedPacket(name: string, data: unknown): string {
+  if (name === 'system_chat') return describeSystemChat(data) ?? '';
+  try {
+    const text = JSON.stringify(data, (_key, value: unknown) => {
+      if (typeof value === 'bigint') return value.toString();
+      if (value instanceof Uint8Array) return `<${value.length} bytes>`;
+      if (value && typeof value === 'object' && (value as { type?: unknown }).type === 'Buffer') {
+        return '<bytes>';
+      }
+      return value;
+    });
+    return (text ?? '').slice(0, 1_200);
+  } catch {
+    return '<unreadable>';
+  }
 }
 
 function packetName(meta: unknown): string {
