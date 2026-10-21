@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import type { Bot } from 'mineflayer';
-import { describeTracedPacket, sendPlainCommand } from '../src/worker.js';
+import { answerCookiePacket, describeTracedPacket, sendPlainCommand, sendTickEnds } from '../src/worker.js';
 
 /* 2026-10-20, about 20:05 UTC: DonutSMP moved to 26.3 and from then on neither bot's /pay or /bal got
  * any reply in chat, while payments to them still arrived. The trace records what the server sends
@@ -39,6 +40,73 @@ describe('a command the bot sends', () => {
       assert.deepEqual(written, []);
       assert.deepEqual(chatted, ['/bal']);
     }
+  });
+});
+
+describe('what the bot answers that a game client answers', () => {
+  const fakeBot = (features: Record<string, boolean> | undefined) => {
+    const written: Array<[string, unknown]> = [];
+    const bot = Object.assign(new EventEmitter(), {
+      supportFeature: undefined as ((name: string) => boolean) | undefined,
+      _client: { write: (name: string, data: unknown) => written.push([name, data]) },
+    });
+    // The version, and so the features, only arrive once the server has answered the ping.
+    const learnVersion = () => {
+      if (features) bot.supportFeature = (name: string) => features[name] === true;
+    };
+    return { bot: bot as unknown as Bot, emitter: bot, written, learnVersion };
+  };
+
+  it('ends every physics tick with tick_end from 1.21.2 on', () => {
+    const { bot, emitter, written, learnVersion } = fakeBot({ sendsClientTickEndPacket: true });
+    sendTickEnds(bot);
+    learnVersion();
+    emitter.emit('physicsTick');
+    emitter.emit('physicsTick');
+    assert.deepEqual(written, [
+      ['tick_end', {}],
+      ['tick_end', {}],
+    ]);
+  });
+
+  it('sends no tick_end on versions without the packet', () => {
+    for (const features of [{ sendsClientTickEndPacket: false }, undefined]) {
+      const { bot, emitter, written, learnVersion } = fakeBot(features);
+      sendTickEnds(bot);
+      learnVersion();
+      emitter.emit('physicsTick');
+      assert.deepEqual(written, []);
+    }
+  });
+
+  it('answers a cookie request with what the server stored, or with nothing', () => {
+    const { bot, written } = fakeBot({});
+    const cookies = new Map<string, Buffer>();
+    assert.equal(answerCookiePacket(bot, cookies, 'cookie_request', { cookie: 'donut:session' }), 'donut:session');
+    const stored = Buffer.from([1, 2, 3]);
+    assert.equal(answerCookiePacket(bot, cookies, 'store_cookie', { key: 'donut:session', value: stored }), 'donut:session');
+    assert.equal(answerCookiePacket(bot, cookies, 'cookie_request', { cookie: 'donut:session' }), 'donut:session');
+    assert.deepEqual(written, [
+      ['cookie_response', { key: 'donut:session', value: undefined }],
+      ['cookie_response', { key: 'donut:session', value: stored }],
+    ]);
+  });
+
+  it('leaves every other packet alone', () => {
+    const { bot, written } = fakeBot({});
+    const cookies = new Map<string, Buffer>();
+    assert.equal(answerCookiePacket(bot, cookies, 'system_chat', { content: 'hi' }), undefined);
+    assert.equal(answerCookiePacket(bot, cookies, 'cookie_request', {}), undefined);
+    assert.equal(answerCookiePacket(bot, cookies, 'store_cookie', { value: Buffer.alloc(1) }), undefined);
+    assert.deepEqual(written, []);
+    assert.equal(cookies.size, 0);
+  });
+
+  it('is wired into every connection, before it spawns', async () => {
+    const source = (await readFile(path.resolve(import.meta.dirname, '../src/worker.ts'), 'utf8')).replace(/\r\n/g, '\n');
+    assert.match(source, /this\.bot = bot;\n\n\s*sendTickEnds\(bot\);/);
+    assert.match(source, /const cookieKey = answerCookiePacket\(bot, cookies, name, data\);/);
+    assert.match(source, /this\.traceReplies\('join'\);\n\s*spawned = true;/);
   });
 });
 

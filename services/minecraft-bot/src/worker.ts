@@ -63,6 +63,11 @@ const TRACE_DETAIL = new Set([
   'kick_disconnect',
   'start_configuration',
   'transfer',
+  // Requests a game client answers, and the bot may not.
+  'cookie_request',
+  'store_cookie',
+  'add_resource_pack',
+  'resource_pack_send',
 ]);
 /** How long to wait for the server to confirm a payout before giving up on knowing. */
 const PAYOUT_CONFIRM_MS = 8_000;
@@ -473,6 +478,28 @@ export class MinecraftWorker {
     this.connectionController = connectionController;
     this.bot = bot;
 
+    sendTickEnds(bot);
+    /* What the server sends between connecting and spawning, which the command trace (it starts at
+     * spawn) never sees: the login and configuration phases, where a server asks a client for its
+     * cookies or offers it a resource pack. Counted by phase, and the requests among them logged. */
+    const beforeSpawn = new Map<string, number>();
+    const cookies = new Map<string, Buffer>();
+    let spawned = false;
+    bot._client.on('packet', (data: unknown, meta: unknown) => {
+      const name = packetName(meta);
+      const cookieKey = answerCookiePacket(bot, cookies, name, data);
+      if (cookieKey !== undefined) {
+        this.log.info({ packet: name, key: cookieKey, phase: packetState(meta) }, 'cookie packet');
+      }
+      if (spawned) return;
+      const channel = name === 'custom_payload' ? (data as { channel?: unknown } | null)?.channel : undefined;
+      const key = `${packetState(meta)}:${name}${typeof channel === 'string' ? `:${channel}` : ''}`;
+      beforeSpawn.set(key, (beforeSpawn.get(key) ?? 0) + 1);
+      if (TRACE_DETAIL.has(name)) {
+        this.log.info({ packet: key, data: describeTracedPacket(name, data) }, 'server packet before spawn');
+      }
+    });
+
     bot.once('spawn', () => {
       clearTimeout(loginWatchdog);
       this.timers.delete(loginWatchdog);
@@ -502,6 +529,11 @@ export class MinecraftWorker {
         'where the bot spawned',
       );
       this.traceReplies('join');
+      spawned = true;
+      this.log.info(
+        { packets: Object.fromEntries([...beforeSpawn].sort((a, b) => b[1] - a[1])) },
+        'packets before spawn',
+      );
       this.run(this.heartbeat(true), 'heartbeat');
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
@@ -1580,6 +1612,48 @@ export function sendPlainCommand(bot: Bot, command: string): void {
   bot.chat(command);
 }
 
+/**
+ * Ends every client tick with tick_end, as the game client has since 1.21.2. Mineflayer 4.39 never
+ * sends it (upstream added it in mineflayer PR #4137, merged 2026-10-03 and not yet released), and a
+ * 26.x server closes a client's tick only when the packet arrives.
+ *
+ * Written as each physics tick begins, before that tick's movement packet, so what the server
+ * receives alternates one movement and one tick_end, as the client's own stream does. The version
+ * is only known once the server has answered the ping, so it is asked at the first tick, not here.
+ */
+export function sendTickEnds(bot: Bot): void {
+  let sends: boolean | undefined;
+  bot.on('physicsTick', () => {
+    sends ??= bot.supportFeature?.('sendsClientTickEndPacket') === true;
+    if (sends) bot._client.write('tick_end', {});
+  });
+}
+
+/**
+ * Answers the server's cookie requests as the game client does: with the value the server stored
+ * on this connection under that key, or with none. Mineflayer 4.39 never answers, and a server
+ * that asks for a cookie waits for the reply.
+ *
+ * Returns the key a cookie packet named, for the log, and undefined for every other packet.
+ */
+export function answerCookiePacket(
+  bot: Bot,
+  cookies: Map<string, Buffer>,
+  name: string,
+  data: unknown,
+): string | undefined {
+  if (name !== 'cookie_request' && name !== 'store_cookie') return undefined;
+  const fields = (data ?? {}) as { cookie?: unknown; key?: unknown; value?: unknown };
+  if (name === 'store_cookie') {
+    if (typeof fields.key !== 'string') return undefined;
+    if (Buffer.isBuffer(fields.value)) cookies.set(fields.key, fields.value);
+    return fields.key;
+  }
+  if (typeof fields.cookie !== 'string') return undefined;
+  bot._client.write('cookie_response', { key: fields.cookie, value: cookies.get(fields.cookie) });
+  return fields.cookie;
+}
+
 /** A traced packet as one bounded line: chat as its text, anything else as its JSON. */
 export function describeTracedPacket(name: string, data: unknown): string {
   if (name === 'system_chat') return describeSystemChat(data) ?? '';
@@ -1602,4 +1676,11 @@ function packetName(meta: unknown): string {
   if (meta === null || typeof meta !== 'object') return '';
   const name = (meta as Record<string, unknown>)['name'];
   return typeof name === 'string' ? name : '';
+}
+
+/** The protocol phase a packet arrived in: login, configuration or play. */
+function packetState(meta: unknown): string {
+  if (meta === null || typeof meta !== 'object') return '';
+  const state = (meta as Record<string, unknown>)['state'];
+  return typeof state === 'string' ? state : '';
 }
