@@ -28,6 +28,10 @@
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://donutluxe.com/" />
 <meta name="theme-color" content="#0a0a0c" />
+<!-- Dark from the parser on: the browser paints its own canvas dark while the stylesheets are still
+     on the way, instead of a white page that turns obsidian a second later on a cold visit. Every
+     theme the site has is dark, so the browser's own scrollbars and form controls follow suit. -->
+<meta name="color-scheme" content="dark" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="DonutLuxe" />
 <meta property="og:title" content="DonutLuxe – DonutSMP Casino | Crash, Mines, Tower &amp; More" />
@@ -117,6 +121,8 @@
 <link rel="stylesheet" href="assets/css/notices.css" />
 <!-- the not-affiliated notice at the foot of every page -->
 <link rel="stylesheet" href="assets/css/sitefoot.css" />
+<!-- the content area's loader, from the first paint until the router shows a page -->
+<link rel="stylesheet" href="assets/css/boot.css" />
 <!-- the phone layer: header, tab bar and chat drawer below 1080px. Last, because it settles what
      every sheet above it said about those three pieces. -->
 <link rel="stylesheet" href="assets/css/mobile.css" />
@@ -500,6 +506,15 @@
   <div class="vjp" id="vaultJackpot" hidden></div>
 
   <main class="main lxmain" id="main" tabindex="-1">
+
+    <!-- What the content area shows until app.js has routed: boot.css shows it while every view is
+         still hidden, so it needs no script to appear or to go. -->
+    <div class="lxboot" role="status">
+      <img class="lxboot__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="64" height="64" />
+      <span class="lxboot__bar" aria-hidden="true"></span>
+      <span class="lxboot__label">Loading DonutLuxe</span>
+      <p class="lxboot__slow">This is taking longer than usual. <a href="">Reload</a></p>
+    </div>
 
     <!-- ─────── HOME ───────
          The lobby, laid out the way the big casino lobbies do it: three offers, one search, one tab

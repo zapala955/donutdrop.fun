@@ -1,0 +1,103 @@
+/* Hallmark · pre-emit critique: P4 H4 E5 S4 R5 V4 */
+/* Hallmark · component: boot loader · genre: atmospheric · theme: the site's luxe tokens (obsidian + gold)
+ * states: held back (first 300 ms) · loading · slow (12 s on) · gone (a page is showing) · reduced motion
+ * contrast: label --lx-mute on --lx-1 5.9:1 · Reload --lx-gold on --lx-1 9.8:1
+ */
+
+/* boot.css — what the content area shows between the first paint and the first page.
+ *
+ * The shell (top bar, rail, phone dock) is plain markup and paints with the CSS, but every page
+ * is a hidden <section class="view"> until app.js has loaded and routed, so on a slow connection a
+ * visitor looked at an empty frame with the footer notice floating at the top of it.
+ *
+ * Nothing here needs a script. The loader shows exactly while no view is visible and is gone the
+ * moment the router shows one, so it cannot outlive the first route or come back on later
+ * navigation. A browser without :has() keeps it hidden, which is how the page behaved before.
+ *
+ * - Held back for 300 ms: a returning visitor's page routes in well under that, and a loader that
+ *   flashes for a frame reads as a glitch. The space is kept from the first paint all the same, so
+ *   the footer waits below the fold rather than jumping.
+ * - Slow: after 12 s the reason it might be stuck, and a Reload link.
+ * - Reduced motion (the system setting or the player's own, data-motion on <html>): no running bar.
+ */
+
+.lxboot { display: none; }
+
+body.lx .lxmain:not(:has(> .view:not([hidden]))) > .lxboot {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--lx-s4);
+  /* The screen under the top bar, less the main column's top padding: the footer notice, which
+   * lives inside <main> after the views, starts just below the fold. */
+  min-height: calc(100dvh - var(--lx-top) - var(--lx-s6));
+  animation: lxboot-in .15s linear .3s both;
+}
+
+.lxboot__mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  /* 4x the 16-pixel grid: whole pixels only, never smoothed. */
+  image-rendering: pixelated;
+}
+
+/* Ten 8px cells, 4px apart; a run of three gold ones walks across them a cell at a time. */
+.lxboot__bar {
+  position: relative;
+  overflow: hidden;
+  width: 116px;
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--lx-3) 0 8px, transparent 8px 12px);
+}
+.lxboot__bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 32px;
+  background: repeating-linear-gradient(90deg, var(--lx-gold) 0 8px, transparent 8px 12px);
+  transform: translateX(-36px);
+  animation: lxboot-run 1.3s steps(13, end) infinite;
+}
+
+.lxboot__label {
+  color: var(--lx-mute);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.lxboot__slow {
+  margin: 0;
+  max-width: 45ch;
+  color: var(--lx-text);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  visibility: hidden;
+  animation: lxboot-slow 0s linear 12s forwards;
+}
+.lxboot__slow a {
+  color: var(--lx-gold);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.lxboot__slow a:hover { color: var(--lx-gold-hi); }
+.lxboot__slow a:active { color: var(--lx-gold-lo); }
+
+@keyframes lxboot-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lxboot-run { from { transform: translateX(-36px); } to { transform: translateX(120px); } }
+@keyframes lxboot-slow { to { visibility: visible; } }
+
+/* The phone layout's dock covers the bottom 64px. */
+@media (max-width: 1023px) {
+  body.lx .lxmain:not(:has(> .view:not([hidden]))) > .lxboot {
+    min-height: calc(100dvh - var(--lx-top) - var(--lx-s6) - 64px - env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lxboot__bar { display: none; }
+}
+:root[data-motion='reduce'] .lxboot__bar { display: none; }
