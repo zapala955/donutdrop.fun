@@ -99,7 +99,8 @@ describe('/accounts', () => {
     assert.ok(command, 'the /accounts command is registered');
     const subs = (command.options ?? []).map((option) => (option as { name: string }).name);
     assert.deepEqual(subs, ['list', 'main', 'unlink']);
-    const server = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
+    // Line endings normalised: a Windows checkout has CRLF and the pattern below is written with LF.
+    const server = (await readFile(new URL('../src/server.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     assert.match(server, /case 'accounts':\n        return handleAccounts\(api, interaction\);/);
   });
 });
