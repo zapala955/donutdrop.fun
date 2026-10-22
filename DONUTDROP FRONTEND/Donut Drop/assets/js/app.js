@@ -457,7 +457,9 @@ function openLoginModal() {
         </details>
 
         <div class="auth__challenge" id="linkChallenge" hidden></div>
-        <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
+        <div class="auth__foot">
+          <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
+        </div>
       </form>
       <div id="linkProgress" role="status"></div>`;
 

@@ -533,3 +533,68 @@
   font-size: 0.75rem;
   line-height: 1.45;
 }
+
+/* ─────────── short windows ───────────
+ *
+ * The sign-in card stands about 630 px tall. A laptop window under its browser bars, or a zoomed
+ * page, often leaves 500 to 600, and the dialog then opened on the heading, the bonus and a rule,
+ * with the username field and Continue below its edge and only a 6 px scrollbar to say so: players
+ * read it as a broken sign-in. Under 700 px of height the card tightens (the bonus to one line, the
+ * gaps closer, the dialog nearly full height) until the whole form fits from about 520 px. */
+@media (max-height: 700px) {
+  .modal[data-variant='auth'] {
+    max-height: calc(100dvh - 16px);
+  }
+  .modal[data-variant='auth'] .modal__body {
+    padding-bottom: 16px;
+  }
+  .auth__title {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  .auth__lede {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    max-width: none;
+  }
+  .auth__bonus {
+    margin-top: 10px;
+    padding: 7px 12px;
+  }
+  /* "Added when your account is created" is the card's least needed line; the amount stays. */
+  .auth__bonusfine {
+    display: none;
+  }
+  .auth__rule {
+    margin: 12px 0;
+  }
+  .auth__checks {
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .auth__ref {
+    margin-top: 10px;
+  }
+  .auth__go {
+    height: 46px;
+    margin-top: 14px;
+  }
+  /* Shorter still (a phone in landscape, a page zoomed far in, the Turnstile check shown), the card
+   * must scroll: Continue's row then rides the bottom of the dialog while any of the form is in
+   * view, so the one button the card is for never sits below the fold unannounced. The row, not the
+   * button, sticks and carries the dialog's colour: a disabled button is dimmed by a filter, which
+   * would dim a band painted on the button too. Where it all fits, sticky changes nothing. */
+  .modal[data-variant='auth'] .auth__foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    padding-bottom: 2px;
+    background: var(--panel);
+  }
+  body.lx .modal[data-variant='auth'] .auth__foot {
+    background: var(--lx-1);
+  }
+  body.lx .modal[data-variant='auth'] .auth__field {
+    height: 44px;
+  }
+}
