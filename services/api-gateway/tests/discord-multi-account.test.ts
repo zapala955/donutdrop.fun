@@ -213,3 +213,37 @@ describe('several accounts on one Discord: signing in', () => {
     assert.match(html, /id="switchAccountBtn" hidden/);
   });
 });
+
+describe('Discord sign-in: the production stack', () => {
+  /* The api's environment in compose is an explicit list, so a setting it does not name never
+   * reaches the gateway: before this, DISCORD_CLIENT_ID and both redirects could be set in the
+   * production env file and the Discord button would still never show. */
+  it('hands the Discord OAuth settings and the client secret to the api', async () => {
+    const compose = await read('infra/docker/compose.yml');
+    const api = compose.slice(compose.indexOf('\n  api:\n'), compose.indexOf('\n  maintenance:'));
+    for (const line of [
+      "DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'",
+      'DISCORD_CLIENT_SECRET_FILE: /run/secrets/discord_client_secret',
+      "DISCORD_REDIRECT_URI: '${DISCORD_REDIRECT_URI:-}'",
+      "DISCORD_LOGIN_REDIRECT_URI: '${DISCORD_LOGIN_REDIRECT_URI:-}'",
+      "DISCORD_MAX_ACCOUNTS: '${DISCORD_MAX_ACCOUNTS:-5}'",
+      '      - discord_client_secret',
+    ]) {
+      assert.ok(api.includes(line), line);
+    }
+    assert.match(
+      compose,
+      /discord_client_secret:\n {4}file: \$\{DISCORD_CLIENT_SECRET_FILE:-\/opt\/donutdrop\/shared\/secrets\/discord-client-secret\}/,
+    );
+  });
+
+  it('writes a placeholder secret before compose needs the file', async () => {
+    const deploy = await read('infra/vps/deploy.sh');
+    const placeholder = deploy.indexOf("printf '%s' 'not-configured' >\"$discord_secret_file\"");
+    assert.ok(placeholder > 0, 'deploy.sh writes the placeholder');
+    assert.ok(
+      placeholder < deploy.indexOf('"${compose[@]}" config --quiet'),
+      'before compose reads it',
+    );
+  });
+});

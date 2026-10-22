@@ -226,6 +226,13 @@ services:
       DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
       COMMUNITY_BOT_ENABLED: '${COMMUNITY_BOT_ENABLED:-false}'
       COMMUNITY_BOT_HMAC_KEY_FILE: /run/secrets/community_bot_hmac_key
+      # Discord OAuth: the referral verification and "Log in with Discord". Both stay off until
+      # their redirect URI is set; the secret file is a placeholder until the real one is written.
+      DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'
+      DISCORD_CLIENT_SECRET_FILE: /run/secrets/discord_client_secret
+      DISCORD_REDIRECT_URI: '${DISCORD_REDIRECT_URI:-}'
+      DISCORD_LOGIN_REDIRECT_URI: '${DISCORD_LOGIN_REDIRECT_URI:-}'
+      DISCORD_MAX_ACCOUNTS: '${DISCORD_MAX_ACCOUNTS:-5}'
       TURNSTILE_ENABLED: '${TURNSTILE_ENABLED:-false}'
       TURNSTILE_SITE_KEY: '${TURNSTILE_SITE_KEY:-}'
       TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key
@@ -248,6 +255,7 @@ services:
       - discord_operators_json
       - community_bot_hmac_key
       - turnstile_secret_key
+      - discord_client_secret
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -602,6 +610,9 @@ secrets:
   # `:?` here would make a stack that has never heard of Turnstile refuse to start.
   turnstile_secret_key:
     file: ${TURNSTILE_SECRET_KEY_FILE:-/opt/donutdrop/shared/secrets/turnstile-secret-key}
+  # Defaulted for the same reason; deploy.sh writes a placeholder when the file does not exist yet.
+  discord_client_secret:
+    file: ${DISCORD_CLIENT_SECRET_FILE:-/opt/donutdrop/shared/secrets/discord-client-secret}
 
 volumes:
   postgres-data:
