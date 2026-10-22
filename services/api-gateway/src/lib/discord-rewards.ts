@@ -1,6 +1,5 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
-import { sha256Hex } from './crypto.js';
 import type { Database, DbClient } from './db.js';
 import { linkAccountToDiscord, linkedAccounts, mainAccount } from './discord-accounts.js';
 import { AppError } from './errors.js';
@@ -15,22 +14,21 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * THE LINK
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * A reward is paid to a site account for something a Discord account did, so the two have to be
- * tied together first. The OAuth flow in referrals.ts does that when the deployment has a Discord
- * client secret. This is the second way, for when it does not:
+ * tied together first. There is one way: the signed-in player presses Link Discord on the site and
+ * authorizes the app on Discord (routes/discord-link.ts, linkDiscord below). The session proves the
+ * site account and Discord proves the Discord account, with nobody in between.
  *
- *   1. the signed-in site shows the player a short code (the session proves the site account);
- *   2. they type `/link <code>` in the server (Discord proves the snowflake on the interaction);
- *   3. the community bot passes both to the gateway over its signed channel.
- *
- * The code is minted for a session, never by the bot, so the bot cannot choose which site account
- * a Discord account lands on -- it can only report who typed a code the site handed out. The
- * honest limit: this path trusts the community bot to report the interaction truthfully, where
- * OAuth trusts nobody in between. Everything it can unlock is bounded below.
+ * It replaced a link code (the site showed a code, the member typed it into the bot's `/link`),
+ * which trusted the community bot to report the interaction truthfully. `/link` in the server now
+ * points at the site, and for a member already linked it collects the join reward
+ * (claimJoinReward below): being in the server is what that reward is for.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * THE REWARDS
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- *   join    once per site account and once per Discord account, paid when the link is made.
+ *   join    once per site account and once per Discord account, for a Discord that is in the
+ *           community server: paid at the link when Discord says it is a member, or later by
+ *           `/link` in the server.
  *   tag     for wearing the server's tag; the bot reports the tag. The first is paid the moment the
  *           tag is on. Every one after it needs the tag worn for 24 hours straight, counted from the
  *           later of the last tag reward and the moment the tag last went back on.
@@ -46,9 +44,6 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * The unique indexes on discord_rewards are the rules; these functions only decide what to try.
  */
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const CODE_LENGTH = 8;
-const CODE_TTL_MINUTES = 10;
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 
 /** When a Discord account was created, from its snowflake. */
@@ -61,114 +56,143 @@ export function oldEnough(config: AppConfig, discordUserId: string, now = Date.n
   return ageMs >= config.discordRewardMinAccountAgeDays * 86_400_000;
 }
 
-/** Codes are typed by hand: upper case, no 0/O or 1/I/L, and spaces or dashes forgiven. */
-export function normalizeLinkCode(value: string): string {
-  return value.toUpperCase().replace(/[\s-]/g, '');
-}
-
-/** Mints a code for a signed-in account, replacing any it had not used yet. */
-export async function createLinkCode(
-  db: Database,
-  userId: string,
-): Promise<{ code: string; expiresAt: string }> {
-  let code = '';
-  for (let i = 0; i < CODE_LENGTH; i += 1) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-  const expires = await db.transaction(async (client) => {
-    await client.query(
-      'DELETE FROM discord_link_codes WHERE user_id = $1 AND consumed_at IS NULL',
-      [userId],
-    );
-    const inserted = await client.query<{ expires_at: Date }>(
-      `INSERT INTO discord_link_codes (code_hash, user_id, expires_at)
-       VALUES ($1, $2, now() + make_interval(mins => $3))
-       RETURNING expires_at`,
-      [sha256Hex(code), userId, CODE_TTL_MINUTES],
-    );
-    return inserted.rows[0]!.expires_at;
-  });
-  return { code, expiresAt: new Date(expires).toISOString() };
-}
-
 export interface RewardLine {
   readonly kind: 'join' | 'tag';
   readonly amountMinor: string;
   readonly to: 'you';
 }
 
-export interface LinkOutcome {
-  readonly username: string;
-  readonly rewards: RewardLine[];
-  /** Why the join reward was not paid, when it was not. */
-  readonly joinSkipped: string | null;
-  /** Whether this account is the Discord's main one (the bot's rewards go to the main account). */
-  readonly main: boolean;
-  /** How many accounts the Discord now carries, and how many it may. */
-  readonly accounts: number;
-  readonly maxAccounts: number;
-}
+export type LinkResult =
+  | {
+      readonly outcome: 'linked';
+      /** The join reward paid with the link, if it was. */
+      readonly joinPaidMinor: string | null;
+      /** Why it was not, when it was not and could have been. */
+      readonly joinSkipped: string | null;
+      /** Linked, but Discord says the player is not in the server: the join reward waits for them. */
+      readonly joinWaiting: boolean;
+      /** Whether this account is the Discord's main one (the bot's rewards go to the main account). */
+      readonly main: boolean;
+      readonly accounts: number;
+      readonly maxAccounts: number;
+    }
+  | { readonly outcome: 'limit' | 'taken' | 'inactive' };
 
 /**
- * Consumes a code and links the Discord account to the site account it was minted for, then pays
- * what the link unlocks. Idempotent for the same pair: linking an account to the Discord account it
- * is already linked to is not an error.
+ * Links a signed-in account to the Discord that authorized the app, and pays the join reward when
+ * Discord said the player is in the server. Idempotent for the same pair: linking an account to the
+ * Discord it is already on is not an error, and the join reward is once per Discord and per account.
+ *
+ * The refusals are outcomes, not errors, because they are told to the player on the page Discord
+ * sends them back to: a Discord already carrying the most accounts allowed (`limit`), an account
+ * already on a different Discord (`taken`), an account that is suspended or closed (`inactive`).
  */
-export async function linkWithCode(
+export async function linkDiscord(
   db: Database,
   config: AppConfig,
-  input: { code: string; discordUserId: string; discordUsername: string; guildId: string },
-): Promise<LinkOutcome> {
-  const outcome = await db.transaction(async (client) => {
-    const claimed = await client.query<{ user_id: string }>(
-      `UPDATE discord_link_codes SET consumed_at = now()
-        WHERE code_hash = $1 AND consumed_at IS NULL AND expires_at > now()
-        RETURNING user_id`,
-      [sha256Hex(normalizeLinkCode(input.code))],
-    );
-    const userId = claimed.rows[0]?.user_id;
-    if (!userId) {
-      throw new AppError(404, 'LINK_CODE_INVALID', 'That code is wrong or has expired');
-    }
+  input: { userId: string; discordUserId: string; discordUsername: string; member: boolean | null },
+): Promise<LinkResult> {
+  const { result, paid } = await db.transaction(
+    async (client): Promise<{ result: LinkResult; paid: boolean }> => {
+      const account = await client.query<{ status: string }>(
+        'SELECT status FROM users WHERE id = $1 FOR UPDATE',
+        [input.userId],
+      );
+      if (account.rows[0]?.status !== 'active') return { result: { outcome: 'inactive' }, paid: false };
 
-    const account = await client.query<{ minecraft_username: string; status: string }>(
-      'SELECT minecraft_username, status FROM users WHERE id = $1',
-      [userId],
-    );
-    const row = account.rows[0];
-    if (!row || row.status !== 'active') {
-      throw new AppError(403, 'ACCOUNT_NOT_ACTIVE', 'That site account cannot be linked');
-    }
-    /* A Discord may carry several accounts (a main and its alts, migration 075); the limit, the
-     * other-Discord refusal and which one is main are decided in lib/discord-accounts.ts. */
-    const link = await linkAccountToDiscord(client, config, {
-      userId,
-      discordUserId: input.discordUserId,
-      discordUsername: input.discordUsername,
-    });
+      let link: Awaited<ReturnType<typeof linkAccountToDiscord>>;
+      try {
+        /* A Discord may carry several accounts (a main and its alts, migration 075); the limit, the
+         * other-Discord refusal and which one is main are decided in lib/discord-accounts.ts. */
+        link = await linkAccountToDiscord(client, config, input);
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'DISCORD_ACCOUNT_LIMIT') {
+          return { result: { outcome: 'limit' }, paid: false };
+        }
+        if (error instanceof AppError && error.code === 'ACCOUNT_ALREADY_LINKED') {
+          return { result: { outcome: 'taken' }, paid: false };
+        }
+        throw error;
+      }
 
-    const rewards: RewardLine[] = [];
-    const credited: string[] = [];
-    const join = await payJoinReward(client, config, userId, input.discordUserId);
-    if (join.paid) {
-      rewards.push({ kind: 'join', amountMinor: join.paid.toString(), to: 'you' });
-      credited.push(userId);
-    }
+      const join =
+        input.member === true
+          ? await payJoinReward(client, config, input.userId, input.discordUserId)
+          : { paid: null, skipped: null };
+      const joinable = config.discordRewardsEnabled && config.discordJoinRewardMinor > 0n;
+      return {
+        result: {
+          outcome: 'linked',
+          joinPaidMinor: join.paid?.toString() ?? null,
+          joinSkipped: join.skipped,
+          joinWaiting:
+            joinable && input.member !== true && !(await joinRewardCollected(client, input)),
+          main: link.main,
+          accounts: link.accounts,
+          maxAccounts: config.discordMaxAccounts,
+        },
+        paid: join.paid !== null,
+      };
+    },
+  );
+  if (paid) liveEvents.publish('balance', [input.userId]);
+  return result;
+}
+
+/** Whether this Discord or this account has had its join reward already. */
+async function joinRewardCollected(
+  client: DbClient,
+  input: { userId: string; discordUserId: string },
+): Promise<boolean> {
+  const found = await client.query(
+    `SELECT 1 FROM discord_rewards
+      WHERE kind = 'join' AND (user_id = $1 OR discord_user_id = $2) LIMIT 1`,
+    [input.userId, input.discordUserId],
+  );
+  return (found.rowCount ?? 0) > 0;
+}
+
+export type JoinRewardResult =
+  | { readonly linked: false }
+  | {
+      readonly linked: true;
+      readonly username: string;
+      readonly paidMinor: string | null;
+      /** Why nothing was paid: already collected, too young a Discord, or rewards off. */
+      readonly skipped: string | null;
+    };
+
+/**
+ * `/link` in the server, for a member whose Discord is linked: the join reward, if it is still due.
+ * Running a command in the server is the proof of membership the reward asks for. Paid to the
+ * Discord's main account, as every reward the bot pays is.
+ */
+export async function claimJoinReward(
+  db: Database,
+  config: AppConfig,
+  discordUserId: string,
+): Promise<JoinRewardResult> {
+  const result = await db.transaction(async (client) => {
+    const main = await mainAccount(client, discordUserId);
+    if (!main || main.status !== 'active') return { linked: false as const };
+    const join = await payJoinReward(client, config, main.id, discordUserId);
     return {
-      username: row.minecraft_username,
-      rewards,
-      joinSkipped: join.skipped,
-      credited,
-      main: link.main,
-      accounts: link.accounts,
+      linked: true as const,
+      userId: main.id,
+      username: main.minecraft_username,
+      paidMinor: join.paid?.toString() ?? null,
+      skipped:
+        join.skipped ??
+        (join.paid ? null : 'Discord rewards are switched off at the moment'),
     };
   });
-  if (outcome.credited.length) liveEvents.publish('balance', [...new Set(outcome.credited)]);
+  if (!result.linked) return result;
+  if (result.paidMinor) liveEvents.publish('balance', [result.userId]);
   return {
-    username: outcome.username,
-    rewards: outcome.rewards,
-    joinSkipped: outcome.joinSkipped,
-    main: outcome.main,
-    accounts: outcome.accounts,
-    maxAccounts: config.discordMaxAccounts,
+    linked: true,
+    username: result.username,
+    paidMinor: result.paidMinor,
+    skipped: result.skipped,
   };
 }
 

@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { loadConfig } from '../src/config.js';
-import { discordAuthorizeUrl } from '../src/lib/discord-oauth.js';
 import { runtimeSettingDefinitions } from '../src/lib/runtime-settings.js';
 
-/* One Discord, several site accounts (migration 075): a main account and its alts, all reachable by
- * "Log in with Discord", with the main one the account the community bot acts for. Checked end to
+/* One Discord, several site accounts (migration 075): a main account and its alts, each linked by
+ * authorizing the app, with the main one the account the community bot acts for. ("Log in with
+ * Discord", which let a Discord pick between them, was removed on 2026-10-22.) Checked end to
  * end against a real Postgres when it was written; these hold the shape in place. */
 
 const repo = path.resolve(import.meta.dirname, '../../..');
@@ -33,7 +33,7 @@ const baseEnv = {
   IP_HASH_KEY: 'i'.repeat(32),
   DISCORD_CLIENT_ID: '123456789012345678',
   DISCORD_CLIENT_SECRET: 'd'.repeat(32),
-  DISCORD_LOGIN_REDIRECT_URI: 'http://localhost:3001/v1/auth/discord/callback',
+  DISCORD_REDIRECT_URI: 'http://localhost:3001/v1/discord/link/callback',
 };
 
 describe('several accounts on one Discord: the limit', () => {
@@ -158,66 +158,10 @@ describe('several accounts on one Discord: the rules', () => {
   });
 });
 
-describe('several accounts on one Discord: signing in', () => {
-  const route = () => read('services/api-gateway/src/routes/discord-login.ts');
-
-  it('asks which account when the Discord carries several, only of the browser that started', async () => {
-    const source = await route();
-    assert.match(source, /return reply\.redirect\(back\(only \? 'ok' : 'choose'\)\);/);
-    const list = source.slice(source.indexOf("'/v1/auth/discord/accounts'"));
-    assert.match(list, /preHandler: requireWebsiteOrigin/);
-    assert.match(list, /confirmedAttempt\(db, request, false\)/);
-    // Administrators are never offered: their sessions need the Minecraft sign-in's MFA.
-    assert.match(source, /eligible: rows\.rows\.filter\(\(account\) => !isAdmin\(account\)\)/);
-    // A picked id must be one of THIS Discord's accounts.
-    assert.match(
-      source,
-      /WHERE id = \$1 AND discord_user_id = \$2 AND demo_of IS NULL\n            FOR UPDATE/,
-    );
-  });
-
-  it("skips Discord's Authorize screen for a returning player, and asks again only when told to", async () => {
-    const config = loadConfig(baseEnv);
-    const quiet = new URL(
-      discordAuthorizeUrl(config, config.discordLoginRedirectUri, 'S'.repeat(43), 'none'),
-    );
-    assert.equal(quiet.searchParams.get('prompt'), 'none');
-    const referral = new URL(
-      discordAuthorizeUrl(config, config.discordLoginRedirectUri, 'S'.repeat(43)),
-    );
-    assert.equal(referral.searchParams.get('prompt'), 'consent');
-    const source = await route();
-    assert.match(source, /body\.consent \? 'consent' : 'none'/);
-    assert.match(source, /NEEDS_CONSENT\.has\(error\) \? 'retry' : 'failed'/);
-  });
-
-  it('ends the session it replaces when a player switches accounts', async () => {
-    const source = await route();
-    assert.match(
-      source,
-      /UPDATE sessions SET revoked_at = now\(\) WHERE token_hash = \$1 AND revoked_at IS NULL/,
-    );
-  });
-
-  it('picks on the page before bootstrap, and switches through Discord, not from a session', async () => {
-    const app = await front('assets/js/app.js');
-    assert.match(app, /\} else if \(outcome === 'choose'\) \{\n    await pickDiscordAccount\(\);/);
-    assert.match(app, /const user = await completeDiscordLogin\(account\.id\);/);
-    assert.match(app, /\$\('#modal'\)\.addEventListener\('close', finish, \{ once: true \}\);/);
-    // Switching goes back through Discord: a session proves its account, not the Discord.
-    assert.match(
-      app,
-      /switchButton\.addEventListener\('click', async \(event\) => \{[\s\S]{0,120}await goToDiscord\(\);/,
-    );
-    const html = await front('index.html');
-    assert.match(html, /id="switchAccountBtn" hidden/);
-  });
-});
-
-describe('Discord sign-in: the production stack', () => {
+describe('Discord linking: the production stack', () => {
   /* The api's environment in compose is an explicit list, so a setting it does not name never
-   * reaches the gateway: before this, DISCORD_CLIENT_ID and both redirects could be set in the
-   * production env file and the Discord button would still never show. */
+   * reaches the gateway: before this, DISCORD_CLIENT_ID and the redirect could be set in the
+   * production env file and the Link Discord button would still never show. */
   it('hands the Discord OAuth settings and the client secret to the api', async () => {
     const compose = await read('infra/docker/compose.yml');
     const api = compose.slice(compose.indexOf('\n  api:\n'), compose.indexOf('\n  maintenance:'));
@@ -225,7 +169,7 @@ describe('Discord sign-in: the production stack', () => {
       "DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'",
       'DISCORD_CLIENT_SECRET_FILE: /run/secrets/discord_client_secret',
       "DISCORD_REDIRECT_URI: '${DISCORD_REDIRECT_URI:-}'",
-      "DISCORD_LOGIN_REDIRECT_URI: '${DISCORD_LOGIN_REDIRECT_URI:-}'",
+      "COMMUNITY_GUILD_ID: '${COMMUNITY_GUILD_ID:-}'",
       "DISCORD_MAX_ACCOUNTS: '${DISCORD_MAX_ACCOUNTS:-5}'",
       '      - discord_client_secret',
     ]) {

@@ -2,9 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
-import { randomToken, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
-import { linkAccountToDiscord } from '../lib/discord-accounts.js';
 import { AppError, conflict } from '../lib/errors.js';
 import {
   claimReferralRewards,
@@ -19,20 +17,14 @@ import {
   voidSameNetworkReferral,
 } from '../lib/referral-network.js';
 import { parseWith } from '../lib/validation.js';
-import {
-  discordAuthorizeUrl,
-  exchangeDiscordCode,
-  OAUTH_STATE_PATTERN,
-} from '../lib/discord-oauth.js';
 
 /**
  * Invite & Earn.
  *
  * Two payouts hang off one relationship. The revenue share accrues silently on every wager the
  * referee makes and is collected here by the referrer; the milestone bonus still pays
- * automatically. This file also owns the dashboard, the code a player chooses, and the Discord
- * OAuth round trip — which is no longer part of any payout gate and is kept because an account may
- * still want to be linked.
+ * automatically. This file also owns the dashboard and the code a player chooses. Linking a Discord
+ * lived here while it was part of the bonus gate; it is routes/discord-link.ts now, for everybody.
  *
  * It does NOT own redemption. A code is spent in the transaction that creates an account, in
  * auth.ts, because "has this person signed up yet" is a question only that transaction can answer
@@ -100,15 +92,6 @@ const RESERVED_FRAGMENTS = [
   'SUPPORT',
   'SYSTEM',
 ];
-const callbackSchema = z
-  .object({
-    code: z.string().min(8).max(512),
-    state: z.string().regex(OAUTH_STATE_PATTERN),
-  })
-  .strict();
-
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-
 interface InviteRow {
   referee_id: string;
   minecraft_username: string;
@@ -536,108 +519,6 @@ export async function registerReferralRoutes(
         );
       }
       return outcome;
-    },
-  );
-
-  // ── Discord verification ──────────────────────────────────────────────────
-
-  app.post(
-    '/v1/referrals/discord/start',
-    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (request) => {
-      requireProgramme();
-      const userId = requireUserId(request.authUser?.id);
-
-      const existing = await db.query<{ discord_verified_at: Date | null }>(
-        'SELECT discord_verified_at FROM users WHERE id = $1',
-        [userId],
-      );
-      if (existing.rows[0]?.discord_verified_at) {
-        conflict('DISCORD_ALREADY_VERIFIED', 'This account already has a verified Discord');
-      }
-
-      /* The raw state goes to the browser; only its hash is stored. The value travels in a URL
-       * that lands in browser history and in Discord's referer, so a database holding the raw
-       * string would turn a log leak into a usable callback. */
-      const state = randomToken(32);
-      await db.query(
-        `INSERT INTO discord_oauth_states (state_hash, user_id, expires_at)
-         VALUES ($1, $2, now() + ($3::int * interval '1 millisecond'))`,
-        [sha256Hex(state), userId, OAUTH_STATE_TTL_MS],
-      );
-
-      return {
-        authorizeUrl: discordAuthorizeUrl(config, config.discordRedirectUri, state),
-        expiresInMs: OAUTH_STATE_TTL_MS,
-      };
-    },
-  );
-
-  /**
-   * The callback Discord redirects the browser to.
-   *
-   * A GET with no CSRF header, because it is a top-level navigation the site did not issue. The
-   * state parameter is the whole defence: it was minted for one session, it is single-use, and it
-   * expires. Everything else — including which account gets verified — is read from the stored
-   * row rather than from the request.
-   */
-  app.get(
-    '/v1/referrals/discord/callback',
-    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
-    async (request, reply) => {
-      requireProgramme();
-      const query = parseWith(callbackSchema, request.query);
-
-      const claimed = await db.transaction(async (client) => {
-        const state = await client.query<{ user_id: string }>(
-          `UPDATE discord_oauth_states
-              SET consumed_at = now()
-            WHERE state_hash = $1 AND consumed_at IS NULL AND expires_at > now()
-            RETURNING user_id`,
-          [sha256Hex(query.state)],
-        );
-        return state.rows[0]?.user_id;
-      });
-      if (!claimed) {
-        return reply.redirect(`${config.appOrigin}/referrals?discord=expired`);
-      }
-
-      let identity: { id: string; username: string };
-      try {
-        identity = await exchangeDiscordCode(config, query.code, config.discordRedirectUri);
-      } catch {
-        // Never surface Discord's own error text: it echoes back request parameters, and one of
-        // those is the client secret's counterpart.
-        return reply.redirect(`${config.appOrigin}/referrals?discord=failed`);
-      }
-
-      const outcome = await db.transaction(async (client) => {
-        /* One Discord may carry a main account and its alts (migration 075), up to the live limit;
-         * lib/discord-accounts.ts decides. Refusals are told to the player rather than becoming a
-         * 500: a Discord already at the limit, or this account already on another Discord. */
-        try {
-          await linkAccountToDiscord(client, config, {
-            userId: claimed,
-            discordUserId: identity.id,
-            discordUsername: identity.username,
-          });
-        } catch (error) {
-          if (error instanceof AppError && error.code === 'DISCORD_ACCOUNT_LIMIT') {
-            return 'limit' as const;
-          }
-          if (error instanceof AppError && error.code === 'ACCOUNT_ALREADY_LINKED') {
-            return 'taken' as const;
-          }
-          throw error;
-        }
-
-        /* No longer retests the milestone. Verifying Discord cannot complete the gate any more
-           because the gate is the wager alone, so a call here could only ever return false — and a
-           call that can only return false reads as a condition somebody forgot to remove. */
-        return 'verified' as const;
-      });
-
-      return reply.redirect(`${config.appOrigin}/referrals?discord=${outcome}`);
     },
   );
 }

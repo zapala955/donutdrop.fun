@@ -5,7 +5,7 @@
  *
  *   signed out                  → register now: the signup bonus, opening the login form
  *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
- *   signed in, Discord unlinked → the Discord page, where the link code is
+ *   signed in, Discord unlinked → the Discord page, where the Link Discord button is
  *   signed in                   → invite & earn
  *
  * It is not allowed to be a nuisance, because a pop-up that is is a reason to leave:
@@ -135,7 +135,7 @@ async function pick() {
           id: 'discord',
           eyebrow: 'Community',
           title: ['Join the Discord'],
-          line: 'Chat with other players, hear about drops first, and link your account with /link.',
+          line: 'Chat with other players, hear about drops first, and link your account on the Discord page.',
           cta: 'Join Discord',
           href: '/discord',
           art: 'diamond.png',

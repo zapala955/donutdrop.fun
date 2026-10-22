@@ -59,9 +59,9 @@ fi
 
 # ── the Discord OAuth client secret, mounted the same way ─────────────────────────────────────────
 # Same bind-mount rule as above: the api lists this secret, so its file must exist before the
-# container can be created, whether or not Discord sign-in is set up. A placeholder is harmless:
-# Discord sign-in and the referral verification stay off until DISCORD_CLIENT_ID and their redirect
-# URI are set, and the real secret replaces this file (see the Discord login setup guide).
+# container can be created, whether or not Discord linking is set up. A placeholder is harmless:
+# linking a Discord stays off until DISCORD_CLIENT_ID and DISCORD_REDIRECT_URI are set, and the real
+# secret replaces this file (see infra/vps/donutdrop.env.example).
 discord_secret_file="${DISCORD_CLIENT_SECRET_FILE:-/opt/donutdrop/shared/secrets/discord-client-secret}"
 if [[ ! -s "$discord_secret_file" ]]; then
   secrets_dir="$(dirname "$discord_secret_file")"
@@ -69,7 +69,7 @@ if [[ ! -s "$discord_secret_file" ]]; then
   printf '%s' 'not-configured' >"$discord_secret_file"
   chown 0:0 "$discord_secret_file"
   chmod 0444 "$discord_secret_file"
-  echo "Wrote a placeholder $discord_secret_file (Discord sign-in stays off until it is set up)."
+  echo "Wrote a placeholder $discord_secret_file (Discord linking stays off until it is set up)."
 fi
 
 "${compose[@]}" config --quiet

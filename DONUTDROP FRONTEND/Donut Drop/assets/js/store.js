@@ -494,39 +494,6 @@ export async function completeLogin(challengeId) {
   return result.user;
 }
 
-/* Log in with Discord, for accounts that already linked one (routes/discord-login.ts).
- *
- * The round trip leaves the page: start hands back Discord's consent URL, Discord sends the browser
- * to the API's callback, and the callback lands on `/?discord-login=<outcome>`. Only then does the
- * page ask for the session, with the cookie start set, so the session goes to this browser alone. */
-export async function discordLoginAvailable() {
-  try {
-    return Boolean((await api.get('/v1/auth/discord'))?.available);
-  } catch {
-    return false; // A button that cannot work is not offered.
-  }
-}
-
-/* `consent` asks Discord to show its Authorize screen. Normally it is skipped (prompt=none) for a
- * player who approved the app before; the page asks for it only after Discord refused that. */
-export async function startDiscordLogin(consent = false) {
-  return api.post('/v1/auth/discord/start', consent ? { consent: true } : {});
-}
-
-/* Session only. bootstrap() runs after it and loads everything a signed-in page needs, so this does
- * not touch `state`: a 401 from a bootstrap racing it would otherwise sign the player straight out.
- * `userId` is the account picked when the Discord carries several; omitted when it carries one. */
-export async function completeDiscordLogin(userId) {
-  const result = await api.post('/v1/auth/discord/complete', userId ? { userId } : {});
-  setCsrfToken(result.csrfToken);
-  return result.user;
-}
-
-/* A Discord with several accounts on it (a main and its alts): which ones this browser may pick. */
-export async function discordLoginAccounts() {
-  return api.post('/v1/auth/discord/accounts', {});
-}
-
 /* Developer login. Skips the pay-login challenge so the site can be worked on with no custody
  * bot online, and returns a real session — everything after it is the genuine server path, not a
  * mock. The endpoint only exists when the backend was started with DEV_LOGIN_ENABLED, and the
@@ -1126,10 +1093,11 @@ export async function claimReferralRewards() {
   return result;
 }
 
-/* Hands back Discord's own authorize URL rather than navigating here, so the caller decides when
- * the page leaves. The state parameter inside it is single-use and short-lived. */
-export async function startDiscordVerification() {
-  const result = await api.post('/v1/referrals/discord/start', {});
+/* Linking a Discord, by authorizing the app (routes/discord-link.ts). Hands back Discord's own
+ * authorize URL rather than navigating here, so the caller decides when the page leaves; Discord
+ * sends the browser back to `/discord?link=<outcome>`. The state inside is single-use and short-lived. */
+export async function startDiscordLink() {
+  const result = await api.post('/v1/discord/link/start', {});
   return result.authorizeUrl;
 }
 

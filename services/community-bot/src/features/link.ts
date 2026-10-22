@@ -1,111 +1,16 @@
-import {
-  ActionRowBuilder,
-  MessageFlags,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  type ChatInputCommandInteraction,
-  type ModalSubmitInteraction,
-} from 'discord.js';
+import { MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import { ApiUnavailable, type PlatformApi } from '../api-client.js';
-import { COLOR, absolute, bad, embed, formatMoney, warn } from '../ui.js';
-import { linkWithCode } from './rewards.js';
+import { COLOR, bad, embed, formatMoney, warn } from '../ui.js';
 
 /**
- * link.ts — the bridge to donutluxe.com, such as it is.
+ * link.ts — `/profile`, what the site knows about a member.
  *
- * The bot does not decide who owns what. The site mints a one-time code for a signed-in browser
- * (the session proves the account), the member types it into `/link code:` here (Discord proves the
- * snowflake), and the gateway joins the two. The code never comes from this bot, so the bot cannot
- * choose which account a Discord account lands on. `/link` on its own opens a pop-up asking for the
- * code; `/link code:` still takes it directly. The linking itself is in features/rewards.ts.
- * `/profile` is a read. One Discord may carry several accounts (alts); features/accounts.ts lists
- * them and picks the main one.
+ * `/link` is in rewards.ts now. Linking itself moved to the site on 2026-10-22: the member presses
+ * Link Discord on donutluxe.com/discord and authorizes the app, so Discord proves the snowflake and
+ * the session proves the account with nobody in between. It used to run through here, from a
+ * one-time code the site minted and the member typed into a pop-up. One Discord may carry several
+ * accounts (alts); features/accounts.ts lists them and picks the main one.
  */
-
-/** The pop-up `/link` opens, and its one field. */
-export const LINK_MODAL_ID = 'link:code';
-export const LINK_CODE_FIELD = 'code';
-
-/**
- * How long `/link` waits to learn whether the member is already linked before opening the pop-up
- * anyway. Discord gives an interaction three seconds to answer, and a pop-up has to BE the answer:
- * it cannot follow a deferred reply. A slow site therefore costs a pop-up that the submit then
- * explains, never a command that times out.
- */
-const LINKED_CHECK_MS = 1_500;
-
-export function buildLinkModal(): ModalBuilder {
-  const code = new TextInputBuilder()
-    .setCustomId(LINK_CODE_FIELD)
-    .setLabel('Your link code')
-    .setPlaceholder('From donutluxe.com/discord: sign in, press Get link code')
-    .setStyle(TextInputStyle.Short)
-    // The site's codes are eight characters; spaces and dashes in a paste are forgiven.
-    .setMinLength(4)
-    .setMaxLength(16)
-    .setRequired(true);
-  return new ModalBuilder()
-    .setCustomId(LINK_MODAL_ID)
-    .setTitle('Link your DonutLuxe account')
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(code));
-}
-
-export async function showLink(api: PlatformApi | null, interaction: ChatInputCommandInteraction) {
-  if (!api) {
-    await interaction.reply({
-      embeds: [unavailable()],
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const profile = await Promise.race([
-    api.profile(interaction.user.id, interaction.user.id).catch(() => null),
-    new Promise<null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), LINKED_CHECK_MS);
-      timer.unref();
-    }),
-  ]);
-
-  /* Already linked: a Discord may carry several accounts (a main and its alts), so the pop-up still
-   * opens while there is room for another. Only a full Discord -- or a gateway too old to say how
-   * full, which allows one -- is told it is linked instead. */
-  const room =
-    profile?.linked && profile.accounts !== undefined && profile.maxAccounts !== undefined
-      ? profile.maxAccounts - profile.accounts
-      : 0;
-  if (profile?.linked && room <= 0) {
-    await interaction.reply({
-      embeds: [
-        embed(
-          'Already linked',
-          `This Discord account is linked to **${profile.username}**.` +
-            (profile.linkedAt ? `\nLinked ${absolute(new Date(profile.linkedAt))}.` : '') +
-            (profile.maxAccounts !== undefined
-              ? `\n\nThat is ${profile.accounts} of ${profile.maxAccounts} accounts, the most one ` +
-                'Discord may carry. `/accounts unlink` frees a slot.'
-              : ''),
-          COLOR.good,
-        ),
-      ],
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  await interaction.showModal(buildLinkModal());
-}
-
-/** The pop-up's answer: the code, handed to the same linking `/link code:` uses. */
-export async function submitLinkCode(api: PlatformApi | null, interaction: ModalSubmitInteraction) {
-  if (!api) {
-    await interaction.reply({ embeds: [unavailable()], flags: MessageFlags.Ephemeral });
-    return;
-  }
-  const code = interaction.fields.getTextInputValue(LINK_CODE_FIELD).trim();
-  await linkWithCode(api, interaction, code);
-}
 
 /**
  * `/profile` — what the site knows about somebody, minus everything it should not say out loud.

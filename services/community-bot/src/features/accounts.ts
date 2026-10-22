@@ -76,7 +76,7 @@ async function listCard(api: PlatformApi, discordUserId: string) {
   if (!accounts.length) {
     return embed(
       'No accounts linked',
-      'Sign in at donutluxe.com, open the Discord page, press **Get link code**, then run `/link` here.',
+      'Sign in at donutluxe.com, open the Discord page, press **Link Discord** and authorize the app.',
       COLOR.quiet,
     );
   }
@@ -92,7 +92,7 @@ async function listCard(api: PlatformApi, discordUserId: string) {
     '',
     `${accounts.length} of ${max} accounts. ` +
       (accounts.length < max
-        ? 'To add another: sign in to it on the site, get a link code, and `/link` it here.'
+        ? 'To add another: sign in to it on the site and press Link Discord on the Discord page.'
         : 'That is the most one Discord may carry; `/accounts unlink` frees a slot.'),
     '`/accounts main` picks which one `/tag` pays. All of them can log in with Discord on the site.',
   );

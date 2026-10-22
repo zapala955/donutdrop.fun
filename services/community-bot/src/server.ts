@@ -62,9 +62,9 @@ import {
   syncInvites,
   whoInvited,
 } from './features/invites.js';
-import { showLink, showProfile, submitLinkCode } from './features/link.js';
+import { showProfile } from './features/link.js';
 import { handleAccounts } from './features/accounts.js';
-import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
+import { claimTag, linkFromServer, showRewards } from './features/rewards.js';
 import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import {
@@ -343,11 +343,8 @@ async function main(): Promise<void> {
       case 'invite-sync':
         return syncInvites(db, interaction);
 
-      case 'link': {
-        const code = interaction.options.getString('code');
-        if (code && api) return linkWithCode(api, interaction, code);
-        return showLink(api, interaction);
-      }
+      case 'link':
+        return linkFromServer(api, interaction);
       case 'test':
         return testWelcomeDm(db, api, interaction, {
           enabled: config.welcomeDmEnabled,
@@ -454,7 +451,6 @@ async function main(): Promise<void> {
     const id = rest.join(':');
     if (prefix === 'ticket' && action === 'create') return createTicket(db, interaction, id);
     if (prefix === 'ticket' && action === 'closing') return closeTicket(db, interaction, id);
-    if (prefix === 'link' && action === 'code') return submitLinkCode(api, interaction);
   }
 
   const stopGiveaways = startGiveawaySweeper(db, client);
