@@ -787,6 +787,10 @@ const environmentSchema = z
         z.literal(''),
       ])
       .default(''),
+    /* How many site accounts one Discord may be linked to (alts). Rewards stay once per Discord
+     * whatever this is (discord_rewards is keyed on the Discord), so it bounds how many accounts one
+     * person can sign in to from one Discord, not what they can collect. Live in the admin panel. */
+    DISCORD_MAX_ACCOUNTS: z.coerce.number().int().min(1).max(25).default(5),
     /* ── the Discord control plane ──
      *
      * A private guild acts as a remote control for the platform: read commands, moderation
@@ -1555,6 +1559,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,
     discordLoginRedirectUri: env.DISCORD_LOGIN_REDIRECT_URI,
+    discordMaxAccounts: env.DISCORD_MAX_ACCOUNTS,
     discordControlEnabled: env.DISCORD_CONTROL_ENABLED,
     discordBotToken: env.DISCORD_BOT_TOKEN,
     discordGuildId: env.DISCORD_GUILD_ID,

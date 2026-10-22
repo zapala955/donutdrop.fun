@@ -447,6 +447,39 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
+      .setName('accounts')
+      .setDescription('The DonutLuxe accounts linked to your Discord (main and alts)')
+      .addSubcommand((sub) => sub.setName('list').setDescription('Show every linked account'))
+      .addSubcommand((sub) =>
+        sub
+          .setName('main')
+          .setDescription('Pick the account /tag pays and /profile shows')
+          .addStringOption((option) =>
+            option
+              .setName('account')
+              .setDescription('Its Minecraft name (Bedrock names start with a dot)')
+              .setRequired(true)
+              .setMinLength(3)
+              .setMaxLength(16),
+          ),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('unlink')
+          .setDescription('Take one account off this Discord')
+          .addStringOption((option) =>
+            option
+              .setName('account')
+              .setDescription('Its Minecraft name (Bedrock names start with a dot)')
+              .setRequired(true)
+              .setMinLength(3)
+              .setMaxLength(16),
+          ),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
       .setName('test')
       .setDescription('Owners only: DM the owners the welcome message as a test')
       .setDefaultMemberPermissions(ADMINISTRATOR),

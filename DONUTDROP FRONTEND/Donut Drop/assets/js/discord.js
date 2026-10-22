@@ -113,6 +113,59 @@ async function getCode(button) {
   }
 }
 
+/* One Discord may carry several accounts (a main and its alts). Every one of them can log in with
+ * Discord; the main one is the account the bot pays /tag to. Said here so an alt does not wonder
+ * where its tag rewards went. Absent on an older gateway, which allows one account per Discord. */
+function accountsNote(accounts) {
+  const note = el('p', 'dsync__fine');
+  if (!accounts) return note;
+  const role = accounts.main
+    ? 'This is your main account: /tag in the server pays it.'
+    : `This is an alt. /tag pays your main account${accounts.mainUsername ? `, ${accounts.mainUsername}` : ''}; /accounts main in the server changes which one that is.`;
+  const room =
+    accounts.count < accounts.max
+      ? ' To add another, sign in to it here, get its link code and /link it.'
+      : ' That is the most one Discord may carry.';
+  note.textContent = `${role} ${accounts.count} of ${accounts.max} accounts on this Discord.${room}`;
+  return note;
+}
+
+/* Unlinks THIS account (the others on the Discord are managed from Discord, with /accounts). Two
+ * presses: the first only arms it, for four seconds. */
+function unlinkButton() {
+  const button = el('button', 'btn btn--tiny dsync__unlink');
+  button.type = 'button';
+  button.textContent = 'UNLINK THIS ACCOUNT';
+  let armed = 0;
+  button.addEventListener('click', async () => {
+    if (!armed) {
+      button.textContent = 'PRESS AGAIN TO UNLINK';
+      armed = window.setTimeout(() => {
+        armed = 0;
+        if (button.isConnected) button.textContent = 'UNLINK THIS ACCOUNT';
+      }, 4000);
+      return;
+    }
+    window.clearTimeout(armed);
+    armed = 0;
+    button.disabled = true;
+    try {
+      const result = await api.post('/v1/discord/unlink', {});
+      toast({
+        kind: 'win',
+        title: 'Discord unlinked',
+        body: result?.newMain ? `${result.newMain} is your main account now` : '',
+      });
+      await loadStatus();
+    } catch (error) {
+      toast({ kind: 'lose', title: 'Discord', body: error?.message || 'Could not unlink' });
+      button.disabled = false;
+      button.textContent = 'UNLINK THIS ACCOUNT';
+    }
+  });
+  return button;
+}
+
 function row(label, value, done = false) {
   const item = el('li', 'dsync__reward');
   if (done) item.dataset.done = '1';
@@ -209,6 +262,8 @@ function paintRewards() {
     const done = el('p', 'dsync__linked');
     done.textContent = `Linked to Discord${status.discordUsername ? ` as @${status.discordUsername}` : ''}.`;
     rewards.appendChild(done);
+    rewards.appendChild(accountsNote(status.accounts));
+    rewards.appendChild(unlinkButton());
     return;
   }
 

@@ -67,6 +67,14 @@ export async function linkWithCode(
       code,
     });
     const lines = [`This Discord account is now linked to **${result.username}**.`];
+    /* A second (third, ...) account on the same Discord is an alt: it signs in with Discord like
+     * the main one, but the bot's rewards keep going to the main account. */
+    if (result.main === false) {
+      lines.push(
+        `That makes ${result.accounts} of ${result.maxAccounts} accounts on this Discord. ` +
+          '`/tag` keeps paying your main account; `/accounts main` changes which one that is.',
+      );
+    }
     for (const reward of result.rewards) {
       if (reward.kind !== 'join') continue;
       lines.push(`🎁 Join reward: **${formatMoney(BigInt(reward.amountMinor))}** added to your balance.`);

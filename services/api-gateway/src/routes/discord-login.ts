@@ -10,7 +10,7 @@ import {
   sessionCookieOptions,
 } from '../lib/auth.js';
 import { hmacHex, randomToken, safeEqualText, sha256, sha256Hex } from '../lib/crypto.js';
-import type { Database } from '../lib/db.js';
+import type { Database, DbClient } from '../lib/db.js';
 import {
   discordAuthorizeUrl,
   exchangeDiscordCode,
@@ -18,34 +18,43 @@ import {
 } from '../lib/discord-oauth.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { recordNetwork } from '../lib/referral-network.js';
+import { parseWith } from '../lib/validation.js';
 
 /**
  * Log in with Discord.
  *
  * A shortcut for players who already linked a Discord (the bot's /link code, or the referral
- * verification): instead of paying the bot again they confirm on Discord and are signed in to the
+ * verification): instead of paying the bot again they confirm on Discord and are signed in to an
  * account that Discord is linked to. It never creates an account and never links one. A Discord
  * that is not linked yet is sent back to the Minecraft sign-in, which stays the only way in.
  *
- * Three requests, one row in discord_login_states (migration 073):
+ * Four requests, one row in discord_login_states (migrations 073, 075):
  *
  *   POST /v1/auth/discord/start      from the site. Mints the state that goes to Discord and a
  *                                    browser token that stays in an httpOnly cookie.
  *   GET  /v1/auth/discord/callback   Discord sends the browser here. The state is spent once, the
- *                                    code exchanged, and the linked account noted on the row.
- *   POST /v1/auth/discord/complete   from the page the callback lands on. Only the browser holding
- *                                    the cookie gets the session.
+ *                                    code exchanged, and the confirmed Discord noted on the row.
+ *   POST /v1/auth/discord/accounts   from the page the callback lands on, when that Discord carries
+ *                                    several accounts (a main and its alts): which ones it may pick.
+ *   POST /v1/auth/discord/complete   the session, for the account picked (or the only one), handed
+ *                                    only to the browser holding the cookie.
  *
  * The callback does not hand out the session itself. A callback URL works in any browser it is
  * pasted into, so a session minted there would let an attacker send somebody a link that signs
  * them into the attacker's account (login CSRF). The cookie from /start is what ties the result to
- * the browser that asked for it.
+ * the browser that asked for it -- and so the account list as well: it is answered only to the
+ * browser whose Discord confirmed.
  *
- * Administrator accounts are refused. Their sessions need the TOTP that only the Minecraft sign-in
- * asks for, and authenticate() revokes an admin session without it on its first request.
+ * Administrator accounts are refused, and left out of the list. Their sessions need the TOTP that
+ * only the Minecraft sign-in asks for, and authenticate() revokes an admin session without it on its
+ * first request.
  */
 
 const LOGIN_TTL_SECONDS = 10 * 60;
+
+/* `consent` asks Discord to show its Authorize screen again. The site sends it only on the retry
+ * after Discord refused the quiet `prompt=none` round trip (see the `retry` outcome). */
+const startSchema = z.object({ consent: z.boolean().optional() }).strict();
 
 const callbackSchema = z.object({
   code: z.string().min(8).max(512).optional(),
@@ -54,14 +63,23 @@ const callbackSchema = z.object({
   error: z.string().max(128).optional(),
 });
 
+const completeSchema = z.object({ userId: z.uuid().optional() }).strict();
+
+/* Errors Discord answers `prompt=none` with when it wants the player to see the screen after all
+ * (OAuth's own names for "this cannot be done without asking"). The page then starts over once,
+ * with consent. */
+const NEEDS_CONSENT = new Set(['consent_required', 'interaction_required', 'login_required']);
+
 /* Where the callback sends the browser. The page reads `discord-login`, says what happened, and on
- * `ok` asks /complete for the session. */
-type CallbackOutcome = 'ok' | 'not-linked' | 'admin' | 'expired' | 'cancelled' | 'failed';
+ * `ok` asks /complete for the session (on `choose`, it asks which account first). */
+type CallbackOutcome =
+  'ok' | 'choose' | 'not-linked' | 'admin' | 'expired' | 'cancelled' | 'retry' | 'failed';
 
 interface LoginAttemptRow {
   state_hash: string;
   user_id: string | null;
   discord_user_id: string | null;
+  discord_username: string | null;
   completed_at: Date | null;
   expired: boolean;
 }
@@ -72,6 +90,8 @@ interface LinkedAccount {
   minecraft_username: string;
   role: 'player' | 'admin';
   status: string;
+  discord_main: boolean;
+  last_login_at: Date | null;
 }
 
 export async function registerDiscordLoginRoutes(
@@ -93,6 +113,52 @@ export async function registerDiscordLoginRoutes(
     account.role === 'admin' ||
     config.adminMinecraftIds.has(account.minecraft_identity.toLowerCase());
 
+  /** The accounts a Discord may sign in to: linked, not a media-test twin, not an administrator. */
+  async function signInAccounts(
+    client: Pick<DbClient, 'query'>,
+    discordUserId: string,
+  ): Promise<{ eligible: LinkedAccount[]; any: boolean }> {
+    const rows = await client.query<LinkedAccount>(
+      `SELECT id, minecraft_identity, minecraft_username, role, status, discord_main, last_login_at
+         FROM users
+        WHERE discord_user_id = $1 AND demo_of IS NULL
+        ORDER BY last_login_at DESC NULLS LAST, discord_main DESC, discord_verified_at, id`,
+      [discordUserId],
+    );
+    return {
+      eligible: rows.rows.filter((account) => !isAdmin(account)),
+      any: rows.rows.length > 0,
+    };
+  }
+
+  /** The attempt this browser started, once its Discord has confirmed. */
+  async function confirmedAttempt(
+    client: Pick<DbClient, 'query'>,
+    request: FastifyRequest,
+    lock: boolean,
+  ): Promise<LoginAttemptRow & { discord_user_id: string }> {
+    const browserToken = readDiscordLoginCookie(request, config);
+    const found = await client.query<LoginAttemptRow>(
+      `SELECT state_hash, user_id, discord_user_id, discord_username, completed_at,
+              expires_at <= now() AS expired
+         FROM discord_login_states
+        WHERE browser_token_hash = $1${lock ? ' FOR UPDATE' : ''}`,
+      [sha256Hex(browserToken)],
+    );
+    const attempt = found.rows[0];
+    if (!attempt) {
+      throw new AppError(404, 'DISCORD_LOGIN_NOT_FOUND', 'Start the Discord sign-in again');
+    }
+    if (attempt.completed_at) conflict('DISCORD_LOGIN_USED', 'This sign-in was already used');
+    if (attempt.expired) {
+      throw new AppError(410, 'DISCORD_LOGIN_EXPIRED', 'The Discord sign-in expired');
+    }
+    if (!attempt.discord_user_id) {
+      conflict('DISCORD_LOGIN_NOT_CONFIRMED', 'Confirm the sign-in on Discord first');
+    }
+    return { ...attempt, discord_user_id: attempt.discord_user_id };
+  }
+
   const back = (outcome: CallbackOutcome) => `${config.appOrigin}/?discord-login=${outcome}`;
 
   /* Whether the sign-in card should offer the button at all. */
@@ -104,10 +170,11 @@ export async function registerDiscordLoginRoutes(
       preHandler: requireWebsiteOrigin,
       config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       if (!available()) {
         throw new AppError(503, 'DISCORD_LOGIN_UNAVAILABLE', 'Discord sign-in is not set up');
       }
+      const body = parseWith(startSchema, request.body ?? {});
       /* Both raw values leave this process (one in a Discord URL, one in a cookie); only their
        * hashes are stored, so a leaked table row is not a usable callback or completion. */
       const state = randomToken(32);
@@ -131,7 +198,12 @@ export async function registerDiscordLoginRoutes(
         maxAge: LOGIN_TTL_SECONDS,
       });
       return reply.code(201).send({
-        authorizeUrl: discordAuthorizeUrl(config, config.discordLoginRedirectUri, state),
+        authorizeUrl: discordAuthorizeUrl(
+          config,
+          config.discordLoginRedirectUri,
+          state,
+          body.consent ? 'consent' : 'none',
+        ),
         expiresInSeconds: LOGIN_TTL_SECONDS,
       });
     },
@@ -141,9 +213,9 @@ export async function registerDiscordLoginRoutes(
    * The callback Discord redirects the browser to.
    *
    * A GET with no CSRF header, because it is a top-level navigation the site did not issue. It
-   * signs nobody in: it spends the state, learns which Discord confirmed, and notes the account
-   * linked to it on the row for /complete. Every answer is a redirect back to the site, never an
-   * error page, and never Discord's own error text.
+   * signs nobody in: it spends the state, learns which Discord confirmed, and notes it on the row
+   * (with the account, when there is exactly one to pick). Every answer is a redirect back to the
+   * site, never an error page, and never Discord's own error text.
    */
   app.get(
     '/v1/auth/discord/callback',
@@ -162,7 +234,12 @@ export async function registerDiscordLoginRoutes(
       const stateHash = spent.rows[0]?.state_hash;
       if (!stateHash) return reply.redirect(back('expired'));
       if (query.data.error || !query.data.code) {
-        return reply.redirect(back(query.data.error === 'access_denied' ? 'cancelled' : 'failed'));
+        const error = query.data.error ?? '';
+        return reply.redirect(
+          back(
+            error === 'access_denied' ? 'cancelled' : NEEDS_CONSENT.has(error) ? 'retry' : 'failed',
+          ),
+        );
       }
 
       let identity: { id: string; username: string };
@@ -176,21 +253,42 @@ export async function registerDiscordLoginRoutes(
         return reply.redirect(back('failed'));
       }
 
-      const linked = await db.query<Pick<LinkedAccount, 'id' | 'role' | 'minecraft_identity'>>(
-        `SELECT id, role, minecraft_identity FROM users
-          WHERE discord_user_id = $1 AND demo_of IS NULL`,
-        [identity.id],
-      );
-      const account = linked.rows[0];
-      if (!account) return reply.redirect(back('not-linked'));
-      if (isAdmin(account)) return reply.redirect(back('admin'));
+      const { eligible, any } = await signInAccounts(db, identity.id);
+      if (!any) return reply.redirect(back('not-linked'));
+      if (!eligible.length) return reply.redirect(back('admin'));
 
+      /* The only account is noted at once; with several the player picks on the site, and the
+       * Discord alone is noted here. */
+      const only = eligible.length === 1 ? eligible[0]!.id : null;
       await db.query(
-        `UPDATE discord_login_states SET user_id = $2, discord_user_id = $3
+        `UPDATE discord_login_states SET discord_user_id = $2, discord_username = $3, user_id = $4
           WHERE state_hash = $1`,
-        [stateHash, account.id, identity.id],
+        [stateHash, identity.id, identity.username, only],
       );
-      return reply.redirect(back('ok'));
+      return reply.redirect(back(only ? 'ok' : 'choose'));
+    },
+  );
+
+  /* Which accounts the confirmed Discord may pick from, for the picker. A POST so the site's origin
+   * travels with it; answered only to the browser that started the attempt (the cookie). */
+  app.post(
+    '/v1/auth/discord/accounts',
+    {
+      preHandler: requireWebsiteOrigin,
+      config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
+    },
+    async (request) => {
+      const attempt = await confirmedAttempt(db, request, false);
+      const { eligible } = await signInAccounts(db, attempt.discord_user_id);
+      return {
+        discordUsername: attempt.discord_username,
+        accounts: eligible.map((account) => ({
+          id: account.id,
+          minecraftUsername: account.minecraft_username,
+          main: account.discord_main,
+          lastLoginAt: account.last_login_at?.toISOString() ?? null,
+        })),
+      };
     },
   );
 
@@ -201,41 +299,33 @@ export async function registerDiscordLoginRoutes(
       config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
     },
     async (request, reply) => {
-      const browserToken = readDiscordLoginCookie(request, config);
+      const body = parseWith(completeSchema, request.body ?? {});
       const sessionToken = randomToken();
       const csrfToken = randomToken();
       const sessionId = randomUUID();
+      /* A player switching accounts arrives with the old account's session still in the browser.
+       * It is ended, not left valid behind a cookie the new one is about to overwrite. */
+      const previous = readSessionToken(request, config);
 
       const user = await db.transaction(async (client) => {
-        const found = await client.query<LoginAttemptRow>(
-          `SELECT state_hash, user_id, discord_user_id, completed_at, expires_at <= now() AS expired
-             FROM discord_login_states
-            WHERE browser_token_hash = $1 FOR UPDATE`,
-          [sha256Hex(browserToken)],
-        );
-        const attempt = found.rows[0];
-        if (!attempt) {
-          throw new AppError(404, 'DISCORD_LOGIN_NOT_FOUND', 'Start the Discord sign-in again');
-        }
-        if (attempt.completed_at) conflict('DISCORD_LOGIN_USED', 'This sign-in was already used');
-        if (attempt.expired) {
-          throw new AppError(410, 'DISCORD_LOGIN_EXPIRED', 'The Discord sign-in expired');
-        }
-        if (!attempt.user_id || !attempt.discord_user_id) {
-          conflict('DISCORD_LOGIN_NOT_CONFIRMED', 'Confirm the sign-in on Discord first');
-        }
+        const attempt = await confirmedAttempt(client, request, true);
+        const chosen = body.userId ?? attempt.user_id;
+        if (!chosen) conflict('DISCORD_LOGIN_CHOOSE', 'Pick which account to sign in to');
 
         /* Asked again, under a lock: the link could have changed in the minutes since the callback,
-         * and the session must go to the account that Discord is linked to now. */
+         * and the session must go to an account that Discord is linked to now. A picked id that is
+         * not one of this Discord's accounts lands here too, with the same answer. */
         const current = await client.query<LinkedAccount>(
-          `SELECT id, minecraft_identity, minecraft_username, role, status FROM users
+          `SELECT id, minecraft_identity, minecraft_username, role, status, discord_main,
+                  last_login_at
+             FROM users
             WHERE id = $1 AND discord_user_id = $2 AND demo_of IS NULL
             FOR UPDATE`,
-          [attempt.user_id, attempt.discord_user_id],
+          [chosen, attempt.discord_user_id],
         );
         const account = current.rows[0];
         if (!account) {
-          conflict('DISCORD_NOT_LINKED', 'That Discord is no longer linked to an account');
+          conflict('DISCORD_NOT_LINKED', 'That account is not linked to this Discord');
         }
         if (isAdmin(account)) {
           throw new AppError(
@@ -251,6 +341,12 @@ export async function registerDiscordLoginRoutes(
         );
         // Every sign-in notes the network it came from, as the Minecraft sign-in does.
         await recordNetwork(client, config, account.id, request.ip);
+        if (previous) {
+          await client.query(
+            'UPDATE sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL',
+            [sha256(previous)],
+          );
+        }
         await client.query(
           `INSERT INTO sessions
              (id, user_id, token_hash, csrf_hash, ip_hash, user_agent, expires_at)
@@ -266,8 +362,8 @@ export async function registerDiscordLoginRoutes(
           ],
         );
         await client.query(
-          'UPDATE discord_login_states SET completed_at = now() WHERE state_hash = $1',
-          [attempt.state_hash],
+          'UPDATE discord_login_states SET user_id = $2, completed_at = now() WHERE state_hash = $1',
+          [attempt.state_hash, account.id],
         );
         return account;
       });
@@ -299,4 +395,12 @@ function readDiscordLoginCookie(request: FastifyRequest, config: AppConfig): str
     throw new AppError(401, 'INVALID_DISCORD_LOGIN_COOKIE', 'Start the Discord sign-in again');
   }
   return unsigned.value;
+}
+
+/** The session this browser already holds, if any and if genuinely signed by this server. */
+function readSessionToken(request: FastifyRequest, config: AppConfig): string | null {
+  const signed = request.cookies[sessionCookieName(config)];
+  if (!signed) return null;
+  const unsigned = request.unsignCookie(signed);
+  return unsigned.valid && unsigned.value ? unsigned.value : null;
 }

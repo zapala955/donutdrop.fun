@@ -4,6 +4,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import { randomToken, sha256Hex } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
+import { linkAccountToDiscord } from '../lib/discord-accounts.js';
 import { AppError, conflict } from '../lib/errors.js';
 import {
   claimReferralRewards,
@@ -611,22 +612,24 @@ export async function registerReferralRoutes(
       }
 
       const outcome = await db.transaction(async (client) => {
-        /* A Discord account already bound elsewhere is the abuse case the whole unique index
-         * exists for, and it is checked explicitly so the player gets told rather than watching a
-         * constraint violation become a 500. */
-        const taken = await client.query<{ id: string }>(
-          'SELECT id FROM users WHERE discord_user_id = $1 AND id <> $2',
-          [identity.id, claimed],
-        );
-        if (taken.rowCount) return 'taken' as const;
-
-        await client.query(
-          `UPDATE users
-              SET discord_user_id = $2, discord_username = $3, discord_verified_at = now(),
-                  updated_at = now()
-            WHERE id = $1 AND discord_verified_at IS NULL`,
-          [claimed, identity.id, identity.username],
-        );
+        /* One Discord may carry a main account and its alts (migration 075), up to the live limit;
+         * lib/discord-accounts.ts decides. Refusals are told to the player rather than becoming a
+         * 500: a Discord already at the limit, or this account already on another Discord. */
+        try {
+          await linkAccountToDiscord(client, config, {
+            userId: claimed,
+            discordUserId: identity.id,
+            discordUsername: identity.username,
+          });
+        } catch (error) {
+          if (error instanceof AppError && error.code === 'DISCORD_ACCOUNT_LIMIT') {
+            return 'limit' as const;
+          }
+          if (error instanceof AppError && error.code === 'ACCOUNT_ALREADY_LINKED') {
+            return 'taken' as const;
+          }
+          throw error;
+        }
 
         /* No longer retests the milestone. Verifying Discord cannot complete the gate any more
            because the gate is the wager alone, so a call here could only ever return false — and a

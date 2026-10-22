@@ -4,6 +4,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { z } from 'zod';
 import { dailyCodeProgress, redeemDailyCode, type RedeemResult } from '../lib/daily-codes.js';
+import { unlinkAccount } from '../lib/discord-accounts.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
@@ -103,7 +104,7 @@ export async function registerDiscordRewardRoutes(
           keepCode: true,
         };
       }
-      return redeemDailyCode(db, config, { discordUserId, code: body.code });
+      return redeemDailyCode(db, config, { discordUserId, userId, code: body.code });
     },
   );
 
@@ -132,6 +133,21 @@ export async function registerDiscordRewardRoutes(
         );
       }
       return createLinkCode(db, userId);
+    },
+  );
+
+  /* Unlinks THIS account from its Discord, from the site. Only the signed-in account: the others on
+   * the same Discord are managed from Discord itself (/accounts), where the Discord is proven. It
+   * frees a slot for another alt and stops this account being reachable by "Log in with Discord".
+   * Rewards already paid stay paid; the Discord's claims stay spent. */
+  app.post(
+    '/v1/discord/unlink',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const userId = request.authUser?.id;
+      if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+      const result = await db.transaction((client) => unlinkAccount(client, { userId }));
+      return { unlinked: true, newMain: result.newMain };
     },
   );
 }

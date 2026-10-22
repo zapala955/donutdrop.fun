@@ -19,7 +19,8 @@ import { linkWithCode } from './rewards.js';
  * snowflake), and the gateway joins the two. The code never comes from this bot, so the bot cannot
  * choose which account a Discord account lands on. `/link` on its own opens a pop-up asking for the
  * code; `/link code:` still takes it directly. The linking itself is in features/rewards.ts.
- * `/profile` is a read.
+ * `/profile` is a read. One Discord may carry several accounts (alts); features/accounts.ts lists
+ * them and picks the main one.
  */
 
 /** The pop-up `/link` opens, and its one field. */
@@ -67,13 +68,24 @@ export async function showLink(api: PlatformApi | null, interaction: ChatInputCo
     }),
   ]);
 
-  if (profile?.linked) {
+  /* Already linked: a Discord may carry several accounts (a main and its alts), so the pop-up still
+   * opens while there is room for another. Only a full Discord -- or a gateway too old to say how
+   * full, which allows one -- is told it is linked instead. */
+  const room =
+    profile?.linked && profile.accounts !== undefined && profile.maxAccounts !== undefined
+      ? profile.maxAccounts - profile.accounts
+      : 0;
+  if (profile?.linked && room <= 0) {
     await interaction.reply({
       embeds: [
         embed(
           'Already linked',
           `This Discord account is linked to **${profile.username}**.` +
-            (profile.linkedAt ? `\nLinked ${absolute(new Date(profile.linkedAt))}.` : ''),
+            (profile.linkedAt ? `\nLinked ${absolute(new Date(profile.linkedAt))}.` : '') +
+            (profile.maxAccounts !== undefined
+              ? `\n\nThat is ${profile.accounts} of ${profile.maxAccounts} accounts, the most one ` +
+                'Discord may carry. `/accounts unlink` frees a slot.'
+              : ''),
           COLOR.good,
         ),
       ],

@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
 import { sha256Hex } from './crypto.js';
 import type { Database, DbClient } from './db.js';
+import { linkAccountToDiscord, linkedAccounts, mainAccount } from './discord-accounts.js';
 import { AppError } from './errors.js';
 import { liveEvents } from './live-events.js';
 import { creditWallet } from './wallet.js';
@@ -99,6 +100,11 @@ export interface LinkOutcome {
   readonly rewards: RewardLine[];
   /** Why the join reward was not paid, when it was not. */
   readonly joinSkipped: string | null;
+  /** Whether this account is the Discord's main one (the bot's rewards go to the main account). */
+  readonly main: boolean;
+  /** How many accounts the Discord now carries, and how many it may. */
+  readonly accounts: number;
+  readonly maxAccounts: number;
 }
 
 /**
@@ -123,44 +129,21 @@ export async function linkWithCode(
       throw new AppError(404, 'LINK_CODE_INVALID', 'That code is wrong or has expired');
     }
 
-    const owner = await client.query<{ id: string }>(
-      'SELECT id FROM users WHERE discord_user_id = $1 AND id <> $2',
-      [input.discordUserId, userId],
+    const account = await client.query<{ minecraft_username: string; status: string }>(
+      'SELECT minecraft_username, status FROM users WHERE id = $1',
+      [userId],
     );
-    if (owner.rows[0]) {
-      throw new AppError(
-        409,
-        'DISCORD_ALREADY_LINKED',
-        'This Discord account is already linked to another site account',
-      );
-    }
-    const account = await client.query<{
-      minecraft_username: string;
-      status: string;
-      discord_user_id: string | null;
-    }>('SELECT minecraft_username, status, discord_user_id FROM users WHERE id = $1 FOR UPDATE', [
-      userId,
-    ]);
     const row = account.rows[0];
     if (!row || row.status !== 'active') {
       throw new AppError(403, 'ACCOUNT_NOT_ACTIVE', 'That site account cannot be linked');
     }
-    if (row.discord_user_id && row.discord_user_id !== input.discordUserId) {
-      throw new AppError(
-        409,
-        'ACCOUNT_ALREADY_LINKED',
-        'That site account is already linked to a different Discord account',
-      );
-    }
-    if (!row.discord_user_id) {
-      await client.query(
-        `UPDATE users
-            SET discord_user_id = $2, discord_username = $3, discord_verified_at = now(),
-                updated_at = now()
-          WHERE id = $1`,
-        [userId, input.discordUserId, input.discordUsername.slice(0, 64)],
-      );
-    }
+    /* A Discord may carry several accounts (a main and its alts, migration 075); the limit, the
+     * other-Discord refusal and which one is main are decided in lib/discord-accounts.ts. */
+    const link = await linkAccountToDiscord(client, config, {
+      userId,
+      discordUserId: input.discordUserId,
+      discordUsername: input.discordUsername,
+    });
 
     const rewards: RewardLine[] = [];
     const credited: string[] = [];
@@ -169,10 +152,24 @@ export async function linkWithCode(
       rewards.push({ kind: 'join', amountMinor: join.paid.toString(), to: 'you' });
       credited.push(userId);
     }
-    return { username: row.minecraft_username, rewards, joinSkipped: join.skipped, credited };
+    return {
+      username: row.minecraft_username,
+      rewards,
+      joinSkipped: join.skipped,
+      credited,
+      main: link.main,
+      accounts: link.accounts,
+    };
   });
   if (outcome.credited.length) liveEvents.publish('balance', [...new Set(outcome.credited)]);
-  return { username: outcome.username, rewards: outcome.rewards, joinSkipped: outcome.joinSkipped };
+  return {
+    username: outcome.username,
+    rewards: outcome.rewards,
+    joinSkipped: outcome.joinSkipped,
+    main: outcome.main,
+    accounts: outcome.accounts,
+    maxAccounts: config.discordMaxAccounts,
+  };
 }
 
 async function credit(
@@ -212,7 +209,9 @@ async function payJoinReward(
      ON CONFLICT DO NOTHING`,
     [id, userId, discordUserId, amount.toString()],
   );
-  if (!inserted.rowCount) return { paid: null, skipped: 'The join reward was already paid' };
+  if (!inserted.rowCount) {
+    return { paid: null, skipped: 'The join reward was already paid to this Discord or this account' };
+  }
   await credit(client, config, userId, amount, 'discord_join_reward', id);
   return { paid: amount, skipped: null };
 }
@@ -308,11 +307,8 @@ export async function claimTagReward(
     const sightings = await recordTagSightings(client, [
       { discordUserId: input.discordUserId, wearing: input.wearingTag },
     ]);
-    const linked = await client.query<{ id: string; minecraft_username: string; status: string }>(
-      'SELECT id, minecraft_username, status FROM users WHERE discord_user_id = $1',
-      [input.discordUserId],
-    );
-    const user = linked.rows[0];
+    // Paid to the Discord's main account: /tag has a Discord in hand and no other way to choose.
+    const user = await mainAccount(client, input.discordUserId);
     if (!user || user.status !== 'active') return { outcome: 'unlinked' as const };
     /* Either side of the link counts as having claimed: relinking the Discord account to another
      * site account, or the site account to another Discord account, is not a new first time. */
@@ -368,37 +364,41 @@ export async function claimTagReward(
   }
 }
 
-/** What the site shows a signed-in player on the Discord page. */
+/** What the site shows a signed-in player on the Discord page, and the bot shows for /rewards. */
 export async function rewardStatus(db: Database, config: AppConfig, userId: string) {
-  const [account, rewards] = await Promise.all([
-    db.query<{
-      discord_user_id: string | null;
-      discord_username: string | null;
-      wearing_since: Date | null;
-      wear_fresh: boolean | null;
-    }>(
-      `SELECT u.discord_user_id, u.discord_username, w.wearing_since,
-              w.observed_at >= now() - make_interval(mins => $2) AS wear_fresh
-         FROM users u
-         LEFT JOIN discord_tag_wear w ON w.discord_user_id = u.discord_user_id
-        WHERE u.id = $1`,
-      [userId, SIGHTING_GAP_MINUTES],
-    ),
+  const account = await db.query<{
+    discord_user_id: string | null;
+    discord_username: string | null;
+    wearing_since: Date | null;
+    wear_fresh: boolean | null;
+  }>(
+    `SELECT u.discord_user_id, u.discord_username, w.wearing_since,
+            w.observed_at >= now() - make_interval(mins => $2) AS wear_fresh
+       FROM users u
+       LEFT JOIN discord_tag_wear w ON w.discord_user_id = u.discord_user_id
+      WHERE u.id = $1`,
+    [userId, SIGHTING_GAP_MINUTES],
+  );
+  const linkedId = account.rows[0]?.discord_user_id ?? null;
+  /* The Discord's rewards as well as the account's: they are once per Discord, so an alt linked to a
+   * Discord that already collected the join reward must not be told it is still waiting. */
+  const [rewards, accounts] = await Promise.all([
     db.query<{ kind: string; n: string; total: string; today: boolean; last: Date }>(
       `SELECT kind, count(*)::text AS n, sum(amount_minor)::text AS total,
               bool_or(kind = 'tag' AND reward_day = (now() AT TIME ZONE 'UTC')::date) AS today,
               max(created_at) AS last
-         FROM discord_rewards WHERE user_id = $1 GROUP BY kind`,
-      [userId],
+         FROM discord_rewards WHERE user_id = $1 OR discord_user_id = $2 GROUP BY kind`,
+      [userId, linkedId],
     ),
+    linkedId ? linkedAccounts(db, linkedId) : Promise.resolve([]),
   ]);
   const by = new Map(rewards.rows.map((row) => [row.kind, row]));
-  const linkedId = account.rows[0]?.discord_user_id ?? null;
   /* When the next tag reward opens, if it can be said: after a first reward, and while the tag is
    * seen to be on. Before the first there is nothing to wait for; with the tag off, nothing to count. */
   const lastTag = by.get('tag')?.last ?? null;
   const since = account.rows[0]?.wear_fresh ? (account.rows[0]?.wearing_since ?? null) : null;
   const tagNextAt = lastTag && since ? tagDueAt(since, lastTag).toISOString() : null;
+  const main = accounts.find((linked) => linked.main) ?? accounts[0] ?? null;
   return {
     enabled: config.discordRewardsEnabled,
     linked: linkedId !== null,
@@ -415,6 +415,14 @@ export async function rewardStatus(db: Database, config: AppConfig, userId: stri
       days: Number(by.get('tag')?.n ?? 0),
       streakHours: TAG_STREAK_HOURS,
       nextAt: tagNextAt,
+    },
+    /* The accounts on this Discord (migration 075): whether this one is the main account the bot
+     * pays /tag to, which one is, and how many more may be linked. */
+    accounts: {
+      count: accounts.length,
+      max: config.discordMaxAccounts,
+      main: Boolean(main && main.id === userId),
+      mainUsername: main?.minecraftUsername ?? null,
     },
   };
 }

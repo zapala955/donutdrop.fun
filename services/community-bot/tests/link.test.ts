@@ -61,6 +61,71 @@ describe('/link', () => {
     assert.match(JSON.stringify(calls[0]?.payload), /Already linked/);
   });
 
+  /* 2026-10-20: one Discord may carry several accounts (a main and its alts), so a linked member
+   * who still has room gets the pop-up for the next one; a full Discord is told so. */
+  it('opens the pop-up for another account while the Discord has room', async () => {
+    const { interaction, calls } = commandInteraction();
+    const api = {
+      profile: async () => ({
+        linked: true,
+        username: 'Steve',
+        linkedAt: null,
+        accounts: 1,
+        maxAccounts: 5,
+      }),
+    } as unknown as PlatformApi;
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['modal'],
+    );
+  });
+
+  it('says the Discord is full once it carries the most accounts allowed', async () => {
+    const { interaction, calls } = commandInteraction();
+    const api = {
+      profile: async () => ({
+        linked: true,
+        username: 'Steve',
+        linkedAt: null,
+        accounts: 5,
+        maxAccounts: 5,
+      }),
+    } as unknown as PlatformApi;
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['reply'],
+    );
+    assert.match(JSON.stringify(calls[0]?.payload), /5 of 5 accounts/);
+    assert.match(JSON.stringify(calls[0]?.payload), /\/accounts unlink/);
+  });
+
+  it('tells an alt that /tag keeps paying the main account', async () => {
+    const edits: unknown[] = [];
+    const api = {
+      link: async () => ({
+        username: 'SteveAlt',
+        rewards: [],
+        joinSkipped: 'The join reward was already paid to this Discord or this account',
+        main: false,
+        accounts: 2,
+        maxAccounts: 5,
+      }),
+    } as unknown as PlatformApi;
+    const interaction = {
+      user: { id: '123456789012345678', username: 'member' },
+      guildId: '223456789012345678',
+      fields: { getTextInputValue: () => 'K7PQ2MXA' },
+      deferReply: async () => undefined,
+      editReply: async (payload: unknown) => void edits.push(payload),
+    } as unknown as ModalSubmitInteraction;
+    await submitLinkCode(api, interaction);
+    const text = JSON.stringify(edits[0]);
+    assert.match(text, /2 of 5 accounts on this Discord/);
+    assert.match(text, /\/accounts main/);
+  });
+
   it('still opens the pop-up when the site is slow, rather than letting Discord time out', async () => {
     const { interaction, calls } = commandInteraction();
     const api = { profile: () => new Promise(() => undefined) } as unknown as PlatformApi;

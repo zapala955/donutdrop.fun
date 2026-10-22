@@ -47,7 +47,14 @@ describe('discord rewards', () => {
       lib,
       /SET consumed_at = now\(\)\s+WHERE code_hash = \$1 AND consumed_at IS NULL AND expires_at > now\(\)/,
     );
-    assert.match(lib, /'DISCORD_ALREADY_LINKED'/);
+    /* One Discord carries a main account and up to discordMaxAccounts in all (migration 075): the
+     * link goes through the one helper that enforces the limit, and the rewards stay keyed on the
+     * Discord, so an alt collects nothing the main account did not. */
+    assert.match(lib, /linkAccountToDiscord\(client, config, \{/);
+    const accounts = await read('services/api-gateway/src/lib/discord-accounts.ts');
+    assert.match(accounts, /if \(count >= config\.discordMaxAccounts\) \{/);
+    assert.match(accounts, /'DISCORD_ACCOUNT_LIMIT'/);
+    assert.match(accounts, /'ACCOUNT_ALREADY_LINKED'/);
     // Every reward is withdrawable only once wagered, like the sign-up bonus.
     assert.match(lib, /requirementFor\(amount, config\.signupBonusWagerMultiplier\)/);
     // The invite reward was removed (2026-10-08): linking pays the join reward and nothing else.

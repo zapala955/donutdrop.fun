@@ -131,7 +131,10 @@ const UTC_DAY_START = `((now() AT TIME ZONE 'UTC')::date::timestamp AT TIME ZONE
 export async function redeemDailyCode(
   db: Database,
   config: AppConfig,
-  input: { discordUserId: string; code: string },
+  /** `userId` is the signed-in account redeeming; `discordUserId` the Discord linked to it. A
+   * Discord may carry several accounts (migration 075): the code is the Discord's, the prize goes
+   * to whichever of its accounts redeems it, and only one of them can, since a code works once. */
+  input: { discordUserId: string; userId: string; code: string },
   /** For tests only: forces the draw (0 to TOTAL_WEIGHT - 1). Production never passes it. */
   roll?: number,
 ): Promise<RedeemResult> {
@@ -165,8 +168,8 @@ export async function redeemDailyCode(
     }
 
     const linked = await client.query<{ id: string; minecraft_username: string; status: string }>(
-      'SELECT id, minecraft_username, status FROM users WHERE discord_user_id = $1',
-      [input.discordUserId],
+      'SELECT id, minecraft_username, status FROM users WHERE id = $1 AND discord_user_id = $2',
+      [input.userId, input.discordUserId],
     );
     const user = linked.rows[0];
     if (!user) {

@@ -5,7 +5,7 @@ import {
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
-  discordLoginAvailable, startDiscordLogin, completeDiscordLogin,
+  discordLoginAvailable, startDiscordLogin, completeDiscordLogin, discordLoginAccounts,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
   refreshUpgradeConfig, refreshPromotions,
@@ -425,7 +425,7 @@ function openLoginModal() {
       </div>
       <div class="auth__discord" id="linkDiscord" hidden>
         <button class="btn auth__dcgo" type="button" id="linkDiscordGo">${DISCORD_ICON}<span>Log in with Discord</span></button>
-        <p class="auth__note">Already linked your Discord? Sign in with one click, no payment.</p>
+        <p class="auth__note" id="linkDiscordNote">Already linked your Discord? Sign in with one click, no payment. Alts on the same Discord too.</p>
         <p class="auth__err" id="linkDiscordError" role="alert" hidden></p>
       </div>
       <hr class="auth__rule">
@@ -507,13 +507,19 @@ function openLoginModal() {
     void discordLoginAvailable().then((available) => {
       if (available && discordBox.isConnected && !$('#linkForm', body).hidden) discordBox.hidden = false;
     });
+    /* Whoever signed in with Discord on this device last time, so a returning player sees whose
+     * session the button is about to bring back. A convenience only: Discord decides who it is. */
+    const last = readDiscordLast();
+    if (last) {
+      $('#linkDiscordNote', body).textContent =
+        `Last time: ${last}. Alts on the same Discord can be picked after Discord confirms.`;
+    }
     discordGo.addEventListener('click', async () => {
       discordGo.disabled = true;
       discordGo.dataset.state = 'loading';
       discordError.hidden = true;
       try {
-        const { authorizeUrl } = await startDiscordLogin();
-        location.assign(authorizeUrl);
+        await goToDiscord();
       } catch (error) {
         discordGo.disabled = false;
         discordGo.dataset.state = '';
@@ -1492,10 +1498,11 @@ paintAuthChrome();
 /* ─────────── coming back from "Log in with Discord" ───────────
  *
  * The API's callback lands on `/?discord-login=<outcome>`. The outcome is read once and stripped so
- * a reload does not replay it. On `ok` the session is collected BEFORE bootstrap, so bootstrap finds
- * the player signed in instead of racing the completion with a 401. Never rejects: the page loads
- * either way. Anything but `ok` says why and reopens the sign-in card, since signing in is what the
- * player was doing. */
+ * a reload does not replay it. The session is collected BEFORE bootstrap -- on `ok` at once, on
+ * `choose` once the player has picked one of the accounts on their Discord -- so bootstrap finds
+ * the player signed in as the right account instead of racing the completion with a 401 (or, when
+ * switching accounts, loading the old one first). Never rejects: the page loads either way. Anything
+ * else says why and reopens the sign-in card, since signing in is what the player was doing. */
 const DISCORD_LOGIN_NOTICES = {
   'not-linked': {
     kind: 'lose',
@@ -1508,6 +1515,134 @@ const DISCORD_LOGIN_NOTICES = {
   failed: { kind: 'lose', title: 'Discord declined', body: 'Try again in a moment.' },
 };
 
+/* The last account signed in with Discord on this device, for the sign-in card's "Last time". */
+const DISCORD_LAST_KEY = 'dd.discord.last';
+/* Set while the one automatic retry with Discord's Authorize screen is under way (see `retry`). */
+const DISCORD_RETRY_KEY = 'dd.discord.retry';
+
+function readDiscordLast() {
+  try {
+    const name = localStorage.getItem(DISCORD_LAST_KEY);
+    return name && /^\.?[A-Za-z0-9_]{2,16}$/.test(name) ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+function signedInWithDiscord(user) {
+  try {
+    localStorage.setItem(DISCORD_LAST_KEY, user.minecraftUsername);
+    sessionStorage.removeItem(DISCORD_RETRY_KEY);
+  } catch {
+    /* a convenience, not a requirement */
+  }
+  toast({ kind: 'win', title: 'Signed in with Discord', body: user.minecraftUsername });
+}
+
+/* Off to Discord. Normally without its Authorize screen for a player who approved the app before;
+ * `consent` asks for the screen (the retry after Discord said it needs one). */
+async function goToDiscord(consent = false) {
+  const { authorizeUrl } = await startDiscordLogin(consent);
+  location.assign(authorizeUrl);
+}
+
+/* "1d", "3h", "now": how long ago an account was last played, for the picker. */
+function agoLabel(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 60_000) return 'just now';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * Which of the accounts on this Discord to sign in to. Resolves once the player has picked one (and
+ * the session is in) or has closed the window without picking; it never rejects.
+ */
+async function pickDiscordAccount() {
+  let choice;
+  try {
+    choice = await discordLoginAccounts();
+  } catch (error) {
+    showApiError(error);
+    return;
+  }
+  const accounts = choice?.accounts || [];
+  if (!accounts.length) {
+    toast(DISCORD_LOGIN_NOTICES['not-linked']);
+    return;
+  }
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    openModal('Choose an account', (body) => {
+      const title = el('h3', 'auth__title');
+      title.setAttribute('aria-hidden', 'true');
+      title.textContent = 'Choose an account';
+      const lede = el('p', 'auth__lede');
+      lede.textContent = `${choice.discordUsername ? `@${choice.discordUsername}` : 'Your Discord'} is linked to ${accounts.length} accounts. Which one?`;
+      const list = el('ul', 'auth__accts');
+      const error = el('p', 'auth__err');
+      error.setAttribute('role', 'alert');
+      error.hidden = true;
+      const buttons = [];
+      for (const account of accounts) {
+        const item = el('li');
+        const pick = el('button', 'auth__acct');
+        pick.type = 'button';
+        const head = el('img', 'auth__accthead');
+        head.alt = '';
+        head.width = 36;
+        head.height = 36;
+        head.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(account.id)}?s=40`;
+        head.addEventListener('error', () => { head.style.visibility = 'hidden'; });
+        const name = el('span', 'auth__acctname');
+        name.textContent = account.minecraftUsername;
+        const meta = el('span', 'auth__acctmeta');
+        meta.textContent = [
+          account.main ? 'Main' : 'Alt',
+          account.lastLoginAt ? `played ${agoLabel(account.lastLoginAt)}` : null,
+        ].filter(Boolean).join(' · ');
+        if (account.main) pick.dataset.main = '1';
+        pick.append(head, name, meta);
+        pick.addEventListener('click', async () => {
+          for (const other of buttons) other.disabled = true;
+          pick.dataset.state = 'loading';
+          error.hidden = true;
+          try {
+            const user = await completeDiscordLogin(account.id);
+            done = true; // closing below is the success path, not a dismissal
+            closeModal();
+            signedInWithDiscord(user);
+            resolve();
+          } catch (failure) {
+            delete pick.dataset.state;
+            for (const other of buttons) other.disabled = false;
+            error.textContent = failure?.message || 'Could not sign in to that account.';
+            error.hidden = false;
+          }
+        });
+        buttons.push(pick);
+        item.appendChild(pick);
+        list.appendChild(item);
+      }
+      const note = el('p', 'auth__note');
+      note.textContent = 'Main is the account /tag pays in the Discord server. /accounts there changes it.';
+      body.replaceChildren(title, lede, list, error, note);
+    }, { variant: 'auth' });
+    // After showModal(), which puts focus on the close button: the most recent account is the
+    // likely pick, so Enter alone signs in to it.
+    $('#modalBody .auth__acct')?.focus();
+    $('#modal').addEventListener('close', finish, { once: true });
+  });
+}
+
 async function finishDiscordReturn() {
   const params = new URLSearchParams(location.search);
   const outcome = params.get('discord-login');
@@ -1517,11 +1652,33 @@ async function finishDiscordReturn() {
   history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}`);
   if (outcome === 'ok') {
     try {
-      const user = await completeDiscordLogin();
-      toast({ kind: 'win', title: 'Signed in with Discord', body: user.minecraftUsername });
+      signedInWithDiscord(await completeDiscordLogin());
       return;
     } catch (error) {
       showApiError(error);
+    }
+  } else if (outcome === 'choose') {
+    await pickDiscordAccount();
+    return;
+  } else if (outcome === 'retry') {
+    /* Discord would not skip its Authorize screen this time. Ask once more, with it; a second
+     * refusal in the same tab is reported rather than looped on. */
+    let retried = true;
+    try {
+      retried = sessionStorage.getItem(DISCORD_RETRY_KEY) === '1';
+      sessionStorage.setItem(DISCORD_RETRY_KEY, '1');
+    } catch {
+      /* no storage: one try, then report */
+    }
+    if (!retried) {
+      try {
+        await goToDiscord(true);
+        return;
+      } catch (error) {
+        showApiError(error);
+      }
+    } else {
+      toast(DISCORD_LOGIN_NOTICES.failed);
     }
   } else if (DISCORD_LOGIN_NOTICES[outcome]) {
     toast(DISCORD_LOGIN_NOTICES[outcome]);
@@ -1531,6 +1688,28 @@ async function finishDiscordReturn() {
     bus.removeEventListener('change', reopenSignIn);
     if (!state.authenticated && !$('#modal').open) openLoginModal();
   });
+}
+
+/* "Switch account" in the account menu: signed in, with Discord sign-in set up. It goes through
+ * Discord again rather than hopping between accounts from this session, because a session proves
+ * this account, not the Discord: a Minecraft account that changed hands must not open the alts of
+ * the Discord it used to be linked to. */
+{
+  const switchButton = $('#switchAccountBtn');
+  if (switchButton) {
+    let available = false;
+    const paint = () => { switchButton.hidden = !(available && state.authenticated); };
+    void discordLoginAvailable().then((answer) => { available = answer; paint(); });
+    bus.addEventListener('change', paint);
+    switchButton.addEventListener('click', async (event) => {
+      event.preventDefault();
+      try {
+        await goToDiscord();
+      } catch (error) {
+        showApiError(error);
+      }
+    });
+  }
 }
 
 /* Convert old #/ links before anything reads route state, then capture an invite code from the

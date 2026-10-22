@@ -163,7 +163,9 @@ function consumeDiscordReturn() {
      promising money. */
   const announcements = {
     verified: { kind: 'win', title: 'Discord verified' },
-    taken: { kind: 'lose', title: 'Already linked', body: 'That Discord is on another account' },
+    taken: { kind: 'lose', title: 'Already linked', body: 'This account is on a different Discord' },
+    // One Discord carries a main account and a few alts; this one was already full.
+    limit: { kind: 'lose', title: 'Discord is full', body: 'Unlink an account with /accounts unlink first' },
     expired: { kind: 'lose', title: 'Link expired', body: 'Start the verification again' },
     failed: { kind: 'lose', title: 'Discord declined' },
   };

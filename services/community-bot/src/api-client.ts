@@ -33,6 +33,10 @@ export type ProfileLookup =
       readonly linkedAt: string | null;
       readonly wageredMinor: string;
       readonly vip: VipStanding;
+      /** Asked about yourself only: how many accounts this Discord carries, and how many it may.
+       * Absent on an older gateway (one account per Discord). */
+      readonly accounts?: number;
+      readonly maxAccounts?: number;
     };
 
 export class ApiUnavailable extends Error {
@@ -63,6 +67,20 @@ export interface LinkResult {
   readonly username: string;
   readonly rewards: RewardLine[];
   readonly joinSkipped: string | null;
+  /** Whether the account just linked is the Discord's main one. Absent on an older gateway. */
+  readonly main?: boolean;
+  readonly accounts?: number;
+  readonly maxAccounts?: number;
+}
+
+/** One of the site accounts linked to a Discord (`/accounts list`). */
+export interface LinkedAccount {
+  readonly username: string;
+  /** The account the bot acts for: `/tag` pays it, `/profile` and `/rewards` show it. */
+  readonly main: boolean;
+  readonly active: boolean;
+  readonly linkedAt: string | null;
+  readonly lastLoginAt: string | null;
 }
 
 export type TagResult =
@@ -182,6 +200,24 @@ export class PlatformApi {
     } catch {
       return null;
     }
+  }
+
+  /** `/accounts list`: every site account on this Discord, main first. */
+  async accounts(discordUserId: string): Promise<{ max: number; accounts: LinkedAccount[] }> {
+    return this.post('/internal/v1/community/accounts', { discordUserId });
+  }
+
+  /** `/accounts main`: which of the member's own accounts the bot acts for. */
+  async setMainAccount(discordUserId: string, username: string): Promise<{ username: string }> {
+    return this.post('/internal/v1/community/accounts/main', { discordUserId, username });
+  }
+
+  /** `/accounts unlink`: takes one of the member's own accounts off this Discord. */
+  async unlinkAccount(
+    discordUserId: string,
+    username: string,
+  ): Promise<{ unlinked: string; newMain: string | null }> {
+    return this.post('/internal/v1/community/accounts/unlink', { discordUserId, username });
   }
 
   async rewardStatus(discordUserId: string): Promise<RewardStatus> {

@@ -4,6 +4,12 @@ import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
 import {
+  linkedAccounts,
+  mainAccount,
+  setMainAccount,
+  unlinkAccount,
+} from '../lib/discord-accounts.js';
+import {
   claimTagReward,
   linkWithCode,
   recordTagSightings,
@@ -11,6 +17,7 @@ import {
   tagWatchList,
 } from '../lib/discord-rewards.js';
 import { maskedName } from '../lib/masked-name.js';
+import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
 import { vipStandingFor } from '../lib/vip.js';
 
@@ -87,6 +94,13 @@ const linkSchema = z
 
 const tagSchema = z.object({ discordUserId: snowflake, wearingTag: z.boolean() }).strict();
 
+/* `/accounts main` and `/accounts unlink` name one of the member's own accounts by its Minecraft
+ * name. The Discord is the one on the interaction, so a member can only ever touch accounts linked
+ * to themselves. */
+const accountChoiceSchema = z
+  .object({ discordUserId: snowflake, username: z.string().regex(MINECRAFT_USERNAME_PATTERN) })
+  .strict();
+
 const watchSchema = z.object({}).strict();
 
 const sightingsSchema = z
@@ -131,7 +145,9 @@ export async function registerCommunityBotRoutes(
                 u.status, u.created_at, u.discord_verified_at, t.wagered_minor
            FROM users u
            LEFT JOIN user_wager_totals t ON t.user_id = u.id
-          WHERE u.discord_user_id = $1`,
+          WHERE u.discord_user_id = $1 AND u.demo_of IS NULL
+          ORDER BY u.discord_main DESC, u.discord_verified_at, u.id
+          LIMIT 1`,
         [body.discordUserId],
       );
 
@@ -144,6 +160,9 @@ export async function registerCommunityBotRoutes(
       if (row.status !== 'active') return { linked: false as const };
 
       const wagered = BigInt(row.wagered_minor ?? '0');
+      /* The card is the Discord's MAIN account. How many alts sit behind it is told to the member
+       * themselves only (so `/link` knows whether another one fits), never to a channel. */
+      const accounts = own ? await linkedAccounts(db, body.discordUserId) : null;
       return {
         linked: true as const,
         username: own ? row.minecraft_username : row.masked_username,
@@ -151,6 +170,7 @@ export async function registerCommunityBotRoutes(
         linkedAt: row.discord_verified_at?.toISOString() ?? null,
         wageredMinor: wagered.toString(),
         vip: vipStandingFor(wagered),
+        ...(accounts ? { accounts: accounts.length, maxAccounts: config.discordMaxAccounts } : {}),
       };
     },
   );
@@ -211,11 +231,8 @@ export async function registerCommunityBotRoutes(
     async (request) => {
       verifyCommunityBotSignature(request, config);
       const body = parseWith(lookupSchema, request.body);
-      const linked = await db.query<{ id: string; minecraft_username: string; status: string }>(
-        'SELECT id, minecraft_username, status FROM users WHERE discord_user_id = $1',
-        [body.discordUserId],
-      );
-      const row = linked.rows[0];
+      // The main account: the one /tag pays.
+      const row = await mainAccount(db, body.discordUserId);
       const status = row && row.status === 'active' ? await rewardStatus(db, config, row.id) : null;
       return {
         linked: Boolean(status),
@@ -235,6 +252,62 @@ export async function registerCommunityBotRoutes(
         join: status?.join ?? null,
         tag: status?.tag ?? null,
       };
+    },
+  );
+
+  /* `/accounts list`: every site account linked to the member's Discord, main first. Answered only
+   * to the member (the bot replies ephemerally), so full names are fine here; nothing about money. */
+  app.post(
+    '/internal/v1/community/accounts',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(lookupSchema, request.body);
+      const accounts = await linkedAccounts(db, body.discordUserId);
+      return {
+        max: config.discordMaxAccounts,
+        accounts: accounts.map((account) => ({
+          username: account.minecraftUsername,
+          main: account.main,
+          active: account.status === 'active',
+          linkedAt: account.linkedAt?.toISOString() ?? null,
+          lastLoginAt: account.lastLoginAt?.toISOString() ?? null,
+        })),
+      };
+    },
+  );
+
+  /* `/accounts main`: which of the member's accounts the bot acts for (/tag pays it). Only among
+   * accounts on the member's own Discord, so even a compromised bot can move a member's rewards
+   * between that member's accounts and nowhere else. */
+  app.post(
+    '/internal/v1/community/accounts/main',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(accountChoiceSchema, request.body);
+      const account = await db.transaction((client) =>
+        setMainAccount(client, body.discordUserId, body.username),
+      );
+      return { username: account.minecraftUsername, main: true };
+    },
+  );
+
+  /* `/accounts unlink`: takes one account off the member's Discord. What it collected stays paid and
+   * the Discord's claims stay spent (discord_rewards is keyed on the Discord). */
+  app.post(
+    '/internal/v1/community/accounts/unlink',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(accountChoiceSchema, request.body);
+      const result = await db.transaction((client) =>
+        unlinkAccount(client, {
+          discordUserId: body.discordUserId,
+          minecraftUsername: body.username,
+        }),
+      );
+      return { unlinked: result.unlinked, newMain: result.newMain };
     },
   );
 }

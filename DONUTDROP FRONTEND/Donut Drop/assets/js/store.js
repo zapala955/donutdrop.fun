@@ -507,16 +507,24 @@ export async function discordLoginAvailable() {
   }
 }
 
-export async function startDiscordLogin() {
-  return api.post('/v1/auth/discord/start', {});
+/* `consent` asks Discord to show its Authorize screen. Normally it is skipped (prompt=none) for a
+ * player who approved the app before; the page asks for it only after Discord refused that. */
+export async function startDiscordLogin(consent = false) {
+  return api.post('/v1/auth/discord/start', consent ? { consent: true } : {});
 }
 
 /* Session only. bootstrap() runs after it and loads everything a signed-in page needs, so this does
- * not touch `state`: a 401 from a bootstrap racing it would otherwise sign the player straight out. */
-export async function completeDiscordLogin() {
-  const result = await api.post('/v1/auth/discord/complete', {});
+ * not touch `state`: a 401 from a bootstrap racing it would otherwise sign the player straight out.
+ * `userId` is the account picked when the Discord carries several; omitted when it carries one. */
+export async function completeDiscordLogin(userId) {
+  const result = await api.post('/v1/auth/discord/complete', userId ? { userId } : {});
   setCsrfToken(result.csrfToken);
   return result.user;
+}
+
+/* A Discord with several accounts on it (a main and its alts): which ones this browser may pick. */
+export async function discordLoginAccounts() {
+  return api.post('/v1/auth/discord/accounts', {});
 }
 
 /* Developer login. Skips the pay-login challenge so the site can be worked on with no custody

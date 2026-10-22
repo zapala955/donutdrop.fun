@@ -15,8 +15,19 @@ const DISCORD_USER_URL = 'https://discord.com/api/users/@me';
 /* The raw state is randomToken(32): 32 bytes as unpadded base64url, 43 characters. */
 export const OAUTH_STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
-/** The authorize URL for one round trip. `identify` alone: an id is all either flow needs. */
-export function discordAuthorizeUrl(config: AppConfig, redirectUri: string, state: string): string {
+/**
+ * The authorize URL for one round trip. `identify` alone: an id is all either flow needs.
+ *
+ * `prompt`: the referral verification asks for consent every time (it is a one-off, and the player
+ * should see what they are agreeing to). Signing in passes `none`, so a player who has approved the
+ * app before goes straight back to the site instead of pressing Authorize on every login.
+ */
+export function discordAuthorizeUrl(
+  config: AppConfig,
+  redirectUri: string,
+  state: string,
+  prompt: 'consent' | 'none' = 'consent',
+): string {
   const authorize = new URL(DISCORD_AUTHORIZE_URL);
   authorize.searchParams.set('client_id', config.discordClientId);
   authorize.searchParams.set('redirect_uri', redirectUri);
@@ -25,7 +36,7 @@ export function discordAuthorizeUrl(config: AppConfig, redirectUri: string, stat
   // business reading an email address or a guild list to do that.
   authorize.searchParams.set('scope', 'identify');
   authorize.searchParams.set('state', state);
-  authorize.searchParams.set('prompt', 'consent');
+  authorize.searchParams.set('prompt', prompt);
   return authorize.toString();
 }
 

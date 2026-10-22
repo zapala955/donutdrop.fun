@@ -81,8 +81,10 @@ describe('a profile looked up from Discord', () => {
   });
 
   it('takes its mask from the one the site\'s public pages use', () => {
-    assert.ok(queries.length > 0);
-    for (const sql of queries) {
+    // The profile read itself; asking about yourself also counts the accounts on your Discord.
+    const profileReads = queries.filter((sql) => sql.includes('user_wager_totals'));
+    assert.ok(profileReads.length > 0);
+    for (const sql of profileReads) {
       assert.ok(sql.includes(`${maskedName('u.minecraft_username')} AS masked_username`));
     }
   });

@@ -285,6 +285,7 @@
 .dsync__reward[data-done="1"] .dsync__rewardvalue { color: #35d07f; }
 .dsync__fine { margin: 0; font-size: .75rem; line-height: 1.5; color: var(--faint); }
 .dsync__linked { margin: 0; font-weight: 700; color: #35d07f; }
+.dsync__unlink { margin-top: 10px; }
 .dsync__code {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 10px;
   width: 100%; padding: 14px; border-radius: var(--r-s);

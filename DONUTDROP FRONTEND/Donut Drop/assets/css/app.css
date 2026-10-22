@@ -1071,6 +1071,9 @@ canvas.play {
 }
 .menu__row:hover { background: var(--panel3); }
 .menu__row:active { background: #241f16; }
+/* A row the page switches off (Switch account, without Discord sign-in). luxe.css sets the row's
+   display from five selectors deep, which an attribute alone would lose to. */
+.menu__row[hidden] { display: none !important; }
 .menu__ico { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--green); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .menu__ico--brand { fill: var(--green); stroke: none; }
 .menu__row--hi { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }

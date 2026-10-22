@@ -748,6 +748,15 @@ export const runtimeSettingDefinitions = {
     max: BIGINT_MAX,
   },
 
+  /* ── Discord ── */
+  discordMaxAccounts: {
+    kind: 'integer',
+    group: 'limits',
+    label: 'Site accounts one Discord may be linked to (alts; rewards stay once per Discord)',
+    min: 1n,
+    max: 25n,
+  },
+
   /* ── invite codes entered after sign-up ── */
   referralLateEntryDays: {
     kind: 'integer',

@@ -125,17 +125,21 @@ describe('log in with Discord: the routes', () => {
     assert.doesNotMatch(callback, /setCookie|INSERT INTO sessions/);
     const complete = source.slice(source.indexOf("'/v1/auth/discord/complete'"));
     assert.match(complete, /preHandler: requireWebsiteOrigin/);
-    assert.match(complete, /readDiscordLoginCookie\(request, config\)/);
-    assert.match(complete, /WHERE browser_token_hash = \$1 FOR UPDATE/);
+    // The attempt is found by this browser's cookie, under a lock, before anything is minted.
+    assert.match(complete, /confirmedAttempt\(client, request, true\)/);
+    const attempt = source.slice(source.indexOf('async function confirmedAttempt('));
+    assert.match(attempt, /readDiscordLoginCookie\(request, config\)/);
+    assert.match(attempt, /WHERE browser_token_hash = \$1\$\{lock \? ' FOR UPDATE' : ''\}/);
     assert.match(complete, /INSERT INTO sessions/);
-    assert.match(complete, /SET completed_at = now\(\)/);
+    assert.match(complete, /SET user_id = \$2, completed_at = now\(\)/);
   });
 
   it('only finds accounts that already carry the Discord, and never creates one', async () => {
     const source = await route();
     assert.match(source, /WHERE discord_user_id = \$1 AND demo_of IS NULL/);
     assert.match(source, /WHERE id = \$1 AND discord_user_id = \$2 AND demo_of IS NULL/);
-    assert.doesNotMatch(source, /INSERT INTO users|SET discord_user_id/);
+    // It writes the Discord onto its own attempt row, never onto an account.
+    assert.doesNotMatch(source, /INSERT INTO users|UPDATE users\s+SET discord_user_id/);
   });
 
   it('refuses administrators, whose sessions need the Minecraft sign-in MFA', async () => {
@@ -199,8 +203,14 @@ describe('log in with Discord: the page', () => {
     assert.match(app, /location\.assign\(authorizeUrl\)/);
     const store = await front('assets/js/store.js');
     assert.match(store, /api\.get\('\/v1\/auth\/discord'\)/);
-    assert.match(store, /api\.post\('\/v1\/auth\/discord\/start', \{\}\)/);
-    assert.match(store, /api\.post\('\/v1\/auth\/discord\/complete', \{\}\)/);
+    assert.match(
+      store,
+      /api\.post\('\/v1\/auth\/discord\/start', consent \? \{ consent: true \} : \{\}\)/,
+    );
+    assert.match(
+      store,
+      /api\.post\('\/v1\/auth\/discord\/complete', userId \? \{ userId \} : \{\}\)/,
+    );
   });
 
   it('collects the session before bootstrap, so bootstrap cannot race it with a 401', async () => {
