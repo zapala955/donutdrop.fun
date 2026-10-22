@@ -25,6 +25,9 @@ import { mountCrash } from './crash.js';
 import { mountMines } from './mines.js';
 import { mountPlinko } from './plinko.js';
 import { mountDice } from './dice.js';
+import { mountFishing } from './fishing.js';
+import { mountIceFishing } from './icefishing.js';
+import { mountDerby } from './derby.js';
 import { mountMonument, mountSlots } from './slots.js';
 import { mountTower } from './tower.js';
 import { mountChicken } from './chicken.js';
@@ -287,6 +290,9 @@ function mountHome(view) {
     chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
     plinko: { name: 'Plinko', art: 'assets/img/items/game-plinko.svg' },
     dice: { name: 'Dice', art: 'assets/img/items/dice.svg' },
+    fishing: { name: 'Fishing', art: 'assets/img/items/game-fishing.svg' },
+    icefishing: { name: 'Ice Fishing', art: 'assets/img/items/game-ice-fishing.svg' },
+    derby: { name: 'Mob Derby', art: 'assets/img/items/game-derby.svg' },
     slots: { name: 'Ore Rush', art: 'assets/img/items/game-ore-rush.svg' },
     monument: { name: 'Ocean Monument', art: 'assets/img/items/game-monument.svg' },
     blackjack: { name: 'Blackjack', art: 'assets/img/items/game-blackjack.svg' },
@@ -1170,6 +1176,9 @@ const VIEWS = {
   chicken: mountChicken,
   plinko: mountPlinko,
   dice: mountDice,
+  fishing: mountFishing,
+  'ice-fishing': mountIceFishing,
+  derby: mountDerby,
   'ore-rush': mountSlots,
   monument: mountMonument,
   coinflip: mountCoinflip,
@@ -1361,7 +1370,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'ore-rush', 'monument', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);

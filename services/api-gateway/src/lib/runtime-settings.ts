@@ -20,6 +20,9 @@ type SettingGroup =
   | 'plinko'
   | 'slots'
   | 'dice'
+  | 'fishing'
+  | 'icefishing'
+  | 'derby'
   | 'discord'
   | 'alerts'
   | 'duels'
@@ -524,6 +527,78 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'dice',
     label: 'Dice maximum payout per roll (a stake whose win would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── fishing ── The edge is fixed in lib/fishing.ts; these are the limits. */
+  fishingEnabled: { kind: 'boolean', group: 'fishing', label: 'Fishing open' },
+  fishingMinStakeMinor: {
+    kind: 'bigint',
+    group: 'fishing',
+    label: 'Fishing minimum stake per cast',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  fishingMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'fishing',
+    label: 'Fishing maximum stake per cast',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  fishingMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'fishing',
+    label: 'Fishing maximum payout per cast (a stake whose best catch would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── ice fishing ── The edge is fixed in lib/ice-fishing.ts; these are the limits. */
+  iceFishingEnabled: { kind: 'boolean', group: 'icefishing', label: 'Ice Fishing open' },
+  iceFishingMinStakeMinor: {
+    kind: 'bigint',
+    group: 'icefishing',
+    label: 'Ice Fishing minimum stake per spin',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  iceFishingMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'icefishing',
+    label: 'Ice Fishing maximum stake per spin',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  iceFishingMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'icefishing',
+    label: 'Ice Fishing maximum payout per spin (a stake whose best spin would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── mob derby ── The edge is fixed in lib/derby.ts; these are the limits. */
+  derbyEnabled: { kind: 'boolean', group: 'derby', label: 'Mob Derby open' },
+  derbyMinStakeMinor: {
+    kind: 'bigint',
+    group: 'derby',
+    label: 'Mob Derby minimum stake per race',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  derbyMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'derby',
+    label: 'Mob Derby maximum stake per race',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  derbyMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'derby',
+    label: 'Mob Derby maximum payout per race (a stake whose win would pay more is refused)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -1054,6 +1129,12 @@ function assertInvariants(view: AppConfig): void {
     ['Slots maximum stake', view.slotsMaxStakeMinor, 'the maximum payout', view.slotsMaxPayoutMinor],
     ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
     ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
+    ['Fishing minimum stake', view.fishingMinStakeMinor, 'the maximum', view.fishingMaxStakeMinor],
+    ['Fishing maximum stake', view.fishingMaxStakeMinor, 'the maximum payout', view.fishingMaxPayoutMinor],
+    ['Ice Fishing minimum stake', view.iceFishingMinStakeMinor, 'the maximum', view.iceFishingMaxStakeMinor],
+    ['Ice Fishing maximum stake', view.iceFishingMaxStakeMinor, 'the maximum payout', view.iceFishingMaxPayoutMinor],
+    ['Mob Derby minimum stake', view.derbyMinStakeMinor, 'the maximum', view.derbyMaxStakeMinor],
+    ['Mob Derby maximum stake', view.derbyMaxStakeMinor, 'the maximum payout', view.derbyMaxPayoutMinor],
     ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */

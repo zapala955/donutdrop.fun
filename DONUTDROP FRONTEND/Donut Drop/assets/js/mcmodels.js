@@ -273,10 +273,368 @@ export function poseGuardian(parts, ticks, extension, eyeX, eyeY, tail) {
   parts.tail2.rotation.y = Math.sin(tail) * Math.PI * 0.15;
 }
 
+/**
+ * An item sprite extruded one pixel deep, the way the game builds a dropped or held item: the sprite
+ * front and back, and an edge strip wherever a solid pixel meets an empty one, in that pixel's
+ * colour. One unit across, centred, facing +z. Returns { geometry, material }.
+ */
+export function itemModel(THREE, source, opts = {}) {
+  const S = 16;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(source, 0, 0, source.naturalWidth || source.width, source.naturalHeight || source.height, 0, 0, S, S);
+  const data = g.getImageData(0, 0, S, S).data;
+  const solid = (x, y) => x >= 0 && y >= 0 && x < S && y < S && data[(y * S + x) * 4 + 3] > 127;
+  const pos = []; const nor = []; const uv = [];
+  const d = 0.5 / S;
+  const quad = (a, b, c2, e, n, ua, ub, uc, ue) => {
+    for (const [v, t] of [[a, ua], [b, ub], [c2, uc], [a, ua], [c2, uc], [e, ue]]) {
+      pos.push(...v); nor.push(...n); uv.push(...t);
+    }
+  };
+  quad([-0.5, -0.5, d], [0.5, -0.5, d], [0.5, 0.5, d], [-0.5, 0.5, d], [0, 0, 1], [0, 0], [1, 0], [1, 1], [0, 1]);
+  quad([0.5, -0.5, -d], [-0.5, -0.5, -d], [-0.5, 0.5, -d], [0.5, 0.5, -d], [0, 0, -1], [1, 0], [0, 0], [0, 1], [1, 1]);
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
+      if (!solid(x, y)) continue;
+      const x0 = -0.5 + x / S; const x1 = x0 + 1 / S;
+      const y1 = 0.5 - y / S; const y0 = y1 - 1 / S;
+      const t = [(x + 0.5) / S, 1 - (y + 0.5) / S];
+      if (!solid(x - 1, y)) quad([x0, y0, -d], [x0, y0, d], [x0, y1, d], [x0, y1, -d], [-1, 0, 0], t, t, t, t);
+      if (!solid(x + 1, y)) quad([x1, y0, d], [x1, y0, -d], [x1, y1, -d], [x1, y1, d], [1, 0, 0], t, t, t, t);
+      if (!solid(x, y - 1)) quad([x0, y1, d], [x1, y1, d], [x1, y1, -d], [x0, y1, -d], [0, 1, 0], t, t, t, t);
+      if (!solid(x, y + 1)) quad([x0, y0, -d], [x1, y0, -d], [x1, y0, d], [x0, y0, d], [0, -1, 0], t, t, t, t);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const map = new THREE.CanvasTexture(c);
+  map.magFilter = THREE.NearestFilter;
+  map.minFilter = THREE.NearestFilter;
+  map.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshLambertMaterial({ map, alphaTest: 0.5, emissive: 0x1c1c1c, ...opts });
+  return { geometry, material };
+}
+
+/** PlayerModel (wide arms) over HumanoidModel: head and hat, body and jacket, arms and sleeves, legs
+ * and trousers, the outer layers a quarter (the hat a half) pixel out. Steve's skin fits it. */
+export const PLAYER = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    {
+      name: 'head', cubes: [{ u: 0, v: 0, x: -4, y: -8, z: -4, w: 8, h: 8, d: 8 }],
+      children: [{ name: 'hat', cubes: [{ u: 32, v: 0, x: -4, y: -8, z: -4, w: 8, h: 8, d: 8, inflate: 0.5 }] }],
+    },
+    {
+      name: 'body', cubes: [{ u: 16, v: 16, x: -4, y: 0, z: -2, w: 8, h: 12, d: 4 }],
+      children: [{ name: 'jacket', cubes: [{ u: 16, v: 32, x: -4, y: 0, z: -2, w: 8, h: 12, d: 4, inflate: 0.25 }] }],
+    },
+    {
+      name: 'rightArm', pivot: [-5, 2, 0], cubes: [{ u: 40, v: 16, x: -3, y: -2, z: -2, w: 4, h: 12, d: 4 }],
+      children: [{ name: 'rightSleeve', cubes: [{ u: 40, v: 32, x: -3, y: -2, z: -2, w: 4, h: 12, d: 4, inflate: 0.25 }] }],
+    },
+    {
+      name: 'leftArm', pivot: [5, 2, 0], cubes: [{ u: 32, v: 48, x: -1, y: -2, z: -2, w: 4, h: 12, d: 4 }],
+      children: [{ name: 'leftSleeve', cubes: [{ u: 48, v: 48, x: -1, y: -2, z: -2, w: 4, h: 12, d: 4, inflate: 0.25 }] }],
+    },
+    {
+      name: 'rightLeg', pivot: [-1.9, 12, 0], cubes: [{ u: 0, v: 16, x: -2, y: 0, z: -2, w: 4, h: 12, d: 4 }],
+      children: [{ name: 'rightPants', cubes: [{ u: 0, v: 32, x: -2, y: 0, z: -2, w: 4, h: 12, d: 4, inflate: 0.25 }] }],
+    },
+    {
+      name: 'leftLeg', pivot: [1.9, 12, 0], cubes: [{ u: 16, v: 48, x: -2, y: 0, z: -2, w: 4, h: 12, d: 4 }],
+      children: [{ name: 'leftPants', cubes: [{ u: 0, v: 48, x: -2, y: 0, z: -2, w: 4, h: 12, d: 4, inflate: 0.25 }] }],
+    },
+  ],
+};
+
+/**
+ * DrownedModel at a cube deformation: HumanoidModel's mesh (the left limbs mirrored copies of the
+ * right) with the drowned's own left arm and left leg. 0 for the drowned, 0.25 for its outer layer.
+ */
+export function drownedModel(k = 0) {
+  const box = (u, v, x, y, z, w, h, d, extra = {}) => ({ u, v, x, y, z, w, h, d, inflate: k, ...extra });
+  return {
+    texW: 64,
+    texH: 64,
+    parts: [
+      { name: 'head', cubes: [box(0, 0, -4, -8, -4, 8, 8, 8)], children: [{ name: 'hat', cubes: [box(32, 0, -4, -8, -4, 8, 8, 8, { inflate: k + 0.5 })] }] },
+      { name: 'body', cubes: [box(16, 16, -4, 0, -2, 8, 12, 4)] },
+      { name: 'rightArm', pivot: [-5, 2, 0], cubes: [box(40, 16, -3, -2, -2, 4, 12, 4)] },
+      { name: 'leftArm', pivot: [5, 2, 0], cubes: [box(32, 48, -1, -2, -2, 4, 12, 4)] },
+      { name: 'rightLeg', pivot: [-1.9, 12, 0], cubes: [box(0, 16, -2, 0, -2, 4, 12, 4)] },
+      { name: 'leftLeg', pivot: [1.9, 12, 0], cubes: [box(16, 48, -2, 0, -2, 4, 12, 4)] },
+    ],
+  };
+}
+
+/** BoatModel: the bottom laid flat, the four sides, and the two paddles. 128 × 64. */
+export const BOAT = {
+  texW: 128,
+  texH: 64,
+  parts: [
+    { name: 'bottom', pivot: [0, 3, 1], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 0, v: 0, x: -14, y: -9, z: -3, w: 28, h: 16, d: 3 }] },
+    { name: 'back', pivot: [-15, 4, 4], rot: [0, (3 * Math.PI) / 2, 0], cubes: [{ u: 0, v: 19, x: -13, y: -7, z: -1, w: 18, h: 6, d: 2 }] },
+    { name: 'front', pivot: [15, 4, 0], rot: [0, Math.PI / 2, 0], cubes: [{ u: 0, v: 27, x: -8, y: -7, z: -1, w: 16, h: 6, d: 2 }] },
+    { name: 'right', pivot: [0, 4, -9], rot: [0, Math.PI, 0], cubes: [{ u: 0, v: 35, x: -14, y: -7, z: -1, w: 28, h: 6, d: 2 }] },
+    { name: 'left', pivot: [0, 4, 9], cubes: [{ u: 0, v: 43, x: -14, y: -7, z: -1, w: 28, h: 6, d: 2 }] },
+    {
+      name: 'leftPaddle', pivot: [3, -5, 9], rot: [0, 0, 0.19634954631328583],
+      cubes: [{ u: 62, v: 0, x: -1, y: 0, z: -5, w: 2, h: 2, d: 18 }, { u: 62, v: 0, x: -1.001, y: -3, z: 8, w: 1, h: 6, d: 7 }],
+    },
+    {
+      name: 'rightPaddle', pivot: [3, -5, -9], rot: [0, Math.PI, 0.19634954631328583],
+      cubes: [{ u: 62, v: 20, x: -1, y: 0, z: -5, w: 2, h: 2, d: 18 }, { u: 62, v: 20, x: 0.001, y: -3, z: 8, w: 1, h: 6, d: 7 }],
+    },
+  ],
+};
+
+/** SquidModel (the glow squid's too): the body and eight tentacles round its base. 64 × 32. */
+export const SQUID = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'body', pivot: [0, 8, 0], cubes: [{ u: 0, v: 0, x: -6, y: -8, z: -6, w: 12, h: 16, d: 12, inflate: 0.02 }] },
+    ...Array.from({ length: 8 }, (_, i) => {
+      const a = (i * Math.PI * 2) / 8;
+      return {
+        name: `tentacle${i}`,
+        pivot: [Math.cos(a) * 5, 15, Math.sin(a) * 5],
+        rot: [0, (i * Math.PI * -2) / 8 + Math.PI / 2, 0],
+        cubes: [{ u: 48, v: 0, x: -1, y: 0, z: -1, w: 2, h: 18, d: 2 }],
+      };
+    }),
+  ],
+};
+/** SquidModel.setupAnim: every tentacle swung out by the same angle. */
+export function poseSquid(parts, tentacleAngle) {
+  for (let i = 0; i < 8; i += 1) parts[`tentacle${i}`].rotation.x = tentacleAngle;
+}
+
+/** DolphinModel: the body with its fins, tail and tail fin, the head and its nose. 64 × 64. */
+export const DOLPHIN = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    {
+      name: 'body', pivot: [0, 22, -5], cubes: [{ u: 22, v: 0, x: -4, y: -7, z: 0, w: 8, h: 7, d: 13 }],
+      children: [
+        { name: 'backFin', rot: [Math.PI / 3, 0, 0], cubes: [{ u: 51, v: 0, x: -0.5, y: 0, z: 8, w: 1, h: 4, d: 5 }] },
+        { name: 'leftFin', pivot: [2, -2, 4], rot: [Math.PI / 3, 0, (2 * Math.PI) / 3], cubes: [{ u: 48, v: 20, x: -0.5, y: -4, z: 0, w: 1, h: 4, d: 7, mirror: true }] },
+        { name: 'rightFin', pivot: [-2, -2, 4], rot: [Math.PI / 3, 0, (-2 * Math.PI) / 3], cubes: [{ u: 48, v: 20, x: -0.5, y: -4, z: 0, w: 1, h: 4, d: 7 }] },
+        {
+          name: 'tail', pivot: [0, -2.5, 11], rot: [-0.10471975803375244, 0, 0], cubes: [{ u: 0, v: 19, x: -2, y: -2.5, z: 0, w: 4, h: 5, d: 11 }],
+          children: [{ name: 'tailFin', pivot: [0, 0, 9], cubes: [{ u: 19, v: 20, x: -5, y: -0.5, z: 0, w: 10, h: 1, d: 6 }] }],
+        },
+        {
+          name: 'head', pivot: [0, -4, -3], cubes: [{ u: 0, v: 0, x: -4, y: -3, z: -3, w: 8, h: 7, d: 6 }],
+          children: [{ name: 'nose', cubes: [{ u: 0, v: 13, x: -1, y: 2, z: -7, w: 2, h: 2, d: 4 }] }],
+        },
+      ],
+    },
+  ],
+};
+/** DolphinModel.setupAnim, swimming: the body dips as the tail and tail fin beat. */
+export function poseDolphin(parts, ticks, pitch = 0) {
+  parts.body.rotation.x = pitch - 0.05 - 0.05 * Math.cos(ticks * 0.3);
+  parts.tail.rotation.x = -0.1 * Math.cos(ticks * 0.3);
+  parts.tailFin.rotation.x = -0.2 * Math.cos(ticks * 0.3);
+}
+
+/** SalmonModel: two halves of body, the head, the fins; the back half sways. 32 × 32. */
+export const SALMON = {
+  texW: 32,
+  texH: 32,
+  parts: [
+    {
+      name: 'bodyFront', pivot: [0, 20, -7.199999809265137], cubes: [{ u: 0, v: 0, x: -1.5, y: -2.5, z: 0, w: 3, h: 5, d: 8 }],
+      children: [{ name: 'topFrontFin', pivot: [0, -4.5, 5], cubes: [{ u: 2, v: 1, x: 0, y: 0, z: 0, w: 0, h: 2, d: 3 }] }],
+    },
+    {
+      name: 'bodyBack', pivot: [0, 20, 0.8000001907348633], cubes: [{ u: 0, v: 13, x: -1.5, y: -2.5, z: 0, w: 3, h: 5, d: 8 }],
+      children: [
+        { name: 'backFin', pivot: [0, 0, 8], cubes: [{ u: 20, v: 10, x: 0, y: -2.5, z: 0, w: 0, h: 5, d: 6 }] },
+        { name: 'topBackFin', pivot: [0, -4.5, -1], cubes: [{ u: 0, v: 2, x: 0, y: 0, z: 0, w: 0, h: 2, d: 4 }] },
+      ],
+    },
+    { name: 'head', pivot: [0, 20, -7.199999809265137], cubes: [{ u: 22, v: 0, x: -1, y: -2, z: -3, w: 2, h: 4, d: 3 }] },
+    { name: 'rightFin', pivot: [-1.5, 21.5, -7.199999809265137], rot: [0, 0, -Math.PI / 4], cubes: [{ u: -4, v: 0, x: -2, y: 0, z: 0, w: 2, h: 0, d: 2 }] },
+    { name: 'leftFin', pivot: [1.5, 21.5, -7.199999809265137], rot: [0, 0, Math.PI / 4], cubes: [{ u: 0, v: 0, x: 0, y: 0, z: 0, w: 2, h: 0, d: 2 }] },
+  ],
+};
+/** SalmonModel.setupAnim: the back half swings, wider out of the water. */
+export function poseSalmon(parts, ticks, inWater = true) {
+  parts.bodyBack.rotation.y = -(inWater ? 1 : 1.3) * 0.25 * Math.sin((inWater ? 1 : 1.7) * 0.6 * ticks);
+}
+
+/**
+ * WardenModel: the body with its ribcage, the head with its two tendrils, the long arms, and the
+ * legs, all hung from a root bone. 128 × 128. Its bioluminescent layer, its heart and its pulsing
+ * spots are the same model drawn again in their own textures.
+ */
+export const WARDEN = {
+  texW: 128,
+  texH: 128,
+  parts: [
+    {
+      name: 'bone', pivot: [0, 24, 0],
+      children: [
+        {
+          name: 'body', pivot: [0, -21, 0], cubes: [{ u: 0, v: 0, x: -9, y: -13, z: -4, w: 18, h: 21, d: 11 }],
+          children: [
+            { name: 'rightRibcage', pivot: [-7, -2, -4], cubes: [{ u: 90, v: 11, x: -2, y: -11, z: -0.10000000149011612, w: 9, h: 21, d: 0 }] },
+            { name: 'leftRibcage', pivot: [7, -2, -4], cubes: [{ u: 90, v: 11, x: -7, y: -11, z: -0.10000000149011612, w: 9, h: 21, d: 0, mirror: true }] },
+            {
+              name: 'head', pivot: [0, -13, 0], cubes: [{ u: 0, v: 32, x: -8, y: -16, z: -5, w: 16, h: 16, d: 10 }],
+              children: [
+                { name: 'rightTendril', pivot: [-8, -12, 0], cubes: [{ u: 52, v: 32, x: -16, y: -13, z: 0, w: 16, h: 16, d: 0 }] },
+                { name: 'leftTendril', pivot: [8, -12, 0], cubes: [{ u: 58, v: 0, x: 0, y: -13, z: 0, w: 16, h: 16, d: 0 }] },
+              ],
+            },
+            { name: 'rightArm', pivot: [-13, -13, 1], cubes: [{ u: 44, v: 50, x: -4, y: 0, z: -4, w: 8, h: 28, d: 8 }] },
+            { name: 'leftArm', pivot: [13, -13, 1], cubes: [{ u: 0, v: 58, x: -4, y: 0, z: -4, w: 8, h: 28, d: 8 }] },
+          ],
+        },
+        { name: 'rightLeg', pivot: [-5.900000095367432, -13, 0], cubes: [{ u: 76, v: 48, x: -3.0999999046325684, y: 0, z: -3, w: 6, h: 13, d: 6 }] },
+        { name: 'leftLeg', pivot: [5.900000095367432, -13, 0], cubes: [{ u: 76, v: 76, x: -2.9000000953674316, y: 0, z: -3, w: 6, h: 13, d: 6 }] },
+      ],
+    },
+  ],
+};
+
+/** CodModel.createBodyLayer: body, head, nose, the two side fins turned 45°, tail and top fin. */
+export const COD = {
+  texW: 32,
+  texH: 32,
+  parts: [
+    { name: 'body', pivot: [0, 22, 0], cubes: [{ u: 0, v: 0, x: -1, y: -2, z: 0, w: 2, h: 4, d: 7 }] },
+    { name: 'head', pivot: [0, 22, 0], cubes: [{ u: 11, v: 0, x: -1, y: -2, z: -3, w: 2, h: 4, d: 3 }] },
+    { name: 'nose', pivot: [0, 22, -3], cubes: [{ u: 0, v: 0, x: -1, y: -2, z: -1, w: 2, h: 3, d: 1 }] },
+    { name: 'rightFin', pivot: [-1, 23, 0], rot: [0, 0, -Math.PI / 4], cubes: [{ u: 22, v: 1, x: -2, y: 0, z: -1, w: 2, h: 0, d: 2 }] },
+    { name: 'leftFin', pivot: [1, 23, 0], rot: [0, 0, Math.PI / 4], cubes: [{ u: 22, v: 4, x: 0, y: 0, z: -1, w: 2, h: 0, d: 2 }] },
+    { name: 'tailFin', pivot: [0, 22, 7], cubes: [{ u: 22, v: 3, x: 0, y: -2, z: 0, w: 0, h: 4, d: 4 }] },
+    { name: 'topFin', pivot: [0, 20, 0], cubes: [{ u: 20, v: -6, x: 0, y: -1, z: -1, w: 0, h: 1, d: 6 }] },
+  ],
+};
+
+/** CodModel.setupAnim: the tail sweeps, wider when the fish is out of the water. */
+export function poseCod(parts, ticks, inWater = true) {
+  parts.tailFin.rotation.y = -(inWater ? 1 : 1.5) * 0.45 * Math.sin(0.6 * ticks);
+}
+
 /** ConduitRenderer's three boxes: the shell (asleep), the cage (awake) and the wind round it. */
 export const CONDUIT_SHELL = { texW: 32, texH: 16, parts: [{ name: 'shell', cubes: [{ u: 0, v: 0, x: -3, y: -3, z: -3, w: 6, h: 6, d: 6 }] }] };
 export const CONDUIT_CAGE = { texW: 32, texH: 16, parts: [{ name: 'cage', cubes: [{ u: 0, v: 0, x: -4, y: -4, z: -4, w: 8, h: 8, d: 8 }] }] };
 export const CONDUIT_WIND = { texW: 64, texH: 32, parts: [{ name: 'wind', cubes: [{ u: 0, v: 0, x: -8, y: -8, z: -8, w: 16, h: 16, d: 16 }] }] };
+
+/* ─────────── the farm: the derby's racers ─────────── */
+
+/** QuadrupedModel's four legs: (0, 16) 4 x `h` x 4 boxes at x +-`x`, z 7 behind and -5 in front, their
+ * tops at 24 - `h`. One side mirrored, as the game's builder flags say. */
+function quadLegs(h, x = 3, k = 0, mirrorLeft = false, mirrorRight = false) {
+  const leg = (mirror) => [{ u: 0, v: 16, x: -2, y: 0, z: -2, w: 4, h, d: 4, inflate: k, mirror }];
+  return [
+    { name: 'rightHindLeg', pivot: [-x, 24 - h, 7], cubes: leg(mirrorRight) },
+    { name: 'leftHindLeg', pivot: [x, 24 - h, 7], cubes: leg(mirrorLeft) },
+    { name: 'rightFrontLeg', pivot: [-x, 24 - h, -5], cubes: leg(mirrorRight) },
+    { name: 'leftFrontLeg', pivot: [x, 24 - h, -5], cubes: leg(mirrorLeft) },
+  ];
+}
+/** PigModel: QuadrupedModel with six-pixel legs, the head and its snout. 64 x 64 (pig_temperate). */
+export const PIG = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    { name: 'head', pivot: [0, 12, -6], cubes: [{ u: 0, v: 0, x: -4, y: -4, z: -8, w: 8, h: 8, d: 8 }, { u: 16, v: 16, x: -2, y: 0, z: -9, w: 4, h: 3, d: 1 }] },
+    { name: 'body', pivot: [0, 11, 2], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 28, v: 8, x: -5, y: -10, z: -7, w: 10, h: 16, d: 8 }] },
+    ...quadLegs(6, 3, 0, true, false),
+  ],
+};
+/** CowModel (the 1.21.5 base cow): the head with its muzzle and horns, the body and udder, twelve-pixel
+ * legs. 64 x 64; the mooshroom wears it too. */
+export const COW = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    {
+      name: 'head', pivot: [0, 4, -8], cubes: [
+        { u: 0, v: 0, x: -4, y: -4, z: -6, w: 8, h: 8, d: 6 },
+        { u: 1, v: 33, x: -3, y: 1, z: -7, w: 6, h: 3, d: 1 },
+        { u: 22, v: 0, x: -5, y: -5, z: -5, w: 1, h: 3, d: 1 },
+        { u: 22, v: 0, x: 4, y: -5, z: -5, w: 1, h: 3, d: 1 },
+      ],
+    },
+    {
+      name: 'body', pivot: [0, 5, 2], rot: [Math.PI / 2, 0, 0], cubes: [
+        { u: 18, v: 4, x: -6, y: -10, z: -7, w: 12, h: 18, d: 10 },
+        { u: 52, v: 0, x: -2, y: 2, z: -8, w: 4, h: 6, d: 1 },
+      ],
+    },
+    ...quadLegs(12, 4, 0, false, true),
+  ],
+};
+/** SheepModel: twelve-pixel legs, a narrow head and body. 64 x 32. */
+export const SHEEP = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'head', pivot: [0, 6, -8], cubes: [{ u: 0, v: 0, x: -3, y: -4, z: -6, w: 6, h: 6, d: 8 }] },
+    { name: 'body', pivot: [0, 5, 2], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 28, v: 8, x: -4, y: -10, z: -7, w: 8, h: 16, d: 6 }] },
+    ...quadLegs(12, 3, 0, false, true),
+  ],
+};
+/** SheepFurModel: the wool over the sheep, part for part, swollen 0.6 / 1.75 / 0.5. 64 x 32, tinted. */
+export const SHEEP_FUR = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'head', pivot: [0, 6, -8], cubes: [{ u: 0, v: 0, x: -3, y: -4, z: -4, w: 6, h: 6, d: 6, inflate: 0.6 }] },
+    { name: 'body', pivot: [0, 5, 2], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 28, v: 8, x: -4, y: -10, z: -7, w: 8, h: 16, d: 6, inflate: 1.75 }] },
+    ...[[-3, 7, 'rightHindLeg'], [3, 7, 'leftHindLeg'], [-3, -5, 'rightFrontLeg'], [3, -5, 'leftFrontLeg']].map(([x, z, name]) => (
+      { name, pivot: [x, 12, z], cubes: [{ u: 0, v: 16, x: -2, y: 0, z: -2, w: 4, h: 6, d: 4, inflate: 0.5 }] })),
+  ],
+};
+/** AdultChickenModel: the head with its beak and wattle, the body, the legs and the wings. 64 x 32. */
+export const CHICKEN = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    {
+      name: 'head', pivot: [0, 15, -4], cubes: [{ u: 0, v: 0, x: -2, y: -6, z: -2, w: 4, h: 6, d: 3 }],
+      children: [
+        { name: 'beak', cubes: [{ u: 14, v: 0, x: -2, y: -4, z: -4, w: 4, h: 2, d: 2 }] },
+        { name: 'redThing', cubes: [{ u: 14, v: 4, x: -1, y: -2, z: -3, w: 2, h: 2, d: 2 }] },
+      ],
+    },
+    { name: 'body', pivot: [0, 16, 0], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 0, v: 9, x: -3, y: -4, z: -3, w: 6, h: 8, d: 6 }] },
+    { name: 'rightLeg', pivot: [-2, 19, 1], cubes: [{ u: 26, v: 0, x: -1, y: 0, z: -3, w: 3, h: 5, d: 3 }] },
+    { name: 'leftLeg', pivot: [1, 19, 1], cubes: [{ u: 26, v: 0, x: -1, y: 0, z: -3, w: 3, h: 5, d: 3 }] },
+    { name: 'rightWing', pivot: [-4, 13, 0], cubes: [{ u: 24, v: 13, x: 0, y: 0, z: -3, w: 1, h: 4, d: 6 }] },
+    { name: 'leftWing', pivot: [4, 13, 0], cubes: [{ u: 24, v: 13, x: -1, y: 0, z: -3, w: 1, h: 4, d: 6 }] },
+  ],
+};
+/** QuadrupedModel.setupAnim's walk: the legs swing as cos(0.6662 t) x 1.4 x speed, diagonals together. */
+export function poseQuadruped(parts, walk, speed, headPitch = 0) {
+  const swing = Math.cos(walk * 0.6662) * 1.4 * speed;
+  parts.rightHindLeg.rotation.x = swing;
+  parts.leftHindLeg.rotation.x = -swing;
+  parts.rightFrontLeg.rotation.x = -swing;
+  parts.leftFrontLeg.rotation.x = swing;
+  parts.head.rotation.x = headPitch;
+}
+/** ChickenModel.setupAnim: the legs as a quadruped's, the wings flapping with `flap`. */
+export function poseChicken(parts, walk, speed, flap) {
+  const swing = Math.cos(walk * 0.6662) * 1.4 * speed;
+  parts.rightLeg.rotation.x = swing;
+  parts.leftLeg.rotation.x = -swing;
+  parts.rightWing.rotation.z = flap;
+  parts.leftWing.rotation.z = -flap;
+}
 
 /* ─────────── particles ─────────── */
 
@@ -334,7 +692,9 @@ void main() {
 
 /**
  * Point sprites cut from an atlas, each with its own life, motion, size, colour and frame. The
- * frame can run (`frameTo`) over the particle's life, the way firework sparks burn down.
+ * frame can run (`frameTo`) over the particle's life, the way firework sparks burn down. `a` scales
+ * a particle's opacity (smoke is never solid) and `fadeIn` is the share of its life it takes to
+ * appear (a firefly lighting up).
  */
 export function makeSprites(THREE, { map, cols = 1, rows = 1, count = 200, additive = false }) {
   const pos = new Float32Array(count * 3);
@@ -369,7 +729,8 @@ export function makeSprites(THREE, { map, cols = 1, rows = 1, count = 200, addit
       P[i] = {
         life: o.life, max: o.life, vx: o.vx || 0, vy: o.vy || 0, vz: o.vz || 0, gravity: o.gravity || 0, drag: o.drag || 0,
         size0: o.size, size1: o.sizeTo ?? o.size, frame0: o.frame || 0, frame1: o.frameTo ?? o.frame ?? 0,
-        r: o.r ?? 1, g: o.g ?? 1, b: o.b ?? 1, twinkle: o.twinkle || false, fade: o.fade ?? 0.3,
+        r: o.r ?? 1, g: o.g ?? 1, b: o.b ?? 1, a: o.a ?? 1, twinkle: o.twinkle || false, fade: o.fade ?? 0.3,
+        fadeIn: o.fadeIn ?? 0,
       };
       pos[i * 3] = o.x; pos[i * 3 + 1] = o.y; pos[i * 3 + 2] = o.z;
       live = true;
@@ -387,7 +748,7 @@ export function makeSprites(THREE, { map, cols = 1, rows = 1, count = 200, addit
         p.vx *= k; p.vy *= k; p.vz *= k;
         pos[i * 3] += p.vx * dt; pos[i * 3 + 1] += p.vy * dt; pos[i * 3 + 2] += p.vz * dt;
         const t = 1 - Math.max(0, p.life) / p.max;
-        const alpha = t > 1 - p.fade ? (1 - t) / p.fade : 1;
+        const alpha = (t > 1 - p.fade ? (1 - t) / p.fade : 1) * (t < p.fadeIn ? t / p.fadeIn : 1) * p.a;
         col[i * 4] = p.r; col[i * 4 + 1] = p.g; col[i * 4 + 2] = p.b;
         col[i * 4 + 3] = Math.max(0, alpha) * (p.twinkle && Math.random() < 0.3 ? 0.35 : 1);
         size[i] = p.size0 + (p.size1 - p.size0) * t;

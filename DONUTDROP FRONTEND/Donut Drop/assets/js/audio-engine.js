@@ -295,6 +295,24 @@ const CUES = {
       tone(ctx, { freq, type: 'triangle', start: 0.09 + index * 0.06, duration: 0.24, gain: 0.14 });
     });
   },
+  /* ── the lake ── */
+  /** A line whipped out over the water: a quick rising swish. */
+  cast(ctx) {
+    noise(ctx, { duration: 0.18, gain: 0.1, frequency: 3200, q: 1.2 });
+    tone(ctx, { freq: 400, type: 'sine', duration: 0.15, gain: 0.05, sweepTo: 900 });
+  },
+  /** Water: the bobber landing, a fish taking it. Low filtered noise with a bright spray on top. */
+  splash(ctx) {
+    noise(ctx, { duration: 0.28, gain: 0.22, frequency: 900, q: 0.5 });
+    noise(ctx, { start: 0.03, duration: 0.2, gain: 0.12, frequency: 2400, q: 0.7 });
+    tone(ctx, { freq: 180, type: 'sine', duration: 0.18, gain: 0.12, sweepTo: 90 });
+  },
+  /** Thunder far off: a long low rumble under the storm. */
+  thunder(ctx) {
+    noise(ctx, { duration: 1.6, gain: 0.3, frequency: 120, q: 0.4 });
+    noise(ctx, { start: 0.1, duration: 1.2, gain: 0.18, frequency: 260, q: 0.5 });
+    tone(ctx, { freq: 48, type: 'sine', duration: 1.4, gain: 0.25, sweepTo: 30 });
+  },
   /** Something enormous landed. Used sparingly or it stops meaning anything. */
   jackpot(ctx) {
     CUES.anvil(ctx);

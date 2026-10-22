@@ -564,7 +564,7 @@ describe('the slots page', () => {
     }
     assert.match(app, /import \{ mountMonument, mountSlots \} from '\.\/slots\.js';/);
     assert.match(app, /monument: mountMonument,/);
-    assert.match(app, /'dice', 'ore-rush', 'monument', 'mines-duel', 'coinflip'\]\]/);
+    assert.match(app, /'dice', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip'\]\]/);
     assert.match(nginx, /\|coinflip\|ore-rush\|monument\|/);
     assert.match(nginx, /\/monument "https:\/\/donutluxe\.com\/monument";/);
     assert.match(nginx, /\/monument "index, follow";/);
@@ -620,7 +620,7 @@ describe('the slots page', () => {
 
   it('draws the machine in its own tokens, in the shared frame, with reduced motion honoured', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/slots.css')]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.slots, \.plinko\) \{/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
     const rules = css.slice(css.indexOf('/* ─────────── the machine'));
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

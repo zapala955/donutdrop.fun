@@ -1,0 +1,254 @@
+/* Hallmark · component: mob derby · genre: sunny, Minecraft-literal · theme: luxe tokens, plus
+ *           Minecraft's own chat colours lifted into the token block below
+ * states: the race -- idle at the gate, into the gate, the countdown, running (the order live), won,
+ *         lost (3D in derby3d.js; the flat lanes here run the same race); the pick -- a radio group of
+ *         the six racers with their faces, odds and chances, one checked; the one button -- Race,
+ *         busy, disabled; Auto race; the graphics.
+ * signature: a farm-mob derby. The pick and its odds big over the track, the order as the field runs
+ *            in inventory-slot faces, the winner shown as the game shows an item.
+ * type: the site's faces only; the pixel identity is the mobs' faces, cut from their skins.
+ * motion: the countdown pops, the splash pops, the faces slide down the flat lanes. Reduced motion:
+ *         none of it animates; the race still runs.
+ */
+
+:is(.derby, .derbypay) {
+  --mc-yellow: #ffff55;  --mc-yellow-sh: #3f3f15;
+  --mc-gold: #ffaa00;    --mc-gold-sh: #2a2a00;
+  --mc-green: #55ff55;   --mc-green-sh: #153f15;
+  --mc-red: #ff5555;     --mc-red-sh: #3f1515;
+  --mc-gray: #aaaaaa;    --mc-gray-sh: #2a2a2a;
+  --mc-white: #ffffff;   --mc-white-sh: #3f3f3f;
+  --mc-ink: #000000;
+
+  --derby-tip: rgba(16, 0, 16, .9);
+  --derby-tip-e1: #5000ff;
+  --derby-tip-e2: #28007f;
+  --derby-slot: #8b8b8b;
+  --derby-slot-hi: #ffffff;
+  --derby-slot-lo: #373737;
+  --derby-glass: rgba(10, 16, 8, .55);
+  --derby-shade: rgba(0, 0, 0, .55);
+  --derby-cast: 0 24px 48px -24px rgba(0, 0, 0, .9);
+  --derby-glow: rgba(255, 196, 64, .55);
+  --derby-sky: #8db9ff;
+  --derby-grass: #6f9a3d;
+  --derby-path: #94713f;
+  --derby-rail: #a2834f;
+  --derby-mine: rgba(255, 255, 85, .22);
+
+  --derby-ui: var(--lx-ui, system-ui, sans-serif);
+  --derby-display: var(--lx-display, var(--lx-ui, system-ui, sans-serif));
+  --derby-ease: cubic-bezier(.22, 1, .36, 1);
+  --derby-px: 3px;
+}
+
+.derby {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the track ─────────── */
+.derby__stage { grid-area: stage; display: grid; min-width: 0; padding: 0; overflow: hidden; }
+.derby__track { position: relative; min-height: 0; height: 100%; overflow: hidden; border-radius: inherit; touch-action: pan-y; background: linear-gradient(var(--derby-sky), var(--derby-sky) 30%, var(--derby-grass) 30%); }
+.derby__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; cursor: grab; }
+.derby__gl:active { cursor: grabbing; }
+
+/* The flat lanes, for a browser without WebGL: each racer's face down its strip of path. */
+.derby__lanes {
+  position: absolute;
+  inset: 36% 4% 8%;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.derby[data-render="3d"] .derby__lanes { display: none; }
+.derby__lanes li { position: relative; background: var(--derby-path); box-shadow: inset 0 -3px 0 var(--derby-rail); }
+.derby__lanes img { position: absolute; left: calc(var(--at, 0) * (100% - 32px)); top: 50%; width: 32px; height: 32px; image-rendering: pixelated; transform: translateY(-50%); }
+
+/* ── the HUD: the pick, the countdown, the result; the order under it ── */
+.derby__hud { position: absolute; left: 50%; top: 14px; z-index: 3; display: grid; justify-items: center; gap: 2px; transform: translateX(-50%); text-align: center; pointer-events: none; --tone-ink: var(--mc-white); --tone-shade: var(--mc-white-sh); }
+.derby__big { margin: 0; color: var(--tone-ink); font: 900 clamp(1.5rem, 3.6vw, 2.6rem)/1.05 var(--derby-display); text-shadow: .06em .06em 0 var(--tone-shade), 0 0 24px var(--derby-shade); white-space: nowrap; }
+.derby__status { margin: 0; color: var(--mc-white); font: 700 .875rem/1.3 var(--derby-ui); text-shadow: 2px 2px 0 var(--mc-ink), 0 0 12px var(--derby-shade); }
+.derby__hud[data-state="countdown"] { --tone-ink: var(--mc-yellow); --tone-shade: var(--mc-yellow-sh); }
+.derby__hud[data-state="countdown"] .derby__big { font-size: clamp(3rem, 8vw, 5rem); animation: derby-pop 600ms var(--derby-ease); }
+.derby__hud[data-state="won"] { --tone-ink: var(--mc-green); --tone-shade: var(--mc-green-sh); }
+.derby__hud[data-state="lost"] { --tone-ink: var(--mc-gray); --tone-shade: var(--mc-gray-sh); }
+@keyframes derby-pop { from { transform: scale(1.6); opacity: 0; } }
+
+.derby__order { position: absolute; left: 12px; bottom: 12px; z-index: 3; display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 6px; list-style: none; background: var(--derby-glass); border-radius: var(--lx-r-s); pointer-events: none; }
+.derby__order[hidden] { display: none; }
+.derby__order li { display: grid; grid-template-columns: 14px 22px auto; align-items: center; gap: 6px; padding: 1px 6px 1px 2px; border-radius: var(--lx-r-s); color: var(--mc-white); font: 700 .75rem/1 var(--derby-ui); text-shadow: 1px 1px 0 var(--mc-ink); }
+.derby__order li b { color: var(--mc-yellow); text-align: right; }
+.derby__order li img { width: 22px; height: 22px; image-rendering: pixelated; }
+.derby__order li[data-mine="1"] { background: var(--derby-mine); }
+
+.derby__splash {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  z-index: 5;
+  margin: 0;
+  color: var(--mc-yellow);
+  font: 900 clamp(2rem, 5.5vw, 3.75rem)/1 var(--derby-display);
+  text-transform: uppercase;
+  text-shadow: .07em .07em 0 var(--mc-yellow-sh), 0 0 30px var(--derby-shade);
+  transform: translate(-50%, -50%) rotate(-8deg);
+  pointer-events: none;
+  animation: derby-splash 1.7s var(--derby-ease) forwards;
+}
+.derby__splash[hidden] { display: none; }
+.derby__splash[data-tone="big"] { color: var(--mc-gold); text-shadow: .07em .07em 0 var(--mc-gold-sh), 0 0 40px var(--derby-glow); }
+.derby__splash[data-tone="won"] { color: var(--mc-green); text-shadow: .07em .07em 0 var(--mc-green-sh), 0 0 30px var(--derby-shade); }
+.derby__splash[data-tone="lost"] { color: var(--mc-white); text-shadow: .07em .07em 0 var(--mc-white-sh), 0 0 30px var(--derby-shade); }
+@keyframes derby-splash {
+  0% { transform: translate(-50%, -50%) rotate(-8deg) scale(.4); opacity: 0; }
+  14% { transform: translate(-50%, -50%) rotate(-8deg) scale(1.12); opacity: 1; }
+  24%, 70% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -60%) rotate(-8deg) scale(.96); opacity: 0; }
+}
+
+.derby__result {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 24px);
+  padding: 10px 16px 10px 10px;
+  background: var(--derby-tip);
+  box-shadow: 0 0 0 var(--derby-px) var(--derby-tip), inset 0 0 0 var(--derby-px) var(--derby-tip-e1), inset 0 calc(var(--derby-px) * -2) 0 var(--derby-tip-e2), var(--derby-cast);
+  pointer-events: none;
+  animation: derby-in 320ms var(--derby-ease);
+}
+.derby__result[hidden] { display: none; }
+@keyframes derby-in { from { transform: scale(.85); opacity: 0; } }
+.derby__slot { display: grid; place-items: center; flex: none; width: 54px; height: 54px; background: var(--derby-slot); box-shadow: inset var(--derby-px) var(--derby-px) 0 var(--derby-slot-lo), inset calc(var(--derby-px) * -1) calc(var(--derby-px) * -1) 0 var(--derby-slot-hi); }
+.derby__slot img { width: 36px; height: 36px; image-rendering: pixelated; }
+.derby__resulttxt { display: grid; gap: 3px; min-width: 0; }
+.derby__resultname { color: var(--mc-yellow); font: 800 1.0625rem/1.15 var(--derby-ui); text-shadow: 2px 2px 0 var(--mc-yellow-sh); }
+.derby__resultkind { color: var(--mc-gray); font: 600 .75rem/1.25 var(--derby-ui); }
+.derby__resultpay { color: var(--mc-green); font: 800 .9375rem/1.2 var(--derby-ui); font-variant-numeric: tabular-nums; text-shadow: 2px 2px 0 var(--mc-green-sh); }
+.derby__result[data-tone="none"] .derby__resultpay { color: var(--mc-red); text-shadow: 2px 2px 0 var(--mc-red-sh); }
+.derby__result[data-tone="big"] .derby__resultpay { color: var(--mc-gold); text-shadow: 2px 2px 0 var(--mc-gold-sh); }
+
+/* ─────────── the panel (the frame in luxe-games.css styles the stake field and the button) ─────────── */
+.derby__panel { grid-area: panel; min-width: 0; }
+.derby__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.derby__field { display: flex; align-items: center; }
+.derby__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.derby__field input:focus { outline: none; }
+.derby__adj { cursor: pointer; }
+.derby__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* The field: six racers, one backed. */
+.derby__picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.derby__pick {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-areas: "face name" "face odds";
+  column-gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--lx-quick) var(--lx-ease), background var(--lx-quick) var(--lx-ease);
+}
+.derby__pick img { grid-area: face; width: 32px; height: 32px; image-rendering: pixelated; }
+.derby__pick b { grid-area: name; font: 800 .8125rem/1.2 var(--derby-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.derby__odds { grid-area: odds; color: var(--lx-gold); font: 800 .75rem/1.2 var(--derby-ui); font-variant-numeric: tabular-nums; }
+.derby__chance { display: none; }
+.derby__pick:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--lx-5); }
+.derby__pick[aria-checked="true"] { background: var(--lx-gold-wash); box-shadow: inset 0 0 0 2px var(--lx-gold); }
+.derby__pick:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.derby__pick:disabled { cursor: not-allowed; opacity: .6; }
+.derby__pick[aria-checked="true"]:disabled { opacity: 1; }
+
+.derby .derby__go:active:not(:disabled) { transform: translateY(1px); }
+.derby .derby__go:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; }
+.derby .derby__go[aria-busy="true"] { cursor: progress; }
+
+.derby__toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
+.derby__toggle,
+.derby__paytable { height: 40px; border: 0; border-radius: var(--lx-r-s); background: var(--lx-4); color: var(--lx-ink); font: 700 .875rem/1 var(--derby-ui); cursor: pointer; transition: background var(--lx-quick) var(--lx-ease); }
+.derby__toggle:hover:not(:disabled),
+.derby__paytable:hover { background: var(--lx-5); }
+.derby__toggle:focus-visible,
+.derby__paytable:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.derby__toggle[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.derby__toggle:disabled { cursor: not-allowed; opacity: .5; }
+.derby__paytable { background: transparent; box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-mute); }
+.derby__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.derby__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); margin: 0; }
+.derby__stats div { padding: var(--lx-s2) 6px; border-radius: var(--lx-r-s); background: var(--lx-0); text-align: center; min-width: 0; }
+.derby__stats dt { color: var(--lx-faint); font: 600 .6875rem/1.2 var(--derby-ui); }
+.derby__stats dd { margin: 3px 0 0; color: var(--lx-ink); font: 800 .875rem/1.2 var(--derby-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.derby__log { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.derby__logitem { display: grid; justify-items: center; gap: 2px; padding: 6px 2px 5px; border-radius: var(--lx-r-s); background: var(--lx-0); min-width: 0; }
+.derby__logitem img { width: 24px; height: 24px; image-rendering: pixelated; }
+.derby__logitem span { color: var(--lx-gold); font: 700 .6875rem/1 var(--derby-ui); font-variant-numeric: tabular-nums; }
+.derby__logitem[data-won="0"] img { opacity: .5; }
+.derby__logitem[data-won="0"] span { color: var(--lx-faint); }
+.derby__logempty { margin: 0; color: var(--lx-faint); font: 500 .75rem/1.3 var(--derby-ui); }
+.derby__logempty[hidden] { display: none; }
+
+.derby__gfx { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); color: var(--lx-faint); font: 600 .75rem/1.2 var(--derby-ui); }
+.derby__gfx select { height: 32px; padding: 0 var(--lx-s2); border: 0; border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-ink); font: 700 .8125rem/1 var(--derby-ui); cursor: pointer; }
+.derby__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.derby__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
+.derby__say { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ─────────── how it works, in the site's modal ─────────── */
+.derbypay { display: grid; gap: var(--lx-s3, 12px); }
+.derbypay__sub { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--derby-ui); }
+.derbypay__scroll { overflow-x: auto; }
+.derbypay__table { width: 100%; border-collapse: separate; border-spacing: 0 3px; font: 600 .8125rem/1.2 var(--derby-ui); }
+.derbypay__table thead th { padding: 4px 8px; color: var(--lx-faint); font-weight: 700; text-align: right; }
+.derbypay__table thead th:first-child { text-align: left; }
+.derbypay__table tbody th,
+.derbypay__table td { padding: 5px 8px; background: var(--lx-0); vertical-align: middle; }
+.derbypay__table tbody th { color: var(--mc-white); text-align: left; white-space: nowrap; }
+.derbypay__table td { text-align: right; white-space: nowrap; color: var(--lx-mute); }
+.derbypay__table td b { color: var(--lx-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+.derbypay__item { display: inline-flex; align-items: center; gap: 8px; }
+.derbypay__item img { width: 20px; height: 20px; image-rendering: pixelated; }
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .derby { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .derby__track { height: auto; aspect-ratio: 4 / 3.2; }
+  .derby__picks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .derby__track { aspect-ratio: 4 / 4.4; }
+  .derby__big { font-size: 1.25rem; }
+  .derby__order { left: 8px; bottom: 8px; padding: 4px; }
+  .derby__order li span { display: none; }
+  .derby__result { right: 8px; bottom: 8px; gap: 8px; padding: 8px 12px 8px 8px; max-width: calc(100% - 96px); }
+  .derby__resultkind { display: none; }
+  .derby__slot { width: 40px; height: 40px; }
+  .derby__slot img { width: 28px; height: 28px; }
+  .derby__picks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .derby__pick,
+  .derby__toggle,
+  .derby__paytable { transition: none; }
+  .derby__result,
+  .derby__splash,
+  .derby__hud[data-state="countdown"] .derby__big { animation: none; }
+}

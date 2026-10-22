@@ -207,6 +207,9 @@ function gameCell(play) {
                 : kind === 'chicken' ? '\u25BA'
                 : kind === 'plinko' ? '\u25CF'
                 : kind === 'dice' ? '\u2684'
+                : kind === 'fishing' ? '\u2693'
+                : kind === 'icefishing' ? '\u2744'
+                : kind === 'derby' ? '\u265e'
                 : kind === 'slots' ? '\u25C8'
                 : kind === 'coinflip' ? '\u25D0'
                 : kind === 'minesduel' ? '\u25A6'
@@ -286,6 +289,9 @@ function gameLabel(play) {
   if (kind === 'chicken') return 'Chicken';
   if (kind === 'plinko') return 'Plinko';
   if (kind === 'dice') return 'Dice';
+  if (kind === 'fishing') return 'Fishing';
+  if (kind === 'icefishing') return 'Ice Fishing';
+  if (kind === 'derby') return 'Mob Derby';
   // Both machines report as slots; the row carries which one (Ore Rush or Ocean Monument).
   if (kind === 'slots') return play.sourceName || play.source_name || 'Ore Rush';
   if (kind === 'coinflip') return 'Coinflip';

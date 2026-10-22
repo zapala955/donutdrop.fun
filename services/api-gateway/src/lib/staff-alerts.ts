@@ -108,6 +108,18 @@ const ROUNDS_SQL = `
   SELECT b.id, 'Dice', b.user_id, b.stake_minor, b.payout_minor, b.created_at
     FROM dice_bets b WHERE b.created_at >= now() - make_interval(mins => $1)
   UNION ALL
+  SELECT c.id, 'Fishing', c.user_id, c.stake_minor, c.payout_minor, c.settled_at
+    FROM fishing_casts c
+   WHERE c.status <> 'open' AND c.settled_at >= now() - make_interval(mins => $1)
+  UNION ALL
+  SELECT g.id, 'Ice Fishing', g.user_id, g.stake_minor, g.payout_minor, g.settled_at
+    FROM ice_fishing_games g
+   WHERE g.status = 'settled' AND g.settled_at >= now() - make_interval(mins => $1)
+  UNION ALL
+  SELECT r.id, 'Mob Derby', r.user_id, r.stake_minor, r.payout_minor, r.created_at
+    FROM derby_races r
+   WHERE r.created_at >= now() - make_interval(mins => $1)
+  UNION ALL
   SELECT g.id, 'Coinflip', g.winner_user_id, g.stake_minor, g.payout_minor, g.settled_at
     FROM coinflip_games g
    WHERE g.status = 'settled' AND g.winner_user_id IS NOT NULL

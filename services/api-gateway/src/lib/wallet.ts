@@ -94,6 +94,15 @@ export type WalletKind =
    * afternoon on 2026-10-04, was retired, and came back on 2026-10-17; the kind never left the
    * ledger. The stake itself is a debit, written by the route. */
   | 'dice_payout'
+  /* Fishing: what a cast caught, stake included when it paid more. Referenced by the cast's id; the
+   * stake itself is a debit, written by the route. */
+  | 'fishing_payout'
+  /* Ice Fishing: what a game on the ice paid when the player pulled out. Referenced by the game's id;
+   * the stake itself is a debit, written by the route. */
+  | 'ice_fishing_payout'
+  /* Mob Derby: a winning pick's odds, stake included. Referenced by the race's id; the stake itself
+   * is a debit, written by the route. */
+  | 'derby_payout'
   /* Discord: the one-off reward for joining the server and linking an account, the daily reward
    * for wearing the server's tag, and the inviter's reward when somebody they brought in links.
    * Each is referenced so the ledger's unique index is what makes a second payment impossible. */

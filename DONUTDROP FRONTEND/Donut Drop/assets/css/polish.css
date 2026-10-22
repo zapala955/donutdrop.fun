@@ -440,6 +440,9 @@
 .gamechip[data-kind="plinko"]    { border-color: rgba(255, 34, 34, .38); }
 .gamechip[data-kind="slots"]     { border-color: rgba(85, 255, 255, .38); }
 .gamechip[data-kind="dice"]      { border-color: rgba(243, 239, 228, .34); }
+.gamechip[data-kind="fishing"]   { border-color: rgba(63, 118, 228, .45); }
+.gamechip[data-kind="icefishing"]   { border-color: rgba(158, 195, 255, .45); }
+.gamechip[data-kind="derby"]   { border-color: rgba(162, 131, 79, .45); }
 .gamechip[data-kind="tower"]     { border-color: rgba(181, 124, 255, .4); }
 .gamechip[data-kind="chicken"]   { border-color: rgba(242, 165, 26, .4); }
 .gamechip[data-kind="minesduel"] { border-color: rgba(64, 214, 224, .38); }

@@ -1,0 +1,338 @@
+/* Hallmark · component: ice fishing · genre: atmospheric, Minecraft-literal · theme: luxe tokens, plus
+ *           Minecraft's own chat colours lifted into the token block below
+ * states: the game -- idle, in play (the multiplier climbing, the next fish priced), pulled out,
+ *         through thin ice (3D in icefishing3d.js; the flat lake here is a grid of ice blocks with
+ *         the same states: closed, a fish, thin ice, broken through); the thin-ice count -- a number
+ *         and quick picks; the one button -- Start, then Pull out (breathing gold), busy, disabled;
+ *         Random hole; the graphics.
+ * signature: Mines on a frozen lake. The multiplier is drawn big over the ice in the game's chat
+ *            colours, each fish shown as the game shows an item, thin ice cracked open.
+ * type: the site's faces only; the pixel identity is the block and item sprites, pixel-sharp.
+ * motion: the result swells, the splash pops, Pull out breathes. Reduced motion: none of it.
+ */
+
+:is(.icefish, .icepay) {
+  --mc-yellow: #ffff55;  --mc-yellow-sh: #3f3f15;
+  --mc-gold: #ffaa00;    --mc-gold-sh: #2a2a00;
+  --mc-green: #55ff55;   --mc-green-sh: #153f15;
+  --mc-aqua: #55ffff;    --mc-aqua-sh: #153f3f;
+  --mc-red: #ff5555;     --mc-red-sh: #3f1515;
+  --mc-gray: #aaaaaa;    --mc-gray-sh: #2a2a2a;
+  --mc-white: #ffffff;   --mc-white-sh: #3f3f3f;
+  --mc-ink: #000000;
+
+  --ice-tip: rgba(16, 0, 16, .9);
+  --ice-tip-e1: #5000ff;
+  --ice-tip-e2: #28007f;
+  --ice-slot: #8b8b8b;
+  --ice-slot-hi: #ffffff;
+  --ice-slot-lo: #373737;
+  --ice-glass: rgba(6, 12, 28, .58);
+  --ice-shade: rgba(0, 0, 0, .55);
+  --ice-cast: 0 24px 48px -24px rgba(0, 0, 0, .9);
+  --ice-glow: rgba(255, 196, 64, .55);
+  --ice-night-top: #050a1c;
+  --ice-night-low: #1a2a55;
+  --ice-lake: #9ec3ff;
+  --ice-crack: #ff9a9a;
+  --ice-water: #0c2650;
+  --ice-vignette: rgba(2, 6, 18, .42);
+
+  --ice-ui: var(--lx-ui, system-ui, sans-serif);
+  --ice-display: var(--lx-display, var(--lx-ui, system-ui, sans-serif));
+  --ice-ease: cubic-bezier(.22, 1, .36, 1);
+  --ice-px: 3px;
+}
+
+.icefish {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the lake ─────────── */
+.icefish__stage { grid-area: stage; display: grid; min-width: 0; padding: 0; overflow: hidden; }
+.icefish__lake { position: relative; min-height: 0; height: 100%; overflow: hidden; border-radius: inherit; touch-action: pan-y; }
+.icefish__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; cursor: grab; }
+.icefish__gl:active { cursor: grabbing; }
+.icefish__lake::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 50%, transparent 60%, var(--ice-vignette));
+  pointer-events: none;
+}
+
+/* The flat lake, for a browser without WebGL: the night over it and a grid of ice blocks. */
+.icefish__flat {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(var(--ice-night-top), var(--ice-night-low) 30%, var(--ice-lake) 30%);
+}
+.icefish[data-render="3d"] .icefish__flat { display: none; }
+.icefish__grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(78%, 56vh); aspect-ratio: 1; margin-top: 14%; }
+.icefish__grid button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: url("../img/block/ice.png") 0 0 / 100% 100%;
+  image-rendering: pixelated;
+  box-shadow: inset 0 0 0 2px var(--ice-slot-lo);
+  cursor: pointer;
+}
+.icefish__grid button:hover:not(:disabled) { box-shadow: inset 0 0 0 3px var(--mc-white); }
+.icefish__grid button:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.icefish__grid button:disabled { cursor: default; }
+.icefish__grid button[data-state="fish"] { background: var(--ice-water); }
+.icefish__grid button[data-state="thin"] { background: url("../img/block/frosted_ice_3.png") 0 0 / 100% 100%, var(--ice-water); opacity: .7; }
+.icefish__grid button[data-state="broke"] { background: url("../img/block/frosted_ice_3.png") 0 0 / 100% 100%, var(--ice-water); box-shadow: inset 0 0 0 3px var(--ice-crack); }
+.icefish__grid img { width: 70%; height: 70%; image-rendering: pixelated; }
+.icefish__grid img[hidden] { display: none; }
+
+/* ── the HUD: the multiplier, big, and the next fish priced under it ── */
+.icefish__hud {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  --tone-ink: var(--mc-white);
+  --tone-shade: var(--mc-white-sh);
+}
+.icefish__mult {
+  margin: 0;
+  color: var(--tone-ink);
+  font: 900 clamp(2rem, 5vw, 3.5rem)/1 var(--ice-display);
+  font-variant-numeric: tabular-nums;
+  text-shadow: .06em .06em 0 var(--tone-shade), 0 0 28px var(--ice-shade);
+}
+.icefish__status { margin: 0; color: var(--mc-white); font: 700 .875rem/1.3 var(--ice-ui); text-shadow: 2px 2px 0 var(--mc-ink), 0 0 12px var(--ice-shade); }
+.icefish__hud[data-state="idle"] .icefish__mult { opacity: .55; }
+.icefish__hud[data-state="play"] { --tone-ink: var(--mc-yellow); --tone-shade: var(--mc-yellow-sh); }
+.icefish__hud[data-state="won"] { --tone-ink: var(--mc-green); --tone-shade: var(--mc-green-sh); }
+.icefish__hud[data-state="won"] .icefish__mult { animation: icefish-swell 520ms var(--ice-ease); }
+.icefish__hud[data-state="lost"] { --tone-ink: var(--mc-red); --tone-shade: var(--mc-red-sh); }
+@keyframes icefish-swell { 40% { transform: scale(1.18); } }
+
+.icefish__slot {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--ice-slot);
+  box-shadow: inset 2px 2px 0 var(--ice-slot-lo), inset -2px -2px 0 var(--ice-slot-hi);
+}
+.icefish__slot img { width: 28px; height: 28px; image-rendering: pixelated; }
+.icefish__slot--big { width: 54px; height: 54px; flex: none; }
+.icefish__slot--big img { width: 36px; height: 36px; }
+
+.icefish__recent { position: absolute; left: 12px; bottom: 12px; z-index: 3; display: flex; flex-wrap: wrap; gap: 4px; max-width: 34%; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.icefish__recent li {
+  padding: 4px 7px;
+  border-radius: var(--lx-r-s);
+  background: var(--ice-glass);
+  color: var(--mc-green);
+  font: 800 .75rem/1 var(--ice-ui);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 1px 0 var(--mc-green-sh);
+}
+.icefish__recent li[data-won="0"] { color: var(--mc-gray); text-shadow: 1px 1px 0 var(--mc-gray-sh); }
+
+.icefish__splash {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  z-index: 5;
+  margin: 0;
+  color: var(--mc-yellow);
+  font: 900 clamp(2rem, 5.5vw, 3.75rem)/1 var(--ice-display);
+  text-transform: uppercase;
+  text-shadow: .07em .07em 0 var(--mc-yellow-sh), 0 0 30px var(--ice-shade);
+  transform: translate(-50%, -50%) rotate(-8deg);
+  pointer-events: none;
+  animation: icefish-splash 1.7s var(--ice-ease) forwards;
+}
+.icefish__splash[hidden] { display: none; }
+.icefish__splash[data-tone="big"] { color: var(--mc-gold); text-shadow: .07em .07em 0 var(--mc-gold-sh), 0 0 40px var(--ice-glow); }
+.icefish__splash[data-tone="won"] { color: var(--mc-green); text-shadow: .07em .07em 0 var(--mc-green-sh), 0 0 30px var(--ice-shade); }
+.icefish__splash[data-tone="lost"] { color: var(--mc-red); text-shadow: .07em .07em 0 var(--mc-red-sh), 0 0 30px var(--ice-shade); }
+@keyframes icefish-splash {
+  0% { transform: translate(-50%, -50%) rotate(-8deg) scale(.4); opacity: 0; }
+  14% { transform: translate(-50%, -50%) rotate(-8deg) scale(1.12); opacity: 1; }
+  24%, 70% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -60%) rotate(-8deg) scale(.96); opacity: 0; }
+}
+
+/* The catch, as the game shows an item: its sprite in a slot and a tooltip beside it. */
+.icefish__catch {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 24px);
+  padding: 10px 16px 10px 10px;
+  background: var(--ice-tip);
+  box-shadow: 0 0 0 var(--ice-px) var(--ice-tip), inset 0 0 0 var(--ice-px) var(--ice-tip-e1), inset 0 calc(var(--ice-px) * -2) 0 var(--ice-tip-e2), var(--ice-cast);
+  pointer-events: none;
+  animation: icefish-pop 320ms var(--ice-ease);
+}
+.icefish__catch[hidden] { display: none; }
+@keyframes icefish-pop { from { transform: scale(.85); opacity: 0; } }
+.icefish__catchtxt { display: grid; gap: 3px; min-width: 0; }
+.icefish__catchname { color: var(--mc-yellow); font: 800 1.0625rem/1.15 var(--ice-ui); text-shadow: 2px 2px 0 var(--mc-yellow-sh); }
+.icefish__catchkind { color: var(--mc-gray); font: 600 .75rem/1.25 var(--ice-ui); }
+.icefish__catchpay { color: var(--mc-green); font: 800 .9375rem/1.2 var(--ice-ui); font-variant-numeric: tabular-nums; text-shadow: 2px 2px 0 var(--mc-green-sh); }
+.icefish__catch[data-tone="none"] .icefish__catchname { color: var(--mc-gray); text-shadow: 2px 2px 0 var(--mc-gray-sh); }
+.icefish__catch[data-tone="none"] .icefish__catchpay { color: var(--mc-red); text-shadow: 2px 2px 0 var(--mc-red-sh); }
+.icefish__catch[data-tone="big"] .icefish__catchpay { color: var(--mc-gold); text-shadow: 2px 2px 0 var(--mc-gold-sh); }
+
+/* ─────────── the panel (the frame in luxe-games.css styles the stake field and the button) ─────────── */
+.icefish__panel { grid-area: panel; min-width: 0; }
+.icefish__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.icefish__field { display: flex; align-items: center; }
+.icefish__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.icefish__field input:focus { outline: none; }
+.icefish__adj { cursor: pointer; }
+.icefish__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* The thin ice: how many of the twenty-five holes, as a number and quick picks. */
+.icefish__thin { display: grid; grid-template-columns: minmax(56px, 1.4fr) repeat(5, minmax(0, 1fr)); gap: 4px; }
+.icefish__thin input {
+  height: 38px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  font: 800 .9375rem/1 var(--ice-ui);
+  font-variant-numeric: tabular-nums;
+}
+.icefish__thin input:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.icefish__quick {
+  height: 38px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 800 .8125rem/1 var(--ice-ui);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.icefish__quick:hover:not(:disabled) { background: var(--lx-5); }
+.icefish__quick:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.icefish__quick[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.icefish__quick:disabled,
+.icefish__thin input:disabled { cursor: not-allowed; opacity: .55; }
+.icefish__quick[aria-pressed="true"]:disabled { opacity: 1; }
+.icefish__thinnote { margin: 0; color: var(--lx-faint); font: 600 .75rem/1.3 var(--ice-ui); font-variant-numeric: tabular-nums; }
+
+/* The one button: Start, then Pull out, breathing gold while there is something to pull out. */
+body.lx .icefish .icefish__go[data-tone="cash"]:not(:disabled),
+.icefish .icefish__go[data-tone="cash"]:not(:disabled) {
+  background: var(--lx-gold-hi);
+  box-shadow: 0 0 0 3px var(--ice-glow), var(--lx-shade);
+  animation: icefish-breathe 900ms ease-in-out infinite;
+}
+@keyframes icefish-breathe { 50% { box-shadow: 0 0 0 6px var(--ice-glow), var(--lx-shade); } }
+
+.icefish .icefish__go:active:not(:disabled) { transform: translateY(1px); }
+.icefish .icefish__go:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; }
+.icefish .icefish__go[aria-busy="true"] { cursor: progress; }
+
+.icefish__toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
+.icefish__toggle,
+.icefish__paytable {
+  height: 40px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .875rem/1 var(--ice-ui);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.icefish__toggle:hover:not(:disabled),
+.icefish__paytable:hover { background: var(--lx-5); }
+.icefish__toggle:focus-visible,
+.icefish__paytable:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.icefish__toggle[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.icefish__toggle:disabled { cursor: not-allowed; opacity: .5; }
+.icefish__paytable { background: transparent; box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-mute); }
+.icefish__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.icefish__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); margin: 0; }
+.icefish__stats div { padding: var(--lx-s2) 6px; border-radius: var(--lx-r-s); background: var(--lx-0); text-align: center; min-width: 0; }
+.icefish__stats dt { color: var(--lx-faint); font: 600 .6875rem/1.2 var(--ice-ui); }
+.icefish__stats dd { margin: 3px 0 0; color: var(--lx-ink); font: 800 .875rem/1.2 var(--ice-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.icefish__log { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.icefish__logitem { display: grid; justify-items: center; gap: 2px; padding: 6px 2px 5px; border-radius: var(--lx-r-s); background: var(--lx-0); min-width: 0; }
+.icefish__logitem img { width: 24px; height: 24px; image-rendering: pixelated; }
+.icefish__logitem span { color: var(--lx-gold); font: 700 .6875rem/1 var(--ice-ui); font-variant-numeric: tabular-nums; }
+.icefish__logitem[data-won="0"] img { opacity: .5; }
+.icefish__logitem[data-won="0"] span { color: var(--lx-faint); }
+.icefish__logempty { margin: 0; color: var(--lx-faint); font: 500 .75rem/1.3 var(--ice-ui); }
+.icefish__logempty[hidden] { display: none; }
+
+.icefish__gfx { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); color: var(--lx-faint); font: 600 .75rem/1.2 var(--ice-ui); }
+.icefish__gfx select { height: 32px; padding: 0 var(--lx-s2); border: 0; border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-ink); font: 700 .8125rem/1 var(--ice-ui); cursor: pointer; }
+.icefish__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.icefish__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
+.icefish__say { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ─────────── how it works, in the site's modal ─────────── */
+.icepay { display: grid; gap: var(--lx-s3, 12px); }
+.icepay__sub { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--ice-ui); }
+.icepay__scroll { overflow-x: auto; }
+.icepay__table { width: 100%; border-collapse: separate; border-spacing: 0 3px; font: 600 .8125rem/1.2 var(--ice-ui); }
+.icepay__table thead th { padding: 4px 8px; color: var(--lx-faint); font-weight: 700; text-align: right; }
+.icepay__table thead th:first-child { text-align: left; }
+.icepay__table tbody th,
+.icepay__table td { padding: 5px 8px; background: var(--lx-0); vertical-align: middle; }
+.icepay__table tbody th { color: var(--mc-white); text-align: left; white-space: nowrap; }
+.icepay__table td { text-align: right; white-space: nowrap; color: var(--lx-mute); }
+.icepay__table td b { color: var(--lx-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+.icepay__item { display: inline-flex; align-items: center; gap: 8px; }
+.icepay__item img { width: 20px; height: 20px; image-rendering: pixelated; }
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .icefish { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .icefish__lake { height: auto; aspect-ratio: 4 / 3.4; }
+}
+@media (max-width: 640px) {
+  .icefish__lake { aspect-ratio: 4 / 4.8; }
+  .icefish__grid { width: 86%; margin-top: 18%; gap: 4px; }
+  .icefish__catch { left: 8px; right: 8px; bottom: 8px; gap: 8px; padding: 8px 12px 8px 8px; }
+  .icefish__recent { display: none; }
+  .icefish__catchname { font-size: .9375rem; }
+  .icefish__catchkind { display: none; }
+  .icefish__slot { width: 34px; height: 34px; }
+  .icefish__slot img { width: 22px; height: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icefish__quick,
+  .icefish__toggle,
+  .icefish__paytable { transition: none; }
+  .icefish__catch,
+  .icefish__splash,
+  .icefish__mult,
+  .icefish .icefish__go[data-tone="cash"] { animation: none; }
+}

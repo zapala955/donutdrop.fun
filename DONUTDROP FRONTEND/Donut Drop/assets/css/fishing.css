@@ -1,0 +1,633 @@
+/* Hallmark · component: fishing · genre: atmospheric, Minecraft-literal · theme: luxe tokens, plus
+ *           Minecraft's own chat colours lifted into the token block below
+ * states: the cast -- idle, the lure going under, diving, reeled up, cut (3D in fishing3d.js; the
+ *         flat pond here does the same in CSS); the HUD's multiplier in its catch's colour as it
+ *         climbs, the depth under it; the ladder's rungs -- ahead, on, passed; a new depth's name
+ *         across the sea; the one button -- Cast, Reel up (pulsing gold), busy, disabled, and the
+ *         frame's hover / :focus-visible / :active; the sinker -- a radio group, one checked; Auto
+ *         cast; the graphics.
+ * signature: a deep dive on a fishing line. The multiplier is drawn big over the sea in the colour
+ *            of the catch on the hook and the depth under it, the catch ladder runs down the side in
+ *            inventory slots, each new depth is titled as the game titles a place, the deep darkens
+ *            the edges, and a cut flashes them red.
+ * type: the site's faces only; the pixel identity is the sprites, drawn pixel-sharp.
+ * motion: the multiplier swells on each new rung, a depth's title fades in and out, Reel up
+ *         breathes, a cut shakes the HUD. Reduced motion: none of it loops, shakes or fades.
+ */
+
+:is(.fishing, .fishpay) {
+  /* Minecraft's chat colours, and their shadows (each the colour at a quarter). */
+  --mc-yellow: #ffff55;  --mc-yellow-sh: #3f3f15;
+  --mc-gold: #ffaa00;    --mc-gold-sh: #2a2a00;
+  --mc-green: #55ff55;   --mc-green-sh: #153f15;
+  --mc-aqua: #55ffff;    --mc-aqua-sh: #153f3f;
+  --mc-red: #ff5555;     --mc-red-sh: #3f1515;
+  --mc-gray: #aaaaaa;    --mc-gray-sh: #2a2a2a;
+  --mc-white: #ffffff;   --mc-white-sh: #3f3f3f;
+  --mc-pink: #ff55ff;    --mc-pink-sh: #3f153f;
+  --mc-ink: #000000;
+
+  /* The item tooltip and the inventory slot. */
+  --fish-tip: rgba(16, 0, 16, .9);
+  --fish-tip-e1: #5000ff;
+  --fish-tip-e2: #28007f;
+  --fish-slot: #8b8b8b;
+  --fish-slot-hi: #ffffff;
+  --fish-slot-lo: #373737;
+  --fish-cast: 0 24px 48px -24px rgba(0, 0, 0, .9);
+  --fish-glass: rgba(6, 10, 18, .55);
+  --fish-glass-edge: rgba(255, 255, 255, .1);
+  --fish-hud-shade: rgba(0, 0, 0, .55);
+  --fish-snap: rgba(255, 40, 40, .45);
+  --fish-land-glow: rgba(255, 196, 64, .55);
+
+  /* A depth's title, and the water closing in round the edges as the lure goes down. */
+  --fish-zone-ink: #ffffff;
+  --fish-zone-sub: #55ffff;
+  --fish-depth: #9fe8ff;
+  --fish-vignette: rgba(4, 8, 16, .38);
+
+  /* The flat pond: a sunset over the ocean. */
+  --fish-sky-top: #3a5fa8;
+  --fish-sky-low: #f2a36b;
+  --fish-water: #2f5fd8;
+  --fish-water-deep: #10306f;
+
+  --fish-ui: var(--lx-ui, system-ui, sans-serif);
+  --fish-display: var(--lx-display, var(--lx-ui, system-ui, sans-serif));
+  --fish-ease: cubic-bezier(.22, 1, .36, 1);
+  --fish-px: 3px; /* one Minecraft GUI pixel at this scale */
+}
+/* Under the water the edges darken with the depth; each depth's title in its own colour. */
+.fishing[data-under="1"] { --fish-vignette: rgba(2, 18, 34, .45); }
+.fishing[data-under="1"][data-zone="wreck"],
+.fishing[data-under="1"][data-zone="monument"] { --fish-vignette: rgba(0, 10, 22, .58); }
+.fishing[data-under="1"][data-zone="abyss"],
+.fishing[data-under="1"][data-zone="city"] { --fish-vignette: rgba(0, 0, 6, .72); }
+.fishing__zone[data-zone="reef"] { --fish-zone-sub: #ff55ff; }
+.fishing__zone[data-zone="kelp"] { --fish-zone-sub: #55ff55; }
+.fishing__zone[data-zone="wreck"] { --fish-zone-sub: #ffaa00; }
+.fishing__zone[data-zone="monument"] { --fish-zone-sub: #55ffff; }
+.fishing__zone[data-zone="abyss"] { --fish-zone-sub: #aa00aa; }
+.fishing__zone[data-zone="city"] { --fish-zone-sub: #00aaaa; }
+
+.fishing {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the lake ─────────── */
+.fishing__stage { grid-area: stage; display: grid; min-width: 0; padding: 0; overflow: hidden; }
+.fishing__pond {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  touch-action: pan-y;
+}
+.fishing__gl {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+.fishing__gl:active { cursor: grabbing; }
+/* A soft vignette over the sea, so the eye stays on the boat and the line, closing in with the depth. */
+.fishing__pond::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 55%, transparent 58%, var(--fish-vignette));
+  pointer-events: none;
+  transition: box-shadow 200ms var(--fish-ease), background 1.2s var(--fish-ease);
+}
+/* A cut flashes the edges of the sea red. */
+.fishing__pond:has(.fishing__hud[data-state="snapped"])::after { box-shadow: inset 0 0 160px 20px var(--fish-snap); }
+
+/* The flat pond, for a browser without WebGL: sky, water, the dock's end and the line. */
+.fishing__flat {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--fish-sky-top), var(--fish-sky-low) 52%, var(--fish-water) 52%, var(--fish-water-deep));
+}
+.fishing[data-render="3d"] .fishing__flat { display: none; }
+.fishing__flat::before {
+  content: "";
+  position: absolute;
+  inset: 52% 0 0;
+  background: url("../img/block/water_still.png") 0 0 / 48px 1536px;
+  image-rendering: pixelated;
+  mix-blend-mode: multiply;
+  opacity: .55;
+}
+.fishing__flatdock {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 38%;
+  height: 22%;
+  background: url("../img/block/oak_planks.png") 0 0 / 48px 48px;
+  image-rendering: pixelated;
+  box-shadow: inset 0 var(--fish-px) 0 var(--fish-slot-hi), 0 0 0 var(--fish-px) var(--mc-ink);
+}
+.fishing__flatrod {
+  position: absolute;
+  left: 26%;
+  bottom: 20%;
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+  transform-origin: 10% 90%;
+}
+.fishing__flatbobber,
+.fishing__flatcatch {
+  position: absolute;
+  left: 62%;
+  top: 56%;
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.fishing__flatcatch { width: 72px; height: 72px; }
+.fishing__flat[data-state="cast"] .fishing__flatrod { animation: fishing-swing 420ms var(--fish-ease); }
+.fishing__flat[data-state="cast"] .fishing__flatbobber { animation: fishing-fly 520ms var(--fish-ease) forwards; }
+.fishing__flat[data-state="wait"] .fishing__flatbobber { opacity: 1; animation: fishing-bob 1.4s ease-in-out infinite; }
+.fishing__flat[data-state="fight"] .fishing__flatbobber { opacity: 1; animation: fishing-thrash 380ms ease-in-out infinite; }
+.fishing__flat[data-state="fight"] .fishing__flatrod { transform: rotate(-12deg); }
+.fishing__flat[data-state="caught"] .fishing__flatcatch { animation: fishing-hop 520ms var(--fish-ease) forwards; }
+.fishing__flat[data-state="snapped"] .fishing__flatbobber { animation: fishing-flung 700ms var(--fish-ease) forwards; }
+@keyframes fishing-swing { 40% { transform: rotate(-30deg); } }
+@keyframes fishing-fly {
+  from { left: 30%; top: 70%; opacity: 1; }
+  50% { top: 30%; }
+  to { left: 62%; top: 56%; opacity: 1; }
+}
+@keyframes fishing-bob { 50% { transform: translate(-50%, -38%); } }
+@keyframes fishing-thrash {
+  0%, 100% { transform: translate(-80%, -30%) rotate(-12deg); }
+  50% { transform: translate(-20%, -10%) rotate(12deg); }
+}
+@keyframes fishing-hop {
+  from { opacity: 1; top: 58%; transform: translate(-50%, -50%) scale(.5) rotate(-20deg); }
+  60% { top: 30%; }
+  to { opacity: 1; top: 40%; transform: translate(-50%, -50%) scale(1) rotate(0); }
+}
+@keyframes fishing-flung {
+  from { opacity: 1; }
+  40% { opacity: 1; top: 30%; left: 70%; }
+  to { opacity: 0; top: 60%; left: 78%; }
+}
+
+/* ── the HUD: the multiplier, big, in the colour of what is on the line ── */
+.fishing__hud {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  --tier-ink: var(--mc-white);
+  --tier-shade: var(--mc-white-sh);
+}
+.fishing__mult { display: flex; align-items: baseline; gap: 12px; margin: 0; }
+.fishing__mult b {
+  color: var(--tier-ink);
+  font: 900 clamp(2.4rem, 6vw, 4.25rem)/1 var(--fish-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+  text-shadow: .06em .06em 0 var(--tier-shade), 0 0 28px var(--fish-hud-shade);
+  transition: color 200ms var(--fish-ease);
+}
+.fishing__mult span {
+  color: var(--mc-green);
+  font: 800 1.125rem/1 var(--fish-ui);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 2px 2px 0 var(--mc-green-sh);
+}
+.fishing__mult span:empty { display: none; }
+.fishing__depth {
+  margin: 0;
+  color: var(--fish-depth);
+  font: 800 .8125rem/1.2 var(--fish-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  text-shadow: 2px 2px 0 var(--mc-ink), 0 0 12px var(--fish-hud-shade);
+}
+.fishing__depth:empty { display: none; }
+.fishing__status {
+  margin: 0;
+  color: var(--mc-white);
+  font: 700 .875rem/1.3 var(--fish-ui);
+  text-shadow: 2px 2px 0 var(--mc-ink), 0 0 12px var(--fish-hud-shade);
+}
+.fishing__hud[data-state="idle"] .fishing__mult,
+.fishing__hud[data-state="waiting"] .fishing__mult { opacity: .55; }
+/* The rungs: white for a cod, green, aqua, gold for treasure, pink for the enchanted. */
+.fishing__hud[data-tier="1"], .fishing__hud[data-tier="2"] { --tier-ink: var(--mc-green); --tier-shade: var(--mc-green-sh); }
+.fishing__hud[data-tier="3"] { --tier-ink: var(--mc-aqua); --tier-shade: var(--mc-aqua-sh); }
+.fishing__hud[data-kind="treasure"] { --tier-ink: var(--mc-gold); --tier-shade: var(--mc-gold-sh); }
+.fishing__hud[data-kind="enchanted"] { --tier-ink: var(--mc-pink); --tier-shade: var(--mc-pink-sh); }
+.fishing__hud[data-state="landed"] { --tier-ink: var(--mc-yellow); --tier-shade: var(--mc-yellow-sh); }
+.fishing__hud[data-state="landed"] .fishing__mult b { animation: fishing-swell 520ms var(--fish-ease); }
+.fishing__hud[data-state="snapped"] { --tier-ink: var(--mc-red); --tier-shade: var(--mc-red-sh); }
+.fishing__hud[data-state="snapped"] .fishing__mult b { animation: fishing-shake 420ms ease-in-out; }
+.fishing__hud[data-state="snapped"] .fishing__status { color: var(--mc-red); }
+@keyframes fishing-swell { 40% { transform: scale(1.18); } }
+@keyframes fishing-shake {
+  20% { transform: translateX(-8px) rotate(-2deg); }
+  40% { transform: translateX(7px) rotate(2deg); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(3px); }
+}
+
+/* The title screen's splash, over the lake: yellow for a landing, gold for a huge one, red for a snap. */
+.fishing__splash {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  z-index: 5;
+  margin: 0;
+  color: var(--mc-yellow);
+  font: 900 clamp(2rem, 5.5vw, 3.75rem)/1 var(--fish-display);
+  text-transform: uppercase;
+  text-shadow: .07em .07em 0 var(--mc-yellow-sh), 0 0 30px var(--fish-hud-shade);
+  transform: translate(-50%, -50%) rotate(-8deg);
+  pointer-events: none;
+  animation: fishing-splash 1.7s var(--fish-ease) forwards;
+}
+.fishing__splash[hidden] { display: none; }
+.fishing__splash[data-tone="big"] { color: var(--mc-gold); text-shadow: .07em .07em 0 var(--mc-gold-sh), 0 0 40px var(--fish-land-glow); }
+.fishing__splash[data-tone="snapped"] { color: var(--mc-red); text-shadow: .07em .07em 0 var(--mc-red-sh), 0 0 30px var(--fish-snap); }
+@keyframes fishing-splash {
+  0% { transform: translate(-50%, -50%) rotate(-8deg) scale(.4); opacity: 0; }
+  14% { transform: translate(-50%, -50%) rotate(-8deg) scale(1.12); opacity: 1; }
+  24%, 70% { transform: translate(-50%, -50%) rotate(-8deg) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -60%) rotate(-8deg) scale(.96); opacity: 0; }
+}
+
+/* A new depth, titled across the sea as the game titles a place: the name big, the depth under it. */
+.fishing__zone {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  animation: fishing-zone 2.4s var(--fish-ease) forwards;
+}
+.fishing__zone[hidden] { display: none; }
+.fishing__zone b {
+  color: var(--fish-zone-ink);
+  font: 900 clamp(1.5rem, 4vw, 2.6rem)/1 var(--fish-display);
+  letter-spacing: .02em;
+  text-shadow: .07em .07em 0 var(--mc-white-sh), 0 0 24px var(--fish-hud-shade);
+}
+.fishing__zone span {
+  color: var(--fish-zone-sub);
+  font: 800 .875rem/1.2 var(--fish-ui);
+  text-shadow: 2px 2px 0 var(--mc-ink);
+}
+@keyframes fishing-zone {
+  0% { opacity: 0; transform: translate(-50%, -40%); }
+  16%, 72% { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, -54%); }
+}
+
+/* ── the catch ladder, down the right of the sea, shallowest first ── */
+.fishing__ladder {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  background: var(--fish-glass);
+  box-shadow: inset 0 0 0 1px var(--fish-glass-edge);
+  border-radius: var(--lx-r-s);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fishing__ladder li {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "rung at";
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 2px 2px;
+  border-radius: var(--lx-r-s);
+  opacity: .5;
+  transition: opacity 200ms var(--fish-ease), background 200ms var(--fish-ease);
+}
+.fishing__rung {
+  grid-area: rung;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: var(--fish-slot);
+  box-shadow:
+    inset 2px 2px 0 var(--fish-slot-lo),
+    inset -2px -2px 0 var(--fish-slot-hi);
+}
+.fishing__rung img { width: 22px; height: 22px; image-rendering: pixelated; }
+.fishing__ladder b { grid-area: at; color: var(--mc-white); font: 800 .75rem/1 var(--fish-ui); font-variant-numeric: tabular-nums; text-shadow: 1px 1px 0 var(--mc-ink); }
+.fishing__rungname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fishing__ladder li[data-state="passed"] { opacity: .85; }
+.fishing__ladder li[data-state="on"] { opacity: 1; background: var(--fish-tip); box-shadow: inset 0 0 0 2px var(--fish-tip-e1); }
+.fishing__ladder li[data-state="on"] b { color: var(--mc-yellow); }
+.fishing__ladder li[data-kind="treasure"] b { color: var(--mc-gold); }
+.fishing__ladder li[data-kind="enchanted"] b { color: var(--mc-pink); }
+
+/* ── the last results, top left, as Crash shows its last rounds ── */
+.fishing__recent {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 32%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+.fishing__recent li {
+  padding: 4px 7px;
+  border-radius: var(--lx-r-s);
+  background: var(--fish-glass);
+  color: var(--mc-green);
+  font: 800 .75rem/1 var(--fish-ui);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 1px 0 var(--mc-green-sh);
+}
+.fishing__recent li[data-status="snapped"] { color: var(--mc-red); text-shadow: 1px 1px 0 var(--mc-red-sh); }
+
+/* The catch, as the game shows an item: its sprite in an inventory slot and a tooltip beside it. */
+.fishing__catch {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100% - 24px);
+  padding: 12px 18px 12px 12px;
+  background: var(--fish-tip);
+  box-shadow:
+    0 0 0 var(--fish-px) var(--fish-tip),
+    inset 0 0 0 var(--fish-px) var(--fish-tip-e1),
+    inset 0 calc(var(--fish-px) * -2) 0 var(--fish-tip-e2),
+    var(--fish-cast);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: fishing-pop 320ms var(--fish-ease);
+}
+.fishing__catch[hidden] { display: none; }
+@keyframes fishing-pop { from { transform: translateX(-50%) scale(.85); opacity: 0; } }
+.fishing__slot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 54px;
+  height: 54px;
+  background: var(--fish-slot);
+  box-shadow:
+    inset var(--fish-px) var(--fish-px) 0 var(--fish-slot-lo),
+    inset calc(var(--fish-px) * -1) calc(var(--fish-px) * -1) 0 var(--fish-slot-hi);
+}
+.fishing__slot img { width: 36px; height: 36px; image-rendering: pixelated; }
+.fishing__catchtxt { display: grid; gap: 3px; min-width: 0; }
+.fishing__catchname {
+  color: var(--mc-white);
+  font: 800 1.125rem/1.15 var(--fish-ui);
+  text-shadow: 2px 2px 0 var(--mc-white-sh);
+  overflow-wrap: anywhere;
+}
+.fishing__catch[data-kind="junk"] .fishing__catchname { color: var(--mc-gray); text-shadow: 2px 2px 0 var(--mc-gray-sh); }
+.fishing__catch[data-kind="treasure"] .fishing__catchname { color: var(--mc-yellow); text-shadow: 2px 2px 0 var(--mc-yellow-sh); }
+.fishing__catch[data-enchanted="1"] .fishing__catchname { color: var(--mc-aqua); text-shadow: 2px 2px 0 var(--mc-aqua-sh); }
+.fishing__catchkind { color: var(--mc-gray); font: 600 .75rem/1.2 var(--fish-ui); }
+.fishing__catchpay { color: var(--mc-green); font: 800 .9375rem/1.2 var(--fish-ui); font-variant-numeric: tabular-nums; text-shadow: 2px 2px 0 var(--mc-green-sh); }
+.fishing__catch[data-tone="none"] .fishing__catchpay { color: var(--mc-red); text-shadow: 2px 2px 0 var(--mc-red-sh); }
+.fishing__catch[data-tone="big"] .fishing__catchpay { color: var(--mc-gold); text-shadow: 2px 2px 0 var(--mc-gold-sh); }
+.fishing__catch[data-result="snapped"] { box-shadow: 0 0 0 var(--fish-px) var(--fish-tip), inset 0 0 0 var(--fish-px) var(--mc-red), var(--fish-cast); }
+.fishing__catch[data-tone="big"] { animation: fishing-pop 320ms var(--fish-ease), fishing-shine 1.6s ease-in-out 320ms 2; }
+@keyframes fishing-shine { 50% { box-shadow: 0 0 0 var(--fish-px) var(--fish-tip), inset 0 0 0 var(--fish-px) var(--mc-gold), inset 0 calc(var(--fish-px) * -2) 0 var(--fish-tip-e2), 0 0 28px var(--fish-land-glow); } }
+
+/* ─────────── the panel (the frame in luxe-games.css styles the stake field and the button) ─────────── */
+.fishing__panel { grid-area: panel; min-width: 0; }
+.fishing__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.fishing__field { display: flex; align-items: center; }
+.fishing__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
+.fishing__field input:focus { outline: none; }
+.fishing__field--x span { padding: 0 var(--lx-s3) 0 var(--lx-s2); }
+.fishing__adj { cursor: pointer; }
+.fishing__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* The sinker: the pace of the dive, one chosen. */
+.fishing__sinkers { display: grid; gap: 6px; }
+.fishing__sinker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name top" "note note";
+  gap: 2px 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--lx-quick) var(--lx-ease), background var(--lx-quick) var(--lx-ease);
+}
+.fishing__sinker b { grid-area: name; font: 800 .875rem/1.2 var(--fish-ui); }
+.fishing__sinkernote { grid-area: note; color: var(--lx-faint); font: 500 .75rem/1.3 var(--fish-ui); }
+.fishing__sinkertop { grid-area: top; color: var(--lx-gold); font: 800 .75rem/1.2 var(--fish-ui); font-variant-numeric: tabular-nums; align-self: center; }
+.fishing__sinker:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--lx-5); }
+.fishing__sinker[aria-checked="true"] { background: var(--lx-gold-wash); box-shadow: inset 0 0 0 2px var(--lx-gold); }
+.fishing__sinker:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.fishing__sinker:disabled { cursor: not-allowed; opacity: .6; }
+.fishing__sinker[aria-checked="true"]:disabled { opacity: 1; }
+
+/* The one button: Cast, then Reel up, breathing gold while there is something on the hook. */
+.fishing .fishing__go:active:not(:disabled) { transform: translateY(1px); }
+.fishing .fishing__go:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; }
+.fishing .fishing__go[aria-busy="true"] { cursor: progress; }
+body.lx .fishing .fishing__go[data-tone="land"],
+.fishing .fishing__go[data-tone="land"] {
+  background: var(--lx-gold-hi);
+  box-shadow: 0 0 0 3px var(--fish-land-glow), var(--lx-shade);
+  animation: fishing-breathe 900ms ease-in-out infinite;
+}
+@keyframes fishing-breathe { 50% { box-shadow: 0 0 0 6px var(--fish-land-glow), var(--lx-shade); } }
+
+.fishing__toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
+.fishing__toggle,
+.fishing__paytable {
+  height: 40px;
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .875rem/1 var(--fish-ui);
+  cursor: pointer;
+  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+}
+.fishing__toggle:hover:not(:disabled),
+.fishing__paytable:hover { background: var(--lx-5); }
+.fishing__toggle:active:not(:disabled),
+.fishing__paytable:active { transform: translateY(1px); }
+.fishing__toggle:focus-visible,
+.fishing__paytable:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.fishing__toggle[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+.fishing__toggle:disabled { cursor: not-allowed; opacity: .5; }
+.fishing__paytable { background: transparent; box-shadow: inset 0 0 0 2px var(--lx-4); color: var(--lx-mute); }
+
+.fishing__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
+.fishing__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lx-s2);
+  margin: 0;
+}
+.fishing__stats div { padding: var(--lx-s2) 6px; border-radius: var(--lx-r-s); background: var(--lx-0); text-align: center; min-width: 0; }
+.fishing__stats dt { color: var(--lx-faint); font: 600 .6875rem/1.2 var(--fish-ui); }
+.fishing__stats dd { margin: 3px 0 0; color: var(--lx-ink); font: 800 .875rem/1.2 var(--fish-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* The last casts, newest first: each catch with where it landed, or the snapped string. */
+.fishing__log {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fishing__logitem {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 2px 5px;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  min-width: 0;
+}
+.fishing__logitem img { width: 24px; height: 24px; image-rendering: pixelated; }
+.fishing__logitem span { color: var(--lx-gold); font: 700 .6875rem/1 var(--fish-ui); font-variant-numeric: tabular-nums; }
+.fishing__logitem[data-status="snapped"] img { opacity: .5; }
+.fishing__logitem[data-status="snapped"] span { color: var(--lx-loss); }
+.fishing__logempty { margin: 0; color: var(--lx-faint); font: 500 .75rem/1.3 var(--fish-ui); }
+.fishing__logempty[hidden] { display: none; }
+
+/* The graphics, last and quiet: what the sea asks of this machine. */
+.fishing__gfx { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); color: var(--lx-faint); font: 600 .75rem/1.2 var(--fish-ui); }
+.fishing__gfx select {
+  height: 32px;
+  padding: 0 var(--lx-s2);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--fish-ui);
+  cursor: pointer;
+}
+.fishing__gfx select:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--lx-5); }
+.fishing__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.fishing__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
+.fishing__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── how it works, in the site's modal ─────────── */
+.fishpay { display: grid; gap: var(--lx-s3, 12px); }
+.fishpay__sub { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--fish-ui); }
+.fishpay__scroll { overflow-x: auto; }
+.fishpay__table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font: 600 .8125rem/1.2 var(--fish-ui); }
+.fishpay__table thead th { padding: 4px 8px; color: var(--lx-faint); font-weight: 700; text-align: right; }
+.fishpay__table thead th:first-child { text-align: left; }
+.fishpay__table tbody th,
+.fishpay__table td { padding: 6px 8px; background: var(--lx-0); vertical-align: middle; }
+.fishpay__table tbody th { color: var(--mc-white); font-weight: 700; text-align: left; white-space: nowrap; }
+.fishpay__item { display: inline-flex; align-items: center; gap: 8px; }
+.fishpay__table tbody tr[data-kind="treasure"] th { color: var(--mc-yellow); }
+.fishpay__table tbody th img { width: 22px; height: 22px; image-rendering: pixelated; }
+.fishpay__table td { text-align: right; white-space: nowrap; }
+.fishpay__table td b { color: var(--lx-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .fishing { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  .fishing__pond { height: auto; aspect-ratio: 4 / 3.2; }
+  .fishing__sinkers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fishing__sinker { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "top" "note"; padding: 8px; }
+}
+@media (max-width: 640px) {
+  .fishing__pond { aspect-ratio: 4 / 4.6; }
+  .fishing__sinkernote { display: none; }
+  .fishing__ladder { right: 6px; gap: 2px; padding: 4px; }
+  .fishing__ladder li { grid-template-columns: auto; grid-template-areas: "rung"; padding: 1px; }
+  .fishing__ladder b { display: none; }
+  .fishing__rung { width: 22px; height: 22px; }
+  .fishing__rung img { width: 16px; height: 16px; }
+  .fishing__depth { font-size: .75rem; }
+  .fishing__zone { top: 40%; }
+  .fishing__recent { max-width: 45%; left: 8px; top: 8px; }
+  .fishing__recent li:nth-child(n + 5) { display: none; }
+  .fishing__hud { top: 34px; }
+  .fishing__catch { bottom: 92px; gap: 10px; padding: 8px 12px 8px 8px; }
+  .fishing__slot { width: 44px; height: 44px; }
+  .fishing__slot img { width: 28px; height: 28px; }
+  .fishing__catchname { font-size: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fishing__sinker,
+  .fishing__toggle,
+  .fishing__paytable,
+  .fishing__mult b,
+  .fishing__ladder li { transition: none; }
+  .fishing__catch,
+  .fishing__splash,
+  .fishing__zone,
+  .fishing__hud .fishing__mult b,
+  .fishing .fishing__go[data-tone="land"],
+  .fishing__flat[data-state] .fishing__flatrod,
+  .fishing__flat[data-state] .fishing__flatbobber,
+  .fishing__flat[data-state] .fishing__flatcatch { animation: none; }
+  .fishing__flat[data-state="caught"] .fishing__flatcatch { opacity: 1; top: 40%; }
+  .fishing__flat[data-state="cast"] .fishing__flatbobber { opacity: 1; }
+}
