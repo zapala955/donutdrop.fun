@@ -56,6 +56,25 @@ const MODULE_SCRIPT = /<script type="module" src="assets\/js\/([a-z0-9-]+\.js)(?
 const CLASSIC_SCRIPT = /<script src="assets\/js\/([a-z0-9-]+\.js)"><\/script>/g;
 const MODULE_PRELOAD = /^[ \t]*<link rel="modulepreload" href="[^"]+" \/>\r?\n/gm;
 
+/* A copyright line plus an invisible watermark, stamped onto the top of every file we ship. The
+ * visible line is a plain notice; the run of zero-width characters after it is a fingerprint that
+ * shows nothing on screen but rides along through any copy-paste or redistribution of the bytes.
+ * If this exact sequence turns up in someone else's bundle, they copied this build rather than
+ * wrote their own — the kind of evidence a DMCA notice wants. It is added after minification (as an
+ * esbuild `banner`, or prepended by hand to the css and classic scripts), so the minifier and
+ * `legalComments: 'none'` never strip it. Decode the mark by reversing `toWatermark`: U+200B is a
+ * 0 bit, U+200C a 1 bit, eight bits to a byte. Keep WATERMARK_TOKEN stable so copies made from any
+ * past release stay identifiable; it carries no secret, so it is fine in a public file. */
+const WATERMARK_TOKEN = 'DONUTLUXE-ORIGINAL-donutluxe.com';
+const toWatermark = (text) =>
+  [...text]
+    .flatMap((ch) => ch.codePointAt(0).toString(2).padStart(8, '0').split(''))
+    .map((bit) => (bit === '0' ? '​' : '‌'))
+    .join('');
+const WATERMARK = toWatermark(WATERMARK_TOKEN);
+const BANNER_JS = `/*! DonutLuxe — original source, donutluxe.com. (c) 2026. Unauthorised copying prohibited.${WATERMARK} */\n`;
+const BANNER_CSS = `/*! DonutLuxe — original source, donutluxe.com. (c) 2026. Unauthorised copying prohibited.${WATERMARK} */\n`;
+
 function argValue(name) {
   const at = process.argv.indexOf(name);
   return at >= 0 ? process.argv[at + 1] : undefined;
@@ -150,7 +169,8 @@ export async function buildFrontend({ site = SITE, out = path.join(site, 'build'
       for (const warning of result.warnings) log(`css warning: ${warning.text}`);
       css = result.code;
     }
-    writeFileSync(path.join(tmp, 'site.css'), css);
+    // Stamp the watermark after minification so it is never stripped.
+    writeFileSync(path.join(tmp, 'site.css'), BANNER_CSS + css);
 
     // ── the modules ──
     const entryFiles = new Map();
@@ -163,9 +183,15 @@ export async function buildFrontend({ site = SITE, out = path.join(site, 'build'
         splitting: true,
         format: 'esm',
         minify: true,
-        sourcemap: 'linked',
+        // No source maps: a linked .map ships the entire unminified source with comments, which is a
+        // one-click copy of the frontend for anyone who opens devtools. Off here, and nginx refuses
+        // any *.map under /b/ as a second line (infra/nginx/nginx.conf).
+        sourcemap: false,
         target: JS_TARGET,
         outdir: tmp,
+        // esbuild inserts `banner` verbatim into every output file, chunks included, after minify and
+        // untouched by legalComments — so the watermark survives on every shipped module.
+        banner: { js: BANNER_JS },
         entryNames: '[name]-[hash]',
         chunkNames: 'chunk-[hash]',
         legalComments: 'none',
@@ -193,7 +219,8 @@ export async function buildFrontend({ site = SITE, out = path.join(site, 'build'
     for (const name of classics) {
       let code = readFileSync(path.join(site, 'assets/js', name), 'utf8');
       if (esbuild) code = (await esbuild.transform(code, { loader: 'js', minify: true, target: JS_TARGET, legalComments: 'none' })).code;
-      writeFileSync(path.join(tmp, name), code);
+      // Stamp the watermark after minification so it is never stripped.
+      writeFileSync(path.join(tmp, name), BANNER_JS + code);
     }
 
     // ── the release ──
