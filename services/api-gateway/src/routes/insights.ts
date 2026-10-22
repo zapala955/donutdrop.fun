@@ -7,6 +7,7 @@ import { AppError } from '../lib/errors.js';
 import { maskedName } from '../lib/masked-name.js';
 import { staffPredicate } from '../lib/admin-stats.js';
 import { notDemoPredicate } from '../lib/media-test.js';
+import { historyPageSql, ROUND_GAME_KEYS, roundGameName, statisticsSql } from '../lib/player-rounds.js';
 import { parseWith } from '../lib/validation.js';
 import { levelFor } from '../lib/vip.js';
 
@@ -93,48 +94,25 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
     },
   );
 
-  /** One player's own numbers. Private: these are not public in the way a leaderboard rank is. */
+  /**
+   * One player's own numbers, every game. Private: these are not public in the way a leaderboard
+   * rank is.
+   *
+   * It used to count the upgrader, crates and battles only, and took its "net profit / loss" off
+   * the whole wallet ledger -- deposits, withdrawals and tips included -- which made it closer to
+   * the balance than to a result. Wins and losses now come from the rounds themselves
+   * (lib/player-rounds.ts), which reconcile to the ledger's stake and payout entries game by game;
+   * rewards are counted beside them, not inside them.
+   */
   app.get('/v1/statistics', { preHandler: guards.authenticate }, async (request) => {
     const userId = requireUserId(request.authUser?.id);
 
-    /* Four independent aggregates, run together rather than in sequence: none of them depends on
-     * another's result and the page renders all four at once. */
-    const [upgrader, cases, battles, ledger, favourites] = await Promise.all([
-      db.query<{
-        rounds: string;
-        wins: string;
-        staked: string;
-        returned: string;
-        best_multiple: string | null;
-      }>(
-        `SELECT count(*)::text AS rounds,
-                count(*) FILTER (WHERE outcome = 'win')::text AS wins,
-                coalesce(sum(stake_value_minor), 0)::text AS staked,
-                coalesce(sum(target_value_minor) FILTER (WHERE outcome = 'win'), 0)::text AS returned,
-                max(target_value_minor::numeric / nullif(stake_value_minor, 0))::text AS best_multiple
-           FROM upgrader_rounds WHERE user_id = $1`,
-        [userId],
-      ),
-      db.query<{ opened: string; spent: string }>(
-        `SELECT count(*)::text AS opened, coalesce(sum(price_minor), 0)::text AS spent
-           FROM case_rounds WHERE user_id = $1`,
-        [userId],
-      ),
-      db.query<{ seats: string; staked: string; won: string }>(
-        `SELECT count(*)::text AS seats,
-                coalesce(sum(p.staked_minor), 0)::text AS staked,
-                coalesce(sum(p.payout_minor), 0)::text AS won
-           FROM battle_players p WHERE p.user_id = $1`,
-        [userId],
-      ),
-      /* Profit and loss straight off the wallet ledger rather than reconstructed from rounds: the
-       * ledger is the only place that already has every source of money in one shape, including
-       * quests, streaks, rakeback and referrals. */
-      db.query<{ credited: string; debited: string }>(
-        `SELECT coalesce(sum(amount_minor) FILTER (WHERE amount_minor > 0), 0)::text AS credited,
-                coalesce(sum(-amount_minor) FILTER (WHERE amount_minor < 0), 0)::text AS debited
-           FROM wallet_transactions WHERE user_id = $1`,
-        [userId],
+    const [games, rewards, favourites] = await Promise.all([
+      db.query<StatisticsGameRow>(statisticsSql(), [userId]),
+      db.query<{ total: string }>(
+        `SELECT coalesce(sum(amount_minor), 0)::text AS total
+           FROM wallet_transactions WHERE user_id = $1 AND kind = ANY($2::text[])`,
+        [userId, REWARD_KINDS],
       ),
       db.query<{ name: string; opens: string; spent: string }>(
         `SELECT c.name, count(*)::text AS opens, sum(cr.price_minor)::text AS spent
@@ -146,53 +124,153 @@ export async function registerInsightRoutes(app: FastifyInstance, db: Database, 
         [userId],
       ),
     ]);
-
-    const up = upgrader.rows[0];
-    const rounds = Number(up?.rounds ?? '0');
-    const wins = Number(up?.wins ?? '0');
-
-    const wagered =
-      BigInt(up?.staked ?? '0') +
-      BigInt(cases.rows[0]?.spent ?? '0') +
-      BigInt(battles.rows[0]?.staked ?? '0');
-    const credited = BigInt(ledger.rows[0]?.credited ?? '0');
-    const debited = BigInt(ledger.rows[0]?.debited ?? '0');
-
-    return {
-      totals: {
-        wageredMinor: wagered.toString(),
-        creditedMinor: credited.toString(),
-        debitedMinor: debited.toString(),
-        // Signed: a losing player must see a negative number rather than a zero.
-        netMinor: (credited - debited).toString(),
-      },
-      upgrader: {
-        rounds,
-        wins,
-        losses: rounds - wins,
-        // Null rather than zero at nought rounds: a 0% win rate and no rounds played are
-        // different facts, and rendering the second as the first is a lie about a player's record.
-        winRate: rounds > 0 ? wins / rounds : null,
-        stakedMinor: up?.staked ?? '0',
-        returnedMinor: up?.returned ?? '0',
-        bestMultiple: up?.best_multiple ? Number(up.best_multiple) : null,
-      },
-      cases: {
-        opened: Number(cases.rows[0]?.opened ?? '0'),
-        spentMinor: cases.rows[0]?.spent ?? '0',
-      },
-      battles: {
-        seats: Number(battles.rows[0]?.seats ?? '0'),
-        stakedMinor: battles.rows[0]?.staked ?? '0',
-        wonMinor: battles.rows[0]?.won ?? '0',
-      },
-      favouriteCases: favourites.rows.map((row) => ({
-        name: row.name,
-        opens: Number(row.opens),
-        spentMinor: row.spent,
-      })),
-    };
+    return statisticsBody(games.rows, rewards.rows[0]?.total ?? '0', favourites.rows);
   });
+
+  /**
+   * The player's own rounds, every game, newest first: the history page. Pages by time -- `next` is
+   * the cursor for the page after -- and filters to one game.
+   */
+  app.get('/v1/history', { preHandler: guards.authenticate }, async (request) => {
+    const userId = requireUserId(request.authUser?.id);
+    const query = parseWith(historySchema, request.query ?? {});
+    const game = query.game ?? null;
+    const params: unknown[] = [userId, query.before ?? 'infinity', query.limit];
+    if (game) params.push(game);
+    const result = await db.query<HistoryRow>(historyPageSql(game), params);
+    return historyBody(result.rows, query.limit);
+  });
+}
+
+/** Ledger entries that are rewards: money the site gave, not money a game paid. */
+export const REWARD_KINDS = [
+  'rakeback_claim',
+  'streak_reward',
+  'daily_code_reward',
+  'rain_claim',
+  'signup_bonus',
+  'referral_bonus',
+  'referral_revshare',
+  'discord_join_reward',
+  'discord_tag_reward',
+  'creator_royalty',
+];
+
+/* A cursor exactly as historyPageSql writes it: UTC, to the microsecond, which a JS Date cannot
+ * hold -- rounded to the millisecond, it could skip a round placed in the same millisecond. */
+const historySchema = z
+  .object({
+    game: z.enum(ROUND_GAME_KEYS).optional(),
+    before: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+
+export interface StatisticsGameRow {
+  game: string;
+  rounds: number;
+  wins: number;
+  wagered: string;
+  paid: string;
+  best: string | null;
+  top_wager: string | null;
+  top_payout: string | null;
+}
+
+/** Two decimals, rounded down: a multiplier is never shown as more than it was. */
+const floor2 = (value: number) => Math.floor(value * 100) / 100;
+
+export function statisticsBody(
+  rows: readonly StatisticsGameRow[],
+  rewardsMinor: string,
+  favouriteCases: readonly { name: string; opens: string; spent: string }[],
+) {
+  let wagered = 0n;
+  let paid = 0n;
+  let rounds = 0;
+  let wins = 0;
+  let best: number | null = null;
+  let biggest: { game: string; wager: bigint; payout: bigint } | null = null;
+  let favourite: StatisticsGameRow | null = null;
+  for (const row of rows) {
+    wagered += BigInt(row.wagered);
+    paid += BigInt(row.paid);
+    rounds += row.rounds;
+    wins += row.wins;
+    if (row.best !== null && (best === null || Number(row.best) > best)) best = Number(row.best);
+    if (row.top_wager !== null && row.top_payout !== null) {
+      const wager = BigInt(row.top_wager);
+      const payout = BigInt(row.top_payout);
+      if (!biggest || payout - wager > biggest.payout - biggest.wager) biggest = { game: row.game, wager, payout };
+    }
+    if (!favourite || row.rounds > favourite.rounds) favourite = row;
+  }
+  return {
+    totals: {
+      rounds,
+      wins,
+      // Null rather than zero at nought rounds: no rounds played is not a 0% record.
+      winRate: rounds > 0 ? wins / rounds : null,
+      wageredMinor: wagered.toString(),
+      paidMinor: paid.toString(),
+      // Signed: a losing player sees a negative number, never a zero.
+      netMinor: (paid - wagered).toString(),
+      rewardsMinor,
+    },
+    favouriteGame: favourite ? { game: favourite.game, name: roundGameName(favourite.game) } : null,
+    bestMultiplier: best === null ? null : floor2(best),
+    biggestWin: biggest
+      ? {
+          game: biggest.game,
+          name: roundGameName(biggest.game),
+          wagerMinor: biggest.wager.toString(),
+          payoutMinor: biggest.payout.toString(),
+          multiplier: floor2(Number(biggest.payout) / Number(biggest.wager)),
+        }
+      : null,
+    games: rows.map((row) => ({
+      game: row.game,
+      name: roundGameName(row.game),
+      rounds: row.rounds,
+      wins: row.wins,
+      wageredMinor: row.wagered,
+      paidMinor: row.paid,
+      netMinor: (BigInt(row.paid) - BigInt(row.wagered)).toString(),
+      bestMultiplier: row.best === null ? null : floor2(Number(row.best)),
+    })),
+    favouriteCases: favouriteCases.map((row) => ({
+      name: row.name,
+      opens: Number(row.opens),
+      spentMinor: row.spent,
+    })),
+  };
+}
+
+export interface HistoryRow {
+  game: string;
+  id: string;
+  at: string;
+  wager: string;
+  payout: string;
+  detail: string | null;
+}
+
+export function historyBody(rows: readonly HistoryRow[], limit: number) {
+  return {
+    rounds: rows.map((row) => ({
+      game: row.game,
+      name: roundGameName(row.game),
+      id: row.id,
+      at: row.at,
+      wagerMinor: row.wager,
+      payoutMinor: row.payout,
+      multiplier: BigInt(row.wager) > 0n ? floor2(Number(row.payout) / Number(row.wager)) : null,
+      detail: row.detail || null,
+    })),
+    // A full page may have more behind it; a short one is the end.
+    next: rows.length === limit ? rows[rows.length - 1]!.at : null,
+    games: ROUND_GAME_KEYS.map((game) => ({ game, name: roundGameName(game) })),
+  };
 }
 
 /**

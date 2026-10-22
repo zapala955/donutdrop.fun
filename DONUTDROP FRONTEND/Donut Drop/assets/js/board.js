@@ -172,6 +172,8 @@ function boardTabs() {
 
 // ─────────── personal statistics ───────────
 
+let statsLoading = false;
+
 export function mountStatistics(view) {
   statsRoot = $('#statsRoot', view);
   if (!statsRoot) return;
@@ -179,13 +181,26 @@ export function mountStatistics(view) {
     statsRoot.dataset.built = '1';
     bus.addEventListener('change', (event) => {
       if (!statsRoot.isConnected) return;
-      if (['statistics', 'login', 'logout', 'ready', 'private'].includes(event.detail)) {
-        paintStats();
-      }
+      /* A page opened straight at /statistics mounts before the session is known, so the fetch
+       * waits for 'ready' or 'login'. It used to happen at mount only, and a refresh of this page
+       * said "Statistics are unavailable" until the player navigated away and back. */
+      if (['login', 'ready'].includes(event.detail) && state.authenticated) loadStats();
+      else if (['statistics', 'login', 'logout', 'ready', 'private'].includes(event.detail)) paintStats();
     });
   }
-  if (state.authenticated) refreshStatistics(false).then(paintStats).catch(() => undefined);
+  if (state.authenticated) loadStats();
+  else paintStats();
+}
+
+function loadStats() {
+  statsLoading = true;
   paintStats();
+  refreshStatistics(false)
+    .catch(() => undefined)
+    .finally(() => {
+      statsLoading = false;
+      paintStats();
+    });
 }
 
 function paintStats() {
@@ -198,52 +213,50 @@ function paintStats() {
   }
   const data = state.statistics;
   if (!data) {
-    statsRoot.appendChild(notice('stats', 'Statistics are unavailable.'));
+    const message = notice('stats', statsLoading ? 'Loading your statistics.' : 'Statistics are unavailable.');
+    if (statsLoading) message.setAttribute('aria-busy', 'true');
+    statsRoot.appendChild(message);
     return;
   }
 
-  const net = Number(data.totals.netMinor);
+  /* Every game, from GET /v1/statistics. It counted the upgrader, crates and battles only, and its
+   * "net profit / loss" came off the whole wallet ledger, deposits and withdrawals included. The
+   * net is now the games' own result; rewards (rakeback, streaks, codes) are their own figure. */
+  const totals = data.totals;
+  if (!totals.rounds) {
+    statsRoot.appendChild(notice('stats', 'No rounds yet. Your numbers start with your first bet.'));
+    return;
+  }
+  const net = Number(totals.netMinor);
+  const biggest = data.biggestWin;
   statsRoot.appendChild(
     statGrid([
-      ['Total wagered', money(Number(data.totals.wageredMinor)), null],
+      ['Total wagered', money(Number(totals.wageredMinor)), null],
       // The one figure on the page that is allowed to be red: a player's own result.
-      ['Net profit / loss', money(net), net >= 0 ? 'up' : 'down'],
+      ['Net result', signedMoney(net), net > 0 ? 'up' : net < 0 ? 'down' : null],
+      ['Rounds played', totals.rounds.toLocaleString('en-US'), null],
+      ['Win rate', totals.winRate === null ? '—' : pct(totals.winRate, 1), null],
       [
-        'Upgrader win rate',
-        data.upgrader.winRate === null ? '—' : pct(data.upgrader.winRate, 1),
-        null,
-      ],
-      [
-        'Best multiplier',
-        data.upgrader.bestMultiple === null ? '—' : `${data.upgrader.bestMultiple.toFixed(2)}x`,
+        biggest ? `Biggest win · ${biggest.name}` : 'Biggest win',
+        biggest ? signedMoney(Number(biggest.payoutMinor) - Number(biggest.wagerMinor)) : '—',
         'gold',
       ],
+      ['Best multiplier', data.bestMultiplier === null ? '—' : `${data.bestMultiplier.toFixed(2)}×`, 'gold'],
+      ['Favourite game', data.favouriteGame?.name ?? '—', null],
+      ['Rewards claimed', money(Number(totals.rewardsMinor)), null],
     ]),
   );
 
-  statsRoot.appendChild(
-    breakdown('Upgrader', [
-      ['Rounds', String(data.upgrader.rounds)],
-      ['Wins', String(data.upgrader.wins)],
-      ['Losses', String(data.upgrader.losses)],
-      ['Staked', money(Number(data.upgrader.stakedMinor))],
-      ['Returned', money(Number(data.upgrader.returnedMinor))],
-    ]),
-  );
-
-  statsRoot.appendChild(
-    breakdown('Crates & battles', [
-      ['Crates opened', String(data.cases.opened)],
-      ['Crate spend', money(Number(data.cases.spentMinor))],
-      ['Battle seats', String(data.battles.seats)],
-      ['Battle stake', money(Number(data.battles.stakedMinor))],
-      ['Battle winnings', money(Number(data.battles.wonMinor))],
-    ]),
-  );
+  statsRoot.appendChild(byGame(data.games));
 
   if (data.favouriteCases.length) {
     statsRoot.appendChild(favourites(data.favouriteCases));
   }
+}
+
+/** The sign written out, so a result reads the same to a colour-blind player and in greyscale. */
+function signedMoney(n) {
+  return n > 0 ? '+' + money(n) : n < 0 ? '−' + money(-n) : '$0';
 }
 
 function statGrid(cells) {
@@ -261,23 +274,55 @@ function statGrid(cells) {
   return grid;
 }
 
-function breakdown(title, rows) {
+/** One row a game the player has played, most wagered first. */
+function byGame(games) {
   const card = el('section', 'stats__panel');
   const label = el('span', 'stats__label');
-  label.textContent = title;
+  label.textContent = 'By game';
   card.appendChild(label);
 
-  const list = el('dl', 'stats__facts mono');
-  for (const [term, value] of rows) {
-    const group = el('div');
-    const dt = el('dt');
-    dt.textContent = term;
-    const dd = el('dd');
-    dd.textContent = value;
-    group.append(dt, dd);
-    list.appendChild(group);
+  const wrap = el('div', 'acct__tablewrap');
+  const table = el('table', 'dtable stats__bygame');
+  const head = el('thead');
+  const headRow = el('tr');
+  for (const [text, cls] of [
+    ['Game', ''],
+    ['Rounds', 'dtable__num'],
+    ['Win rate', 'dtable__num'],
+    ['Wagered', 'dtable__num'],
+    ['Net', 'dtable__num'],
+    ['Best', 'dtable__num'],
+  ]) {
+    const cell = el('th', cls);
+    cell.textContent = text;
+    headRow.appendChild(cell);
   }
-  card.appendChild(list);
+  head.appendChild(headRow);
+
+  const body = el('tbody');
+  for (const game of games) {
+    const row = el('tr');
+    const name = el('td', 'dtable__name');
+    name.textContent = game.name;
+    const rounds = el('td', 'dtable__num mono');
+    rounds.textContent = game.rounds.toLocaleString('en-US');
+    const rate = el('td', 'dtable__num mono dtable__dim');
+    rate.textContent = pct(game.wins / game.rounds, 1);
+    const wagered = el('td', 'dtable__num mono');
+    wagered.textContent = money(Number(game.wageredMinor));
+    const netCell = el('td', 'dtable__num mono');
+    const net = Number(game.netMinor);
+    if (net > 0) netCell.dataset.dir = 'up';
+    if (net < 0) netCell.dataset.dir = 'down';
+    netCell.textContent = signedMoney(net);
+    const best = el('td', 'dtable__num mono dtable__dim');
+    best.textContent = game.bestMultiplier === null ? '—' : `${game.bestMultiplier.toFixed(2)}×`;
+    row.append(name, rounds, rate, wagered, netCell, best);
+    body.appendChild(row);
+  }
+  table.append(head, body);
+  wrap.appendChild(table);
+  card.appendChild(wrap);
   return card;
 }
 

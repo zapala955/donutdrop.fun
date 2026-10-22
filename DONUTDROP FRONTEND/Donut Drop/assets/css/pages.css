@@ -376,7 +376,9 @@
    LEADERBOARD & STATISTICS
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
 .board, .stats { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.stats__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(166px, 1fr)); gap: 8px; }
+/* Eight figures: four a row, two on a phone, so neither width leaves a short last row. */
+.stats__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 720px) { .stats__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stats__card {
   display: flex; flex-direction: column; gap: 4px;
   padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
@@ -468,6 +470,30 @@
 .dtable td[data-dir="up"] { color: var(--cyan); }
 .dtable td[data-dir="down"] { color: var(--crimson); }
 .dtable tbody tr[data-outcome="win"] .dtable__name { color: var(--text); }
+
+/* Match history: every game's rounds, a strip of games to narrow them, a line of detail under each
+   game's name ("3 mines", "Cashed out at 2.10x"), and the button that pages back through time. */
+.lxtabs.hist__filter { margin: 0; }
+/* `.dtable th` sets every header left and outranks `.dtable__num`; a figure's header sits over it. */
+:is(.hist__table, .stats__bygame) th.dtable__num { text-align: right; }
+:is(.hist__table, .stats__bygame) th { white-space: nowrap; }
+.hist__game { min-width: 150px; }
+.hist__game .dtable__name, .hist__detail { display: block; }
+.hist__detail {
+  margin-top: 2px; max-width: 280px;
+  font-size: .6875rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hist__more { align-self: center; min-width: 160px; }
+.hist__retry { margin-top: 12px; }
+/* On a phone the two tables keep their essentials on screen: the multiplier (the profit says the
+   same) and the per-game win rate and best multiplier (the cards above carry the overall ones). */
+@media (max-width: 560px) {
+  .hist__table :is(th, td):nth-child(3),
+  .stats__bygame :is(th, td):is(:nth-child(3), :nth-child(6)) { display: none; }
+  .hist__game { min-width: 0; }
+  .hist__detail { max-width: 150px; }
+}
 .dtable tbody tr[data-outcome="lose"] .dtable__name { color: var(--muted); }
 
 .acct__actions { display: flex; flex-wrap: wrap; gap: 8px; }

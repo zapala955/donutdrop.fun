@@ -16,9 +16,9 @@ import {
   refreshWalletSummary,
   refreshReferrals,
   attachReferralCode,
-  upgradeHistory,
+  roundHistory,
 } from './store.js';
-import { $, el, money, pct } from './util.js';
+import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { buildPreferences } from './settings.js';
 
@@ -314,28 +314,52 @@ function paintWallet() {
 
 // ─────────── /history ───────────
 
+/* Every game's rounds, newest first, from GET /v1/history. It showed the upgrader alone, from when
+ * the upgrader was the whole site. A strip of games narrows it to one (the lobby's own tab strip),
+ * and "Load more" pages back through time. Each visit fetches the first page again: rounds settle
+ * while the player is elsewhere, and an old copy would leave them out. */
+const HISTORY_PAGE = 50;
+
 let historyRoot = null;
-let rounds = null;
-let loadingRounds = false;
+let history = null; // { rounds, next, games } once loaded
+let historyGame = null; // the game the strip is narrowed to; null for every game
+let historyLoading = false;
+let historyMore = false;
+let historyFailed = false;
+// Bumped by every request, so an answer that arrives after the filter has changed is dropped.
+let historyToken = 0;
 
 export function mountHistory(view) {
   historyRoot = view;
   bindOnce(view, 'history', () => paintHistory());
-  if (state.authenticated && rounds === null && !loadingRounds) loadRounds();
+  history = null;
+  historyFailed = false;
   paintHistory();
 }
 
-function loadRounds() {
-  loadingRounds = true;
-  upgradeHistory(50)
-    .then((result) => {
-      rounds = result.rounds || [];
+function loadHistory(more = false) {
+  const token = ++historyToken;
+  const before = more ? history?.next ?? null : null;
+  if (more) historyMore = true;
+  else {
+    historyLoading = true;
+    historyFailed = false;
+  }
+  paintHistory();
+  roundHistory({ game: historyGame, before, limit: HISTORY_PAGE })
+    .then((page) => {
+      if (token !== historyToken) return;
+      history = more && history ? { ...page, rounds: [...history.rounds, ...page.rounds] } : page;
     })
     .catch(() => {
-      rounds = [];
+      if (token !== historyToken) return;
+      if (more) toast({ kind: 'lose', title: 'Could not load more rounds', body: 'Try again in a moment.' });
+      else historyFailed = true;
     })
     .finally(() => {
-      loadingRounds = false;
+      if (token !== historyToken) return;
+      historyLoading = false;
+      historyMore = false;
       paintHistory();
     });
 }
@@ -343,38 +367,53 @@ function loadRounds() {
 function paintHistory() {
   if (!historyRoot?.isConnected) return;
   const root = ensureShell(historyRoot, 'Match history', 'historyRoot');
+  // The control that had the focus is rebuilt below; it gets the focus back by its key.
+  const focusKey = root.contains(document.activeElement) ? document.activeElement.dataset.focusKey : undefined;
   root.innerHTML = '';
 
   if (!state.authenticated) {
+    history = null;
+    historyGame = null;
     root.appendChild(notice('Log in to see your history.'));
     return;
   }
-  if (rounds === null) {
-    root.appendChild(notice(loadingRounds ? 'Loading.' : 'History is unavailable.'));
+  if (history === null && !historyLoading && !historyFailed) {
+    loadHistory();
+    return;
+  }
+  if (history === null) {
+    if (historyFailed) {
+      const failed = notice('Your history could not be loaded.');
+      const retry = el('button', 'btn btn--glass hist__retry');
+      retry.type = 'button';
+      retry.textContent = 'Try again';
+      retry.dataset.focusKey = 'retry';
+      retry.addEventListener('click', () => loadHistory());
+      failed.appendChild(retry);
+      root.appendChild(failed);
+    } else {
+      const loading = notice('Loading your rounds.');
+      loading.setAttribute('aria-busy', 'true');
+      root.appendChild(loading);
+    }
+    restoreFocus(root, focusKey);
     return;
   }
 
-  const wins = rounds.filter((r) => r.outcome === 'win').length;
-  root.appendChild(
-    statGrid([
-      ['Rounds loaded', String(rounds.length), null],
-      ['Wins', String(wins), 'up'],
-      ['Losses', String(rounds.length - wins), 'down'],
-      ['Win rate', rounds.length ? pct(wins / rounds.length, 1) : '—', null],
-    ]),
-  );
+  root.appendChild(historyFilter());
 
-  const card = panel('Upgrader rounds');
+  const card = panel(historyGame ? `${gameName(historyGame)} rounds` : 'Every round');
+  if (historyLoading) card.setAttribute('aria-busy', 'true');
   const wrap = el('div', 'acct__tablewrap');
-  const table = el('table', 'dtable');
+  const table = el('table', 'dtable hist__table');
 
   const head = el('thead');
   const headRow = el('tr');
   for (const [text, cls] of [
-    ['Target', ''],
-    ['Stake', 'dtable__num'],
-    ['Chance', 'dtable__num'],
-    ['Result', 'dtable__num'],
+    ['Game', ''],
+    ['Bet', 'dtable__num'],
+    ['Multiplier', 'dtable__num'],
+    ['Profit', 'dtable__num'],
     ['When', 'dtable__num'],
   ]) {
     const cell = el('th', cls);
@@ -384,45 +423,111 @@ function paintHistory() {
   head.appendChild(headRow);
 
   const body = el('tbody');
-  if (!rounds.length) {
+  if (!history.rounds.length) {
     const row = el('tr');
-    const cell = el('td');
+    const cell = el('td', 'dtable__empty');
     cell.colSpan = 5;
-    cell.className = 'dtable__empty';
-    cell.textContent = 'No rounds yet.';
+    cell.textContent = historyGame ? `No ${gameName(historyGame)} rounds yet.` : 'No rounds yet.';
     row.appendChild(cell);
     body.appendChild(row);
   }
-
-  for (const round of rounds) {
-    const row = el('tr');
-    row.dataset.outcome = round.outcome;
-
-    const target = el('td', 'dtable__name');
-    target.textContent = round.display_name ?? round.minecraft_name ?? '—';
-
-    const stake = el('td', 'dtable__num mono');
-    stake.textContent = money(Number(round.stake_value_minor));
-
-    const chance = el('td', 'dtable__num mono dtable__dim');
-    chance.textContent = pct(Number(round.chance_ppm) / 1_000_000, 2);
-
-    const result = el('td', 'dtable__num mono');
-    result.dataset.dir = round.outcome === 'win' ? 'up' : 'down';
-    result.textContent =
-      round.outcome === 'win' ? '+' + money(Number(round.target_value_minor)) : '−' + money(Number(round.stake_value_minor));
-
-    const when = el('td', 'dtable__num mono dtable__dim');
-    when.textContent = new Date(round.created_at).toLocaleString();
-
-    row.append(target, stake, chance, result, when);
-    body.appendChild(row);
-  }
+  for (const round of history.rounds) body.appendChild(historyRow(round));
 
   table.append(head, body);
   wrap.appendChild(table);
   card.appendChild(wrap);
+
+  if (history.next) {
+    const more = el('button', 'btn btn--glass hist__more');
+    more.type = 'button';
+    more.dataset.focusKey = 'more';
+    more.disabled = historyMore;
+    more.setAttribute('aria-busy', historyMore ? 'true' : 'false');
+    more.textContent = historyMore ? 'Loading' : 'Load more';
+    more.addEventListener('click', () => loadHistory(true));
+    card.appendChild(more);
+  }
   root.appendChild(card);
+  restoreFocus(root, focusKey);
+}
+
+/** "All games", then every game, as the lobby's tab strip: one pressed at a time. */
+function historyFilter() {
+  const strip = el('div', 'lxtabs hist__filter');
+  const track = el('div', 'lxtabs__track');
+  track.setAttribute('role', 'group');
+  track.setAttribute('aria-label', 'Show rounds from');
+  for (const option of [{ game: null, name: 'All games' }, ...(history?.games ?? [])]) {
+    const tab = el('button', 'lxtab');
+    tab.type = 'button';
+    tab.textContent = option.name;
+    tab.dataset.focusKey = 'game:' + (option.game ?? 'all');
+    tab.setAttribute('aria-pressed', String(option.game === historyGame));
+    tab.addEventListener('click', () => {
+      if (option.game === historyGame) return;
+      historyGame = option.game;
+      loadHistory();
+    });
+    track.appendChild(tab);
+  }
+  strip.appendChild(track);
+  return strip;
+}
+
+function historyRow(round) {
+  const wager = Number(round.wagerMinor);
+  const payout = Number(round.payoutMinor);
+  const row = el('tr');
+  row.dataset.outcome = payout > wager ? 'win' : payout < wager ? 'loss' : 'even';
+
+  const game = el('td', 'hist__game');
+  const name = el('span', 'dtable__name');
+  name.textContent = round.name;
+  game.appendChild(name);
+  if (round.detail) {
+    const detail = el('span', 'hist__detail');
+    detail.textContent = round.detail;
+    game.appendChild(detail);
+  }
+
+  const bet = el('td', 'dtable__num mono');
+  bet.textContent = money(wager);
+
+  const multiplier = el('td', 'dtable__num mono dtable__dim');
+  multiplier.textContent = round.multiplier === null ? '—' : `${round.multiplier.toFixed(2)}×`;
+
+  // The sign carries the direction as well as the colour, so it survives a colour-blind reader.
+  const profit = el('td', 'dtable__num mono');
+  const net = payout - wager;
+  if (net > 0) profit.dataset.dir = 'up';
+  if (net < 0) profit.dataset.dir = 'down';
+  profit.textContent = net > 0 ? '+' + money(net) : net < 0 ? '−' + money(-net) : '±$0';
+
+  // The year only when it is not this one: the column has to fit beside the money on a phone.
+  const when = el('td', 'dtable__num mono dtable__dim');
+  const at = new Date(round.at);
+  const sameYear = at.getFullYear() === new Date().getFullYear();
+  when.textContent = at.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  when.title = at.toLocaleString();
+
+  row.append(game, bet, multiplier, profit, when);
+  return row;
+}
+
+function gameName(game) {
+  return history?.games?.find((option) => option.game === game)?.name ?? game;
+}
+
+function restoreFocus(root, key) {
+  if (!key) return;
+  const target = [...root.querySelectorAll('[data-focus-key]')].find((node) => node.dataset.focusKey === key);
+  target?.focus();
 }
 
 // ─────────── /settings ───────────

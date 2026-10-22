@@ -812,6 +812,14 @@ export async function upgradeHistory(limit = 25) {
   return api.get('/v1/upgrades/history?limit=' + Number(limit));
 }
 
+/** The player's own rounds, every game, newest first; `before` is the previous page's `next`. */
+export async function roundHistory({ game = null, before = null, limit = 50 } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (game) query.set('game', game);
+  if (before) query.set('before', before);
+  return api.get('/v1/history?' + query.toString());
+}
+
 export async function caseHistory(limit = 25) {
   return api.get('/v1/cases/history?limit=' + Number(limit));
 }
