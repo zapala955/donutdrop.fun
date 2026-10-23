@@ -187,6 +187,19 @@ export async function registerTransferRoutes(
       /* Items bought with a bonus or an unwagered deposit are that money in another form. Only
        * checked for a new request: a replay above returns what was already granted. */
       await assertWagerRequirementMet(client, userId, 'withdrawing');
+      /* Nor while the account is on hold (lib/anti-drain.ts). A cash withdrawal from a held account
+       * waits for staff; items have no such queue, so the request is refused until they release it. */
+      const account = await client.query<{ payout_hold_reason: string | null }>(
+        'SELECT payout_hold_reason FROM users WHERE id = $1',
+        [userId],
+      );
+      if (account.rows[0]?.payout_hold_reason) {
+        throw new AppError(
+          403,
+          'ACCOUNT_ON_HOLD',
+          'Your account is on hold until staff review it, and cannot withdraw items until then',
+        );
+      }
       const lots = await client.query<{
         id: string;
         bot_id: string;

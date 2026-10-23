@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
+import { staffPredicate } from './admin-stats.js';
+import { compactMinor, holdQueuedForUser } from './anti-drain.js';
+import { appendAudit } from './audit.js';
 import type { ContributionSource } from './cash-settlement.js';
 import type { DbClient } from './db.js';
 import { conflict } from './errors.js';
@@ -289,6 +292,16 @@ export async function tryUnlockMilestone(
   );
   if (!recorded.rowCount) return false;
 
+  /* Before the credit: the referrer's account row is locked here and their wallet after it, the
+   * order a withdrawal takes them in, so the two cannot deadlock. */
+  await holdIfInvitesStopAtRequirement(
+    client,
+    config,
+    referral.referrer_id,
+    refereeId,
+    BigInt(referral.wagered_minor),
+  );
+
   await creditWallet(client, referral.referrer_id, bonus, 'referral_bonus', refereeId);
   await client.query(
     `UPDATE referrals
@@ -296,6 +309,78 @@ export async function tryUnlockMilestone(
       WHERE referee_id = $1`,
     [refereeId, bonus.toString()],
   );
+  return true;
+}
+
+/** How far over the referral wager requirement an invite may go and still count as stopping at it. */
+export const REFERRAL_STOP_MARGIN_BPS = 1_000n; // 10%
+/** How many such invites put the referrer on hold. */
+export const REFERRAL_STOP_COUNT = 2;
+
+/**
+ * Two invited players who wager just past the referral requirement and then stop are what alts
+ * farming the bonus look like; a real friend keeps playing. So when an invite pays its milestone
+ * and REFERRAL_STOP_COUNT or more of the referrer's paid invites (this one included) have wagered no
+ * more than REFERRAL_STOP_MARGIN_BPS over the requirement, the referrer gets a payout hold until an
+ * administrator reviews it. The operator's rule, 2026-10-23.
+ *
+ * A hold takes nothing (lib/anti-drain.ts): the bonus is still paid into the wallet and can be
+ * played. It stops money leaving, pulls back withdrawals already waiting for the bot, and lists the
+ * player in admin -> Payouts with this reason, where Release lifts it; staff alerts post it.
+ *
+ * Judged when an invite pays, because that is when money moves. The invite paying now has only just
+ * reached the requirement, so it is almost always inside the margin; what decides the hold is
+ * whether an earlier paid invite also stopped there instead of playing on. Measured against the
+ * requirement as it is now, so an invite paid under a lower one counts by today's figure.
+ */
+async function holdIfInvitesStopAtRequirement(
+  client: DbClient,
+  config: AppConfig,
+  referrerId: string,
+  refereeId: string,
+  refereeWageredMinor: bigint,
+): Promise<boolean> {
+  const requirement = config.referralBonusWagerMinor;
+  const limit = (requirement * (10_000n + REFERRAL_STOP_MARGIN_BPS)) / 10_000n;
+  const earlier = await client.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM referrals
+      WHERE referrer_id = $1 AND referee_id <> $2 AND voided_at IS NULL
+        AND bonus_unlocked_at IS NOT NULL AND wagered_minor <= $3`,
+    [referrerId, refereeId, limit.toString()],
+  );
+  const stopped = Number(earlier.rows[0]?.n ?? 0) + (refereeWageredMinor <= limit ? 1 : 0);
+  if (stopped < REFERRAL_STOP_COUNT) return false;
+
+  const reason =
+    `Auto: ${stopped} invites stopped at the referral wager requirement (each wagered at most ` +
+    `${compactMinor(limit)} against ${compactMinor(requirement)}). Review the invites.`;
+  /* The guard is in the UPDATE: a hold already in place (by hand or by another rule) is left as it
+   * is, and staff, who test the programme with their own invites, are never held by it. */
+  const placed = await client.query(
+    `UPDATE users u
+        SET payout_hold_reason = $2, payout_hold_at = now(), payout_hold_by = NULL,
+            updated_at = now()
+      WHERE u.id = $1 AND u.payout_hold_reason IS NULL AND u.status = 'active'
+        AND NOT ${staffPredicate('u')}
+      RETURNING u.id`,
+    [referrerId, reason.slice(0, 300)],
+  );
+  if (!placed.rows.length) return false;
+  const pulled = await holdQueuedForUser(client, referrerId, reason);
+  await appendAudit(client, config, {
+    actorUserId: null,
+    action: 'referral.auto_hold',
+    targetType: 'user',
+    targetId: referrerId,
+    details: {
+      reason,
+      stoppedInvites: stopped,
+      limitMinor: limit.toString(),
+      requirementMinor: requirement.toString(),
+      paidInvite: refereeId,
+      pulledBack: pulled.held,
+    },
+  });
   return true;
 }
 

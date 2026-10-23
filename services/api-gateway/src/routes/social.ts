@@ -571,6 +571,19 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
          * deposit that may not be withdrawn yet could be tipped to a second account that owes
          * nothing and withdrawn from there. */
         await assertWagerRequirementMet(client, fromUserId, 'tipping');
+        /* Nor while the account is on hold (lib/anti-drain.ts): a hold keeps the money where it is
+         * until staff have looked, and a tip to a second account would walk straight around it. */
+        const sender = await client.query<{ payout_hold_reason: string | null }>(
+          'SELECT payout_hold_reason FROM users WHERE id = $1',
+          [fromUserId],
+        );
+        if (sender.rows[0]?.payout_hold_reason) {
+          throw new AppError(
+            403,
+            'ACCOUNT_ON_HOLD',
+            'Your account is on hold until staff review it, and cannot send tips until then',
+          );
+        }
 
         /* Debit and balance check in ONE statement, as everywhere else on this platform. A
          * read-then-write here is how a player tips money they no longer have. */
