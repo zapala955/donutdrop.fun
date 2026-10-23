@@ -624,7 +624,6 @@ function openLoginModal() {
         const challenge = await startLogin(username, challengeToken, code || undefined);
         go.dataset.state = 'success';
         form.hidden = true;
-        discordBox.hidden = true;
         /* The command, the amount, and one button that copies it.
          *
          * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
