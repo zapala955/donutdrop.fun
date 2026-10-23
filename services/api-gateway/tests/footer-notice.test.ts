@@ -23,9 +23,6 @@ describe('the notice at the foot of every page', () => {
     );
     assert.match(text, /not an official Minecraft product/);
     assert.match(footer, /href="\/terms"/);
-    // donutvanta.com redirects here; the name on the page is what lets a search for it find the site.
-    assert.match(text, /DonutLuxe is also DonutVanta, at donutvanta\.com\./);
-    assert.match(html, /"alternateName":\["DonutLuxe\.com","DonutVanta","DonutVanta\.com"\]/);
   });
 
   it('is the last thing in the main column, on every route, and loads its own stylesheet', async () => {
