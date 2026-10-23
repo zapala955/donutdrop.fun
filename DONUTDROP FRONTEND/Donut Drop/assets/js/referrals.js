@@ -48,6 +48,7 @@ export function mountReferrals(node) {
       paint();
     });
   }
+  consumeDiscordReturn();
   paint();
 }
 
@@ -145,6 +146,41 @@ export function pendingReferralCode() {
  * row for the whole payment round trip — which survives a reload, where session storage did not.
  */
 
+
+/* ─────────── coming back from Discord ───────────
+ *
+ * The API redirects to `/referrals?discord=<outcome>` and the outcome is announced once, then
+ * stripped from the URL so a reload does not replay it.
+ */
+function consumeDiscordReturn() {
+  const params = new URLSearchParams(location.search);
+  const outcome = params.get('discord');
+  if (!outcome) return;
+
+  /* `unlocked` used to be one of these. Verifying Discord could complete the bonus gate, so the
+     redirect could come back announcing a payment. The gate is the wager alone now, so that
+     outcome can no longer be produced and an announcement for it would be unreachable code
+     promising money. */
+  const announcements = {
+    verified: { kind: 'win', title: 'Discord verified' },
+    taken: { kind: 'lose', title: 'Already linked', body: 'This account is on a different Discord' },
+    // One Discord carries a main account and a few alts; this one was already full.
+    limit: { kind: 'lose', title: 'Discord is full', body: 'Unlink an account with /accounts unlink first' },
+    expired: { kind: 'lose', title: 'Link expired', body: 'Start the verification again' },
+    failed: { kind: 'lose', title: 'Discord declined' },
+  };
+  const announcement = announcements[outcome];
+  if (announcement) {
+    toast(announcement);
+    if (outcome === 'verified') playSound('coin');
+  }
+
+  params.delete('discord');
+  const rest = params.toString();
+  history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}`);
+  // The verification landed on the server; the cached snapshot predates it.
+  refreshReferrals().catch(() => undefined);
+}
 
 /* ─────────── render ─────────── */
 function paint() {

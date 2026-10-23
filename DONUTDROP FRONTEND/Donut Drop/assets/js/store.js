@@ -1093,11 +1093,10 @@ export async function claimReferralRewards() {
   return result;
 }
 
-/* Linking a Discord, by authorizing the app (routes/discord-link.ts). Hands back Discord's own
- * authorize URL rather than navigating here, so the caller decides when the page leaves; Discord
- * sends the browser back to `/discord?link=<outcome>`. The state inside is single-use and short-lived. */
-export async function startDiscordLink() {
-  const result = await api.post('/v1/discord/link/start', {});
+/* Hands back Discord's own authorize URL rather than navigating here, so the caller decides when
+ * the page leaves. The state parameter inside it is single-use and short-lived. */
+export async function startDiscordVerification() {
+  const result = await api.post('/v1/referrals/discord/start', {});
   return result.authorizeUrl;
 }
 

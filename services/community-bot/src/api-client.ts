@@ -57,16 +57,21 @@ export class ApiRefused extends Error {
   }
 }
 
-/** `/link` from a member: not linked (they link on the site), or linked and the join reward's fate. */
-export type JoinRewardResult =
-  | { readonly linked: false }
-  | {
-      readonly linked: true;
-      readonly username: string;
-      readonly paidMinor: string | null;
-      /** Why nothing was paid: already collected, too young a Discord, or rewards off. */
-      readonly skipped: string | null;
-    };
+export interface RewardLine {
+  readonly kind: 'join' | 'tag';
+  readonly amountMinor: string;
+  readonly to: 'you';
+}
+
+export interface LinkResult {
+  readonly username: string;
+  readonly rewards: RewardLine[];
+  readonly joinSkipped: string | null;
+  /** Whether the account just linked is the Discord's main one. Absent on an older gateway. */
+  readonly main?: boolean;
+  readonly accounts?: number;
+  readonly maxAccounts?: number;
+}
 
 /** One of the site accounts linked to a Discord (`/accounts list`). */
 export interface LinkedAccount {
@@ -141,9 +146,14 @@ export class PlatformApi {
     });
   }
 
-  /** `/link` from a member already linked on the site: the join reward, if it is still due. */
-  async joinReward(body: { discordUserId: string; guildId: string }): Promise<JoinRewardResult> {
-    return this.post<JoinRewardResult>('/internal/v1/community/join-reward', body);
+  /** `/link <code>`: the code the site showed a signed-in player. */
+  async link(body: {
+    discordUserId: string;
+    discordUsername: string;
+    guildId: string;
+    code: string;
+  }): Promise<LinkResult> {
+    return this.post<LinkResult>('/internal/v1/community/link', body);
   }
 
   /** `/tag`: the reward for wearing the server's tag, as far as this bot can see. */
@@ -216,7 +226,7 @@ export class PlatformApi {
 
   /**
    * One signed call. The gateway's refusals carry a code and a sentence written for players
-   * (a tag reward not due yet, an account that is not linked); those come back as `ApiRefused` so the
+   * (a wrong link code, an account linked elsewhere); those come back as `ApiRefused` so the
    * command can say what went wrong. Anything else is the platform being unavailable.
    */
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {

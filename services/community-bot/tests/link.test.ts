@@ -1,90 +1,180 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
-import type { ChatInputCommandInteraction } from 'discord.js';
+import type { ChatInputCommandInteraction, ModalSubmitInteraction } from 'discord.js';
 import type { PlatformApi } from '../src/api-client.js';
-import { commandDefinitions } from '../src/commands.js';
-import { linkFromServer } from '../src/features/rewards.js';
+import {
+  LINK_CODE_FIELD,
+  LINK_MODAL_ID,
+  buildLinkModal,
+  showLink,
+  submitLinkCode,
+} from '../src/features/link.js';
 
-/* 2026-10-22: a Discord is linked on the site, by authorizing the app; `/link` no longer takes a
- * code. In the server it sends a member who is not linked to the site, and collects the join reward
- * for one who is (being in the server is what that reward is for). */
+/* `/link` used to need `/link code:<code>` typed out, option syntax and all. Now plain `/link`
+ * opens a pop-up with one box for the code the site showed. */
 
-function interaction(guildId: string | null = '223456789012345678') {
+function commandInteraction() {
   const calls: { kind: string; payload: unknown }[] = [];
-  const value = {
+  const interaction = {
     user: { id: '123456789012345678', username: 'member' },
-    guildId,
+    guildId: '223456789012345678',
     reply: async (payload: unknown) => void calls.push({ kind: 'reply', payload }),
-    deferReply: async () => void calls.push({ kind: 'defer', payload: null }),
-    editReply: async (payload: unknown) => void calls.push({ kind: 'edit', payload }),
+    showModal: async (payload: unknown) => void calls.push({ kind: 'modal', payload }),
   } as unknown as ChatInputCommandInteraction;
-  return { interaction: value, calls };
+  return { interaction, calls };
 }
 
 describe('/link', () => {
-  it('is a plain command: no code to type any more', () => {
-    const link = commandDefinitions().find((entry) => entry.name === 'link');
-    assert.ok(link, 'the /link command is registered');
-    assert.deepEqual(link.options ?? [], []);
+  it('opens a pop-up asking for the code', () => {
+    const modal = buildLinkModal().toJSON();
+    assert.equal(modal.custom_id, LINK_MODAL_ID);
+    const row = modal.components[0] as unknown as { components: Record<string, unknown>[] };
+    const input = row.components[0]!;
+    assert.equal(input['custom_id'], LINK_CODE_FIELD);
+    assert.equal(input['required'], true);
+    assert.equal(input['min_length'], 4);
+    assert.equal(input['max_length'], 16);
+    assert.match(String(input['placeholder']), /donutluxe\.com\/discord/);
   });
 
-  it('sends a member who is not linked to the site, with a button there', async () => {
-    const asked: unknown[] = [];
+  it('shows the pop-up to somebody who is not linked', async () => {
+    const { interaction, calls } = commandInteraction();
+    const api = { profile: async () => ({ linked: false }) } as unknown as PlatformApi;
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['modal'],
+    );
+  });
+
+  it('says "already linked" instead of asking again', async () => {
+    const { interaction, calls } = commandInteraction();
     const api = {
-      joinReward: async (body: unknown) => {
-        asked.push(body);
-        return { linked: false };
-      },
+      profile: async () => ({ linked: true, username: 'Steve', linkedAt: null }),
     } as unknown as PlatformApi;
-    const { interaction: command, calls } = interaction();
-    await linkFromServer(api, command);
-    assert.deepEqual(asked, [{ discordUserId: '123456789012345678', guildId: '223456789012345678' }]);
-    const edit = JSON.stringify(calls.find((call) => call.kind === 'edit')?.payload);
-    assert.match(edit, /Link Discord/);
-    assert.match(edit, /authorize the app/);
-    assert.match(edit, /"url":"https:\/\/donutluxe\.com\/discord"/);
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['reply'],
+    );
+    assert.match(JSON.stringify(calls[0]?.payload), /Already linked/);
   });
 
-  it('collects the join reward for a member who is linked', async () => {
+  /* 2026-10-20: one Discord may carry several accounts (a main and its alts), so a linked member
+   * who still has room gets the pop-up for the next one; a full Discord is told so. */
+  it('opens the pop-up for another account while the Discord has room', async () => {
+    const { interaction, calls } = commandInteraction();
     const api = {
-      joinReward: async () => ({ linked: true, username: 'Steve', paidMinor: '5000000', skipped: null }),
-    } as unknown as PlatformApi;
-    const { interaction: command, calls } = interaction();
-    await linkFromServer(api, command);
-    const edit = JSON.stringify(calls.find((call) => call.kind === 'edit')?.payload);
-    assert.match(edit, /linked to \*\*Steve\*\*/);
-    assert.match(edit, /Join reward/);
-  });
-
-  it('says why nothing was paid', async () => {
-    const api = {
-      joinReward: async () => ({
+      profile: async () => ({
         linked: true,
         username: 'Steve',
-        paidMinor: null,
-        skipped: 'The join reward was already paid to this Discord or this account',
+        linkedAt: null,
+        accounts: 1,
+        maxAccounts: 5,
       }),
     } as unknown as PlatformApi;
-    const { interaction: command, calls } = interaction();
-    await linkFromServer(api, command);
-    assert.match(JSON.stringify(calls.find((call) => call.kind === 'edit')?.payload), /already paid/);
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['modal'],
+    );
   });
 
-  it('works only inside the server, and says so when the site is not connected', async () => {
-    const outside = interaction(null);
-    await linkFromServer({ joinReward: async () => assert.fail('asked') } as unknown as PlatformApi, outside.interaction);
-    assert.match(JSON.stringify(outside.calls.at(-1)?.payload), /Server only/);
-
-    const offline = interaction();
-    await linkFromServer(null, offline.interaction);
-    assert.equal(offline.calls[0]?.kind, 'reply');
-    assert.match(JSON.stringify(offline.calls[0]?.payload), /Not available here/);
+  it('says the Discord is full once it carries the most accounts allowed', async () => {
+    const { interaction, calls } = commandInteraction();
+    const api = {
+      profile: async () => ({
+        linked: true,
+        username: 'Steve',
+        linkedAt: null,
+        accounts: 5,
+        maxAccounts: 5,
+      }),
+    } as unknown as PlatformApi;
+    await showLink(api, interaction);
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['reply'],
+    );
+    assert.match(JSON.stringify(calls[0]?.payload), /5 of 5 accounts/);
+    assert.match(JSON.stringify(calls[0]?.payload), /\/accounts unlink/);
   });
 
-  it('is routed to the server-side handler, and the code pop-up is gone', async () => {
-    const server = (await readFile(new URL('../src/server.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-    assert.match(server, /case 'link':\n\s*return linkFromServer\(api, interaction\);/);
-    assert.doesNotMatch(server, /submitLinkCode|link:code/);
+  it('tells an alt that /tag keeps paying the main account', async () => {
+    const edits: unknown[] = [];
+    const api = {
+      link: async () => ({
+        username: 'SteveAlt',
+        rewards: [],
+        joinSkipped: 'The join reward was already paid to this Discord or this account',
+        main: false,
+        accounts: 2,
+        maxAccounts: 5,
+      }),
+    } as unknown as PlatformApi;
+    const interaction = {
+      user: { id: '123456789012345678', username: 'member' },
+      guildId: '223456789012345678',
+      fields: { getTextInputValue: () => 'K7PQ2MXA' },
+      deferReply: async () => undefined,
+      editReply: async (payload: unknown) => void edits.push(payload),
+    } as unknown as ModalSubmitInteraction;
+    await submitLinkCode(api, interaction);
+    const text = JSON.stringify(edits[0]);
+    assert.match(text, /2 of 5 accounts on this Discord/);
+    assert.match(text, /\/accounts main/);
+  });
+
+  it('still opens the pop-up when the site is slow, rather than letting Discord time out', async () => {
+    const { interaction, calls } = commandInteraction();
+    const api = { profile: () => new Promise(() => undefined) } as unknown as PlatformApi;
+    const keepAlive = setInterval(() => undefined, 50);
+    try {
+      await showLink(api, interaction);
+    } finally {
+      clearInterval(keepAlive);
+    }
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ['modal'],
+    );
+  });
+
+  it('links with the code typed into the pop-up', async () => {
+    const linked: unknown[] = [];
+    const edits: unknown[] = [];
+    const api = {
+      link: async (body: unknown) => {
+        linked.push(body);
+        return { username: 'Steve', rewards: [], joinSkipped: null };
+      },
+    } as unknown as PlatformApi;
+    const interaction = {
+      user: { id: '123456789012345678', username: 'member' },
+      guildId: '223456789012345678',
+      fields: { getTextInputValue: (id: string) => (id === LINK_CODE_FIELD ? ' K7PQ2MXA ' : '') },
+      deferReply: async () => undefined,
+      editReply: async (payload: unknown) => void edits.push(payload),
+    } as unknown as ModalSubmitInteraction;
+    await submitLinkCode(api, interaction);
+    assert.deepEqual(linked, [
+      {
+        discordUserId: '123456789012345678',
+        discordUsername: 'member',
+        guildId: '223456789012345678',
+        code: 'K7PQ2MXA',
+      },
+    ]);
+    assert.match(JSON.stringify(edits[0]), /now linked to \*\*Steve\*\*/);
+  });
+
+  it('routes the pop-up back to the linking', async () => {
+    const server = await readFile(new URL('../src/server.ts', import.meta.url), 'utf8');
+    assert.match(
+      server,
+      /if \(prefix === 'link' && action === 'code'\) return submitLinkCode\(api, interaction\);/,
+    );
+    assert.equal(LINK_MODAL_ID, 'link:code');
   });
 });

@@ -226,15 +226,12 @@ services:
       DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
       COMMUNITY_BOT_ENABLED: '${COMMUNITY_BOT_ENABLED:-false}'
       COMMUNITY_BOT_HMAC_KEY_FILE: /run/secrets/community_bot_hmac_key
-      # Discord OAuth: linking a Discord to an account by authorizing the app. Off until the
-      # redirect URI is set; the secret file is a placeholder until the real one is written.
+      # Discord OAuth: the referral verification. Off until its redirect URI is set; the secret
+      # file is a placeholder until the real one is written.
       DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'
       DISCORD_CLIENT_SECRET_FILE: /run/secrets/discord_client_secret
       DISCORD_REDIRECT_URI: '${DISCORD_REDIRECT_URI:-}'
       DISCORD_MAX_ACCOUNTS: '${DISCORD_MAX_ACCOUNTS:-5}'
-      # The public server, the community bot's own setting: linking asks Discord whether the player
-      # is in it, and pays the join reward only to a member.
-      COMMUNITY_GUILD_ID: '${COMMUNITY_GUILD_ID:-}'
       TURNSTILE_ENABLED: '${TURNSTILE_ENABLED:-false}'
       TURNSTILE_SITE_KEY: '${TURNSTILE_SITE_KEY:-}'
       TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key

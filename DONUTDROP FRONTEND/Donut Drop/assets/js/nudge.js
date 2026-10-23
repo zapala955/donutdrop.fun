@@ -5,7 +5,7 @@
  * picked for who is looking:
  *
  *   signed out                      → the signup bonus, opening the login form
- *   signed in, Discord not linked   → the Discord page, where the Link Discord button is
+ *   signed in, Discord not linked   → the Discord page, where the link code is
  *   otherwise                       → the invite link, or a game to try (data.js SPOTLIGHT_GAMES)
  *
  * It never blocks anything: no backdrop, focus is left where it was, and the × or Escape closes
@@ -101,7 +101,7 @@ async function pickOffer() {
           kind: 'discord',
           eyebrow: 'Community',
           title: ['Join the Discord'],
-          line: 'Chat with other players and link your account on the Discord page.',
+          line: 'Chat with other players and link your account with /link.',
           cta: 'Join Discord',
           href: '/discord',
         };

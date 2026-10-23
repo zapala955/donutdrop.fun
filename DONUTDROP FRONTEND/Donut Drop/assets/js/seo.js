@@ -147,7 +147,7 @@ export const ROUTE_META = {
   discord: {
     title: 'DonutLuxe Discord — Join & Link Your Account',
     description:
-      'Join the DonutLuxe Discord and link your account for the server rewards.',
+      'Join the DonutLuxe Discord, then link your account with /link for the server rewards.',
   },
   'creator-media': {
     title: 'DonutLuxe Creator & Media Programme',

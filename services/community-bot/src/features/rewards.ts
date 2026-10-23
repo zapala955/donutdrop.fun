@@ -1,9 +1,7 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags,
   type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
   type User,
 } from 'discord.js';
 import { ApiRefused, ApiUnavailable, type PlatformApi, type RewardStatus } from '../api-client.js';
@@ -13,8 +11,8 @@ import { watchTag } from './tag-watch.js';
 /**
  * rewards.ts — what this server pays, and the commands that collect it.
  *
- *   /link         linking happens on the site (authorize the app); here a linked member collects
- *                 the join reward, and anybody else gets a button to the site.
+ *   /link         ties this Discord account to the DonutLuxe account that showed the code (typed
+ *                 into the pop-up, or as `code:`), and pays the join reward the link unlocks.
  *   /tag          the reward for wearing the server's tag: the first at once, then one for every
  *                 24 hours it stays on.
  *   /rewards      where you stand.
@@ -50,50 +48,38 @@ export async function wearsServerTag(user: User, guildId: string): Promise<boole
   return showsServerTag(fresh, guildId);
 }
 
-/**
- * `/link`. Linking itself happens on the site, by authorizing the app, so a member who is not linked
- * gets a button to the Discord page. A member who is linked collects the join reward here if it is
- * still due: running a command in this server is the membership that reward is for.
- */
-export async function linkFromServer(
-  api: PlatformApi | null,
-  interaction: ChatInputCommandInteraction,
+/** The link and its reward, for a code typed as `/link code:` or into the pop-up `/link` opens. */
+export async function linkWithCode(
+  api: PlatformApi,
+  interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
+  code: string,
 ) {
-  if (!api) {
-    await interaction.reply({ embeds: [unavailable()], flags: MessageFlags.Ephemeral });
-    return;
-  }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   if (!interaction.guildId) {
     await interaction.editReply({ embeds: [bad('Server only', 'Run this inside the server.')] });
     return;
   }
   try {
-    const result = await api.joinReward({
+    const result = await api.link({
       discordUserId: interaction.user.id,
+      discordUsername: interaction.user.username,
       guildId: interaction.guildId,
+      code,
     });
-    if (!result.linked) {
-      await interaction.editReply({
-        embeds: [
-          embed(
-            'Link your DonutLuxe account',
-            'Linking happens on the site: sign in at **donutluxe.com**, open the Discord page, press ' +
-              '**Link Discord** and authorize the app. Then run `/link` here again to collect the ' +
-              'join reward.',
-            COLOR.quiet,
-          ),
-        ],
-        components: [siteButton()],
-      });
-      return;
+    const lines = [`This Discord account is now linked to **${result.username}**.`];
+    /* A second (third, ...) account on the same Discord is an alt: the bot's rewards keep going to
+     * the main account. */
+    if (result.main === false) {
+      lines.push(
+        `That makes ${result.accounts} of ${result.maxAccounts} accounts on this Discord. ` +
+          '`/tag` keeps paying your main account; `/accounts main` changes which one that is.',
+      );
     }
-    const lines = [`This Discord account is linked to **${result.username}**.`];
-    if (result.paidMinor) {
-      lines.push(`🎁 Join reward: **${formatMoney(BigInt(result.paidMinor))}** added to your balance.`);
-    } else if (result.skipped) {
-      lines.push(`_${result.skipped}._`);
+    for (const reward of result.rewards) {
+      if (reward.kind !== 'join') continue;
+      lines.push(`🎁 Join reward: **${formatMoney(BigInt(reward.amountMinor))}** added to your balance.`);
     }
+    if (result.joinSkipped) lines.push(`_${result.joinSkipped}._`);
     lines.push(
       '',
       'Wear the server tag and run `/tag`: the first reward is yours straight away, then one for ' +
@@ -103,13 +89,6 @@ export async function linkFromServer(
   } catch (error) {
     await interaction.editReply({ embeds: [failed(error)] });
   }
-}
-
-/** A link button to the site's Discord page, where the account is linked. */
-function siteButton(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setLabel('Open the Discord page').setStyle(ButtonStyle.Link).setURL(SITE),
-  );
 }
 
 /** `/tag` — the tag reward, if it is due. */
@@ -175,7 +154,7 @@ export async function showRewards(
       'Server rewards',
       status.linked
         ? `Linked to **${status.username}**.`
-        : `Not linked yet. Open **${SITE}**, press Link Discord and authorize the app.`,
+        : `Not linked yet. Get a code at **${SITE}**, then run \`/link\` and paste it in.`,
     ).addFields(
       {
         name: `Join · ${money(status.amounts.joinMinor)}`,

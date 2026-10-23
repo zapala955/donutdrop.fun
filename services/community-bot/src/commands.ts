@@ -435,7 +435,14 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('link')
-      .setDescription('Link your DonutLuxe account (on the site) and collect the join reward'),
+      .setDescription('Connect your Discord to your DonutLuxe account')
+      .addStringOption((option) =>
+        option
+          .setName('code')
+          .setDescription('The code shown at donutluxe.com/discord')
+          .setMinLength(4)
+          .setMaxLength(16),
+      ) as SlashCommandBuilder,
   );
 
   add(

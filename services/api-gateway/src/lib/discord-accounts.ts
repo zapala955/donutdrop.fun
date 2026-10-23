@@ -10,7 +10,7 @@ import { AppError } from './errors.js';
  * member picks another with `/accounts main` in the server. The main account is the one the bot acts
  * for -- `/tag` pays it, `/profile` and `/rewards` describe it -- because those commands have a
  * Discord in hand and no other way to choose. The site never needs it: a signed-in session already
- * names its account, and "Log in with Discord" lets the player pick.
+ * names its account.
  *
  * Every reward that depends on Discord stays once per Discord whatever this allows: discord_rewards
  * carries unique indexes on the Discord id (join once, tag once a day, invite once per invitee), so

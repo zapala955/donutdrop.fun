@@ -15,7 +15,7 @@
  *
  * What it says depends on who is looking, and every state says what to do next:
  *   signed out       → log in (the window comes back, code kept, once they have)
- *   not linked       → the Discord page, where the Link Discord button is
+ *   not linked       → the Discord page, where the link code is
  *   switched off     → that, plainly
  *   below the day's wagering bar (2M by default) → how far they are, with a bar, a button to go and
  *                      play, and a quiet re-check every few seconds, so the field appears by itself
@@ -284,8 +284,8 @@ function paint() {
     card.append(art('ender_chest.png'), ...heading('Daily code', ['Link Discord first']));
     card.appendChild(
       paragraph(
-        'A daily code only works on the account linked to the Discord it was sent to. Open the ' +
-          'Discord page and press Link Discord. Your code is kept for 24 hours.',
+        'A daily code only works on the account linked to the Discord it was sent to. Get your ' +
+          'link code on the Discord page and run /link in the server. Your code is kept for 24 hours.',
       ),
     );
     const go = el('a', 'btn btn--go popup__go');

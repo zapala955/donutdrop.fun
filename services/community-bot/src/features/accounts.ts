@@ -5,8 +5,8 @@ import { COLOR, bad, clip, embed, ok, relative, warn } from '../ui.js';
 /**
  * accounts.ts — `/accounts`: the DonutLuxe accounts linked to your Discord.
  *
- * One Discord may carry several site accounts (a main Minecraft account and its alts). All of them
- * can be signed in to with "Log in with Discord" on the site; the MAIN one is the account this bot
+ * One Discord may carry several site accounts (a main Minecraft account and its alts). The MAIN
+ * one is the account this bot
  * acts for, because a command here has a Discord in hand and nothing else to choose by: `/tag` pays
  * it, `/profile` and `/rewards` show it.
  *
@@ -47,7 +47,7 @@ export async function handleAccounts(
           ok(
             'Main account changed',
             `**${result.username}** is now your main account: \`/tag\` pays it, and \`/profile\` and ` +
-              '`/rewards` show it. Every linked account can still log in with Discord on the site.',
+              '`/rewards` show it.',
           ),
         ],
       });
@@ -76,7 +76,7 @@ async function listCard(api: PlatformApi, discordUserId: string) {
   if (!accounts.length) {
     return embed(
       'No accounts linked',
-      'Sign in at donutluxe.com, open the Discord page, press **Link Discord** and authorize the app.',
+      'Sign in at donutluxe.com, open the Discord page, press **Get link code**, then run `/link` here.',
       COLOR.quiet,
     );
   }
@@ -92,9 +92,9 @@ async function listCard(api: PlatformApi, discordUserId: string) {
     '',
     `${accounts.length} of ${max} accounts. ` +
       (accounts.length < max
-        ? 'To add another: sign in to it on the site and press Link Discord on the Discord page.'
+        ? 'To add another: sign in to it on the site, get a link code, and `/link` it here.'
         : 'That is the most one Discord may carry; `/accounts unlink` frees a slot.'),
-    '`/accounts main` picks which one `/tag` pays. All of them can log in with Discord on the site.',
+    '`/accounts main` picks which one `/tag` pays.',
   );
   return embed('Your linked accounts', lines.join('\n'), COLOR.brand);
 }

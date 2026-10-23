@@ -758,11 +758,9 @@ const environmentSchema = z
     SIGNUP_BONUS_MINOR: nonNegativeBigintString.default('2000000'),
     SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(5),
     DEPOSIT_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
-    /* Discord OAuth: how a player links their Discord, by authorizing the app (routes/discord-link.ts).
-     * The client secret is file-backed like every other credential, and the redirect URI -- the
-     * site's /v1/discord/link/callback -- is pinned here rather than taken from the request: an
-     * attacker-chosen redirect is how an authorization code leaves for somebody else's server. All
-     * three empty: there is no way to link, and the site says so. */
+    /* Discord OAuth. The client secret is file-backed like every other credential, and the
+     * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect
+     * is how an authorization code leaves for somebody else's server. */
     DISCORD_CLIENT_ID: z
       .string()
       .regex(/^$|^[0-9]{5,32}$/, 'must be a Discord application id')
@@ -776,13 +774,6 @@ const environmentSchema = z
           .refine((value) => /^https?:\/\//.test(value), 'must be an HTTP(S) URL'),
         z.literal(''),
       ])
-      .default(''),
-    /* The public Discord server (the community bot's COMMUNITY_GUILD_ID). Linking a Discord asks
-     * Discord whether the player is a member of it, and the join reward is paid only to one. Empty:
-     * nothing is asked, and the join reward waits for /link in the server, which proves it there. */
-    COMMUNITY_GUILD_ID: z
-      .string()
-      .regex(/^$|^[0-9]{5,32}$/, 'must be a Discord server id')
       .default(''),
     /* How many site accounts one Discord may be linked to (alts). Rewards stay once per Discord
      * whatever this is (discord_rewards is keyed on the Discord), so it bounds how many accounts one
@@ -1555,7 +1546,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordClientId: env.DISCORD_CLIENT_ID,
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,
-    communityGuildId: env.COMMUNITY_GUILD_ID,
     discordMaxAccounts: env.DISCORD_MAX_ACCOUNTS,
     discordControlEnabled: env.DISCORD_CONTROL_ENABLED,
     discordBotToken: env.DISCORD_BOT_TOKEN,

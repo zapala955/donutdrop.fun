@@ -5,7 +5,7 @@ import type { Database } from '../lib/db.js';
 import { z } from 'zod';
 import { dailyCodeProgress, redeemDailyCode, type RedeemResult } from '../lib/daily-codes.js';
 import { unlinkAccount } from '../lib/discord-accounts.js';
-import { rewardStatus } from '../lib/discord-rewards.js';
+import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
 
@@ -14,9 +14,9 @@ import { parseWith } from '../lib/validation.js';
 const redeemSchema = z.object({ code: z.string().min(1).max(40) }).strict();
 
 /**
- * The site's half of the Discord rewards: what the rewards stand at, unlinking, and the window
- * where a daily code is redeemed. Linking is routes/discord-link.ts; the bot's half is in
- * community-bot.ts.
+ * The site's half of the Discord rewards: a link code for the signed-in player to type into
+ * `/link` in the server, what the rewards stand at, and the window where a daily code is redeemed.
+ * The bot's half is in community-bot.ts.
  */
 export async function registerDiscordRewardRoutes(
   app: FastifyInstance,
@@ -100,7 +100,7 @@ export async function registerDiscordRewardRoutes(
         return {
           status: 'refused',
           reason:
-            'Link your Discord account first: open the Discord page and press Link Discord. Your daily code is kept',
+            'Link your Discord account first: open the Discord page, copy your code and run /link in the server. Your daily code is kept',
           keepCode: true,
         };
       }
@@ -108,9 +108,37 @@ export async function registerDiscordRewardRoutes(
     },
   );
 
+  app.post(
+    '/v1/discord/link-code',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const userId = request.authUser?.id;
+      if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+      if (!config.communityBotEnabled) {
+        throw new AppError(
+          503,
+          'DISCORD_LINK_UNAVAILABLE',
+          'Linking through Discord is switched off',
+        );
+      }
+      const linked = await db.query<{ discord_user_id: string | null }>(
+        'SELECT discord_user_id FROM users WHERE id = $1',
+        [userId],
+      );
+      if (linked.rows[0]?.discord_user_id) {
+        throw new AppError(
+          409,
+          'DISCORD_ALREADY_LINKED',
+          'This account is already linked to Discord',
+        );
+      }
+      return createLinkCode(db, userId);
+    },
+  );
+
   /* Unlinks THIS account from its Discord, from the site. Only the signed-in account: the others on
    * the same Discord are managed from Discord itself (/accounts), where the Discord is proven. It
-   * frees a slot for another alt and stops this account being reachable by "Log in with Discord".
+   * frees a slot for another alt.
    * Rewards already paid stay paid; the Discord's claims stay spent. */
   app.post(
     '/v1/discord/unlink',

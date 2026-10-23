@@ -263,10 +263,6 @@ describe('frontend/backend contract', () => {
       path.resolve(import.meta.dirname, '../src/routes/referrals.ts'),
       'utf8',
     );
-    const linkRoutes = await readFile(
-      path.resolve(import.meta.dirname, '../src/routes/discord-link.ts'),
-      'utf8',
-    );
 
     assert.doesNotMatch(html, /href="#\//);
     assert.match(html, /href="\/terms"/);
@@ -280,10 +276,8 @@ describe('frontend/backend contract', () => {
     assert.match(routing, /query\.set\('code', parts\[1\]\)/);
     assert.match(nginx, /\|terms\)\$/);
     assert.match(referralRoutes, /\$\{config\.appOrigin\}\/\?ref=\$\{code\}/);
-    // Linking a Discord comes back to the Discord page on a clean path, never a fragment.
-    assert.match(linkRoutes, /\$\{config\.appOrigin\}\/discord\?link=\$\{outcome\}/);
+    assert.match(referralRoutes, /\$\{config\.appOrigin\}\/referrals\?discord=/);
     assert.doesNotMatch(referralRoutes, /\/#\//);
-    assert.doesNotMatch(linkRoutes, /\/#\//);
   });
 
   it('renders Terms as a basic document instead of an economics dashboard', async () => {
@@ -481,11 +475,10 @@ describe('frontend/backend contract', () => {
     assert.match(row, /<svg class="menu__ico menu__ico--brand"/);
     assert.match(html, /<a class="lxnav" href="\/discord" data-route="discord"/);
 
-    // The page itself carries the invite, and the link: Link Discord, by authorizing the app.
+    // The page itself still carries the invite, and the link code.
     const page = await source('assets/js/discord.js');
     assert.match(page, /const INVITE_URL = 'https:\/\/discord\.gg\/[A-Za-z0-9]+';/);
-    assert.match(page, /location\.assign\(await startDiscordLink\(\)\);/);
-    assert.doesNotMatch(page, /link-code/);
+    assert.match(page, /api\.post\('\/v1\/discord\/link-code'/);
   });
 
   it('measures the chat tail before appending so initial and incoming messages stay visible', async () => {

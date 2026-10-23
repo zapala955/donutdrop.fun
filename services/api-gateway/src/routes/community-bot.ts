@@ -10,8 +10,8 @@ import {
   unlinkAccount,
 } from '../lib/discord-accounts.js';
 import {
-  claimJoinReward,
   claimTagReward,
+  linkWithCode,
   recordTagSightings,
   rewardStatus,
   tagWatchList,
@@ -58,14 +58,15 @@ import { vipStandingFor } from '../lib/vip.js';
  * there is worse than no comment.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * IT CANNOT WRITE THE LINK
+ * HOW IT CAN WRITE THE LINK
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * The bot can prove which Discord account is talking to it, but not which site account that
- * person owns -- only a signed-in browser can. So linking happens on the site alone, by
- * authorizing the app (routes/discord-link.ts), and the bot only reads it. It used to write it too,
- * from a code the site minted and the member typed into `/link`; that path trusted the bot to report
- * the interaction truthfully, and was removed on 2026-10-22. `/link` now sends the member to the
- * site, and for a member already linked collects the join reward (below).
+ * person owns -- only a signed-in browser can. So the code that joins the two is minted by the
+ * SITE for a session (POST /v1/discord/link-code) and only typed into the bot; the bot cannot pick
+ * an account, only report who typed a code the site gave out. OAuth (referrals.ts) remains the
+ * stronger path, because it trusts nothing in between; this one exists because a deployment
+ * without a Discord client secret otherwise has no way to link at all, and then no way to pay the
+ * server's rewards to anybody.
  */
 
 const snowflake = z.string().regex(/^[0-9]{5,32}$/);
@@ -82,10 +83,12 @@ const profileSchema = z.object({
   viewerDiscordUserId: snowflake.optional(),
 });
 
-const joinRewardSchema = z
+const linkSchema = z
   .object({
     discordUserId: snowflake,
+    discordUsername: z.string().min(1).max(64),
     guildId: snowflake,
+    code: z.string().min(4).max(16),
   })
   .strict();
 
@@ -172,16 +175,15 @@ export async function registerCommunityBotRoutes(
     },
   );
 
-  /* `/link` from a member already linked: the join reward, if it is still due. The member ran a
-   * command in the server, which is the membership the reward is for (the bot answers in its own
-   * guild only). Linking itself is not here: it happens on the site. */
+  /* `/link <code>`: ties the Discord account to the site account the code was minted for, and pays
+   * what that unlocks -- the join reward, and the invite rewards that were waiting on it. */
   app.post(
-    '/internal/v1/community/join-reward',
+    '/internal/v1/community/link',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (request) => {
       verifyCommunityBotSignature(request, config);
-      const body = parseWith(joinRewardSchema, request.body);
-      return claimJoinReward(db, config, body.discordUserId);
+      const body = parseWith(linkSchema, request.body);
+      return linkWithCode(db, config, body);
     },
   );
 

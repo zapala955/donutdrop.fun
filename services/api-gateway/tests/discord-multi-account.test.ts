@@ -5,9 +5,9 @@ import { describe, it } from 'node:test';
 import { loadConfig } from '../src/config.js';
 import { runtimeSettingDefinitions } from '../src/lib/runtime-settings.js';
 
-/* One Discord, several site accounts (migration 075): a main account and its alts, each linked by
- * authorizing the app, with the main one the account the community bot acts for. ("Log in with
- * Discord", which let a Discord pick between them, was removed on 2026-10-22.) Checked end to
+/* One Discord, several site accounts (migration 075): a main account and its alts, with the main one
+ * the account the community bot acts for. ("Log in with Discord", which let a Discord pick between
+ * them, was removed on 2026-10-22.) Checked end to
  * end against a real Postgres when it was written; these hold the shape in place. */
 
 const repo = path.resolve(import.meta.dirname, '../../..');
@@ -33,7 +33,7 @@ const baseEnv = {
   IP_HASH_KEY: 'i'.repeat(32),
   DISCORD_CLIENT_ID: '123456789012345678',
   DISCORD_CLIENT_SECRET: 'd'.repeat(32),
-  DISCORD_REDIRECT_URI: 'http://localhost:3001/v1/discord/link/callback',
+  DISCORD_REDIRECT_URI: 'http://localhost:3001/v1/referrals/discord/callback',
 };
 
 describe('several accounts on one Discord: the limit', () => {
@@ -158,10 +158,10 @@ describe('several accounts on one Discord: the rules', () => {
   });
 });
 
-describe('Discord linking: the production stack', () => {
+describe('Discord OAuth: the production stack', () => {
   /* The api's environment in compose is an explicit list, so a setting it does not name never
    * reaches the gateway: before this, DISCORD_CLIENT_ID and the redirect could be set in the
-   * production env file and the Link Discord button would still never show. */
+   * production env file and the gateway would never see them. */
   it('hands the Discord OAuth settings and the client secret to the api', async () => {
     const compose = await read('infra/docker/compose.yml');
     const api = compose.slice(compose.indexOf('\n  api:\n'), compose.indexOf('\n  maintenance:'));
@@ -169,7 +169,6 @@ describe('Discord linking: the production stack', () => {
       "DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'",
       'DISCORD_CLIENT_SECRET_FILE: /run/secrets/discord_client_secret',
       "DISCORD_REDIRECT_URI: '${DISCORD_REDIRECT_URI:-}'",
-      "COMMUNITY_GUILD_ID: '${COMMUNITY_GUILD_ID:-}'",
       "DISCORD_MAX_ACCOUNTS: '${DISCORD_MAX_ACCOUNTS:-5}'",
       '      - discord_client_secret',
     ]) {

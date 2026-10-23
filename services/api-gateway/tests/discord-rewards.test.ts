@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { snowflakeCreatedAt } from '../src/lib/discord-rewards.js';
+import { normalizeLinkCode, snowflakeCreatedAt } from '../src/lib/discord-rewards.js';
 
 /*
  * The Discord rewards pay real balance for things a Discord account did, through a bot in a server
- * anybody can join. What keeps that honest is structural -- unique indexes, a link made only by
- * Discord's own OAuth, what every reward adds to the wager requirement -- so these pin the structure.
+ * anybody can join. What keeps that honest is structural -- unique indexes, who mints the link code,
+ * what every reward adds to the wager requirement -- so these pin the structure.
  */
 const root = path.resolve(import.meta.dirname, '../../..');
 const read = (file: string) => readFile(path.join(root, file), 'utf8');
@@ -19,6 +19,10 @@ describe('discord rewards', () => {
       snowflakeCreatedAt('175928847299117063').toISOString(),
       '2016-04-30T11:18:25.796Z',
     );
+  });
+
+  it('forgives case, spaces and dashes in a typed code', () => {
+    assert.equal(normalizeLinkCode(' ab3d-ef9h '), 'AB3DEF9H');
   });
 
   it('pays each reward at most once by index, not by a check that can race', async () => {
@@ -35,26 +39,18 @@ describe('discord rewards', () => {
     assert.match(sql, /code_hash char\(64\) PRIMARY KEY/);
   });
 
-  /* 2026-10-22: a Discord is linked only by authorizing the app (routes/discord-link.ts); the link
-   * code typed into the bot's /link is gone, so nothing between the player and Discord can choose
-   * which account a Discord lands on. */
-  it('links only through Discord OAuth, started by a signed-in session, with a state spent once', async () => {
-    const link = await read('services/api-gateway/src/routes/discord-link.ts');
-    assert.match(link, /'\/v1\/discord\/link\/start',\s+\{ preHandler: guards\.requireCsrf/);
-    assert.match(
-      link,
-      /SET consumed_at = now\(\)\s+WHERE state_hash = \$1 AND consumed_at IS NULL AND expires_at > now\(\)/,
-    );
+  it('mints the link code on the site, for a session, and consumes it once', async () => {
     const site = await read('services/api-gateway/src/routes/discord-rewards.ts');
-    assert.doesNotMatch(site, /link-code/);
+    assert.match(site, /'\/v1\/discord\/link-code',\s+\{ preHandler: guards\.requireCsrf/);
     const lib = await read('services/api-gateway/src/lib/discord-rewards.ts');
-    assert.doesNotMatch(lib, /discord_link_codes|createLinkCode|linkWithCode/);
-    // The join reward at the link is paid only to a member Discord vouched for.
-    assert.match(lib, /input\.member === true\s+\? await payJoinReward\(client, config, input\.userId, input\.discordUserId\)/);
+    assert.match(
+      lib,
+      /SET consumed_at = now\(\)\s+WHERE code_hash = \$1 AND consumed_at IS NULL AND expires_at > now\(\)/,
+    );
     /* One Discord carries a main account and up to discordMaxAccounts in all (migration 075): the
      * link goes through the one helper that enforces the limit, and the rewards stay keyed on the
      * Discord, so an alt collects nothing the main account did not. */
-    assert.match(lib, /linkAccountToDiscord\(client, config, input\)/);
+    assert.match(lib, /linkAccountToDiscord\(client, config, \{/);
     const accounts = await read('services/api-gateway/src/lib/discord-accounts.ts');
     assert.match(accounts, /if \(count >= config\.discordMaxAccounts\) \{/);
     assert.match(accounts, /'DISCORD_ACCOUNT_LIMIT'/);
@@ -69,7 +65,7 @@ describe('discord rewards', () => {
   it('lets the community bot reach the rewards only over its signed channel', async () => {
     const bot = await read('services/api-gateway/src/routes/community-bot.ts');
     for (const route of [
-      '/internal/v1/community/join-reward',
+      '/internal/v1/community/link',
       '/internal/v1/community/rewards/tag',
       '/internal/v1/community/rewards/status',
       '/internal/v1/community/rewards/tag-watch',
