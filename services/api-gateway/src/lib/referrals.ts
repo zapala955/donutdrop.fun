@@ -316,6 +316,8 @@ export async function tryUnlockMilestone(
 export const REFERRAL_STOP_MARGIN_BPS = 1_000n; // 10%
 /** How many such invites put the referrer on hold. */
 export const REFERRAL_STOP_COUNT = 2;
+/** A referrer whose account is younger than this is held at the first such invite. */
+export const REFERRAL_FRESH_REFERRER_DAYS = 7;
 
 /**
  * Two invited players who wager just past the referral requirement and then stop are what alts
@@ -332,6 +334,10 @@ export const REFERRAL_STOP_COUNT = 2;
  * reached the requirement, so it is almost always inside the margin; what decides the hold is
  * whether an earlier paid invite also stopped there instead of playing on. Measured against the
  * requirement as it is now, so an invite paid under a lower one counts by today's figure.
+ *
+ * A referrer younger than REFERRAL_FRESH_REFERRER_DAYS is held at the FIRST such invite. The farm
+ * of 2026-10-23 chained its alts: an invite that had just paid became a referrer itself, invited one
+ * more fresh alt and took that bonus too, and an account with one invite never reaches two.
  */
 async function holdIfInvitesStopAtRequirement(
   client: DbClient,
@@ -342,18 +348,25 @@ async function holdIfInvitesStopAtRequirement(
 ): Promise<boolean> {
   const requirement = config.referralBonusWagerMinor;
   const limit = (requirement * (10_000n + REFERRAL_STOP_MARGIN_BPS)) / 10_000n;
-  const earlier = await client.query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM referrals
-      WHERE referrer_id = $1 AND referee_id <> $2 AND voided_at IS NULL
-        AND bonus_unlocked_at IS NOT NULL AND wagered_minor <= $3`,
-    [referrerId, refereeId, limit.toString()],
+  const earlier = await client.query<{ n: string; fresh: boolean | null }>(
+    `SELECT (SELECT count(*) FROM referrals
+              WHERE referrer_id = $1 AND referee_id <> $2 AND voided_at IS NULL
+                AND bonus_unlocked_at IS NOT NULL AND wagered_minor <= $3)::text AS n,
+            (SELECT created_at > now() - make_interval(days => $4::integer)
+               FROM users WHERE id = $1) AS fresh`,
+    [referrerId, refereeId, limit.toString(), REFERRAL_FRESH_REFERRER_DAYS],
   );
+  const fresh = earlier.rows[0]?.fresh === true;
   const stopped = Number(earlier.rows[0]?.n ?? 0) + (refereeWageredMinor <= limit ? 1 : 0);
-  if (stopped < REFERRAL_STOP_COUNT) return false;
+  if (stopped < (fresh ? 1 : REFERRAL_STOP_COUNT)) return false;
 
+  const bounds = `${compactMinor(limit)} against ${compactMinor(requirement)}`;
   const reason =
-    `Auto: ${stopped} invites stopped at the referral wager requirement (each wagered at most ` +
-    `${compactMinor(limit)} against ${compactMinor(requirement)}). Review the invites.`;
+    stopped < REFERRAL_STOP_COUNT
+      ? `Auto: account under ${REFERRAL_FRESH_REFERRER_DAYS} days old, and its invite stopped at the ` +
+        `referral wager requirement (wagered at most ${bounds}). Review the invites.`
+      : `Auto: ${stopped} invites stopped at the referral wager requirement (each wagered at most ` +
+        `${bounds}). Review the invites.`;
   /* The guard is in the UPDATE: a hold already in place (by hand or by another rule) is left as it
    * is, and staff, who test the programme with their own invites, are never held by it. */
   const placed = await client.query(
@@ -375,6 +388,7 @@ async function holdIfInvitesStopAtRequirement(
     details: {
       reason,
       stoppedInvites: stopped,
+      freshReferrer: fresh,
       limitMinor: limit.toString(),
       requirementMinor: requirement.toString(),
       paidInvite: refereeId,

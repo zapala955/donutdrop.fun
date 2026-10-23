@@ -4,7 +4,12 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import type { AppConfig } from '../src/config.js';
 import type { DbClient } from '../src/lib/db.js';
-import { REFERRAL_STOP_COUNT, REFERRAL_STOP_MARGIN_BPS, tryUnlockMilestone } from '../src/lib/referrals.js';
+import {
+  REFERRAL_FRESH_REFERRER_DAYS,
+  REFERRAL_STOP_COUNT,
+  REFERRAL_STOP_MARGIN_BPS,
+  tryUnlockMilestone,
+} from '../src/lib/referrals.js';
 
 /* 2026-10-23, the operator's rule: when two of a referrer's invites wager no more than 10% over the
  * referral wager requirement, the referrer is put on hold until an administrator reviews it. The
@@ -21,7 +26,12 @@ const config = {
 } as unknown as AppConfig;
 
 /** A Postgres stand-in: answers the milestone's queries and records every statement, in order. */
-function fakeClient(opts: { refereeWagered: bigint; earlierStopped: number; alreadyHeld?: boolean }) {
+function fakeClient(opts: {
+  refereeWagered: bigint;
+  earlierStopped: number;
+  alreadyHeld?: boolean;
+  freshReferrer?: boolean;
+}) {
   const statements: string[] = [];
   const client = {
     query: async (sql: string, params: unknown[] = []) => {
@@ -31,10 +41,11 @@ function fakeClient(opts: { refereeWagered: bigint; earlierStopped: number; alre
       }
       if (/AS referrer_blocked/.test(sql)) return { rows: [{ referrer_blocked: false, shared_network: false }], rowCount: 1 };
       if (/INSERT INTO referral_earnings/.test(sql)) return { rows: [], rowCount: 1 };
-      if (/count\(\*\)::text AS n FROM referrals/.test(sql)) {
+      if (/SELECT count\(\*\) FROM referrals/.test(sql)) {
         // The earlier invites are counted against 110% of the requirement.
         assert.equal(params[2], ((REQUIREMENT * (10_000n + REFERRAL_STOP_MARGIN_BPS)) / 10_000n).toString());
-        return { rows: [{ n: String(opts.earlierStopped) }], rowCount: 1 };
+        assert.equal(params[3], REFERRAL_FRESH_REFERRER_DAYS);
+        return { rows: [{ n: String(opts.earlierStopped), fresh: opts.freshReferrer ?? false }], rowCount: 1 };
       }
       if (/UPDATE users u\s+SET payout_hold_reason/.test(sql)) {
         return opts.alreadyHeld ? { rows: [], rowCount: 0 } : { rows: [{ id: 'referrer' }], rowCount: 1 };
@@ -80,6 +91,17 @@ describe('a referrer whose invites stop at the wager requirement', () => {
     const over = fakeClient({ refereeWagered: 110_000_001n, earlierStopped: 1 });
     await tryUnlockMilestone(over.client, config, 'referee');
     assert.ok(!over.held());
+  });
+
+  it('holds a referrer under 7 days old at the first invite that stops there (the chained farm)', async () => {
+    const fresh = fakeClient({ refereeWagered: 101_000_000n, earlierStopped: 0, freshReferrer: true });
+    assert.equal(await tryUnlockMilestone(fresh.client, config, 'referee'), true);
+    assert.ok(fresh.held(), 'held at one');
+    assert.ok(fresh.statements.some((sql) => /INSERT INTO audit_log/.test(sql)));
+    // But a new account whose friend plays on past 110% is not.
+    const played = fakeClient({ refereeWagered: 130_000_000n, earlierStopped: 0, freshReferrer: true });
+    await tryUnlockMilestone(played.client, config, 'referee');
+    assert.ok(!played.held());
   });
 
   it('leaves a hold already in place as it is, and writes no second audit row', async () => {
