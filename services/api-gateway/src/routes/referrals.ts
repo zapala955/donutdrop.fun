@@ -12,6 +12,7 @@ import {
   revshareMinor,
 } from '../lib/referrals.js';
 import { maskedName } from '../lib/masked-name.js';
+import { accountId } from '../lib/media-test.js';
 import {
   recordNetwork,
   referralBlocked,
@@ -148,7 +149,10 @@ export async function registerReferralRoutes(
 
   app.get('/v1/referrals', { preHandler: guards.authenticate }, async (request) => {
     requireProgramme();
-    const userId = requireUserId(request.authUser?.id);
+    /* The creator's own programme, in test mode too. Read as the session's account, a test twin
+     * minted a code of its own here; a creator who shared that link while filming signed real
+     * players up under play money, and their bonuses and shares landed in the twin (2026-10-24). */
+    const userId = requireUserId(accountId(request.authUser));
 
     const code = await db.transaction((client) => ensureReferralCode(client, userId));
 
@@ -469,8 +473,11 @@ export async function registerReferralRoutes(
           conflict('REFERRAL_SAME_CODE', 'That is already your inviter\u0027s code');
         }
 
+        /* A code a test twin minted before 2026-10-24 credits the creator it belongs to: links
+         * shared from one are still out there, and play money must never be anybody's inviter. */
         const owner = await client.query<{ user_id: string; name: string }>(
-          `SELECT c.user_id, ${maskedName('u.minecraft_username')} AS name
+          `SELECT coalesce(u.demo_of, c.user_id) AS user_id,
+                  ${maskedName('u.minecraft_username')} AS name
              FROM referral_codes c JOIN users u ON u.id = c.user_id
             WHERE c.code = $1`,
           [body.code],

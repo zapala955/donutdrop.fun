@@ -356,8 +356,12 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
          * somebody's money and their signup at once.
          */
         if (!existing.rows[0] && config.referralsEnabled && challenge.referral_code) {
+          /* A test twin's code (minted before 2026-10-24) binds the creator behind it, never the
+           * play-money twin. */
           const referrer = await client.query<{ user_id: string }>(
-            'SELECT user_id FROM referral_codes WHERE code = $1',
+            `SELECT coalesce(u.demo_of, c.user_id) AS user_id
+               FROM referral_codes c JOIN users u ON u.id = c.user_id
+              WHERE c.code = $1`,
             [challenge.referral_code],
           );
           const referrerId = referrer.rows[0]?.user_id;
