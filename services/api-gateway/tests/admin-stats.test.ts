@@ -103,11 +103,21 @@ describe('admin dashboard figures', () => {
     assert.equal(totals.ggr, 150n);
     assert.equal(totals.promo, 25n);
     assert.equal(totals.itemBuybacks, 30n);
-    assert.equal(totals.net, 95n);
+    // 150 - 25 - 30, less the adjustment: this one is a clawback of 50, so it wins 50 back.
+    assert.equal(totals.net, 145n);
     assert.equal(totals.deposits, 2_000n);
     // A withdrawal refunded after a failed payout never left.
     assert.equal(totals.withdrawals, 700n);
     assert.equal(totals.adjustments, -50n);
+  });
+
+  it('counts a staff credit as a loss for the house (the operator, 2026-10-24)', () => {
+    const totals = summarize(
+      kinds({ case_open: [-1_000, 10], case_win: [900], admin_adjustment: [300, 2] }),
+    );
+    assert.equal(totals.ggr, 100n);
+    assert.equal(totals.adjustments, 300n);
+    assert.equal(totals.net, -200n);
   });
 
   it('reports each game on its own, and counts a blackjack double as the same player', () => {

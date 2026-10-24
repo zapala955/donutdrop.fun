@@ -746,13 +746,15 @@ function renderDashboard(report) {
   badge.textContent = change.text;
   foot.append(badge, ` vs ${periodWords(days)} (${compactAmount(p.net)})`);
   /* How the net is made, left to right, so a bad day says whether the games lost or the promos
-   * cost: house take, less what was paid back, less items bought back. */
+   * cost: house take, less what was paid back, less items bought back, less what staff credited
+   * by hand (a clawback makes that negative and adds back). */
   const bridge = document.createElement('dl');
   bridge.className = 'bridge';
   for (const [name, amount, sign] of [
     ['House take', t.ggr, ''],
     ['Promos & rewards', t.promo, '−'],
     ['Item buybacks', t.itemBuybacks, '−'],
+    ['Staff adjustments', t.adjustments, '−'],
     ['Net', t.net, '='],
   ]) {
     const item = document.createElement('div');

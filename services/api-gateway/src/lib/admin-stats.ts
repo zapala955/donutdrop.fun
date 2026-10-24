@@ -14,9 +14,13 @@ import type { DbClient } from './db.js';
  *
  * On top of that come the costs the house pays players for playing — rakeback, referral shares,
  * creator royalties, races, quests, streaks, rain, sign-up bonuses, the jackpot, vault yield — and
- * the cash it buys items back for. Net profit is GGR less all of those. Deposits, withdrawals and
- * manual adjustments are reported beside it but are not profit: they move money in and out of
- * wallets, not between a player and the house.
+ * the cash it buys items back for. Net profit is GGR less all of those, and less staff adjustments:
+ * a balance an operator credits to a player can be withdrawn like any winnings, so it is the
+ * house's loss, and a clawback (a negative adjustment) wins it back. That was the operator's call
+ * (2026-10-24); before it, adjustments were reported beside the net and millions credited by hand
+ * left as cash without ever showing up as a cost. Deposits and withdrawals are still reported
+ * beside it and are not profit: they move money in and out of wallets, not between a player and
+ * the house.
  *
  * Cash basis: a crate or upgrade won as an inventory lot (custody mode) pays no cash until the item
  * is sold back, and shows up then under item buybacks. In cash-only play every prize is cash and the
@@ -204,7 +208,7 @@ const rowsOf = (kinds: Map<string, KindAggregate>, names: readonly string[]): nu
  *
  * Signs: stakes are negative ledger rows and payouts and refunds positive, so the house's take on
  * the games is the NEGATED sum of every game kind; promo and buybacks are positive credits to
- * players, i.e. costs.
+ * players, i.e. costs. So is a staff adjustment, with its sign: a credit costs, a clawback recovers.
  */
 export function summarize(kinds: Map<string, KindAggregate>): Totals {
   const staked = -sumOf(kinds, STAKE_KINDS);
@@ -212,17 +216,18 @@ export function summarize(kinds: Map<string, KindAggregate>): Totals {
   const ggr = -sumOf(kinds, GAME_KINDS);
   const promo = sumOf(kinds, Object.keys(PROMO_KINDS));
   const itemBuybacks = sumOf(kinds, ITEM_BUYBACK_KINDS);
+  const adjustments = sumOf(kinds, ADJUSTMENT_KINDS);
   return {
     wagered: staked - refunded,
     bets: Math.max(0, rowsOf(kinds, STAKE_KINDS) - rowsOf(kinds, REFUND_KINDS)),
     ggr,
     promo,
     itemBuybacks,
-    net: ggr - promo - itemBuybacks,
+    net: ggr - promo - itemBuybacks - adjustments,
     deposits: sumOf(kinds, DEPOSIT_KINDS),
     // Paid out of wallets: the debit, less anything refunded back after a failed payout.
     withdrawals: -sumOf(kinds, WITHDRAWAL_KINDS),
-    adjustments: sumOf(kinds, ADJUSTMENT_KINDS),
+    adjustments,
   };
 }
 
