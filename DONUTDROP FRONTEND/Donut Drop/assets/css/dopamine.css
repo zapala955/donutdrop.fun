@@ -103,11 +103,11 @@ body.lx .lxpromo:has(.lxpromo__cover:hover) {
 }
 
 /* ═════════ the game frames: the crate rail's body around every game ═════════ */
-body.lx :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette) {
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .plinko, .bj, .roulette) {
   background: var(--dd-frame);
   box-shadow: var(--dd-edge);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .plinko, .bj, .roulette, .upg)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .plinko, .bj, .roulette, .upg)) > .phead--game {
   background: var(--dd-foot);
 }
 
@@ -148,7 +148,7 @@ body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-checked="true"] {
 /* ═════════ the money buttons: the crate's flat gold, with its light on hover ═════════ */
 body.lx :is(
   .lxbtn--gold, .main .btn--go, .modal .btn--go,
-  .crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go,
+  .crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .fishing .fishing__go, .icefish .icefish__go, .derby .derby__go,
   .plinko .plinko__go
 ):hover:not(:disabled):not(.lxpromo__go) {
   box-shadow: 0 6px 20px -9px rgba(227, 161, 58, .5);

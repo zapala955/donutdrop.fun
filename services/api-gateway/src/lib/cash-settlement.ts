@@ -60,6 +60,9 @@ export type ContributionSource =
   | 'plinko'
   | 'dice'
   | 'slots'
+  | 'fishing'
+  | 'ice_fishing'
+  | 'derby'
   | 'coinflip'
   | 'mines_duel';
 

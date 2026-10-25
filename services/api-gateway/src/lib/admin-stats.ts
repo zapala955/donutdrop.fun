@@ -94,6 +94,9 @@ export const GAMES: readonly GameDefinition[] = [
     payouts: ['dice_payout'],
     refunds: [],
   },
+  { key: 'fishing', label: 'Fishing', stakes: ['fishing_stake'], payouts: ['fishing_payout'], refunds: [] },
+  { key: 'ice_fishing', label: 'Ice Fishing', stakes: ['ice_fishing_stake'], payouts: ['ice_fishing_payout'], refunds: [] },
+  { key: 'derby', label: 'Mob Derby', stakes: ['derby_stake'], payouts: ['derby_payout'], refunds: [] },
   {
     key: 'minesduel',
     label: 'Mines duels',

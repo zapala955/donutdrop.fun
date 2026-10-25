@@ -581,6 +581,33 @@ const environmentSchema = z
     DICE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     DICE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     DICE_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Fishing. The edge is fixed in lib/fishing.ts. A cast whose best catch would pay more than the
+     * ceiling is refused, so the ceiling sets the largest stake in each weather. */
+    FISHING_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    FISHING_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    FISHING_MAX_STAKE_MINOR: positiveBigintString.default('50000000'),
+    FISHING_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Ice Fishing. The edge is fixed in lib/ice-fishing.ts. A spin whose best catch would pay more than
+     * the ceiling is refused, so the ceiling sets the largest stake at each risk. */
+    ICE_FISHING_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    ICE_FISHING_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    ICE_FISHING_MAX_STAKE_MINOR: positiveBigintString.default('50000000'),
+    ICE_FISHING_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Mob Derby. The edge is fixed in lib/derby.ts. A bet whose win would pay more than the ceiling
+     * is refused, so the ceiling sets the largest stake on each racer. */
+    DERBY_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    DERBY_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
+    DERBY_MAX_STAKE_MINOR: positiveBigintString.default('50000000'),
+    DERBY_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     SKILL_DUEL_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     SKILL_DUEL_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     /* A lobby nobody joins holds its host's money. This is how long before the sweeper refunds it
@@ -1110,6 +1137,48 @@ const environmentSchema = z
         message: 'must be at least DICE_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.FISHING_MIN_STAKE_MINOR) > BigInt(env.FISHING_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FISHING_MAX_STAKE_MINOR'],
+        message: 'must be at least FISHING_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.FISHING_MAX_PAYOUT_MINOR) < BigInt(env.FISHING_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FISHING_MAX_PAYOUT_MINOR'],
+        message: 'must be at least FISHING_MAX_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.ICE_FISHING_MIN_STAKE_MINOR) > BigInt(env.ICE_FISHING_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ICE_FISHING_MAX_STAKE_MINOR'],
+        message: 'must be at least ICE_FISHING_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.ICE_FISHING_MAX_PAYOUT_MINOR) < BigInt(env.ICE_FISHING_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ICE_FISHING_MAX_PAYOUT_MINOR'],
+        message: 'must be at least ICE_FISHING_MAX_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.DERBY_MIN_STAKE_MINOR) > BigInt(env.DERBY_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DERBY_MAX_STAKE_MINOR'],
+        message: 'must be at least DERBY_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.DERBY_MAX_PAYOUT_MINOR) < BigInt(env.DERBY_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DERBY_MAX_PAYOUT_MINOR'],
+        message: 'must be at least DERBY_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.PLINKO_MIN_STAKE_MINOR) > BigInt(env.PLINKO_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1616,6 +1685,18 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     diceMinStakeMinor: BigInt(env.DICE_MIN_STAKE_MINOR),
     diceMaxStakeMinor: BigInt(env.DICE_MAX_STAKE_MINOR),
     diceMaxPayoutMinor: BigInt(env.DICE_MAX_PAYOUT_MINOR),
+    fishingEnabled: env.FISHING_ENABLED,
+    fishingMinStakeMinor: BigInt(env.FISHING_MIN_STAKE_MINOR),
+    fishingMaxStakeMinor: BigInt(env.FISHING_MAX_STAKE_MINOR),
+    fishingMaxPayoutMinor: BigInt(env.FISHING_MAX_PAYOUT_MINOR),
+    iceFishingEnabled: env.ICE_FISHING_ENABLED,
+    iceFishingMinStakeMinor: BigInt(env.ICE_FISHING_MIN_STAKE_MINOR),
+    iceFishingMaxStakeMinor: BigInt(env.ICE_FISHING_MAX_STAKE_MINOR),
+    iceFishingMaxPayoutMinor: BigInt(env.ICE_FISHING_MAX_PAYOUT_MINOR),
+    derbyEnabled: env.DERBY_ENABLED,
+    derbyMinStakeMinor: BigInt(env.DERBY_MIN_STAKE_MINOR),
+    derbyMaxStakeMinor: BigInt(env.DERBY_MAX_STAKE_MINOR),
+    derbyMaxPayoutMinor: BigInt(env.DERBY_MAX_PAYOUT_MINOR),
     payLoginMinAmount: env.PAY_LOGIN_MIN_AMOUNT,
     payLoginMaxAmount: env.PAY_LOGIN_MAX_AMOUNT,
     turnstileEnabled: env.TURNSTILE_ENABLED,

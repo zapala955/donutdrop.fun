@@ -99,9 +99,9 @@ describe('chat renderer', () => {
 describe('activity avatars', () => {
   it('carries an opaque player id through every activity kind and normalizes it', async () => {
     const apiSource = await activity();
-    // case, upgrade, roulette, blackjack, crash, mines, tower, chicken, plinko, dice, coinflip, mines duel
-    // and faction in the feed, and the same twelve games (no faction) in today's biggest wins.
-    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 27);
+    // case, upgrade, roulette, blackjack, crash, mines, tower, chicken, plinko, dice, fishing, ice fishing,
+    // mob derby, coinflip, mines duel and faction in the feed, and the same games (no faction) in today's biggest wins.
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 33);
     const storeSource = await store();
     assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
   });

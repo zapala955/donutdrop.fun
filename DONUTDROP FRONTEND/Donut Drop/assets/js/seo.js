@@ -91,6 +91,24 @@ export const ROUTE_META = {
       'Play dice with DonutSMP money on DonutLuxe: draw a line from 0 to 100, call over or under, ' +
       'and roll.',
   },
+  fishing: {
+    title: 'DonutLuxe Fishing — DonutSMP Fishing',
+    description:
+      'Go fishing with DonutSMP money on DonutLuxe: dive from a coral reef to an ancient city as the multiplier climbs. ' +
+      'Reel up before the line is cut.',
+  },
+  'ice-fishing': {
+    title: 'DonutLuxe Ice Fishing — DonutSMP Mines',
+    description:
+      'Drill a frozen lake for fish with DonutSMP money on DonutLuxe: every fish raises the multiplier, ' +
+      'thin ice ends the game. Pull out whenever you like.',
+  },
+  derby: {
+    title: 'DonutLuxe Mob Derby — DonutSMP Racing',
+    description:
+      'Bet DonutSMP money on a race of six Minecraft farm mobs on DonutLuxe. ' +
+      'Back the pig at 2.88x or the black sheep at 19.2x.',
+  },
   'ore-rush': {
     title: 'DonutLuxe Ore Rush — DonutSMP Slots',
     description:
