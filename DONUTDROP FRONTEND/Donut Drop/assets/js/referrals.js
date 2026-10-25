@@ -44,7 +44,7 @@ export function mountReferrals(node) {
     root.dataset.built = '1';
     bus.addEventListener('change', (event) => {
       if (!root.isConnected) return;
-      if (!['login', 'logout', 'ready', 'referrals', 'private'].includes(event.detail)) return;
+      if (!['login', 'logout', 'ready', 'referrals', 'private', 'promotions'].includes(event.detail)) return;
       paint();
     });
   }
@@ -193,7 +193,13 @@ function paint() {
    * around a dash. A large filled figure rendered around nothing reads as a component that failed
    * to load, which is the wrong impression on the one page that asks a player for their trust. */
   if (!state.authenticated) {
-    root.appendChild(gate('Log in to get your invite link.'));
+    /* Signed out: the offer itself, from GET /v1/promotions, and the one button that takes it.
+     * This used to be the single line below, which was all a visitor -- or a search engine --
+     * ever learned about the programme here; asked which DonutSMP site pays per referral, an
+     * assistant had nothing from this page to quote (2026-10-25). The line stays for the moment
+     * before the terms arrive, or if they never do. */
+    const terms = state.promotions?.referral;
+    root.appendChild(terms ? publicOffer(terms) : gate('Log in to get your invite link.'));
     return;
   }
   if (!data) {
@@ -242,16 +248,66 @@ function icon(...paths) {
  */
 function offerCard(data) {
   const card = el('div', 'refer__card');
-  const terms = data.terms;
+  const sharePercent = (data.terms.revshareWagerBps / 100).toFixed(1);
+  appendDeal(
+    card,
+    data.terms,
+    'Send your link to someone who has not played here yet. Once they have wagered the amount'
+    + ` below, the bonus lands in your wallet — and ${sharePercent}% of everything they wager keeps building`
+    + ' in Rewards for you to claim.',
+  );
+
+  card.appendChild(el('hr', 'refer__rule'));
+  card.appendChild(codeField(data));
+  card.appendChild(linkField(data));
+  /* The Discord block stood here. It was on this page because verification was half the gate; the
+   * gate is the wager alone now, so a verification card would be asking for a step that buys the
+   * player nothing. Discord verification still exists on the account — it is simply not part of
+   * this deal any more, and a page that kept advertising it would be selling a condition it does
+   * not have. */
+  return card;
+}
+
+/**
+ * The same card for somebody not signed in: the deal, then the button that gets them a link.
+ *
+ * The lede names the figures in words as well as in the headline, so the sentence a search result
+ * or an assistant lifts from this page carries the offer whole. Every figure is still the
+ * server's: `terms` is GET /v1/promotions' referral block.
+ */
+function publicOffer(terms) {
+  const wrap = el('div', 'refer');
+  const card = el('div', 'refer__card');
+  const bonus = money(Number(terms.bonusMinor));
+  const sharePercent = (terms.revshareWagerBps / 100).toFixed(1);
+  appendDeal(
+    card,
+    terms,
+    `Earn ${bonus} for every player you refer to DonutLuxe. Once they have wagered`
+    + ` ${money(Number(terms.bonusWagerMinor))}, the bonus lands in your wallet — and ${sharePercent}%`
+    + ' of everything they wager keeps building for you, for life.',
+  );
+  card.appendChild(el('hr', 'refer__rule'));
+  /* The luxe shell's gate button (luxe.js armGates), named for what it gets you. `lxgate` also
+   * tells that function this card already has its button. */
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.className = 'lxbtn lxbtn--gold lxgate';
+  go.textContent = 'Log in to get your link';
+  go.addEventListener('click', () => $('#loginBtn')?.click());
+  card.appendChild(go);
+  wrap.appendChild(card);
+  return wrap;
+}
+
+/** The title, the lede, the headline figure and the ruled terms: the deal, signed in or not. */
+function appendDeal(card, terms, ledeText) {
   const sharePercent = (terms.revshareWagerBps / 100).toFixed(1);
 
   const title = el('h2', 'refer__title');
   title.textContent = 'Invite \u0026 earn';
   const lede = el('p', 'refer__lede');
-  lede.textContent =
-    'Send your link to someone who has not played here yet. Once they have wagered the amount'
-    + ` below, the bonus lands in your wallet \u2014 and ${sharePercent}% of everything they wager keeps building`
-    + ' in Rewards for you to claim.';
+  lede.textContent = ledeText;
   card.append(title, lede);
 
   /* The headline figure, and nothing beside it. */
@@ -279,16 +335,6 @@ function offerCard(data) {
     list.append(key, val);
   }
   card.appendChild(list);
-
-  card.appendChild(el('hr', 'refer__rule'));
-  card.appendChild(codeField(data));
-  card.appendChild(linkField(data));
-  /* The Discord block stood here. It was on this page because verification was half the gate; the
-   * gate is the wager alone now, so a verification card would be asking for a step that buys the
-   * player nothing. Discord verification still exists on the account — it is simply not part of
-   * this deal any more, and a page that kept advertising it would be selling a condition it does
-   * not have. */
-  return card;
 }
 
 /**

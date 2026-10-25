@@ -42,7 +42,7 @@ import { mountVip, initVipWidget } from './vip.js';
 import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
 import { mountDiscord } from './discord.js';
-import { applyRouteMeta } from './seo.js';
+import { applyRouteMeta, liveRouteMeta } from './seo.js';
 import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
@@ -1325,7 +1325,7 @@ function route() {
 
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
   // Title, description, canonical and robots for this route: what a search result shows.
-  applyRouteMeta(name);
+  applyRouteMeta(name, liveRouteMeta(name, state.promotions, money));
   /* Each disclosure reads as current whenever any route it owns is the live one. Casino owns only
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
@@ -1488,6 +1488,13 @@ bus.addEventListener('change', (event) => {
     if (signInOpen()) closeModal();
     void settlePendingReferral();
   }
+});
+/* The invite page's search text quotes the live offer (seo.js liveRouteMeta). The route is usually
+ * drawn before GET /v1/promotions has answered, so it is retitled once the figures are in. */
+bus.addEventListener('change', (event) => {
+  if (event.detail !== 'promotions' && event.detail !== 'ready') return;
+  const live = liveRouteMeta(currentRouteName(), state.promotions, money);
+  if (live) applyRouteMeta(currentRouteName(), live);
 });
 initLiveEvents();
 initNudge({ openLogin: openLoginModal });

@@ -18,6 +18,13 @@
  *
  * The copy describes what each page does and nothing else. No figures, no promises: a search
  * snippet is the first thing a new player reads about the site.
+ *
+ * One exception, at the operator's request (2026-10-25): the invite page's title and description
+ * quote the live offer ("$50M per invite"), so a search result -- and an assistant asked which
+ * DonutSMP site pays per referral -- carries it. The figures come from GET /v1/promotions through
+ * liveRouteMeta() once it has answered, never from this file, because an invite figure typed into
+ * the site once went stale and advertised a bonus it had stopped paying. ROUTE_META's own text,
+ * which nginx serves and link previews read, still names no figure.
  */
 
 import { BASE } from './routing.js';
@@ -119,8 +126,8 @@ export const ROUTE_META = {
   referrals: {
     title: 'DonutLuxe Referrals — Invite & Earn',
     description:
-      'Invite players to DonutLuxe and earn a share of the house margin on what they play, never ' +
-      'a cut of their losses.',
+      'Earn a bonus for every player you refer to DonutLuxe, plus a share of everything they ' +
+      'wager for life.',
   },
   fairness: {
     title: 'DonutLuxe Provably Fair — Verify a Round',
@@ -206,11 +213,31 @@ function setMeta(selector, attribute, value) {
   if (node) node.setAttribute(attribute, value);
 }
 
-export function applyRouteMeta(route) {
+/**
+ * A route's title and description with the live offer in them, or null to keep ROUTE_META's.
+ *
+ * `promotions` is GET /v1/promotions as the store holds it; `money` is util.js's formatter, passed
+ * in so this file keeps no imports a Node script (infra/nginx/seo-map.mjs) cannot load.
+ */
+export function liveRouteMeta(route, promotions, money) {
+  const referral = promotions?.referral;
+  if (route !== 'referrals' || !referral || typeof money !== 'function') return null;
+  const bonus = money(Number(referral.bonusMinor));
+  const wager = money(Number(referral.bonusWagerMinor));
+  const share = Number.isFinite(referral.revshareWagerBps)
+    ? `, plus ${(referral.revshareWagerBps / 100).toFixed(1)}% of everything they wager for life`
+    : '';
+  return {
+    title: `DonutLuxe Referrals — ${bonus} Per Invite`,
+    description: `Earn ${bonus} for every player you refer to DonutLuxe once they wager ${wager}${share}.`,
+  };
+}
+
+export function applyRouteMeta(route, live = null) {
   const meta = ROUTE_META[route];
   const indexable = Boolean(meta) && !PRIVATE_ROUTES.has(route);
-  const title = meta?.title ?? ROUTE_META.home.title;
-  const description = meta?.description ?? ROUTE_META.home.description;
+  const title = live?.title ?? meta?.title ?? ROUTE_META.home.title;
+  const description = live?.description ?? meta?.description ?? ROUTE_META.home.description;
   const url = canonicalUrl(meta ? route : 'home');
 
   document.title = title;

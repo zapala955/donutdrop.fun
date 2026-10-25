@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppConfig } from '../config.js';
+import { revshareMinor } from '../lib/referrals.js';
 import { requirementFor } from '../lib/wager-requirements.js';
 
 /**
@@ -31,6 +32,10 @@ export async function registerPromotionRoutes(app: FastifyInstance, config: AppC
       ? {
           bonusMinor: config.referralBonusMinor.toString(),
           bonusWagerMinor: config.referralBonusWagerMinor.toString(),
+          /* The lifetime share as a share of the friend's wagers, the figure the invite page
+           * quotes signed in (GET /v1/referrals terms). Signed out, the same page now shows the
+           * whole deal, so a visitor -- and a search engine -- reads the offer before an account. */
+          revshareWagerBps: Number((revshareMinor(config, 1_000_000n) * 10_000n) / 1_000_000n),
         }
       : null,
     depositWagerMultiplier: config.depositWagerMultiplier,

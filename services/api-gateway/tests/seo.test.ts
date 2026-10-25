@@ -205,7 +205,8 @@ describe('what search engines are given', () => {
     }
     const app = await readFrontend('assets/js/app.js');
     const route = app.slice(app.indexOf('function route() {'), app.indexOf('/* ═════════ boot'));
-    assert.match(route, /applyRouteMeta\(name\);/);
+    // With the live offer for the invite page (seo.js liveRouteMeta; referral-offer-public.test.ts).
+    assert.match(route, /applyRouteMeta\(name, liveRouteMeta\(name, state\.promotions, money\)\);/);
   });
 
   it('ships the home page head with a canonical, previews and structured data', async () => {

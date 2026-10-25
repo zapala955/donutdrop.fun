@@ -153,7 +153,8 @@ describe('the public promotions', () => {
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), {
         signupBonus: { amountMinor: '2000000', wagerMultiplier: 5, wagerMinor: '10000000' },
-        referral: { bonusMinor: '20000000', bonusWagerMinor: '50000000' },
+        // The lifetime share too: signed out, the invite page shows the whole deal (2026-10-25).
+        referral: { bonusMinor: '20000000', bonusWagerMinor: '50000000', revshareWagerBps: 50 },
         depositWagerMultiplier: 1,
       });
     } finally {
