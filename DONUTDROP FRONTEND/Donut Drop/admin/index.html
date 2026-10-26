@@ -287,14 +287,18 @@
 
           <!-- Every in-game payment an operator has ordered, newest first. It sits under the bots
            rather than in a tab of its own because it is the receipt for the button above it:
-           after paying somebody you look here to see whether it actually landed. -->
-          <div class="panel__head panel__head--sub">
-            <h3>Operator payouts</h3>
-            <span class="hint"
-              >Paid from the bot's own in-game balance. No site wallet is touched.</span
-            >
-          </div>
-          <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
+           after paying somebody you look here to see whether it actually landed.
+           Folded by default (2026-10-26): open, the list pushed the bot transaction log below it a
+           long scroll down. The heading carries the count, and any payout still to check. -->
+          <details class="fold" id="payoutFold">
+            <summary class="panel__head panel__head--sub fold__head">
+              <h3>Operator payouts <span class="fold__count" id="payoutCount"></span></h3>
+              <span class="hint"
+                >Paid from the bot's own in-game balance. No site wallet is touched.</span
+              >
+            </summary>
+            <div class="tablewrap"><table class="grid" id="payoutTable"></table></div>
+          </details>
 
           <!-- The money ledger for the bots themselves: every deposit received, every sweep to
            the vault, every release back, every payout sent. One player's money can be followed

@@ -2222,6 +2222,13 @@ async function loadPayouts() {
       return tr;
     },
   );
+  /* The list is folded away under its heading (index.html), so the heading says what is in it:
+     how many there are, and how many still wait on somebody to check the in-game receipt. */
+  const payouts = data.payouts ?? [];
+  const toCheck = payouts.filter((payout) => payout.status === 'manual_review').length;
+  const count = $('payoutCount');
+  count.textContent = `(${payouts.length}${toCheck ? ` · ${toCheck} to check` : ''})`;
+  count.toggleAttribute('data-attention', toCheck > 0);
 }
 
 async function loadJobs() {
