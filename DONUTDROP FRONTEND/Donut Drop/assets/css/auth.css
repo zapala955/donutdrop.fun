@@ -534,6 +534,51 @@
   line-height: 1.45;
 }
 
+/* ─────────── the second way in, and other quiet links ───────────
+ *
+ * "Email linked? Sign in with a code instead" under the sign-in card, and "Pay a different
+ * Minecraft name" in the withdraw card: text buttons, quiet until hovered, so they never compete
+ * with the gold button above them. */
+
+.auth__alt {
+  margin: 12px 0 0;
+  text-align: center;
+}
+.auth__alt[hidden] {
+  display: none;
+}
+.auth__altbtn {
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth__altbtn:hover {
+  color: var(--gold-bright);
+  text-decoration: underline;
+}
+.auth__altbtn:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.auth__coderow {
+  margin-top: 16px;
+}
+.auth__coderow[hidden] {
+  display: none;
+}
+/* Fields and buttons the cards switch on and off (the payee field, Send code / Send). Both set a
+   display of their own, which a bare [hidden] loses to. */
+.modal[data-variant='auth'] .auth__field[hidden],
+.modal[data-variant='auth'] .btn[hidden] {
+  display: none;
+}
+
 /* ─────────── short windows ───────────
  *
  * The sign-in card stands about 630 px tall. A laptop window under its browser bars, or a zoomed

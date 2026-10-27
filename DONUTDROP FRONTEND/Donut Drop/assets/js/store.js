@@ -494,6 +494,50 @@ export async function completeLogin(challengeId) {
   return result.user;
 }
 
+/* ─────────── email (routes/email.ts) ───────────
+ *
+ * An email linked in Settings is a second way in (a six-digit code sent to it) and the key to
+ * withdrawing to a different Minecraft name. The Minecraft sign-in stays the way an account is
+ * made; the email is added afterwards. */
+export async function emailLoginAvailable() {
+  try {
+    return Boolean((await api.get('/v1/auth/email'))?.available);
+  } catch {
+    return false; // A button that cannot work is not offered.
+  }
+}
+
+export function startEmailLogin(email) {
+  return api.post('/v1/auth/email/start', { email });
+}
+
+/* The code from the mail. A session for this browser, taken over the way the Minecraft sign-in does. */
+export async function completeEmailLogin(code) {
+  const result = await api.post('/v1/auth/email/complete', { code });
+  setCsrfToken(result.csrfToken);
+  state.user = result.user;
+  state.authenticated = true;
+  state.online = true;
+  try {
+    await refreshPrivate(false);
+  } catch (error) {
+    // The session exists; a secondary endpoint failing must not make the sign-in look failed.
+    state.lastError = error;
+    console.warn('Post-login data refresh failed', error);
+  }
+  emit('login');
+  return result.user;
+}
+
+export const emailStatus = () => api.get('/v1/email');
+export const startEmailLink = (email) => api.post('/v1/email/link/start', { email });
+export const confirmEmailLink = (code) => api.post('/v1/email/link/confirm', { code });
+export const startEmailRemove = () => api.post('/v1/email/remove/start', {});
+export const confirmEmailRemove = (code) => api.post('/v1/email/remove/confirm', { code });
+/* A code for one withdrawal to a different name: this amount, to this name, and nothing else. */
+export const requestWithdrawCode = (amountMinor, payeeUsername) =>
+  api.post('/v1/email/withdraw-code', { amountMinor: String(amountMinor), payeeUsername });
+
 /* Developer login. Skips the pay-login challenge so the site can be worked on with no custody
  * bot online, and returns a real session — everything after it is the genuine server path, not a
  * mock. The endpoint only exists when the backend was started with DEV_LOGIN_ENABLED, and the
@@ -991,12 +1035,16 @@ export async function cashWithdrawalInfo() {
   return api.get('/v1/cash-withdrawals/info');
 }
 
-export async function requestCashWithdrawal(amountMinor) {
+export async function requestCashWithdrawal(amountMinor, other = null) {
   /* The idempotency key is what makes a double-tapped Send one payout rather than two. The server
-   * replays the first result instead of debiting again. */
+   * replays the first result instead of debiting again. `other` = { payeeUsername, emailCode } for
+   * a withdrawal to a different Minecraft name. */
   const result = await api.post(
     '/v1/cash-withdrawals',
-    { amountMinor: String(amountMinor) },
+    {
+      amountMinor: String(amountMinor),
+      ...(other ? { payeeUsername: other.payeeUsername, emailCode: other.emailCode } : {}),
+    },
     { idempotencyKey: idempotencyKey() },
   );
   emit('balance');

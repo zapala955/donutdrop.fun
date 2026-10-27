@@ -17,6 +17,11 @@ import {
   refreshReferrals,
   attachReferralCode,
   roundHistory,
+  emailStatus,
+  startEmailLink,
+  confirmEmailLink,
+  startEmailRemove,
+  confirmEmailRemove,
 } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
@@ -543,9 +548,23 @@ let settingsRoot = null;
 export function mountSettings(view) {
   settingsRoot = view;
   bindOnce(view, 'settings', () => paintSettings());
+  /* The email status is not part of the session's own load (refreshPrivate), so a page opened
+   * straight on /settings asks for it once the session is known, and forgets it on sign-out. */
+  if (!emailBound) {
+    emailBound = true;
+    bus.addEventListener('change', (event) => {
+      if (event.detail === 'logout') {
+        emailInfo = null;
+        resetEmailFlow();
+      } else if ((event.detail === 'login' || event.detail === 'ready') && state.authenticated) {
+        if (settingsRoot?.isConnected) refreshEmail();
+      }
+    });
+  }
   if (state.authenticated) {
     refreshAccount(false).then(paintSettings).catch(() => undefined);
     refreshReferrals(false).then(paintSettings).catch(() => undefined);
+    refreshEmail();
   }
   paintSettings();
 }
@@ -591,8 +610,185 @@ function paintSettings() {
   );
   mine.appendChild(identity);
 
+  const email = emailPanel();
+  if (email) mine.appendChild(email);
+
   const invite = inviteCodePanel();
   if (invite) mine.appendChild(invite);
+}
+
+/* ─────────── email ───────────
+ *
+ * An email on the account is a second way in (a code sent to it, from the sign-in window) and what
+ * confirms a withdrawal to a different Minecraft name. Linking and removing both go through a code
+ * sent to the address, so a stolen session cannot swap in the thief's own. The step in progress is
+ * kept here, outside the panel: the page repaints on every login, account and referral event, and a
+ * repaint must not throw away a code half typed. */
+let emailInfo = null; // GET /v1/email, or null before it answers
+let emailBound = false; // the session listener in mountSettings, added once
+const emailFlow = { step: 'idle', sentTo: '', typed: '', note: '', bad: false };
+const resetEmailFlow = () =>
+  Object.assign(emailFlow, { step: 'idle', sentTo: '', typed: '', note: '', bad: false });
+
+function refreshEmail() {
+  emailStatus()
+    .then((info) => {
+      emailInfo = info;
+      paintSettings();
+    })
+    .catch(() => undefined);
+}
+
+function emailPanel() {
+  if (!emailInfo?.available) return null; // email is not set up on this site
+  const card = panel('Email');
+  const note = el('p', 'refer__note');
+  const say = (text, bad = false) => {
+    emailFlow.note = bad ? text : '';
+    emailFlow.bad = bad;
+    note.textContent = text;
+    if (bad) note.dataset.bad = '1';
+    else delete note.dataset.bad;
+  };
+
+  const field = el('div', 'refer__field');
+  const input = document.createElement('input');
+  input.className = 'refer__input';
+  input.spellcheck = false;
+  const action = el('button', 'refer__copy');
+  action.type = 'button';
+  field.append(input, action);
+
+  const busy = async (label, work) => {
+    action.disabled = true;
+    const before = action.textContent;
+    action.textContent = label;
+    try {
+      await work();
+    } catch (error) {
+      action.disabled = false;
+      action.textContent = before;
+      say(error?.message || 'That did not work. Try again.', true);
+    }
+  };
+
+  /* The code from the mail, for either step. */
+  const codeStep = (label, onConfirm) => {
+    input.id = 'settingsEmailCode';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'one-time-code';
+    input.maxLength = 6;
+    input.placeholder = 'Code from the email';
+    input.setAttribute('aria-label', 'Code from the email');
+    input.value = emailFlow.typed;
+    action.textContent = label;
+    action.disabled = !/^\d{6}$/.test(input.value);
+    input.addEventListener('input', () => {
+      const digits = input.value.replace(/\D/g, '').slice(0, 6);
+      if (input.value !== digits) input.value = digits;
+      emailFlow.typed = digits;
+      action.disabled = digits.length !== 6;
+    });
+    action.addEventListener('click', () => busy('Checking', onConfirm));
+    const cancel = el('button', 'acct__textbtn');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => {
+      resetEmailFlow();
+      paintSettings();
+    });
+    card.append(field, cancel);
+  };
+
+  if (!emailInfo.email) {
+    if (emailFlow.step === 'link-code') {
+      codeStep('Confirm', async () => {
+        emailInfo = await confirmEmailLink(emailFlow.typed);
+        resetEmailFlow();
+        toast({ kind: 'win', title: 'Email linked', body: emailInfo.email });
+        paintSettings();
+      });
+      say(emailFlow.bad ? emailFlow.note : `Code sent to ${emailFlow.sentTo}. It works for 10 minutes.`, emailFlow.bad);
+    } else {
+      input.id = 'settingsEmail';
+      input.type = 'email';
+      input.autocomplete = 'email';
+      input.maxLength = 254;
+      input.placeholder = 'you@example.com';
+      input.setAttribute('aria-label', 'Email');
+      input.value = emailFlow.typed;
+      action.textContent = 'Send code';
+      const valid = () => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.value.trim());
+      action.disabled = !valid();
+      input.addEventListener('input', () => {
+        emailFlow.typed = input.value;
+        action.disabled = !valid();
+      });
+      action.addEventListener('click', () =>
+        busy('Sending', async () => {
+          const sent = await startEmailLink(input.value.trim());
+          resetEmailFlow();
+          Object.assign(emailFlow, { step: 'link-code', sentTo: sent.sentTo });
+          paintSettings();
+        }),
+      );
+      card.append(field);
+      say(
+        emailFlow.bad
+          ? emailFlow.note
+          : `Link an email to sign in with a code, and to withdraw to a different Minecraft name (from ${emailInfo.payoutWaitHours} hours after linking).`,
+        emailFlow.bad,
+      );
+    }
+    card.appendChild(note);
+    return card;
+  }
+
+  const ready = emailInfo.payoutReadyAt && Date.parse(emailInfo.payoutReadyAt) <= Date.now();
+  card.appendChild(
+    facts([
+      ['Email', emailInfo.email],
+      ['Linked', emailInfo.verifiedAt ? new Date(emailInfo.verifiedAt).toLocaleDateString() : '—'],
+      [
+        'Pay other names',
+        ready ? 'Yes, with a code' : `From ${new Date(emailInfo.payoutReadyAt).toLocaleString()}`,
+      ],
+    ]),
+  );
+  if (emailFlow.step === 'remove-code') {
+    codeStep('Remove', async () => {
+      emailInfo = await confirmEmailRemove(emailFlow.typed);
+      resetEmailFlow();
+      toast({ kind: 'win', title: 'Email removed' });
+      paintSettings();
+    });
+    say(emailFlow.bad ? emailFlow.note : `Code sent to ${emailFlow.sentTo} to confirm the removal.`, emailFlow.bad);
+  } else {
+    const remove = el('button', 'acct__textbtn');
+    remove.type = 'button';
+    remove.textContent = 'Remove email';
+    remove.addEventListener('click', async () => {
+      remove.disabled = true;
+      try {
+        const sent = await startEmailRemove();
+        resetEmailFlow();
+        Object.assign(emailFlow, { step: 'remove-code', sentTo: sent.sentTo });
+        paintSettings();
+      } catch (error) {
+        remove.disabled = false;
+        say(error?.message || 'That did not work. Try again.', true);
+      }
+    });
+    card.appendChild(remove);
+    say(
+      emailFlow.bad
+        ? emailFlow.note
+        : 'Sign in with a code from the sign-in window. To change the address, remove it first: a code goes to it.',
+      emailFlow.bad,
+    );
+  }
+  card.appendChild(note);
+  return card;
 }
 
 const INVITE_CODE = /^[A-Z0-9]{6,16}$/;

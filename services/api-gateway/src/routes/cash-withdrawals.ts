@@ -18,6 +18,15 @@ import { publishLiveSoon } from '../lib/live-events.js';
 import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import {
+  CODE_PATTERN,
+  EMAIL_PAYOUT_WAIT_HOURS,
+  checkCode,
+  maskEmail,
+  spendCode,
+} from '../lib/email-codes.js';
+import { mailAvailable } from '../lib/mailer.js';
+import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
+import {
   assertWagerRequirementMet,
   wagerRequirementRemaining,
 } from '../lib/wager-requirements.js';
@@ -58,7 +67,16 @@ const MIN_WITHDRAWAL_MINOR = 10_000n;
  */
 export const WITHDRAWAL_COOLDOWN_SECONDS = 60;
 
-const requestSchema = z.object({ amountMinor: z.string().regex(/^[1-9]\d{0,18}$/) }).strict();
+/* `payeeUsername` + `emailCode`: a withdrawal to a different Minecraft name, confirmed with a code
+ * sent to the account's email for exactly this amount and name (routes/email.ts). Without them, or
+ * with the account's own name, it pays the account's own name as it always has. */
+const requestSchema = z
+  .object({
+    amountMinor: z.string().regex(/^[1-9]\d{0,18}$/),
+    payeeUsername: z.string().regex(MINECRAFT_USERNAME_PATTERN).optional(),
+    emailCode: z.string().regex(CODE_PATTERN).optional(),
+  })
+  .strict();
 const idSchema = z.object({ id: z.uuid() }).strict();
 
 interface WithdrawalRow {
@@ -320,9 +338,26 @@ export async function registerCashWithdrawalRoutes(
       const pendingPosition = pending ? await queuePositionOf(db, pending) : null;
       // Stated up front, so the form can say "wager $X more" before anybody fills it in.
       const wagerRemaining = userId ? await wagerRequirementRemaining(db, userId) : 0n;
+      /* Whether this account may pay a different name: email set up on the site, an email on the
+       * account, and that email linked long enough ago (routes/email.ts says why). */
+      const email = userId
+        ? (
+            await db.query<{ email: string | null; ready_at: Date | null }>(
+              `SELECT email, email_verified_at + ($2::int * interval '1 hour') AS ready_at
+                 FROM users WHERE id = $1`,
+              [userId, EMAIL_PAYOUT_WAIT_HOURS],
+            )
+          ).rows[0]
+        : undefined;
       return {
         wagerRequirementRemainingMinor: wagerRemaining.toString(),
         payeeUsername: request.authUser?.minecraftUsername ?? null,
+        otherPayee: {
+          available: mailAvailable(config),
+          email: email?.email ? maskEmail(email.email) : null,
+          readyAt: email?.ready_at?.toISOString() ?? null,
+          ready: Boolean(email?.ready_at && email.ready_at.getTime() <= Date.now()),
+        },
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
         approvalThresholdMinor: config.cashApprovalThresholdMinor.toString(),
         cooldownSeconds: WITHDRAWAL_COOLDOWN_SECONDS,
@@ -342,9 +377,14 @@ export async function registerCashWithdrawalRoutes(
     async (request, reply) => {
       const body = parseWith(requestSchema, request.body ?? {});
       const userId = request.authUser?.id;
-      const payee = request.authUser?.minecraftUsername;
-      if (!userId || !payee) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+      const ownName = request.authUser?.minecraftUsername;
+      if (!userId || !ownName) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
       const idempotencyKey = requireIdempotencyKey(request.headers['idempotency-key']);
+      /* A different name only with the email code for this exact amount and name. The account's
+       * own name, typed or not, is the ordinary withdrawal and needs nothing more. */
+      const otherPayee =
+        body.payeeUsername !== undefined && body.payeeUsername.toLowerCase() !== ownName.toLowerCase();
+      const payee = otherPayee ? body.payeeUsername! : ownName;
 
       const amount = BigInt(body.amountMinor);
       if (amount < MIN_WITHDRAWAL_MINOR) {
@@ -362,6 +402,33 @@ export async function registerCashWithdrawalRoutes(
        * gauge, not a lock -- one live payout per player and the cooldown already serialise the
        * player, and the hold flag is re-read from the locked account row inside. */
       const facts = await loadWithdrawalFacts(db, userId, amount);
+
+      /* The code is checked before the transaction below, in one of its own, so a wrong guess
+       * costs a try even when the withdrawal then fails; it is SPENT inside, so a withdrawal that
+       * fails (balance, cooldown, bot offline) leaves it usable. A replay of a withdrawal already
+       * made skips the check: its code was spent making it. */
+      let emailCode: { id: string } | null = null;
+      if (otherPayee) {
+        const existing = await db.query(
+          'SELECT 1 FROM cash_withdrawals WHERE user_id = $1 AND idempotency_key = $2',
+          [userId, idempotencyKey],
+        );
+        if (!existing.rowCount) {
+          if (!body.emailCode) {
+            throw new AppError(
+              400,
+              'EMAIL_CODE_REQUIRED',
+              'Paying a different name needs the code sent to your email',
+            );
+          }
+          emailCode = await checkCode(
+            db,
+            config,
+            { purpose: 'withdraw', userId, payeeUsername: payee, amountMinor: amount },
+            body.emailCode,
+          );
+        }
+      }
 
       const created = await db.transaction(async (client) => {
         const replayed = await client.query<WithdrawalRow>(
@@ -420,6 +487,20 @@ export async function registerCashWithdrawalRoutes(
 
         // Before the bot check: "wager $X more" is the answer the player can act on.
         await assertWagerRequirementMet(client, userId, 'withdrawing');
+
+        /* Read again under the account lock: an email removed (or swapped for a new one, which
+         * waits its 24 hours again) since the code was sent cannot still pay another name. */
+        if (emailCode) {
+          const email = await client.query<{ ready: boolean | null }>(
+            `SELECT email_verified_at <= now() - ($2::int * interval '1 hour') AS ready
+               FROM users WHERE id = $1`,
+            [userId, EMAIL_PAYOUT_WAIT_HOURS],
+          );
+          if (!email.rows[0]?.ready) {
+            conflict('EMAIL_TOO_NEW', 'This account cannot pay a different name right now');
+          }
+          await spendCode(client, emailCode.id);
+        }
 
         const bot = await onlineBot(client);
         if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
