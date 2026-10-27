@@ -920,15 +920,23 @@ async function processDeposit(
  * Records that a payment matching a pending login was seen in chat.
  * Confirmation is completed by the browser's status request, which resolves the current UUID for
  * the username carried by the strictly parsed DonutSMP system receipt.
+ *
+ * The name is matched without its Bedrock dot, and the challenge then takes the payer's real name.
+ * Players ticked "I play Bedrock" without reading it, or left it unticked on Bedrock, and the login
+ * waited for ".steve" while "Steve" paid, or the other way round, until it expired (2026-10-27).
+ * The amount is what identifies a login -- one live challenge per amount per bot, enforced by
+ * auth_link_challenges_active_pay_amount_idx, and shown only to the browser that asked -- so the
+ * dot was never what made a match safe; and the account signed in is always the one that paid,
+ * Java or Bedrock, because the status request resolves it from the name recorded here.
  */
 async function processPaymentObserved(
   client: DbClient,
   event: z.infer<typeof paymentEvent>,
 ): Promise<void> {
-  const result = await client.query<{ id: string }>(
-    `SELECT id FROM auth_link_challenges
+  const result = await client.query<{ id: string; normalized_username: string }>(
+    `SELECT id, normalized_username FROM auth_link_challenges
       WHERE method = 'payment' AND bot_id = $1
-        AND normalized_username = lower($2) AND pay_amount = $3
+        AND ltrim(normalized_username, '.') = ltrim(lower($2), '.') AND pay_amount = $3
         AND completed_at IS NULL AND confirmed_at IS NULL AND expires_at > now()
       FOR UPDATE`,
     [event.botId, event.payer, event.amount],
@@ -937,9 +945,12 @@ async function processPaymentObserved(
   // People pay the bot for reasons that have nothing to do with logging in. An unmatched payment
   // is ordinary, not an error, and must not fail the event or trigger a bot retry.
   if (!challenge) return;
-  await client.query('UPDATE auth_link_challenges SET observed_payment_at = now() WHERE id = $1', [
-    challenge.id,
-  ]);
+  await client.query(
+    `UPDATE auth_link_challenges
+        SET observed_payment_at = now(), requested_username = $2, normalized_username = lower($2)
+      WHERE id = $1`,
+    [challenge.id, event.payer],
+  );
 }
 
 interface LinkedCashUserRow {

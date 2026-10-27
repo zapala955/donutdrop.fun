@@ -373,13 +373,14 @@ function mountHome(view) {
 }
 
 
-/* The two shapes a name can take on the way in.
+/* The two shapes a name can take on the way in, the server's own rule (MINECRAFT_USERNAME_PATTERN).
  *
  * Java is the plain 3–16 rule. Bedrock players reach DonutSMP through its Floodgate bridge, which
- * prepends a dot and truncates the result to Minecraft's 16-character ceiling — so the part the
- * player types is capped at 15, and the dot is added by the checkbox rather than by them. */
-const JAVA_NAME = /^[A-Za-z0-9_]{3,16}$/;
-const BEDROCK_NAME = /^[A-Za-z0-9_]{2,15}$/;
+ * prepends a dot and keeps the whole name within 16. There used to be an "I play Bedrock" checkbox
+ * that added the dot; players ticked it without reading, or missed it on Bedrock, and the login
+ * waited for a name that never paid (2026-10-27). The server now matches the payment without the
+ * dot and signs in whichever account paid, so the dot is optional here and nobody has to choose. */
+const MINECRAFT_NAME = /^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/;
 const REFERRAL_CODE = /^[A-Z0-9]{6,16}$/;
 
 const PERSON_ICON =
@@ -431,23 +432,18 @@ function openLoginModal() {
         <label class="auth__label" for="linkUsername">Minecraft username</label>
         <div class="auth__field" id="linkField">
           ${PERSON_ICON}
-          <span class="auth__prefix" id="linkPrefix" hidden>.</span>
           <input id="linkUsername" class="auth__input" type="text" maxlength="16" required
                  autocomplete="username" autocapitalize="none" spellcheck="false"
                  placeholder="Enter your minecraft username…">
         </div>
         <p class="auth__err" id="linkError" role="alert" hidden></p>
+        <p class="auth__note">On Bedrock? Your name works with or without the dot.</p>
 
         <div class="auth__checks">
           <label class="auth__check">
             <input type="checkbox" id="linkTerms">
             <span class="auth__box" aria-hidden="true"></span>
             <span class="auth__txt">I agree to all <a href="/terms">Terms &amp; Conditions</a>.</span>
-          </label>
-          <label class="auth__check">
-            <input type="checkbox" id="linkBedrock">
-            <span class="auth__box" aria-hidden="true"></span>
-            <span class="auth__txt">I play Bedrock Edition (adds a <span class="mono">.</span> before your name)</span>
           </label>
         </div>
 
@@ -484,9 +480,7 @@ function openLoginModal() {
     const form = $('#linkForm', body);
     const field = $('#linkField', body);
     const input = $('#linkUsername', body);
-    const prefix = $('#linkPrefix', body);
     const terms = $('#linkTerms', body);
-    const bedrock = $('#linkBedrock', body);
     const referral = $('#linkRef', body);
     const go = $('#linkGo', body);
     const slot = $('#linkChallenge', body);
@@ -525,8 +519,7 @@ function openLoginModal() {
 
     const typedName = () => input.value.trim();
     const referralCode = () => referral.value.trim().toUpperCase();
-    const nameValid = () =>
-      bedrock.checked ? BEDROCK_NAME.test(typedName()) : JAVA_NAME.test(typedName());
+    const nameValid = () => MINECRAFT_NAME.test(typedName());
     const referralValid = () => referralCode() === '' || REFERRAL_CODE.test(referralCode());
 
     const setError = (message) => {
@@ -544,8 +537,6 @@ function openLoginModal() {
     let challengeWidget;
 
     const sync = () => {
-      prefix.hidden = !bedrock.checked;
-      input.maxLength = bedrock.checked ? 15 : 16;
       go.disabled = !(
         nameValid() &&
         terms.checked &&
@@ -594,12 +585,6 @@ function openLoginModal() {
     })();
 
     input.addEventListener('input', () => {
-      // Somebody who knows the convention will type the dot themselves. Take that as the answer to
-      // the question the checkbox asks, rather than failing them on it.
-      if (input.value.startsWith('.')) {
-        input.value = input.value.slice(1);
-        bedrock.checked = true;
-      }
       setError('');
       sync();
     });
@@ -609,15 +594,10 @@ function openLoginModal() {
         return;
       }
       setError(
-        bedrock.checked
+        typedName().startsWith('.')
           ? 'After the dot, Bedrock names are 2–15 letters, numbers or underscores.'
           : 'Minecraft names are 3–16 letters, numbers or underscores.',
       );
-    });
-    bedrock.addEventListener('change', () => {
-      if (bedrock.checked) input.value = input.value.slice(0, 15);
-      setError('');
-      sync();
     });
     terms.addEventListener('change', sync);
     referral.addEventListener('input', sync);
@@ -626,7 +606,7 @@ function openLoginModal() {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (go.disabled) return;
-      const username = (bedrock.checked ? '.' : '') + typedName();
+      const username = typedName();
       const code = referralCode();
       go.disabled = true;
       go.dataset.state = 'loading';
