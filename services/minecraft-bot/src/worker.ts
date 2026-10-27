@@ -1400,6 +1400,24 @@ export class MinecraftWorker {
       return;
     }
 
+    /* The server said no because the payee has turned payments off in DonutSMP's /settings. Also
+     * an answer: the command ran and was refused, so nothing moved. Reported as PAYOUT_NOT_SENT,
+     * the code the gateway refunds a withdrawal on, and not retryable: it cannot land until the
+     * player changes the setting, and sending it again only repeats the refusal. No reconnect --
+     * the connection just answered. It used to be read as silence: unconfirmed, a reconnect that
+     * stalled every payout behind it, and an operator refunding it by hand (2026-10-27). */
+    if (receipt === 'payments_disabled') {
+      this.log.warn(
+        { jobId: job.id, payee, amountMinor },
+        'cash payout refused: the player has payments turned off in /settings; nothing was sent',
+      );
+      await this.api.completeJob(job, 'failed', {
+        retryable: false,
+        errorCode: 'PAYOUT_NOT_SENT',
+      });
+      return;
+    }
+
     /* No confirmation, and the server said the command did not run (its cooldown). That is an
      * answer, like a refusal for funds: no money moved. Reported as not sent and retryable, so the
      * gateway sends it again in a moment rather than parking a payment that never happened in

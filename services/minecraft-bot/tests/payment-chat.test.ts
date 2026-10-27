@@ -696,6 +696,22 @@ test('recognises the server refusing a payout for funds, and nothing else', asyn
   assert.equal(parsePayoutRefusal(null), undefined);
 });
 
+/* The payee has switched payments off in DonutSMP's /settings. Logged from the live server on
+ * 2026-10-27 as red:"That player does not have payments enabled in /settings", three times for one
+ * player's withdrawals, each of which was then taken for an unconfirmed payout. */
+test('recognises the server refusing a payout because the player has payments turned off', async () => {
+  const { parsePayoutRefusal } = await import('../src/payment-chat.js');
+  const line = 'That player does not have payments enabled in /settings';
+  assert.equal(parsePayoutRefusal({ content: { text: line, color: 'red' } }), 'payments_disabled');
+  assert.equal(parsePayoutRefusal({ content: { text: '', extra: [{ text: `${line}.`, color: 'red' }] } }), 'payments_disabled');
+  // Only the server's own red line, never a player repeating it in chat.
+  assert.equal(parsePayoutRefusal({ content: { text: line, color: 'white' } }), undefined);
+  assert.equal(
+    parsePayoutRefusal({ content: { text: '', extra: [{ text: 'Steve: ', color: 'gray' }, { text: line, color: 'red' }] } }),
+    undefined,
+  );
+});
+
 /* /bal, now the only way a bot learns what it holds (DonutSMP switched its stats API off). The
  * exact wording was never captured, so the reader is tested against every plausible shape and
  * against the lookalikes it must refuse. */

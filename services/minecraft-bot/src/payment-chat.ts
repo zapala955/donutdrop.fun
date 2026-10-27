@@ -103,7 +103,13 @@ export function parseOutgoingPayment(packet: unknown): OutgoingPayment | undefin
  * live server: every "unconfirmed" payout between 2026-09-28 and 2026-09-30 but one was this. */
 const INSUFFICIENT_FUNDS_TEXT = "you don't have enough funds to do this";
 
-export type PayoutRefusal = 'insufficient_funds';
+/* What DonutSMP answers, in red, when the payee has switched off receiving payments in its
+ * /settings. Logged from the live server on 2026-10-27 as red:"That player does not have payments
+ * enabled in /settings", three times in a row for one player's withdrawals: each was read as an
+ * unconfirmed payout, cost the teller a reconnect and waited for an operator to refund it. */
+const PAYMENTS_DISABLED_TEXT = 'that player does not have payments enabled in /settings';
+
+export type PayoutRefusal = 'insufficient_funds' | 'payments_disabled';
 
 /**
  * Recognizes the server refusing this bot's /pay. A refusal is a definite answer -- no money
@@ -114,7 +120,10 @@ export type PayoutRefusal = 'insufficient_funds';
  * shape. Only consulted in the seconds after the bot's own /pay.
  */
 export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
-  return serverErrorText(packet) === INSUFFICIENT_FUNDS_TEXT ? 'insufficient_funds' : undefined;
+  const text = serverErrorText(packet);
+  if (text === INSUFFICIENT_FUNDS_TEXT) return 'insufficient_funds';
+  if (text === PAYMENTS_DISABLED_TEXT) return 'payments_disabled';
+  return undefined;
 }
 
 /* What DonutSMP answers, in red, to a command sent too soon after the bot's previous one. Logged
