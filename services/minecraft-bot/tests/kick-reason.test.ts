@@ -42,16 +42,15 @@ describe('a kick that says the server cannot let the account in yet', () => {
     assert.equal(isHeldOffKick('multiplayer.disconnect.duplicate_login'), false);
   });
 
-  it('waits longer after each refusal in a row, with the process held open', async () => {
+  it('knocks again about once a minute, off a fixed beat, with the process held open', async () => {
     const { readFile } = await import('node:fs/promises');
     const { heldOffRetryMs } = await import('../src/worker.js');
-    /* 2026-10-28: knocking every 300 s on the dot kept wymiar out for 36 minutes; a ten-minute
-     * silence let it straight in. So the waits grow, and never land on the same beat twice. */
-    assert.equal(heldOffRetryMs(0, () => 0), 5 * 60_000);
-    assert.equal(heldOffRetryMs(1, () => 0), 10 * 60_000);
-    assert.equal(heldOffRetryMs(2, () => 0), 15 * 60_000);
-    assert.equal(heldOffRetryMs(9, () => 0), 15 * 60_000);
-    assert.equal(heldOffRetryMs(0, () => 0.999), 5 * 60_000 + 59_940);
+    /* 2026-10-28: the owner asked for a retry every minute while DonutSMP holds the teller out,
+     * since every minute out is a minute of stalled payouts. Jitter keeps it off a fixed beat. */
+    assert.equal(heldOffRetryMs(0, () => 0), 60_000);
+    assert.equal(heldOffRetryMs(1, () => 0), 60_000);
+    assert.equal(heldOffRetryMs(9, () => 0), 60_000);
+    assert.equal(heldOffRetryMs(0, () => 0.999), 60_000 + 9_990);
     const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
     assert.match(source, /else if \(isHeldOffKick\(text\)\) this\.heldOff = true;/);
     // Back to the shortest wait once the bot is in game again.
@@ -177,9 +176,8 @@ describe('an ordinary disconnect', () => {
     assert.equal(reconnectGapMs(0, () => 0), RECONNECT_GAP_MS);
     assert.equal(reconnectGapMs(1, () => 0), 30_000);
     assert.equal(reconnectGapMs(2, () => 0), 60_000);
-    assert.equal(reconnectGapMs(3, () => 0), 120_000);
-    assert.equal(reconnectGapMs(4, () => 0), 300_000);
-    assert.equal(reconnectGapMs(40, () => 0), 300_000);
+    assert.equal(reconnectGapMs(3, () => 0), 60_000);
+    assert.equal(reconnectGapMs(40, () => 0), 60_000);
     assert.equal(reconnectGapMs(1, () => 0.999), 30_000 + 9_990);
     const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     // Counted when a connection ends without having spawned, and cleared the moment one does.
