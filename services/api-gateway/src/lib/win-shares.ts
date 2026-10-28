@@ -80,12 +80,20 @@ const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 
 /**
- * The card's address. The version is the card's design: bump it whenever the picture changes, so
- * previews and caches fetch the new one rather than keep the old. Version 1 printed the player's
- * name; anything that cached it is left holding that address, not this one. Version 3 carries the
- * masked name.
+ * The version of what a share looks like: the card and the preview's title and text. Bump it
+ * whenever either changes. It is in the card's address AND the link's own, because a preview
+ * caches by the link: Discord keeps the title and picture it read the first time it saw a URL, and
+ * sharing a round again hands back the same share. Version 1 printed the player's real name in the
+ * title and on the card, and the bare /w/<id> links shared then still preview that way wherever
+ * they were posted (2026-10-28); a versioned link is a URL those caches have never seen. Version 3
+ * carries the masked name.
  */
 export const CARD_VERSION = 3;
+
+/** The link a player posts. The page ignores the version; it is there for the caches. */
+export function shareUrl(share: WinShare, origin: string): string {
+  return `${origin}/w/${share.id}?v=${CARD_VERSION}`;
+}
 
 export function shareImageUrl(share: WinShare, origin: string): string {
   return `${origin}/w/${share.id}.png?v=${CARD_VERSION}`;
@@ -95,7 +103,7 @@ export function shareImageUrl(share: WinShare, origin: string): string {
 export function sharePageHtml(share: WinShare, origin: string): string {
   const title = escapeHtml(shareTitle(share));
   const description = escapeHtml(shareDescription(share));
-  const page = escapeHtml(`${origin}/w/${share.id}`);
+  const page = escapeHtml(shareUrl(share, origin));
   const image = escapeHtml(shareImageUrl(share, origin));
   const landing = escapeHtml(`${origin}${shareLandingPath(share)}`);
   return `<!doctype html>

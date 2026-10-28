@@ -11,6 +11,7 @@ import {
   shareLandingPath,
   sharePageHtml,
   shareTitle,
+  shareUrl,
   type WinShare,
 } from '../src/lib/win-shares.js';
 
@@ -82,8 +83,11 @@ describe('a share link', () => {
     assert.equal(shareDescription(share), "54.2× on a $230K bet. Join DonutLuxe with S********'s invite.");
     assert.equal(shareDescription({ ...share, referralCode: null }), '54.2× on a $230K bet. DonutLuxe, the DonutSMP casino.');
     const html = sharePageHtml(share, 'https://donutluxe.com');
-    // Versioned, so a preview that cached an earlier design fetches this one.
+    /* Versioned, the picture AND the link: Discord keeps the title it read the first time it saw a
+     * URL, and the first version's title had the player's real name in it. */
     assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=3" \/>/);
+    assert.match(html, /<meta property="og:url" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\?v=3" \/>/);
+    assert.equal(shareUrl(share, 'https://donutluxe.com'), 'https://donutluxe.com/w/K7P2QXAB?v=3');
     assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
     assert.match(html, /<meta property="og:title" content="S\*{8} won \$12\.5M on Crash" \/>/);
     assert.match(html, /<meta name="robots" content="noindex" \/>/);
