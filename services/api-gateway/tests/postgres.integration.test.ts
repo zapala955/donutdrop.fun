@@ -5,6 +5,7 @@ import pg from 'pg';
 import { describe, it } from 'node:test';
 import { assertAuditDatabaseRole, assertRuntimeDatabaseRole } from '../src/lib/database-role.js';
 import { maintainDepositIntents } from '../src/lib/deposit-maintenance.js';
+import { processPaymentObserved } from '../src/routes/minecraft-in.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 
@@ -339,6 +340,60 @@ async function verifyDepositMaintenance(runtime: pg.Pool): Promise<void> {
   }
 }
 
+/* The statement recording a sign-in payment once bound one parameter into a varchar column and into
+ * lower(). The route tests' fake databases accepted it; PostgreSQL refused it, and until 2026-10-28
+ * every payment that matched a login failed and nobody could sign in by paying. */
+async function verifyPaymentLogin(runtime: pg.Pool): Promise<void> {
+  const client = await runtime.connect();
+  const botId = '73000000-0000-4000-8000-000000000001';
+  const challengeId = '73000000-0000-4000-8000-000000000010';
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO bot_accounts(id, username, server_host)
+       VALUES ($1, 'PayLoginBot', 'donutsmp.invalid')`,
+      [botId],
+    );
+    // Asked for as Bedrock, paid from Java: the dot does not decide the match, the amount does.
+    await client.query(
+      `INSERT INTO auth_link_challenges
+         (id, requested_username, normalized_username, code_hash, browser_token_hash, expires_at,
+          method, pay_amount, bot_id)
+       VALUES ($1, '.Steve', '.steve', decode(repeat('31', 32), 'hex'),
+               decode(repeat('32', 32), 'hex'), now() + interval '5 minutes', 'payment', 458, $2)`,
+      [challengeId, botId],
+    );
+
+    await processPaymentObserved(client, {
+      type: 'payment_observed',
+      eventId: '73000000-0000-4000-8000-000000000101',
+      botId,
+      payer: 'Steve',
+      amount: 458,
+    });
+
+    const challenge = await client.query<{
+      requested_username: string;
+      normalized_username: string;
+      observed: boolean;
+    }>(
+      `SELECT requested_username, normalized_username, observed_payment_at IS NOT NULL AS observed
+         FROM auth_link_challenges
+        WHERE id = $1`,
+      [challengeId],
+    );
+    assert.deepEqual(challenge.rows[0], {
+      requested_username: 'Steve',
+      normalized_username: 'steve',
+      observed: true,
+    });
+  } finally {
+    await client.query('ROLLBACK').catch(() => undefined);
+    client.release();
+  }
+}
+
 void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl }, () => {
   void it('applies every migration and confines the API login', async () => {
     if (!databaseUrl) return;
@@ -493,6 +548,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await verifyTelemetryRetention(runtime);
         await verifyDepositAuthorizationLeases(runtime);
         await verifyDepositMaintenance(runtime);
+        await verifyPaymentLogin(runtime);
       } finally {
         await runtime.end();
       }

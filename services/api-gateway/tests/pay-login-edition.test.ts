@@ -21,7 +21,9 @@ describe('signing in by payment, Java or Bedrock', () => {
     assert.match(body, /AND ltrim\(normalized_username, '\.'\) = ltrim\(lower\(\$2\), '\.'\) AND pay_amount = \$3/);
     assert.doesNotMatch(body, /AND normalized_username = lower\(\$2\)/);
     // The account signed in is the one that paid: the status request resolves it from this name.
-    assert.match(body, /SET observed_payment_at = now\(\), requested_username = \$2, normalized_username = lower\(\$2\)/);
+    // Cast, or PostgreSQL deduces varchar and text for the one parameter and refuses the statement;
+    // postgres.integration.test.ts runs it against a real server.
+    assert.match(body, /SET observed_payment_at = now\(\), requested_username = \$2::text,\s+normalized_username = lower\(\$2::text\)/);
   });
 
   it('asks nobody which edition they play, and takes a name with or without the dot', async () => {

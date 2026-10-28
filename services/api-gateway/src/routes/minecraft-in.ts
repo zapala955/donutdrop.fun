@@ -928,8 +928,10 @@ async function processDeposit(
  * auth_link_challenges_active_pay_amount_idx, and shown only to the browser that asked -- so the
  * dot was never what made a match safe; and the account signed in is always the one that paid,
  * Java or Bedrock, because the status request resolves it from the name recorded here.
+ *
+ * Exported for the PostgreSQL integration test, which runs it against a real server.
  */
-async function processPaymentObserved(
+export async function processPaymentObserved(
   client: DbClient,
   event: z.infer<typeof paymentEvent>,
 ): Promise<void> {
@@ -945,9 +947,14 @@ async function processPaymentObserved(
   // People pay the bot for reasons that have nothing to do with logging in. An unmatched payment
   // is ordinary, not an error, and must not fail the event or trigger a bot retry.
   if (!challenge) return;
+  /* The casts are not decoration. Bare, $2 lands in a varchar column and in lower(), which takes
+   * text, and PostgreSQL refuses to deduce two types for one parameter ("inconsistent types deduced
+   * for parameter $2"). Every payment that matched a login failed that way, and nobody could sign
+   * in by paying, from the Bedrock change until 2026-10-28. */
   await client.query(
     `UPDATE auth_link_challenges
-        SET observed_payment_at = now(), requested_username = $2, normalized_username = lower($2)
+        SET observed_payment_at = now(), requested_username = $2::text,
+            normalized_username = lower($2::text)
       WHERE id = $1`,
     [challenge.id, event.payer],
   );
