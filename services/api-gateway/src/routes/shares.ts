@@ -178,11 +178,11 @@ export async function registerShareRoutes(app: FastifyInstance, db: Database, co
 
       if (image) {
         if (!share) throw new AppError(404, 'SHARE_NOT_FOUND', 'That win is not shared.');
+        /* Not cached: the API answers everything no-store (app.ts, onSend), so each fetch draws the
+         * card afresh, in its current design. Link previews keep their own copy whatever we say,
+         * which is what CARD_VERSION in the address is for. */
         return reply
           .header('content-type', 'image/png')
-          /* A share never changes, but the card's design does (CARD_VERSION). It was cached for a
-           * year as immutable, and the first design printed the player's name. */
-          .header('cache-control', 'public, max-age=86400')
           // Previews fetch it from their own servers, and some clients then load it from ours.
           .header('cross-origin-resource-policy', 'cross-origin')
           .send(renderWinCard(share));
@@ -192,7 +192,6 @@ export async function registerShareRoutes(app: FastifyInstance, db: Database, co
       if (isLinkPreview(request.headers['user-agent'])) {
         return reply
           .header('content-type', 'text/html; charset=utf-8')
-          .header('cache-control', 'public, max-age=300')
           .send(sharePageHtml(share, config.appOrigin));
       }
       // Counted, never waited on: a visitor is not held at the door for a tally.
