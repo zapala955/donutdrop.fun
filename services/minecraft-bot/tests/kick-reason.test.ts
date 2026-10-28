@@ -42,15 +42,15 @@ describe('a kick that says the server cannot let the account in yet', () => {
     assert.equal(isHeldOffKick('multiplayer.disconnect.duplicate_login'), false);
   });
 
-  it('knocks again about once a minute, off a fixed beat, with the process held open', async () => {
+  it('knocks again every five minutes, off a fixed beat, with the process held open', async () => {
     const { readFile } = await import('node:fs/promises');
     const { heldOffRetryMs } = await import('../src/worker.js');
-    /* 2026-10-28: the owner asked for a retry every minute while DonutSMP holds the teller out,
-     * since every minute out is a minute of stalled payouts. Jitter keeps it off a fixed beat. */
-    assert.equal(heldOffRetryMs(0, () => 0), 60_000);
-    assert.equal(heldOffRetryMs(1, () => 0), 60_000);
-    assert.equal(heldOffRetryMs(9, () => 0), 60_000);
-    assert.equal(heldOffRetryMs(0, () => 0.999), 60_000 + 9_990);
+    /* 2026-10-28: the owner first asked for a retry every minute while DonutSMP holds a bot out,
+     * then, after a relog was refused minute after minute, for five. Jitter keeps it off a beat. */
+    assert.equal(heldOffRetryMs(0, () => 0), 300_000);
+    assert.equal(heldOffRetryMs(1, () => 0), 300_000);
+    assert.equal(heldOffRetryMs(9, () => 0), 300_000);
+    assert.equal(heldOffRetryMs(0, () => 0.999), 300_000 + 9_990);
     const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
     assert.match(source, /else if \(isHeldOffKick\(text\)\) this\.heldOff = true;/);
     // Back to the shortest wait once the bot is in game again.
@@ -169,16 +169,16 @@ describe('an ordinary disconnect', () => {
   /* 2026-10-28, 11:13 and 11:36 UTC: while DonutSMP restarted a region, every login stalled for
    * about 26 s and closed with no reason, and the bot went straight back in ten seconds later. Once
    * the region was up it was refused "You are already online" for one of those half-finished
-   * logins. A login that never gets the bot in game now makes the next wait longer. */
-  it('waits longer after each login in a row that never got in game', async () => {
+   * logins. A login that never gets the bot in game now waits as long as a refused one: five
+   * minutes, as the owner asked later that day. */
+  it('waits five minutes after a login that never got in game', async () => {
     const { readFile } = await import('node:fs/promises');
     const { RECONNECT_GAP_MS, reconnectGapMs } = await import('../src/worker.js');
     assert.equal(reconnectGapMs(0, () => 0), RECONNECT_GAP_MS);
-    assert.equal(reconnectGapMs(1, () => 0), 30_000);
-    assert.equal(reconnectGapMs(2, () => 0), 60_000);
-    assert.equal(reconnectGapMs(3, () => 0), 60_000);
-    assert.equal(reconnectGapMs(40, () => 0), 60_000);
-    assert.equal(reconnectGapMs(1, () => 0.999), 30_000 + 9_990);
+    assert.equal(reconnectGapMs(1, () => 0), 300_000);
+    assert.equal(reconnectGapMs(2, () => 0), 300_000);
+    assert.equal(reconnectGapMs(40, () => 0), 300_000);
+    assert.equal(reconnectGapMs(1, () => 0.999), 300_000 + 9_990);
     const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     // Counted when a connection ends before the server answered a command, and cleared when one does.
     const end = source.slice(source.indexOf("bot.once('end', (reason) => {"));
