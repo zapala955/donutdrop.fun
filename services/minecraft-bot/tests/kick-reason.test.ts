@@ -42,15 +42,25 @@ describe('a kick that says the server cannot let the account in yet', () => {
     assert.equal(isHeldOffKick('multiplayer.disconnect.duplicate_login'), false);
   });
 
-  it('keeps the bot away for five minutes, with the process held open', async () => {
+  it('waits longer after each refusal in a row, with the process held open', async () => {
     const { readFile } = await import('node:fs/promises');
+    const { heldOffRetryMs } = await import('../src/worker.js');
+    /* 2026-10-28: knocking every 300 s on the dot kept wymiar out for 36 minutes; a ten-minute
+     * silence let it straight in. So the waits grow, and never land on the same beat twice. */
+    assert.equal(heldOffRetryMs(0, () => 0), 5 * 60_000);
+    assert.equal(heldOffRetryMs(1, () => 0), 10 * 60_000);
+    assert.equal(heldOffRetryMs(2, () => 0), 15 * 60_000);
+    assert.equal(heldOffRetryMs(9, () => 0), 15 * 60_000);
+    assert.equal(heldOffRetryMs(0, () => 0.999), 5 * 60_000 + 59_940);
     const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
-    assert.match(source, /const HELD_OFF_RETRY_MS = 5 \* 60_000;/);
     assert.match(source, /else if \(isHeldOffKick\(text\)\) this\.heldOff = true;/);
+    // Back to the shortest wait once the bot is in game again.
+    assert.match(source, /'Mineflayer bot spawned'\);\r?\n\s*this\.heldOffStreak = 0;/);
     const branch = source.slice(source.indexOf('} else if (!this.stopped && this.heldOff) {'));
     const body = branch.slice(0, branch.indexOf('} else if', 10));
+    assert.match(body, /const wait = heldOffRetryMs\(this\.heldOffStreak\);\s*this\.heldOffStreak \+= 1;/);
     assert.match(body, /this\.heldOff = false;/);
-    assert.match(body, /\}, HELD_OFF_RETRY_MS\);\r?\n\s*this\.timers\.add\(timer\);/);
+    assert.match(body, /\}, wait\);\r?\n\s*this\.timers\.add\(timer\);/);
     assert.doesNotMatch(body, /unref\(\)/);
   });
 });
