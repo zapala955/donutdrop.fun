@@ -156,8 +156,20 @@ export function isBanKick(text: string): boolean {
  * ("You are already online") for nine minutes, and the vault knocked about once a minute the whole
  * time, each knock a fresh login on the same account. Five minutes apart is quieter, and still
  * back soon after the server lets it in.
+ *
+ * But not five minutes every time. On 2026-10-28 wymiar was refused that way from 10:31 to 11:07
+ * UTC, knocking every 300 s on the dot, while nobody was on the account. Ten minutes with no
+ * knock at all and it was let straight in, so each knock was most likely renewing the stale
+ * session it was waiting out. The waits now grow, with a little jitter, until a gap outlasts it.
  */
-const HELD_OFF_RETRY_MS = 5 * 60_000;
+const HELD_OFF_RETRY_MS: readonly number[] = [5 * 60_000, 10 * 60_000, 15 * 60_000];
+const HELD_OFF_JITTER_MS = 60_000;
+
+/** The wait before the next login after `streak` refusals in a row (0 for the first). */
+export function heldOffRetryMs(streak: number, random: () => number = Math.random): number {
+  const base = HELD_OFF_RETRY_MS[Math.min(streak, HELD_OFF_RETRY_MS.length - 1)]!;
+  return base + Math.floor(random() * HELD_OFF_JITTER_MS);
+}
 
 /** How long an ordinary disconnect waits before logging in again (see the `end` handler). */
 export const RECONNECT_GAP_MS = 10_000;
@@ -288,8 +300,10 @@ export class MinecraftWorker {
   private stopped = false;
   /** Set when the server kicked this account as banned; the next attempt waits BANNED_RETRY_MS. */
   private banned = false;
-  /** Set when the server said it cannot let this account in yet; the next attempt waits HELD_OFF_RETRY_MS. */
+  /** Set when the server said it cannot let this account in yet; the next attempt waits heldOffRetryMs. */
   private heldOff = false;
+  /** Refusals in a row since the bot was last in game; each makes the next wait longer. */
+  private heldOffStreak = 0;
   /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
   private relogDue = false;
   /** The current logout is a relog, so the bot comes back after RELOG_OFFLINE_*, not ten seconds. */
@@ -529,6 +543,7 @@ export class MinecraftWorker {
       // respawned session, even if no inventory event was observed during the disconnect.
       this.invalidateSnapshotState();
       this.log.info({ username: bot.username, version: bot.version }, 'Mineflayer bot spawned');
+      this.heldOffStreak = 0;
       // Where the server put it, and what it says on arrival: a lobby or a holding area shows here.
       this.log.info(
         { dimension: bot.game?.dimension, gameMode: bot.game?.gameMode, position: bot.entity?.position },
@@ -718,15 +733,17 @@ export class MinecraftWorker {
       } else if (!this.stopped && this.heldOff) {
         /* Held open and tracked, like the ban wait: a process that exited here would be restarted
          * by Docker within a minute and knock again, which is the loop this replaces. */
+        const wait = heldOffRetryMs(this.heldOffStreak);
+        this.heldOffStreak += 1;
         this.log.warn(
-          { retryInMinutes: HELD_OFF_RETRY_MS / 60_000 },
+          { retryInMinutes: Math.round(wait / 6_000) / 10, refusalsInARow: this.heldOffStreak },
           'The server is not letting this account in yet; trying again later',
         );
         this.heldOff = false;
         const timer = setTimeout(() => {
           this.timers.delete(timer);
           this.connect();
-        }, HELD_OFF_RETRY_MS);
+        }, wait);
         this.timers.add(timer);
       } else if (!this.stopped && relogging) {
         /* Held open (no unref) like the ban wait, so the process does not exit and leave the gap
