@@ -174,6 +174,22 @@ export function heldOffRetryMs(streak: number, random: () => number = Math.rando
 /** How long an ordinary disconnect waits before logging in again (see the `end` handler). */
 export const RECONNECT_GAP_MS = 10_000;
 
+/* How long to wait after logins that never got the bot into the game, by how many in a row.
+ *
+ * While DonutSMP restarts a region, a login is accepted at the door and then stalls for about 26 s
+ * before the socket closes, with no kick and no reason. On 2026-10-28 (11:13 and 11:36 UTC) the
+ * bot went straight back in ten seconds later, time after time, and once the region was up it was
+ * refused "You are already online" for the session one of those half-finished logins had left. */
+const FAILED_LOGIN_GAPS_MS: readonly number[] = [30_000, 60_000, 120_000, 300_000];
+const FAILED_LOGIN_JITTER_MS = 10_000;
+
+/** The wait before logging in again after `failedLogins` logins in a row that never spawned. */
+export function reconnectGapMs(failedLogins: number, random: () => number = Math.random): number {
+  if (failedLogins <= 0) return RECONNECT_GAP_MS;
+  const base = FAILED_LOGIN_GAPS_MS[Math.min(failedLogins, FAILED_LOGIN_GAPS_MS.length) - 1]!;
+  return base + Math.floor(random() * FAILED_LOGIN_JITTER_MS);
+}
+
 /** Whether a kick says the server is not letting this account in yet: maintenance, or a session it still holds. */
 export function isHeldOffKick(text: string): boolean {
   return /already online|under maintenance/i.test(text);
@@ -304,6 +320,8 @@ export class MinecraftWorker {
   private heldOff = false;
   /** Refusals in a row since the bot was last in game; each makes the next wait longer. */
   private heldOffStreak = 0;
+  /** Connections in a row that ended before the bot spawned; each makes the next wait longer. */
+  private failedLogins = 0;
   /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
   private relogDue = false;
   /** The current logout is a relog, so the bot comes back after RELOG_OFFLINE_*, not ten seconds. */
@@ -544,6 +562,7 @@ export class MinecraftWorker {
       this.invalidateSnapshotState();
       this.log.info({ username: bot.username, version: bot.version }, 'Mineflayer bot spawned');
       this.heldOffStreak = 0;
+      this.failedLogins = 0;
       // Where the server put it, and what it says on arrival: a lobby or a holding area shows here.
       this.log.info(
         { dimension: bot.game?.dimension, gameMode: bot.game?.gameMode, position: bot.entity?.position },
@@ -719,6 +738,7 @@ export class MinecraftWorker {
       const relogging = this.relogging;
       this.relogDue = false;
       this.relogging = false;
+      if (!spawned) this.failedLogins += 1;
       if (!this.stopped && this.banned) {
         /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
          * straight away, which is exactly the reconnect loop this is here to stop. */
@@ -763,11 +783,21 @@ export class MinecraftWorker {
          * old session -- "You are already online", then five minutes held off. That is how one
          * unconfirmed payout took the teller offline from 10:31 to 10:37 on 2026-10-28, and why
          * the container had restarted 135 times. Ten seconds is long enough for the server to let
-         * the old session go. */
+         * the old session go.
+         *
+         * Unless the login itself is what keeps failing: then the gap grows (see
+         * reconnectGapMs), so a region that is restarting is not knocked on every half minute. */
+        const gap = reconnectGapMs(this.failedLogins);
+        if (this.failedLogins > 0) {
+          this.log.warn(
+            { failedLoginsInARow: this.failedLogins, retryInSeconds: Math.round(gap / 1000) },
+            'Login ended before the bot got in; waiting longer before the next',
+          );
+        }
         const timer = setTimeout(() => {
           this.timers.delete(timer);
           this.connect();
-        }, RECONNECT_GAP_MS);
+        }, gap);
         this.timers.add(timer);
       }
     });
