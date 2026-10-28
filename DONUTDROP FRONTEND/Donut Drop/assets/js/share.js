@@ -202,9 +202,9 @@ async function saveImage(share) {
 }
 
 /**
- * Somebody arrived on a shared win (`/?ref=ABC123&win=K7P2QX`): show them the win, and whose invite
- * they are joining on, by the masked name the share carries. The code itself is kept by
- * referrals.js, as for any invite link.
+ * Somebody arrived on a shared win (`/?ref=ABC123&win=K7P2QX`): show them the win, and that they are
+ * joining on an invite. No name: the masked one is on the card, and in a sentence the stars read
+ * badly. The code itself is kept by referrals.js, as for any invite link.
  */
 export async function initShareLanding() {
   const params = new URLSearchParams(location.search);
@@ -219,7 +219,7 @@ export async function initShareLanding() {
     const round = `${share.multiplier} on a ${money(Number(share.wagerMinor))} bet.`;
     toast({
       title: share.title,
-      body: share.invite ? `${round} You are joining with ${share.player}'s invite.` : round,
+      body: share.invite ? `${round} You are joining with an invite.` : round,
       kind: 'gold',
       ttl: 9000,
     });

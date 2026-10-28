@@ -45,7 +45,8 @@ export function isLinkPreview(userAgent: string | undefined): boolean {
  * `playerName` is the MASKED name ("A********"), read through lib/masked-name.ts exactly as the live
  * feed reads it; the real one stays in win_shares.player_name and never leaves the database. The
  * first card printed the real name, and the next none at all; the owner asked for it masked, as
- * everywhere else on the site (2026-10-28).
+ * everywhere else on the site (2026-10-28). It is on the card only: in a preview's title and text
+ * the stars read badly, so those name nobody.
  */
 export interface WinShare {
   readonly id: string;
@@ -58,13 +59,13 @@ export interface WinShare {
 }
 
 export function shareTitle(share: WinShare): string {
-  return `${share.playerName} won ${compactMoney(share.payoutMinor)} on ${share.gameName}`;
+  return `${compactMoney(share.payoutMinor)} win on ${share.gameName}`;
 }
 
 export function shareDescription(share: WinShare): string {
   const round = `${multiplierText(share.wagerMinor, share.payoutMinor)} on a ${compactMoney(share.wagerMinor)} bet.`;
   return share.referralCode
-    ? `${round} Join DonutLuxe with ${share.playerName}'s invite.`
+    ? `${round} Join DonutLuxe with this invite.`
     : `${round} DonutLuxe, the DonutSMP casino.`;
 }
 
@@ -86,9 +87,9 @@ const escapeHtml = (text: string) =>
  * sharing a round again hands back the same share. Version 1 printed the player's real name in the
  * title and on the card, and the bare /w/<id> links shared then still preview that way wherever
  * they were posted (2026-10-28); a versioned link is a URL those caches have never seen. Version 3
- * carries the masked name.
+ * put the masked name everywhere; version 4 keeps it on the card and out of the title and text.
  */
-export const CARD_VERSION = 3;
+export const CARD_VERSION = 4;
 
 /** The link a player posts. The page ignores the version; it is there for the caches. */
 export function shareUrl(share: WinShare, origin: string): string {
