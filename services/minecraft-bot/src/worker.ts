@@ -16,16 +16,19 @@ import { parseDepositAttemptResult, type TransferAdapter } from './transfer-adap
 import {
   describeSystemChat,
   displayedAmountBounds,
+  looksLikePaymentReceipt,
   parseOutgoingPayment,
   parsePaymentMessage,
   parsePaymentNotice,
   parsePayoutRefusal,
   parseBalanceReply,
   parseCommandCooldown,
+  rawSystemChat,
   type BalanceReading,
   type OutgoingPayment,
   type PayoutRefusal,
 } from './payment-chat.js';
+import { retryReport } from './report-retry.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
@@ -644,7 +647,17 @@ export class MinecraftWorker {
         return;
       }
       const notice = parsePaymentNotice(data);
-      if (!notice) return;
+      if (!notice) {
+        /* Money that arrived in a shape the reader does not trust. It is not credited, but it is
+         * put on record in full: otherwise the only trace is a nameless /bal adjustment. */
+        if (looksLikePaymentReceipt(data)) {
+          this.log.warn(
+            { chat: describeSystemChat(data), raw: rawSystemChat(data) },
+            'payment-like message the receipt reader did not accept',
+          );
+        }
+        return;
+      }
       if (notice.payer.toLowerCase() === bot.username.toLowerCase()) return;
       const payment = parsePaymentMessage(data);
       /* Resolved HERE, not inside the queued report.
@@ -826,13 +839,24 @@ export class MinecraftWorker {
   private async reportPaymentNotice(
     payer: string,
     displayedAmount: string,
-    payerUuid?: string,
+    payerUuid: string | undefined,
+    eventId: string,
   ): Promise<void> {
     this.log.info(
       { payer, displayedAmount, payerUuid: payerUuid ?? null },
       'Observed in-game cash payment receipt',
     );
-    await this.api.reportPaymentNotice(payer, displayedAmount, payerUuid);
+    /* One event id for every attempt. The gateway journals events by id, so a retry after an
+     * attempt that did land -- a reply lost to a timeout -- is answered from the journal instead
+     * of crediting the payment twice. */
+    await retryReport(
+      () => this.api.reportPaymentNotice(payer, displayedAmount, payerUuid, eventId),
+      (error, attempt, delayMs) =>
+        this.log.warn(
+          { err: error, payer, displayedAmount, attempt, retryInMs: delayMs },
+          'payment receipt not reported yet; retrying',
+        ),
+    );
   }
 
   /** Preserve the order in which DonutSMP delivered payment receipts. */
@@ -842,14 +866,17 @@ export class MinecraftWorker {
     exactAmount?: number,
     payerUuid?: string,
   ): void {
+    const eventId = randomUUID();
     this.paymentReports = this.paymentReports
       .catch(() => undefined)
       .then(async () => {
-        await this.reportPaymentNotice(payer, displayedAmount, payerUuid);
+        await this.reportPaymentNotice(payer, displayedAmount, payerUuid, eventId);
         if (exactAmount !== undefined) await this.reportPayment(payer, exactAmount);
       })
       .catch((error: unknown) => {
-        this.log.error({ err: error }, 'payment observation failed');
+        /* The money is on the account all the same, so the next /bal books it as a nameless
+         * adjustment. This line is the only place the payer's name survives. */
+        this.log.error({ err: error, payer, displayedAmount }, 'payment observation failed');
       });
   }
 

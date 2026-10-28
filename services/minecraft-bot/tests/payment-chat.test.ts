@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   describeSystemChat,
+  looksLikePaymentReceipt,
   parsePaymentMessage,
   parsePaymentNotice,
+  rawSystemChat,
 } from '../src/payment-chat.js';
 
 /* The log written after a payout has to show whatever the server said back. It used to drop
@@ -589,6 +591,40 @@ test('refuses an action bar message carrying payment-shaped text', () => {
     },
   };
   assert.equal(parsePaymentMessage(actionBar), undefined);
+});
+
+/* A receipt the strict reader refuses still has to leave a trace, or the money shows up later as
+ * a nameless /bal adjustment. The detector is diagnostic only: it must recognise any payment
+ * wording, whatever the parts and colours, and must not fire on players talking in chat. */
+test('flags any payment-like server line, and not chat about payments', () => {
+  // The real receipt, which the strict reader accepts anyway.
+  assert.equal(looksLikePaymentReceipt(paidOne), true);
+  // A name split into its own coloured part: four parts, so the strict reader refuses it.
+  const rankedName: unknown = {
+    isActionBar: false,
+    content: {
+      text: '',
+      extra: [
+        { color: 'gold', text: 'Fazoop' },
+        { color: 'white', text: ' paid you ' },
+        { color: '#00FF00', text: '$ ' },
+        { color: 'white', text: '300M' },
+      ],
+    },
+  };
+  assert.equal(parsePaymentNotice(rankedName), undefined);
+  assert.equal(looksLikePaymentReceipt(rankedName), true);
+  assert.match(rawSystemChat(rankedName) ?? '', /"Fazoop"/);
+  // One plain line in a colour the reader does not expect.
+  assert.equal(looksLikePaymentReceipt({ content: { text: 'k56ox paid you $100M', color: 'green' } }), true);
+
+  // Players talking about a payment carry a separator before the words.
+  assert.equal(looksLikePaymentReceipt({ content: { text: 'Steve: he paid you $5M already' } }), false);
+  assert.equal(looksLikePaymentReceipt({ content: { text: '[VIP] Steve » bro who paid you' } }), false);
+  assert.equal(looksLikePaymentReceipt({ content: { text: 'You paid Notch $ 5M' } }), false);
+  assert.equal(looksLikePaymentReceipt({ content: { text: 'Notch paid you $ 5' }, isActionBar: true }), false);
+  assert.equal(looksLikePaymentReceipt(shardReward), false);
+  assert.equal(looksLikePaymentReceipt(undefined), false);
 });
 
 /* ── Bedrock payers ──
