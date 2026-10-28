@@ -18,6 +18,7 @@ import {
   shareLandingPath,
   sharePageHtml,
   shareTitle,
+  shareUrl,
   type WinShare,
 } from '../lib/win-shares.js';
 
@@ -72,7 +73,7 @@ function shareBody(share: WinShare, config: AppConfig) {
     // Whether the link brings a visitor in on the player's invite; the code itself is in the link.
     invite: share.referralCode !== null,
     title: shareTitle(share),
-    url: `${config.appOrigin}/w/${share.id}`,
+    url: shareUrl(share, config.appOrigin),
     imageUrl: shareImageUrl(share, config.appOrigin),
   };
 }
