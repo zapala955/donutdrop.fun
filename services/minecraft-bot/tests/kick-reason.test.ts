@@ -137,3 +137,22 @@ describe('reading a kick reason', () => {
     assert.ok(describeKick({ text: 'x'.repeat(5000) }).length <= 500);
   });
 });
+
+/* 2026-10-28: an unconfirmed payout ended the teller's connection on purpose. The reconnect timer
+ * was unref'd, so the idle process exited, Docker restarted it at once, and the new login landed
+ * while DonutSMP still held the old session: "You are already online", then five minutes held off.
+ * The container had restarted 135 times that way. */
+describe('an ordinary disconnect', () => {
+  it('waits out the gap in the same process, so the server has let the old session go', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { RECONNECT_GAP_MS } = await import('../src/worker.js');
+    const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    assert.ok(RECONNECT_GAP_MS >= 10_000);
+    const ordinary = source.slice(source.indexOf('} else if (!this.stopped) {'));
+    const branch = ordinary.slice(0, ordinary.indexOf('\n      }\n'));
+    assert.match(branch, /setTimeout\(\(\) => \{\s*this\.timers\.delete\(timer\);\s*this\.connect\(\);\s*\}, RECONNECT_GAP_MS\);/);
+    assert.match(branch, /this\.timers\.add\(timer\);/);
+    // An unref'd timer lets the process exit and Docker log straight back in.
+    assert.doesNotMatch(branch, /\.unref\(\)/);
+  });
+});
