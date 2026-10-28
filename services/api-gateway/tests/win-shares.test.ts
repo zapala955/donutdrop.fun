@@ -78,18 +78,21 @@ describe('a share link', () => {
     assert.equal(shareLandingPath({ ...share, referralCode: null }), '/?win=K7P2QXAB');
   });
 
-  it('previews as the win, with the card as its picture', () => {
-    assert.equal(shareTitle(share), 'S******** won $12.5M on Crash');
-    assert.equal(shareDescription(share), "54.2× on a $230K bet. Join DonutLuxe with S********'s invite.");
+  /* The masked name is on the card only: in the preview's title and text the stars read badly
+   * (2026-10-28). */
+  it('previews as the win, with the card as its picture and nobody named', () => {
+    assert.equal(shareTitle(share), '$12.5M win on Crash');
+    assert.equal(shareDescription(share), '54.2× on a $230K bet. Join DonutLuxe with this invite.');
     assert.equal(shareDescription({ ...share, referralCode: null }), '54.2× on a $230K bet. DonutLuxe, the DonutSMP casino.');
     const html = sharePageHtml(share, 'https://donutluxe.com');
+    assert.doesNotMatch(html, /S\*{8}/);
     /* Versioned, the picture AND the link: Discord keeps the title it read the first time it saw a
      * URL, and the first version's title had the player's real name in it. */
-    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=3" \/>/);
-    assert.match(html, /<meta property="og:url" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\?v=3" \/>/);
-    assert.equal(shareUrl(share, 'https://donutluxe.com'), 'https://donutluxe.com/w/K7P2QXAB?v=3');
+    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=4" \/>/);
+    assert.match(html, /<meta property="og:url" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\?v=4" \/>/);
+    assert.equal(shareUrl(share, 'https://donutluxe.com'), 'https://donutluxe.com/w/K7P2QXAB?v=4');
     assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
-    assert.match(html, /<meta property="og:title" content="S\*{8} won \$12\.5M on Crash" \/>/);
+    assert.match(html, /<meta property="og:title" content="\$12\.5M win on Crash" \/>/);
     assert.match(html, /<meta name="robots" content="noindex" \/>/);
   });
 

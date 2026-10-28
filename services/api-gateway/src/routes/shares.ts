@@ -65,8 +65,7 @@ function shareBody(share: WinShare, config: AppConfig) {
     id: share.id,
     game: share.game,
     gameName: share.gameName,
-    // Masked ("A********"), as everywhere a stranger looks.
-    player: share.playerName,
+    // No player: the masked name is on the card only (lib/win-shares.ts).
     wagerMinor: share.wagerMinor.toString(),
     payoutMinor: share.payoutMinor.toString(),
     multiplier: multiplierText(share.wagerMinor, share.payoutMinor),
