@@ -2,6 +2,11 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { AppConfig } from '../config.js';
 import { pickBot, queueVaultSweep, recordBotTransfer } from './bots.js';
 import type { Database, DbClient } from './db.js';
+import {
+  judgeUnconfirmedPayout,
+  openUnconfirmedPayouts,
+  settleUnconfirmedPayout,
+} from './unconfirmed-payouts.js';
 
 /** How often the teller's reading is looked at. */
 const INTERVAL_MS = 60_000;
@@ -46,13 +51,30 @@ export function startTellerSweeper(
   let running = false;
 
   const tick = async (): Promise<void> => {
-    await db.transaction(async (client) => {
+    const decided = await db.transaction(async (client) => {
       const teller = await pickBot(client, config, 'teller');
       // No teller online: there is nothing to read and nothing to sweep.
-      if (!teller) return;
+      if (!teller) return undefined;
       const reading = await trustedReading(client, teller.id);
       // No reading yet, an old one, or one a booked movement has overtaken: wait for the next.
-      if (!reading) return;
+      if (!reading) return undefined;
+
+      /* A payout the server never answered is decided from this reading, and until it is the books
+       * are not corrected at all: a correction would absorb a paid payout into an adjustment and
+       * make it look unpaid. See lib/unconfirmed-payouts.ts. */
+      const open = await openUnconfirmedPayouts(client, teller.id);
+      if (open.length > 0) {
+        const [only] = open;
+        if (open.length !== 1 || !only || !only.readingAfter) return undefined;
+        const verdict = judgeUnconfirmedPayout({
+          tracked: reading.tracked,
+          readingLow: reading.low,
+          readingStep: reading.step,
+          amount: only.amount,
+        });
+        if (verdict === 'unclear') return undefined;
+        return { botId: teller.id, payout: only, verdict, reading };
+      }
 
       /* Reconcile first, so the sweep about to be queued is sized against a balance the console
        * and the withdrawal router also believe. Booked rather than assigned: a corrected balance
@@ -74,7 +96,21 @@ export function startTellerSweeper(
         { id: teller.id, username: teller.username },
         reading.low,
       );
+      return undefined;
     });
+    /* Applied in a transaction of its own, which takes the withdrawal before the wallet or the bot
+     * -- the operator's order -- rather than inside the one above, which holds the bot row first
+     * and would invert it against a withdrawal request locking wallet then teller. The verdict is
+     * a fact about money already moved or not, so it is just as true a moment later; the next
+     * tick reconciles against the books this leaves. */
+    if (decided) {
+      await db.transaction((client) =>
+        settleUnconfirmedPayout(client, config, log, decided.botId, decided.payout, decided.verdict, {
+          readingLow: decided.reading.low,
+          tracked: decided.reading.tracked,
+        }),
+      );
+    }
   };
 
   const timer = setInterval(() => {
@@ -102,6 +138,8 @@ export function startTellerSweeper(
 export interface TrustedReading {
   /** The least the account holds, per /bal. */
   low: bigint;
+  /** How wide the reading is: 1 for an exact figure, more for an abbreviated one. */
+  step: bigint;
   /** What the tracked figure is. */
   tracked: bigint;
   /** What the tracked figure should be: unchanged if it already fits the reading, else `low`. */
@@ -151,6 +189,7 @@ export async function trustedReading(
   const fits = tracked >= low && tracked < low + step;
   return {
     low,
+    step,
     tracked,
     correctedTo: fits ? tracked : low,
     displayed: bot.observed_balance_display ?? `$${low.toString()}`,
