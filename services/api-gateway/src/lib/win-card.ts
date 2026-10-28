@@ -11,8 +11,8 @@ import { DONUT } from './card-art.js';
  * drew could say anything, and it would go out under the site's name. It wears the site's own link
  * preview (assets/img/brand/og-image.png) -- the charcoal ground, the pixel donut in a warm glow,
  * Archivo Black with the money in gold, Figtree for everything else, the rounded chips -- with the
- * win where the tagline was. Nothing on it says who won: the site masks names everywhere a stranger
- * looks, and a card is posted to strangers.
+ * win where the tagline was. Who won is the masked name ("A********"), as the live feed shows it:
+ * the site masks names everywhere a stranger looks, and a card is posted to strangers.
  *
  * Hallmark · component: share card · theme: project system (og-image) · no italics, no gradient text
  */
@@ -36,6 +36,8 @@ const BODY = 'Figtree';
 /** What a card shows: one settled win, as it was when it was shared. */
 export interface WinCard {
   readonly gameName: string;
+  /** Masked ("A********"), as the site shows a player to a stranger: never the real name. */
+  readonly playerName: string;
   readonly wagerMinor: bigint;
   readonly payoutMinor: bigint;
 }
@@ -117,7 +119,12 @@ export function winCardSvg(card: WinCard): string {
   let amountSize = 176;
   while (amountSize > 96 && measureText(amount, DISPLAY, DISPLAY_WEIGHT, amountSize) > 650) amountSize -= 8;
 
-  // The text block, centred top to bottom: the name, the game, the figure, the chips.
+  // Who and where, on one line, smaller rather than into the donut for a long game name.
+  const who = `${card.playerName} won on ${card.gameName}`;
+  let whoSize = 40;
+  while (whoSize > 26 && measureText(who, BODY, 600, whoSize) > 650) whoSize -= 2;
+
+  // The text block, centred top to bottom: the site's name, who and where, the figure, the chips.
   const nameY = 134;
   const gameY = 262;
   const amountY = gameY + 32 + Math.round(amountSize * 0.74);
@@ -147,7 +154,8 @@ export function winCardSvg(card: WinCard): string {
     `<g transform="translate(${donutX} ${donutY}) scale(${scale})" shape-rendering="crispEdges">${donut}</g>` +
     // The site's name, as the link preview sets it: Donut in white, Luxe in gold.
     `<text x="${left}" y="${nameY}" font-family="${DISPLAY}" font-weight="${DISPLAY_WEIGHT}" font-size="46"><tspan fill="${INK}">Donut</tspan><tspan fill="${GOLD}">Luxe</tspan></text>` +
-    `<text x="${left}" y="${gameY}" font-family="${BODY}" font-weight="600" font-size="40" fill="${MUTED}">Won on ${escapeXml(card.gameName)}</text>` +
+    `<text x="${left}" y="${gameY}" font-family="${BODY}" font-weight="600" font-size="${whoSize}" fill="${MUTED}">` +
+    `<tspan fill="${INK}">${escapeXml(card.playerName)}</tspan> won on ${escapeXml(card.gameName)}</text>` +
     `<text x="${left - 4}" y="${amountY}" font-family="${DISPLAY}" font-weight="${DISPLAY_WEIGHT}" font-size="${amountSize}" fill="${GOLD}">${escapeXml(amount)}</text>` +
     multiplier.svg +
     bet.svg +

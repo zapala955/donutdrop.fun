@@ -422,6 +422,8 @@ function paintHistory() {
     ['Multiplier', 'dtable__num'],
     ['Profit', 'dtable__num'],
     ['When', 'dtable__num'],
+    // The win-card column (share.js): a button on every win.
+    ['Share', 'hist__sharehead'],
   ]) {
     const cell = el('th', cls);
     cell.textContent = text;
@@ -433,7 +435,7 @@ function paintHistory() {
   if (!history.rounds.length) {
     const row = el('tr');
     const cell = el('td', 'dtable__empty');
-    cell.colSpan = 5;
+    cell.colSpan = 6;
     cell.textContent = historyGame ? `No ${gameName(historyGame)} rounds yet.` : 'No rounds yet.';
     row.appendChild(cell);
     body.appendChild(row);
@@ -496,14 +498,6 @@ function historyRow(round) {
     detail.textContent = round.detail;
     game.appendChild(detail);
   }
-  if (isShareable(wager, payout)) {
-    const share = el('button', 'hist__share');
-    share.type = 'button';
-    share.textContent = 'Share';
-    share.setAttribute('aria-label', `Share this ${round.name} win`);
-    share.addEventListener('click', () => shareRound(round.game, round.id));
-    game.appendChild(share);
-  }
 
   const bet = el('td', 'dtable__num mono');
   bet.textContent = money(wager);
@@ -529,9 +523,36 @@ function historyRow(round) {
     hour: '2-digit',
     minute: '2-digit',
   });
+  /* On a phone the When column gives its room to the Share one, and the time moves under the game
+   * (pages.css). Both copies exist; each width shows one. */
+  const whenUnder = el('span', 'hist__when mono');
+  whenUnder.textContent = when.textContent;
+  game.appendChild(whenUnder);
   when.title = at.toLocaleString();
 
-  row.append(game, bet, multiplier, profit, when);
+  // Every win can be made into a card (share.js); a loss or a push has nothing to show.
+  const shareCell = el('td', 'hist__sharecell');
+  if (isShareable(wager, payout)) {
+    const share = el('button', 'hist__share');
+    share.type = 'button';
+    share.title = 'Make a card of this win';
+    share.setAttribute('aria-label', `Share this ${round.name} win`);
+    share.innerHTML =
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 7l4-4 4 4M4 11v5h12v-5"/></svg><span>Share</span>';
+    share.addEventListener('click', async () => {
+      share.disabled = true;
+      share.setAttribute('aria-busy', 'true');
+      try {
+        await shareRound(round.game, round.id);
+      } finally {
+        share.disabled = false;
+        share.removeAttribute('aria-busy');
+      }
+    });
+    shareCell.appendChild(share);
+  }
+
+  row.append(game, bet, multiplier, profit, when, shareCell);
   return row;
 }
 

@@ -487,18 +487,34 @@
 }
 .hist__more { align-self: center; min-width: 160px; }
 .hist__retry { margin-top: 12px; }
-/* A win worth a card (share.js): a small gold link under the game's name. */
+/* ── the history's Share column (share.js): a gold pill on every win ──
+ * It was a small gold word under the game's name, on big wins only, and nobody found it. */
+.hist__sharehead, .hist__sharecell { width: 1%; text-align: right; white-space: nowrap; }
+/* The time under the game: a phone's copy of the When column (account.js), hidden elsewhere. */
+.hist__when { display: none; }
 .hist__share {
-  margin-top: 4px; padding: 0; border: 0; background: none;
-  font-size: .6875rem; font-weight: 700; color: var(--gold); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--lx-gold) 45%, transparent);
+  border-radius: var(--lx-r-pill);
+  background: transparent; color: var(--lx-gold);
+  font: 700 .75rem var(--lx-ui); cursor: pointer;
+  transition: background-color .14s, border-color .14s;
 }
-.hist__share:hover, .hist__share:focus-visible { text-decoration: underline; }
+.hist__share svg {
+  width: 14px; height: 14px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.hist__share:hover { background: color-mix(in srgb, var(--lx-gold) 12%, transparent); border-color: var(--lx-gold); }
+.hist__share:focus-visible { outline: 2px solid var(--lx-gold); outline-offset: 2px; }
+.hist__share:active { transform: translateY(1px); }
+.hist__share:disabled { opacity: .5; cursor: progress; }
 
 /* ── win cards (share.js) ── */
 .modal[data-variant='share'] { width: min(640px, calc(100vw - 24px)); }
 .share__card {
   display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630;
-  border-radius: var(--r-s); image-rendering: pixelated; background: var(--bg2);
+  border-radius: var(--r-s); background: var(--bg2);
 }
 .share__link {
   width: 100%; margin-top: 12px; padding: 8px 10px;
@@ -508,10 +524,67 @@
 .share__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .share__actions .btn { flex: 1 1 140px; }
 .modal__body .share__note { margin: 10px 0 0; font-size: .75rem; }
-/* The prompt after a qualifying win sits with the toasts, which ignore the pointer; this one is
- * there to be pressed. */
-.share-prompt { pointer-events: auto; }
-.share-prompt__go { margin-top: 6px; }
+
+/* ── the bar after a big win (share.js offerShare) ──
+ * One line of what was won, a Share button and a close button, at the foot of the screen and above
+ * the phone's dock, where a thumb is. It replaced a toast with a full-size button inside it. */
+.sharebar {
+  position: fixed; z-index: 150;
+  left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  width: min(440px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: var(--lx-s2);
+  padding: var(--lx-s2) var(--lx-s2) var(--lx-s2) var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  box-shadow: inset 3px 0 0 var(--lx-gold), 0 0 0 1px var(--lx-4), var(--lx-shade-hi);
+  font-family: var(--lx-ui);
+  transform: translateX(-50%);
+  animation: sharebar-in .2s cubic-bezier(.2, .8, .2, 1) both;
+}
+/* Out by an animation too: the way in holds its last frame, and would outrank a transition. */
+.sharebar.is-leaving { animation: sharebar-out .16s cubic-bezier(.4, 0, 1, 1) both; }
+@keyframes sharebar-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+@keyframes sharebar-out {
+  from { opacity: 1; transform: translateX(-50%); }
+  to { opacity: 0; transform: translate(-50%, 8px); }
+}
+.sharebar__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sharebar__copy :is(b, span) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sharebar__copy b { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); }
+.sharebar__copy span { color: var(--lx-mute); font: 500 .8125rem var(--lx-ui); }
+.sharebar__go {
+  flex: none; height: 36px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-pill);
+  background: var(--lx-gold); color: var(--lx-0);
+  font: 800 .875rem var(--lx-ui); cursor: pointer;
+  transition: filter .14s;
+}
+.sharebar__go:hover { filter: brightness(1.08); }
+.sharebar__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 2px; }
+.sharebar__go:active { transform: translateY(1px); }
+.sharebar__go:disabled { filter: saturate(.6); opacity: .7; cursor: progress; }
+.sharebar__x {
+  flex: none; display: grid; place-items: center;
+  width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: var(--lx-r); background: none; color: var(--lx-mute); cursor: pointer;
+}
+.sharebar__x svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.sharebar__x:hover { color: var(--lx-ink); background: var(--lx-3); }
+.sharebar__x:focus-visible { outline: 2px solid var(--lx-gold); outline-offset: 2px; }
+/* With the dock along the foot (luxe.css, up to 1279px), the bar sits just above it. */
+@media (max-width: 1279px) {
+  .sharebar { bottom: calc(64px + env(safe-area-inset-bottom, 0px) + var(--lx-s3)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sharebar { animation-name: sharebar-fade-in; }
+  .sharebar.is-leaving { animation-name: sharebar-fade-out; }
+  @keyframes sharebar-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sharebar-fade-out { from { opacity: 1; } to { opacity: 0; } }
+}
+
 /* On a phone the two tables keep their essentials on screen: the multiplier (the profit says the
    same) and the per-game win rate and best multiplier (the cards above carry the overall ones). */
 @media (max-width: 560px) {
@@ -519,6 +592,14 @@
   .stats__bygame :is(th, td):is(:nth-child(3), :nth-child(6)) { display: none; }
   .hist__game { min-width: 0; }
   .hist__detail { max-width: 150px; }
+  /* The Share column takes the When column's room; the time moves under the game. The pill keeps
+     its icon and a thumb-sized target, and gives its word to the figures. */
+  .hist__table :is(th, td):nth-child(5) { display: none; }
+  .hist__when { display: block; margin-top: 2px; font-size: .6875rem; color: var(--muted); }
+  .hist__share { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .hist__share span { display: none; }
+  .sharebar__go, .sharebar__x { height: 40px; }
+  .sharebar__x { width: 40px; }
 }
 .dtable tbody tr[data-outcome="lose"] .dtable__name { color: var(--muted); }
 

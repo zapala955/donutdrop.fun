@@ -4,12 +4,12 @@
  * whoever follows the link arrives on your invite code. This only asks for the link and shows what
  * comes back, so nothing here can make a card say something the round did not.
  *
- * Offered for a win of 5x or better, or $10M or more of profit. The server applies the same rule
- * (lib/win-shares.ts) and is what decides; this only keeps the button off rounds it would refuse.
+ * Any win can be shared (lib/win-shares.ts decides); the site offers it unasked only for a win worth
+ * showing off, 5x or better or $10M or more of profit, so an ordinary win is not interrupted.
  *
- * Three ways in: the history page (every qualifying win has a Share button), a prompt that appears
- * after a qualifying win (winfx.js finds it on the live feed), and the banner a visitor arriving on
- * somebody's link is shown (initShareLanding). */
+ * Three ways in: the history page (a Share button on every win), a bar that appears after a big win
+ * (winfx.js finds it on the live feed), and the note a visitor arriving on somebody's link is shown
+ * (initShareLanding). */
 import { api } from './api.js';
 import { state } from './store.js';
 import { openModal, toast } from './ui.js';
@@ -17,13 +17,23 @@ import { el, money } from './util.js';
 
 const MIN_MULTIPLIER = 5;
 const MIN_PROFIT = 10_000_000;
-const PROMPT_MS = 12_000;
+const OFFER_MS = 12_000;
 const SHARE_ID = /^[A-HJ-NP-Z2-9]{8}$/;
 
-/** Whether a round of yours can be shared. Never in test mode: play money is not a win to show. */
+/** Whether a round of yours can be shared: any win. Never in test mode: play money is not a win to show. */
 export function isShareable(wager, payout) {
   if (state.user?.testMode?.active) return false;
-  return wager > 0 && payout > wager && (payout >= wager * MIN_MULTIPLIER || payout - wager >= MIN_PROFIT);
+  return wager > 0 && payout > wager;
+}
+
+/** Whether a win is worth offering a card for unasked, the moment it lands. */
+export function isWorthOffering(wager, payout) {
+  return isShareable(wager, payout) && (payout >= wager * MIN_MULTIPLIER || payout - wager >= MIN_PROFIT);
+}
+
+/** The multiplier as the history writes it: rounded down to the hundredth, trailing zeros dropped. */
+function multiplierText(wager, payout) {
+  return `${(Math.floor((payout / wager) * 100) / 100).toString()}×`;
 }
 
 /** Makes the link for one of your rounds (or fetches the one already made) and opens the card. */
@@ -39,43 +49,71 @@ export async function shareRound(game, id) {
 }
 
 /**
- * After a qualifying win: a prompt in the corner for a few seconds. The live feed and the history
- * name a round differently, so the click finds it in the history by its bet and payout, newest
- * first, which is the round that was just celebrated.
+ * After a big win: a slim bar at the foot of the screen, above the phone's dock, for a few seconds.
+ * One line of what was won, a Share button, a close button; it waits while the pointer or the focus
+ * is on it. It used to be a toast with a full-size button stuffed inside it, top right on a desktop
+ * and wedged over the page on a phone.
+ *
+ * The live feed and the history name a round differently, so Share finds it in the history by its
+ * bet and payout, newest first, which is the round that was just celebrated.
  */
-export function offerShare(wager, payout) {
-  const wrap = document.querySelector('#toasts');
-  if (!wrap) return;
-  wrap.querySelector('.share-prompt')?.remove();
-  const prompt = el('div', 'toast toast--gold share-prompt');
-  prompt.setAttribute('role', 'status');
-  const copy = el('div');
-  const heading = el('b');
-  heading.textContent = `You won ${money(payout)}`;
-  const button = el('button', 'btn btn--go share-prompt__go');
-  button.type = 'button';
-  button.textContent = 'Share this win';
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    prompt.remove();
+export function offerShare({ wager, payout, sourceName }) {
+  document.querySelector('.sharebar')?.remove();
+  const bar = el('div', 'sharebar');
+  bar.setAttribute('role', 'status');
+
+  const copy = el('div', 'sharebar__copy');
+  const won = el('b');
+  won.textContent = `You won ${money(payout)}`;
+  const detail = el('span');
+  detail.textContent = sourceName ? `${multiplierText(wager, payout)} on ${sourceName}` : multiplierText(wager, payout);
+  copy.append(won, detail);
+
+  const go = el('button', 'sharebar__go');
+  go.type = 'button';
+  go.textContent = 'Share';
+  const close = el('button', 'sharebar__x');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+
+  let timer = 0;
+  const leave = () => {
+    clearTimeout(timer);
+    bar.classList.add('is-leaving');
+    setTimeout(() => bar.remove(), 180);
+  };
+  const wait = () => { clearTimeout(timer); timer = setTimeout(leave, OFFER_MS); };
+  bar.addEventListener('pointerenter', () => clearTimeout(timer));
+  bar.addEventListener('pointerleave', wait);
+  bar.addEventListener('focusin', () => clearTimeout(timer));
+  bar.addEventListener('focusout', wait);
+  close.addEventListener('click', leave);
+
+  go.addEventListener('click', async () => {
+    go.disabled = true;
+    go.setAttribute('aria-busy', 'true');
+    go.textContent = 'Opening';
     try {
       const page = await api.get('/v1/history?limit=20');
       const round = (page.rounds || []).find(
         (row) => Number(row.wagerMinor) === wager && Number(row.payoutMinor) === payout,
       );
+      leave();
       if (!round) {
         toast({ title: 'That round is not in your history yet', body: 'Share it from your history in a moment.', kind: 'lose' });
         return;
       }
       await shareRound(round.game, round.id);
     } catch (error) {
+      leave();
       toast({ title: 'That win could not be shared', body: error?.message || '', kind: 'lose' });
     }
   });
-  copy.append(heading, button);
-  prompt.appendChild(copy);
-  wrap.appendChild(prompt);
-  setTimeout(() => prompt.remove(), PROMPT_MS);
+
+  bar.append(copy, go, close);
+  document.body.appendChild(bar);
+  wait();
 }
 
 function openShareCard(share) {
@@ -164,8 +202,8 @@ async function saveImage(share) {
 }
 
 /**
- * Somebody arrived on a shared win (`/?ref=ABC123&win=K7P2QX`): show them the win, and that they are
- * joining on an invite. Never whose: a share carries no name. The code itself is kept by
+ * Somebody arrived on a shared win (`/?ref=ABC123&win=K7P2QX`): show them the win, and whose invite
+ * they are joining on, by the masked name the share carries. The code itself is kept by
  * referrals.js, as for any invite link.
  */
 export async function initShareLanding() {
@@ -181,7 +219,7 @@ export async function initShareLanding() {
     const round = `${share.multiplier} on a ${money(Number(share.wagerMinor))} bet.`;
     toast({
       title: share.title,
-      body: share.invite ? `${round} You are joining with this player's invite.` : round,
+      body: share.invite ? `${round} You are joining with ${share.player}'s invite.` : round,
       kind: 'gold',
       ttl: 9000,
     });

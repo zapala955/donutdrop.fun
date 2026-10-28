@@ -15,11 +15,14 @@ import {
  * clothes: the site's fonts (assets/fonts) and the pixel donut, generated from the frontend's art
  * (scripts/card-art.mjs). */
 
-const crash = { gameName: 'Crash', wagerMinor: 230_000n, payoutMinor: 12_466_000n };
+const crash = { gameName: 'Crash', playerName: 'A********', wagerMinor: 230_000n, payoutMinor: 12_466_000n };
 
 /** Every piece of text on the card, in order. */
 const texts = (svg: string) =>
-  [...svg.matchAll(/<(?:text|tspan)[^>]*>([^<]+)</g)].map((match) => match[1]!.replace(/&#215;/g, '×'));
+  svg
+    .split(/<[^>]+>/)
+    .map((text) => text.trim())
+    .filter(Boolean);
 
 describe('the card art', () => {
   it('is generated from the frontend files as they are now', async () => {
@@ -49,27 +52,41 @@ describe('the figures on a card', () => {
 });
 
 describe('the card', () => {
-  it('says the game, the win, the multiplier and the bet, and nothing about who', () => {
-    assert.deepEqual(texts(winCardSvg(crash)), ['Donut', 'Luxe', 'Won on Crash', '$12.5M', '54.2×', '$230K bet']);
+  it('says who (masked), the game, the win, the multiplier and the bet', () => {
+    assert.deepEqual(texts(winCardSvg(crash)), [
+      'Donut',
+      'Luxe',
+      'A********',
+      'won on Crash',
+      '$12.5M',
+      '54.2×',
+      '$230K bet',
+    ]);
   });
 
-  /* 2026-10-28: the first card printed the player's name ("AriaStar8 bet $230K") and an "18+".
-   * The site masks names wherever a stranger looks, and a card is posted to strangers. */
-  it('has no name on it to print, and no age line', () => {
-    const svg = winCardSvg({ ...crash, playerName: 'AriaStar8' } as typeof crash);
-    assert.doesNotMatch(svg, /AriaStar8/);
-    assert.doesNotMatch(svg, /18\+/);
+  /* 2026-10-28: the first card printed the player's real name ("AriaStar8 bet $230K") and an "18+".
+   * It now prints the name it is given, which is always the masked one (routes/shares.ts). */
+  it('has no age line', () => {
+    assert.doesNotMatch(winCardSvg(crash), /18\+/);
+  });
+
+  it('sets a long name and game smaller rather than letting them run into the donut', () => {
+    const svg = winCardSvg({ ...crash, playerName: '.B********', gameName: 'Mines Duel Deluxe Edition' });
+    const who = /font-size="(\d+)" fill="#8b8f9a">/.exec(svg);
+    assert.ok(who, 'the line is on the card');
+    assert.ok(measureText('.B******** won on Mines Duel Deluxe Edition', 'Figtree', 600, Number(who[1])) <= 650);
   });
 
   it('sets the figure smaller rather than letting it run into the donut', () => {
-    const svg = winCardSvg({ gameName: 'Case Battles', wagerMinor: 1_500_000_000n, payoutMinor: 988_000_000_000n });
+    const svg = winCardSvg({ ...crash, gameName: 'Case Battles', wagerMinor: 1_500_000_000n, payoutMinor: 988_000_000_000n });
     const amount = /font-size="(\d+)" fill="#ffaa00">(\$[^<]+)</.exec(svg);
     assert.ok(amount, 'the figure is on the card');
     assert.ok(measureText(amount[2]!, 'Archivo', 900, Number(amount[1])) <= 650);
   });
 
   it('escapes what it prints', () => {
-    assert.match(winCardSvg({ ...crash, gameName: '<Slots & Co>' }), /Won on &#60;Slots &#38; Co&#62;/);
+    const svg = winCardSvg({ ...crash, playerName: '<b>', gameName: '<Slots & Co>' });
+    assert.match(svg, /<tspan fill="#ffffff">&#60;b&#62;<\/tspan> won on &#60;Slots &#38; Co&#62;/);
   });
 
   it('is a 1200 by 630 PNG, small enough to send to every preview that asks', () => {
