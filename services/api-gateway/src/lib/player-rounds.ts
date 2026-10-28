@@ -251,11 +251,14 @@ interface PageOptions {
   readonly gameValue: string | null;
   /** Placeholder for the most rows one source may give, or null for no limit. */
   readonly limit: string | null;
+  /** Placeholder for one round's id, to read that round alone. */
+  readonly round?: string;
 }
 
 function sourceSql(source: RoundSource, options: PageOptions): string {
   const at = source.group ? `min(${source.time})` : source.time;
   const conditions = [source.where];
+  if (options.round) conditions.push(`${source.id} = ${options.round}`);
   if (options.before) conditions.push(`${source.time} < ${options.before}`);
   if (options.game && source.game === null) conditions.push(`${source.key} = ${options.game}`);
   return (
@@ -282,6 +285,14 @@ export function roundsUnion(options: PageOptions): string {
 /** Every round, for the statistics: no cursor, no filter, no limit. */
 export function allRoundsSql(): string {
   return roundsUnion({ before: null, game: null, gameValue: null, limit: null });
+}
+
+/**
+ * One settled round of the player's, as the history shows it: what a win card is made from.
+ * Parameters: $1 the player, $2 the round's id, $3 the game key (a known one: see ROUND_GAME_KEYS).
+ */
+export function roundSql(game: string): string {
+  return roundsUnion({ before: null, game: '$3::text', gameValue: game, limit: null, round: '$2::uuid' });
 }
 
 /**

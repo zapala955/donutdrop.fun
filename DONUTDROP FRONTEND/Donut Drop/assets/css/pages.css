@@ -495,6 +495,31 @@
 }
 .hist__more { align-self: center; min-width: 160px; }
 .hist__retry { margin-top: 12px; }
+/* A win worth a card (share.js): a small gold link under the game's name. */
+.hist__share {
+  margin-top: 4px; padding: 0; border: 0; background: none;
+  font-size: .6875rem; font-weight: 700; color: var(--gold); cursor: pointer;
+}
+.hist__share:hover, .hist__share:focus-visible { text-decoration: underline; }
+
+/* ── win cards (share.js) ── */
+.modal[data-variant='share'] { width: min(640px, calc(100vw - 24px)); }
+.share__card {
+  display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630;
+  border-radius: var(--r-s); image-rendering: pixelated; background: var(--bg2);
+}
+.share__link {
+  width: 100%; margin-top: 12px; padding: 8px 10px;
+  border: 1px solid var(--line2); border-radius: var(--r-s);
+  background: var(--panel2); color: var(--text); font: inherit; font-size: .8125rem;
+}
+.share__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.share__actions .btn { flex: 1 1 140px; }
+.modal__body .share__note { margin: 10px 0 0; font-size: .75rem; }
+/* The prompt after a qualifying win sits with the toasts, which ignore the pointer; this one is
+ * there to be pressed. */
+.share-prompt { pointer-events: auto; }
+.share-prompt__go { margin-top: 6px; }
 /* On a phone the two tables keep their essentials on screen: the multiplier (the profit says the
    same) and the per-game win rate and best multiplier (the cards above carry the overall ones). */
 @media (max-width: 560px) {
