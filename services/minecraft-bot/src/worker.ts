@@ -164,8 +164,12 @@ export function isBanKick(text: string): boolean {
  * minute it sits out is a minute of stalled payouts. On 10-16 a once-a-minute knock did not stop
  * the hold from clearing after nine minutes, so knocking often does not seem to prolong it. A
  * little jitter keeps the knocks off a fixed beat.
+ *
+ * Later on 2026-10-28 the owner asked for five minutes. A relog at 15:15 UTC landed on maintenance
+ * and was then refused "You are already online" minute after minute, every knock a fresh login on
+ * the account; the stalled logins below wait the same.
  */
-const HELD_OFF_RETRY_MS: readonly number[] = [60_000];
+const HELD_OFF_RETRY_MS: readonly number[] = [5 * 60_000];
 const HELD_OFF_JITTER_MS = 10_000;
 
 /** The wait before the next login after `streak` refusals in a row (0 for the first). */
@@ -182,8 +186,10 @@ export const RECONNECT_GAP_MS = 10_000;
  * While DonutSMP restarts a region, a login is accepted at the door and then stalls for about 26 s
  * before the socket closes, with no kick and no reason. On 2026-10-28 (11:13 and 11:36 UTC) the
  * bot went straight back in ten seconds later, time after time, and once the region was up it was
- * refused "You are already online" for the session one of those half-finished logins had left. */
-const FAILED_LOGIN_GAPS_MS: readonly number[] = [30_000, 60_000];
+ * refused "You are already online" for the session one of those half-finished logins had left.
+ * The wait was 30 s and then a minute; since the owner's five minutes for refusals (above), a
+ * login that never got in waits as long as one that was turned away. */
+const FAILED_LOGIN_GAPS_MS: readonly number[] = [5 * 60_000];
 const FAILED_LOGIN_JITTER_MS = 10_000;
 
 /** The wait before logging in again after `failedLogins` logins in a row that never spawned. */
@@ -321,9 +327,9 @@ export class MinecraftWorker {
   private banned = false;
   /** Set when the server said it cannot let this account in yet; the next attempt waits heldOffRetryMs. */
   private heldOff = false;
-  /** Refusals in a row since the bot was last in game; each makes the next wait longer. */
+  /** Refusals in a row since the bot was last in game; heldOffRetryMs is indexed by it. */
   private heldOffStreak = 0;
-  /** Connections in a row that ended before the server answered a command; each makes the next wait longer. */
+  /** Connections in a row that ended before the server answered a command; any makes the next wait reconnectGapMs. */
   private failedLogins = 0;
   /** Set when a session spawns, cleared when the server answers its first /bal. No job is claimed while set. */
   private awaitingFirstAnswer = false;
