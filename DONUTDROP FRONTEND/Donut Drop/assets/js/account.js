@@ -20,6 +20,7 @@ import {
 } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
+import { isShareable, shareRound } from './share.js';
 import { buildPreferences } from './settings.js';
 
 /* Wallet ledger kinds, in the words a player would use. The API returns the column value, which
@@ -494,6 +495,14 @@ function historyRow(round) {
     const detail = el('span', 'hist__detail');
     detail.textContent = round.detail;
     game.appendChild(detail);
+  }
+  if (isShareable(wager, payout)) {
+    const share = el('button', 'hist__share');
+    share.type = 'button';
+    share.textContent = 'Share';
+    share.setAttribute('aria-label', `Share this ${round.name} win`);
+    share.addEventListener('click', () => shareRound(round.game, round.id));
+    game.appendChild(share);
   }
 
   const bet = el('td', 'dtable__num mono');

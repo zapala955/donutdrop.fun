@@ -43,6 +43,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerMinecraftInternalRoutes } from './routes/minecraft-in.js';
 import { registerInsightRoutes } from './routes/insights.js';
 import { registerReferralRoutes } from './routes/referrals.js';
+import { registerShareRoutes } from './routes/shares.js';
 import { registerPromotionRoutes } from './routes/promotions.js';
 import { registerSideBetRoutes } from './routes/sidebets.js';
 import { registerSocialRoutes } from './routes/social.js';
@@ -269,6 +270,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerDerbyRoutes(app, db, config);
   await registerDiscordRewardRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
+  await registerShareRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   await registerMediaTestRoutes(app, db, config);
   await registerNotificationRoutes(app, db, config);

@@ -69,6 +69,7 @@ import { initDailyCode } from './daily-code.js';
 import { initTestMode } from './testmode.js';
 import { initNotices } from './notices.js';
 import { initWinFx } from './winfx.js';
+import { initShareLanding } from './share.js';
 import { initBlockArt } from './blockart.js';
 import {
   appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
@@ -1451,6 +1452,8 @@ paintAuthChrome();
  * ordinary query string so shared links and login round trips no longer depend on a fragment. */
 migrateLegacyHashRoute();
 captureReferralCode();
+// After the code is kept: this takes `win` off the address and leaves `ref` where it was.
+void initShareLanding();
 
 /* Somebody arriving on an invite link is here to sign up, so open the card that does it.
  *

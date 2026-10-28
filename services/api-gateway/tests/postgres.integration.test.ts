@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import { assertAuditDatabaseRole, assertRuntimeDatabaseRole } from '../src/lib/database-role.js';
 import { maintainDepositIntents } from '../src/lib/deposit-maintenance.js';
 import { processPaymentObserved } from '../src/routes/minecraft-in.js';
+import { ROUND_GAME_KEYS, roundSql } from '../src/lib/player-rounds.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 
@@ -394,6 +395,57 @@ async function verifyPaymentLogin(runtime: pg.Pool): Promise<void> {
   }
 }
 
+/* Win cards (migration 080). Every game's round query runs against the real schema -- the history
+ * sources are the one place a typo in a join only shows on a real server -- and the API's login may
+ * add a share and count a visit to it, but not rewrite what a share says. */
+async function verifyWinShares(runtime: pg.Pool): Promise<void> {
+  const client = await runtime.connect();
+  const userId = '74000000-0000-4000-8000-000000000010';
+  const roundId = '74000000-0000-4000-8000-000000000020';
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO users(id, minecraft_identity, minecraft_username, normalized_username)
+       VALUES ($1, 'share-test-identity', 'SharePlayer', 'shareplayer')`,
+      [userId],
+    );
+    for (const game of ROUND_GAME_KEYS) {
+      const round = await client.query(roundSql(game), [userId, roundId, game]);
+      assert.equal(round.rowCount, 0, game);
+    }
+
+    await client.query(
+      `INSERT INTO win_shares (id, user_id, game, round_id, player_name, wager_minor, payout_minor)
+       VALUES ('K7P2QXAB', $1, 'crash', $2, 'SharePlayer', 100, 500)`,
+      [userId, roundId],
+    );
+    await client.query(`UPDATE win_shares SET views = views + 1 WHERE id = 'K7P2QXAB'`);
+
+    await client.query('SAVEPOINT rewrite');
+    await assert.rejects(
+      client.query(`UPDATE win_shares SET payout_minor = 5000 WHERE id = 'K7P2QXAB'`),
+      (error: unknown) => (error as { code?: string }).code === '42501',
+    );
+    await client.query('ROLLBACK TO SAVEPOINT rewrite');
+
+    // A loss is not a win to show, whoever asks.
+    await client.query('SAVEPOINT loss');
+    await assert.rejects(
+      client.query(
+        `INSERT INTO win_shares (id, user_id, game, round_id, player_name, wager_minor, payout_minor)
+         VALUES ('K7P2QXAC', $1, 'dice', $2, 'SharePlayer', 100, 100)`,
+        [userId, roundId],
+      ),
+      (error: unknown) => (error as { code?: string }).code === '23514',
+    );
+    await client.query('ROLLBACK TO SAVEPOINT loss');
+  } finally {
+    await client.query('ROLLBACK').catch(() => undefined);
+    client.release();
+  }
+}
+
 void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl }, () => {
   void it('applies every migration and confines the API login', async () => {
     if (!databaseUrl) return;
@@ -549,6 +601,7 @@ void describe('PostgreSQL migration and runtime isolation', { skip: !databaseUrl
         await verifyDepositAuthorizationLeases(runtime);
         await verifyDepositMaintenance(runtime);
         await verifyPaymentLogin(runtime);
+        await verifyWinShares(runtime);
       } finally {
         await runtime.end();
       }
