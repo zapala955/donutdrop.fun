@@ -44,25 +44,30 @@ export function isLinkPreview(userAgent: string | undefined): boolean {
   return Boolean(userAgent && PREVIEWERS.test(userAgent));
 }
 
-/** A share as it is stored: the round as it was when shared. */
+/**
+ * A share as the world sees it: the round as it was when shared, and nothing about who played it.
+ *
+ * The player's name is kept with the share (win_shares.player_name) and never leaves the database:
+ * the site masks names everywhere a stranger looks (lib/masked-name.ts), and a share is posted to
+ * strangers. The first version printed the name on the card and in the preview (2026-10-28).
+ */
 export interface WinShare {
   readonly id: string;
   readonly game: string;
   readonly gameName: string;
-  readonly playerName: string;
   readonly wagerMinor: bigint;
   readonly payoutMinor: bigint;
   readonly referralCode: string | null;
 }
 
 export function shareTitle(share: WinShare): string {
-  return `${share.playerName} won ${compactMoney(share.payoutMinor)} on ${share.gameName}`;
+  return `${compactMoney(share.payoutMinor)} win on ${share.gameName}`;
 }
 
 export function shareDescription(share: WinShare): string {
   const round = `${multiplierText(share.wagerMinor, share.payoutMinor)} on a ${compactMoney(share.wagerMinor)} bet.`;
   return share.referralCode
-    ? `${round} Join DonutLuxe with ${share.playerName}'s invite.`
+    ? `${round} Join DonutLuxe with this invite.`
     : `${round} DonutLuxe, the DonutSMP casino.`;
 }
 
@@ -77,12 +82,23 @@ export function shareLandingPath(share: WinShare): string {
 const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 
+/**
+ * The card's address. The version is the card's design: bump it whenever the picture changes, so
+ * previews and caches fetch the new one rather than keep the old. Version 1 printed the player's
+ * name; anything that cached it is left holding that address, not this one.
+ */
+export const CARD_VERSION = 2;
+
+export function shareImageUrl(share: WinShare, origin: string): string {
+  return `${origin}/w/${share.id}.png?v=${CARD_VERSION}`;
+}
+
 /** The page a link preview reads: the card as its image, the win as its title. */
 export function sharePageHtml(share: WinShare, origin: string): string {
   const title = escapeHtml(shareTitle(share));
   const description = escapeHtml(shareDescription(share));
   const page = escapeHtml(`${origin}/w/${share.id}`);
-  const image = escapeHtml(`${origin}/w/${share.id}.png`);
+  const image = escapeHtml(shareImageUrl(share, origin));
   const landing = escapeHtml(`${origin}${shareLandingPath(share)}`);
   return `<!doctype html>
 <html lang="en">

@@ -21,7 +21,6 @@ const share: WinShare = {
   id: 'K7P2QXAB',
   game: 'crash',
   gameName: 'Crash',
-  playerName: 'Steve',
   wagerMinor: 230_000n,
   payoutMinor: 12_466_000n,
   referralCode: 'ABC123',
@@ -75,20 +74,33 @@ describe('a share link', () => {
   });
 
   it('previews as the win, with the card as its picture', () => {
-    assert.equal(shareTitle(share), 'Steve won $12.5M on Crash');
-    assert.equal(shareDescription(share), "54.2x on a $230K bet. Join DonutLuxe with Steve's invite.");
-    assert.equal(shareDescription({ ...share, referralCode: null }), '54.2x on a $230K bet. DonutLuxe, the DonutSMP casino.');
+    assert.equal(shareTitle(share), '$12.5M win on Crash');
+    assert.equal(shareDescription(share), '54.2× on a $230K bet. Join DonutLuxe with this invite.');
+    assert.equal(shareDescription({ ...share, referralCode: null }), '54.2× on a $230K bet. DonutLuxe, the DonutSMP casino.');
     const html = sharePageHtml(share, 'https://donutluxe.com');
-    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png" \/>/);
+    // Versioned, so a preview that cached an earlier design fetches this one.
+    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=2" \/>/);
     assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
-    assert.match(html, /<meta property="og:title" content="Steve won \$12\.5M on Crash" \/>/);
+    assert.match(html, /<meta property="og:title" content="\$12\.5M win on Crash" \/>/);
     assert.match(html, /<meta name="robots" content="noindex" \/>/);
   });
 
   it('escapes whatever it is given', () => {
-    const html = sharePageHtml({ ...share, playerName: '"><script>alert(1)</script>' }, 'https://donutluxe.com');
+    const html = sharePageHtml({ ...share, gameName: '"><script>alert(1)</script>' }, 'https://donutluxe.com');
     assert.doesNotMatch(html, /<script>/);
     assert.match(html, /&#34;&#62;&#60;script&#62;/);
+  });
+
+  /* 2026-10-28: the first version put the player's name on the card, in the preview's title and in
+   * the share the landing page reads. A share is posted to strangers; it names nobody. */
+  it('never hands out the name of the player who shared it', async () => {
+    const routes = await read('../src/routes/shares.ts');
+    const columns = /const SHARE_COLUMNS = '([^']+)';/.exec(routes)?.[1];
+    assert.equal(columns, 'id, game, wager_minor, payout_minor, referral_code');
+    const body = routes.slice(routes.indexOf('function shareBody('), routes.indexOf('function requireUserId('));
+    assert.doesNotMatch(body, /^\s*player\w*:/im, 'no field naming the player');
+    const browser = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/share.js');
+    assert.doesNotMatch(browser, /share\.player/);
   });
 });
 

@@ -13,6 +13,7 @@ import {
   isShareable,
   newShareId,
   SHARE_ID_PATTERN,
+  shareImageUrl,
   shareLandingPath,
   sharePageHtml,
   shareTitle,
@@ -35,20 +36,19 @@ const slugSchema = z.object({ slug: z.string().max(16) }).strict();
 interface ShareRow {
   id: string;
   game: string;
-  player_name: string;
   wager_minor: string;
   payout_minor: string;
   referral_code: string | null;
 }
 
-const SHARE_COLUMNS = 'id, game, player_name, wager_minor, payout_minor, referral_code';
+// Never player_name: a share says nothing about who played it (lib/win-shares.ts).
+const SHARE_COLUMNS = 'id, game, wager_minor, payout_minor, referral_code';
 
 function toShare(row: ShareRow): WinShare {
   return {
     id: row.id,
     game: row.game,
     gameName: roundGameName(row.game),
-    playerName: row.player_name,
     wagerMinor: BigInt(row.wager_minor),
     payoutMinor: BigInt(row.payout_minor),
     referralCode: row.referral_code,
@@ -60,7 +60,6 @@ function shareBody(share: WinShare, config: AppConfig) {
     id: share.id,
     game: share.game,
     gameName: share.gameName,
-    player: share.playerName,
     wagerMinor: share.wagerMinor.toString(),
     payoutMinor: share.payoutMinor.toString(),
     multiplier: multiplierText(share.wagerMinor, share.payoutMinor),
@@ -68,7 +67,7 @@ function shareBody(share: WinShare, config: AppConfig) {
     invite: share.referralCode !== null,
     title: shareTitle(share),
     url: `${config.appOrigin}/w/${share.id}`,
-    imageUrl: `${config.appOrigin}/w/${share.id}.png`,
+    imageUrl: shareImageUrl(share, config.appOrigin),
   };
 }
 
@@ -181,8 +180,9 @@ export async function registerShareRoutes(app: FastifyInstance, db: Database, co
         if (!share) throw new AppError(404, 'SHARE_NOT_FOUND', 'That win is not shared.');
         return reply
           .header('content-type', 'image/png')
-          // A share never changes: it is the round as it was.
-          .header('cache-control', 'public, max-age=31536000, immutable')
+          /* A share never changes, but the card's design does (CARD_VERSION). It was cached for a
+           * year as immutable, and the first design printed the player's name. */
+          .header('cache-control', 'public, max-age=86400')
           // Previews fetch it from their own servers, and some clients then load it from ours.
           .header('cross-origin-resource-policy', 'cross-origin')
           .send(renderWinCard(share));
