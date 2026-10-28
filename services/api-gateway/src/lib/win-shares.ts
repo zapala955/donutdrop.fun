@@ -5,18 +5,12 @@ import { compactMoney, multiplierText } from './win-card.js';
  * Win cards: a player's own settled win, shared as a short link that previews as a picture of it
  * and brings whoever follows it in on the player's invite code (migration 080).
  *
- * Only a win worth showing off gets a card: five times the bet or better, or $10M or more of profit.
- * The frontend offers the button by the same rule (assets/js/share.js), and this is what decides.
+ * Any win can be shared, from the history (assets/js/account.js). It began as five times the bet or
+ * $10M of profit, and the owner asked for every bet in the history (2026-10-28); that rule now only
+ * decides which wins the site offers a card for unasked, after the round (assets/js/share.js).
  */
-export const SHARE_MIN_MULTIPLIER_X100 = 500n;
-export const SHARE_MIN_PROFIT_MINOR = 10_000_000n;
-
 export function isShareable(wagerMinor: bigint, payoutMinor: bigint): boolean {
-  if (wagerMinor <= 0n || payoutMinor <= wagerMinor) return false;
-  return (
-    payoutMinor * 100n >= wagerMinor * SHARE_MIN_MULTIPLIER_X100 ||
-    payoutMinor - wagerMinor >= SHARE_MIN_PROFIT_MINOR
-  );
+  return wagerMinor > 0n && payoutMinor > wagerMinor;
 }
 
 /* The referral-code alphabet (lib/referrals.ts): no 0/O or 1/I, so a link read off a screenshot
@@ -45,29 +39,32 @@ export function isLinkPreview(userAgent: string | undefined): boolean {
 }
 
 /**
- * A share as the world sees it: the round as it was when shared, and nothing about who played it.
+ * A share as the world sees it: the round as it was when shared, and the player as the site shows
+ * one to a stranger.
  *
- * The player's name is kept with the share (win_shares.player_name) and never leaves the database:
- * the site masks names everywhere a stranger looks (lib/masked-name.ts), and a share is posted to
- * strangers. The first version printed the name on the card and in the preview (2026-10-28).
+ * `playerName` is the MASKED name ("A********"), read through lib/masked-name.ts exactly as the live
+ * feed reads it; the real one stays in win_shares.player_name and never leaves the database. The
+ * first card printed the real name, and the next none at all; the owner asked for it masked, as
+ * everywhere else on the site (2026-10-28).
  */
 export interface WinShare {
   readonly id: string;
   readonly game: string;
   readonly gameName: string;
+  readonly playerName: string;
   readonly wagerMinor: bigint;
   readonly payoutMinor: bigint;
   readonly referralCode: string | null;
 }
 
 export function shareTitle(share: WinShare): string {
-  return `${compactMoney(share.payoutMinor)} win on ${share.gameName}`;
+  return `${share.playerName} won ${compactMoney(share.payoutMinor)} on ${share.gameName}`;
 }
 
 export function shareDescription(share: WinShare): string {
   const round = `${multiplierText(share.wagerMinor, share.payoutMinor)} on a ${compactMoney(share.wagerMinor)} bet.`;
   return share.referralCode
-    ? `${round} Join DonutLuxe with this invite.`
+    ? `${round} Join DonutLuxe with ${share.playerName}'s invite.`
     : `${round} DonutLuxe, the DonutSMP casino.`;
 }
 
@@ -85,9 +82,10 @@ const escapeHtml = (text: string) =>
 /**
  * The card's address. The version is the card's design: bump it whenever the picture changes, so
  * previews and caches fetch the new one rather than keep the old. Version 1 printed the player's
- * name; anything that cached it is left holding that address, not this one.
+ * name; anything that cached it is left holding that address, not this one. Version 3 carries the
+ * masked name.
  */
-export const CARD_VERSION = 2;
+export const CARD_VERSION = 3;
 
 export function shareImageUrl(share: WinShare, origin: string): string {
   return `${origin}/w/${share.id}.png?v=${CARD_VERSION}`;

@@ -21,17 +21,18 @@ const share: WinShare = {
   id: 'K7P2QXAB',
   game: 'crash',
   gameName: 'Crash',
+  playerName: 'S********',
   wagerMinor: 230_000n,
   payoutMinor: 12_466_000n,
   referralCode: 'ABC123',
 };
 
 describe('which wins can be shared', () => {
-  it('takes five times the bet or better, or $10M or more of profit', () => {
+  /* 2026-10-28: it began as 5x or $10M of profit; the owner asked for every bet in the history. */
+  it('takes any win', () => {
+    assert.equal(isShareable(100n, 101n), true);
     assert.equal(isShareable(100n, 500n), true);
-    assert.equal(isShareable(100n, 499n), false);
-    assert.equal(isShareable(100_000_000n, 110_000_000n), true, '$10M profit at 1.1x');
-    assert.equal(isShareable(100_000_000n, 109_999_999n), false);
+    assert.equal(isShareable(100_000_000n, 100_000_001n), true);
   });
 
   it('never takes a loss, a push or a free round', () => {
@@ -40,10 +41,13 @@ describe('which wins can be shared', () => {
     assert.equal(isShareable(0n, 50_000_000n), false);
   });
 
-  it('is offered in the browser by the same rule', async () => {
+  it('is offered unasked, after the round, only for a big win', async () => {
     const browser = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/share.js');
     assert.match(browser, /const MIN_MULTIPLIER = 5;/);
     assert.match(browser, /const MIN_PROFIT = 10_000_000;/);
+    assert.match(browser, /export function isWorthOffering\(wager, payout\) \{/);
+    const winfx = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/winfx.js');
+    assert.match(winfx, /if \(isWorthOffering\(row\.wager, row\.payout\)/);
   });
 });
 
@@ -74,14 +78,14 @@ describe('a share link', () => {
   });
 
   it('previews as the win, with the card as its picture', () => {
-    assert.equal(shareTitle(share), '$12.5M win on Crash');
-    assert.equal(shareDescription(share), '54.2× on a $230K bet. Join DonutLuxe with this invite.');
+    assert.equal(shareTitle(share), 'S******** won $12.5M on Crash');
+    assert.equal(shareDescription(share), "54.2× on a $230K bet. Join DonutLuxe with S********'s invite.");
     assert.equal(shareDescription({ ...share, referralCode: null }), '54.2× on a $230K bet. DonutLuxe, the DonutSMP casino.');
     const html = sharePageHtml(share, 'https://donutluxe.com');
     // Versioned, so a preview that cached an earlier design fetches this one.
-    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=2" \/>/);
+    assert.match(html, /<meta property="og:image" content="https:\/\/donutluxe\.com\/w\/K7P2QXAB\.png\?v=3" \/>/);
     assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
-    assert.match(html, /<meta property="og:title" content="\$12\.5M win on Crash" \/>/);
+    assert.match(html, /<meta property="og:title" content="S\*{8} won \$12\.5M on Crash" \/>/);
     assert.match(html, /<meta name="robots" content="noindex" \/>/);
   });
 
@@ -91,16 +95,17 @@ describe('a share link', () => {
     assert.match(html, /&#34;&#62;&#60;script&#62;/);
   });
 
-  /* 2026-10-28: the first version put the player's name on the card, in the preview's title and in
-   * the share the landing page reads. A share is posted to strangers; it names nobody. */
-  it('never hands out the name of the player who shared it', async () => {
+  /* 2026-10-28: the first version put the player's real name on the card, in the preview's title and
+   * in the share the landing page reads. It is masked now, by the live feed's own SQL. */
+  it('hands out the player only as the masked name', async () => {
     const routes = await read('../src/routes/shares.ts');
-    const columns = /const SHARE_COLUMNS = '([^']+)';/.exec(routes)?.[1];
-    assert.equal(columns, 'id, game, wager_minor, payout_minor, referral_code');
-    const body = routes.slice(routes.indexOf('function shareBody('), routes.indexOf('function requireUserId('));
-    assert.doesNotMatch(body, /^\s*player\w*:/im, 'no field naming the player');
-    const browser = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/share.js');
-    assert.doesNotMatch(browser, /share\.player/);
+    const columns = /const SHARE_COLUMNS = `([^`]+)`;/.exec(routes)?.[1];
+    assert.equal(columns, "id, game, ${maskedName('player_name')} AS player, wager_minor, payout_minor, referral_code");
+    // player_name appears in the masked select and in the insert, and is read nowhere else.
+    assert.deepEqual(
+      [...routes.matchAll(/player_name/g)].length,
+      [...routes.matchAll(/maskedName\('player_name'\)|INSERT INTO win_shares \(id, user_id, game, round_id, player_name/g)].length,
+    );
   });
 });
 

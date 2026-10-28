@@ -14,7 +14,7 @@
  * only noted, not celebrated: those moments reseed what has been seen. */
 import { state, bus } from './store.js';
 import { money } from './util.js';
-import { isShareable, offerShare } from './share.js';
+import { isWorthOffering, offerShare } from './share.js';
 
 const SHOWN_MS = 1800;
 const key = (row) => `${row.kind}:${row.id}`;
@@ -43,7 +43,7 @@ export function initWinFx() {
     const rows = state.activities || [];
     let net = 0;
     let mine = 0;
-    // The best of them worth a win card (share.js), offered once the flourish has played.
+    // The best of them big enough to offer a win card for (share.js), once the flourish has played.
     let best = null;
     for (const row of rows) {
       const k = key(row);
@@ -52,13 +52,13 @@ export function initWinFx() {
       if (!me || row.playerId !== me || row.payoutMinor == null) continue;
       mine += 1;
       net += row.payout - row.wager;
-      if (isShareable(row.wager, row.payout) && (!best || row.payout - row.wager > best.payout - best.wager)) best = row;
+      if (isWorthOffering(row.wager, row.payout) && (!best || row.payout - row.wager > best.payout - best.wager)) best = row;
     }
     // The set only needs to remember what the feed can still show.
     if (seen.size > 400) reseed();
 
     if (mine > 0 && net > 0 && !document.hidden) flourish(pill, net);
-    if (best && !document.hidden) offerShare(best.wager, best.payout);
+    if (best && !document.hidden) offerShare(best);
   });
 }
 

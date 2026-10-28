@@ -4,6 +4,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { maskedName } from '../lib/masked-name.js';
 import { ROUND_GAME_KEYS, roundGameName, roundSql } from '../lib/player-rounds.js';
 import { ensureReferralCode } from '../lib/referrals.js';
 import { parseWith } from '../lib/validation.js';
@@ -36,19 +37,22 @@ const slugSchema = z.object({ slug: z.string().max(16) }).strict();
 interface ShareRow {
   id: string;
   game: string;
+  player: string;
   wager_minor: string;
   payout_minor: string;
   referral_code: string | null;
 }
 
-// Never player_name: a share says nothing about who played it (lib/win-shares.ts).
-const SHARE_COLUMNS = 'id, game, wager_minor, payout_minor, referral_code';
+/* The player only ever leaves as the masked name, by the same SQL as the live feed (lib/masked-name.ts).
+ * The real name is written with the share and read nowhere. */
+const SHARE_COLUMNS = `id, game, ${maskedName('player_name')} AS player, wager_minor, payout_minor, referral_code`;
 
 function toShare(row: ShareRow): WinShare {
   return {
     id: row.id,
     game: row.game,
     gameName: roundGameName(row.game),
+    playerName: row.player,
     wagerMinor: BigInt(row.wager_minor),
     payoutMinor: BigInt(row.payout_minor),
     referralCode: row.referral_code,
@@ -60,6 +64,8 @@ function shareBody(share: WinShare, config: AppConfig) {
     id: share.id,
     game: share.game,
     gameName: share.gameName,
+    // Masked ("A********"), as everywhere a stranger looks.
+    player: share.playerName,
     wagerMinor: share.wagerMinor.toString(),
     payoutMinor: share.payoutMinor.toString(),
     multiplier: multiplierText(share.wagerMinor, share.payoutMinor),
@@ -102,7 +108,7 @@ async function shareRound(
   const wager = BigInt(found.wager);
   const payout = BigInt(found.payout);
   if (!isShareable(wager, payout)) {
-    throw new AppError(409, 'ROUND_NOT_SHAREABLE', 'Only a win of 5x or more, or $10M or more profit, can be shared.');
+    throw new AppError(409, 'ROUND_NOT_SHAREABLE', 'Only a round you won can be shared.');
   }
 
   const player = await client.query<{ name: string; demo: boolean; referral_blocked: boolean }>(
