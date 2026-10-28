@@ -154,16 +154,16 @@ export function isBanKick(text: string): boolean {
  *
  * On 2026-10-16 a relog landed on DonutSMP's maintenance. Its network then held the old session
  * ("You are already online") for nine minutes, and the vault knocked about once a minute the whole
- * time, each knock a fresh login on the same account. Five minutes apart is quieter, and still
- * back soon after the server lets it in.
+ * time, each knock a fresh login on the same account. The wait was five minutes after that.
  *
- * But not five minutes every time. On 2026-10-28 wymiar was refused that way from 10:31 to 11:07
- * UTC, knocking every 300 s on the dot, while nobody was on the account. Ten minutes with no
- * knock at all and it was let straight in, so each knock was most likely renewing the stale
- * session it was waiting out. The waits now grow, with a little jitter, until a gap outlasts it.
+ * On 2026-10-28, after DonutSMP's third maintenance of the day, the owner asked for a knock every
+ * minute instead: the teller is the only bot taking deposits and paying withdrawals, and every
+ * minute it sits out is a minute of stalled payouts. On 10-16 a once-a-minute knock did not stop
+ * the hold from clearing after nine minutes, so knocking often does not seem to prolong it. A
+ * little jitter keeps the knocks off a fixed beat.
  */
-const HELD_OFF_RETRY_MS: readonly number[] = [5 * 60_000, 10 * 60_000, 15 * 60_000];
-const HELD_OFF_JITTER_MS = 60_000;
+const HELD_OFF_RETRY_MS: readonly number[] = [60_000];
+const HELD_OFF_JITTER_MS = 10_000;
 
 /** The wait before the next login after `streak` refusals in a row (0 for the first). */
 export function heldOffRetryMs(streak: number, random: () => number = Math.random): number {
@@ -180,7 +180,7 @@ export const RECONNECT_GAP_MS = 10_000;
  * before the socket closes, with no kick and no reason. On 2026-10-28 (11:13 and 11:36 UTC) the
  * bot went straight back in ten seconds later, time after time, and once the region was up it was
  * refused "You are already online" for the session one of those half-finished logins had left. */
-const FAILED_LOGIN_GAPS_MS: readonly number[] = [30_000, 60_000, 120_000, 300_000];
+const FAILED_LOGIN_GAPS_MS: readonly number[] = [30_000, 60_000];
 const FAILED_LOGIN_JITTER_MS = 10_000;
 
 /** The wait before logging in again after `failedLogins` logins in a row that never spawned. */
