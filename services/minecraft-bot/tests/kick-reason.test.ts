@@ -180,9 +180,26 @@ describe('an ordinary disconnect', () => {
     assert.equal(reconnectGapMs(40, () => 0), 60_000);
     assert.equal(reconnectGapMs(1, () => 0.999), 30_000 + 9_990);
     const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-    // Counted when a connection ends without having spawned, and cleared the moment one does.
+    // Counted when a connection ends before the server answered a command, and cleared when one does.
     const end = source.slice(source.indexOf("bot.once('end', (reason) => {"));
-    assert.match(end.slice(0, 2000), /if \(!spawned\) this\.failedLogins \+= 1;/);
-    assert.match(source, /'Mineflayer bot spawned'\);\n\s*this\.heldOffStreak = 0;\n\s*this\.failedLogins = 0;/);
+    assert.match(end.slice(0, 2500), /if \(!spawned \|\| this\.awaitingFirstAnswer\) this\.failedLogins \+= 1;/);
+    assert.match(source, /this\.awaitingFirstAnswer = false;\n\s*this\.unansweredProbes = 0;\n\s*this\.failedLogins = 0;/);
+  });
+
+  /* 2026-10-28 14:06: wymiar spawned on a region still coming up and sent a /pay two seconds later.
+   * Neither it nor the /bal was answered, and the payout waited for an operator, the fifth that day. */
+  it('claims no job until the server has answered a /bal, and gives up on a deaf session', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    const gate = source.slice(source.indexOf('private captureJobClaimState()'));
+    assert.match(gate.slice(0, 3000), /this\.awaitingFirstAnswer\s*\? 'commands_unanswered'/);
+    // Every session starts unproven.
+    assert.match(source, /'Mineflayer bot spawned'\);\n\s*this\.heldOffStreak = 0;\n\s*this\.awaitingFirstAnswer = true;\n\s*this\.unansweredProbes = 0;/);
+    // An unanswered probe is asked again, and after the limit the bot logs in again.
+    assert.match(source, /if \(this\.awaitingFirstAnswer\) this\.awaitFirstAnswer\(connectionController\);/);
+    const probe = source.slice(source.indexOf('private awaitFirstAnswer('));
+    assert.match(probe, /if \(this\.unansweredProbes >= COMMAND_PROBE_LIMIT\) \{[\s\S]*?this\.cycleConnection\('commands unanswered'\);/);
+    assert.match(probe, /this\.balanceSoon\(COMMAND_PROBE_GAP_MS\);/);
+    assert.match(source, /const COMMAND_PROBE_LIMIT = 4;/);
   });
 });
