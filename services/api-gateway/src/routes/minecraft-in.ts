@@ -1800,11 +1800,28 @@ async function processJobResult(
       }
     }
     if (job.kind === 'admin_payout') {
-      await client.query(
+      const paid = await client.query<{ payee_username: string; amount_minor: string }>(
         `UPDATE admin_payouts SET status = 'paid', paid_at = now(), updated_at = now()
-          WHERE id = $1 AND status IN ('queued', 'processing')`,
+          WHERE id = $1 AND status IN ('queued', 'processing')
+          RETURNING payee_username, amount_minor`,
         [job.reference_id],
       );
+      /* The bot's side of it, booked like a player's withdrawal. It used not to be booked at all:
+       * the money left, the tracked balance stayed put, and the next /bal corrected it with a
+       * nameless "donutsmp" adjustment -- every operator payout of 10-26 to 10-28 shows up that
+       * way instead of under its payee. Keyed on the job like bookPayoutLeg, so a replayed result
+       * books nothing twice. */
+      const row = paid.rows[0];
+      if (row) {
+        await recordBotTransfer(client, {
+          botId: event.botId,
+          direction: 'out',
+          counterparty: row.payee_username,
+          amountMinor: BigInt(row.amount_minor),
+          reason: 'admin_payout',
+          referenceId: job.id,
+        });
+      }
     }
     /* A reconnect settles by completing and nothing else. It references no row, moves no money,
      * and the proof it worked is the heartbeat that follows. */
