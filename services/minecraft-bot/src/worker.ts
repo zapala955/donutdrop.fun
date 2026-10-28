@@ -31,6 +31,8 @@ import {
 import { retryReport } from './report-retry.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
+type BotWindow = NonNullable<Bot['currentWindow']>;
+
 const DEPOSIT_LEASE_SAFETY_MARGIN_MS = 10_000;
 const MIN_DEPOSIT_TRANSFER_WINDOW_MS = 20_000;
 const MAX_DEPOSIT_TRANSFER_DURATION_MS = 120_000;
@@ -120,6 +122,20 @@ const RELOG_OFFLINE_MIN_MS = 6_000;
 const RELOG_OFFLINE_MAX_MS = 15_000;
 /** While a relog waits for a payout, job or /bal already in flight, how often it looks again. */
 const RELOG_RETRY_MS = 2_000;
+/**
+ * The /rtp sent once on every join, and how long after it the bot neither reads its balance nor
+ * claims work.
+ *
+ * 2026-10-28: logins kept landing on a region that was restarting -- stalled for 26 s, or let in
+ * and refused "You are already online" -- because the server puts a player back where they logged
+ * out, and the owner asked for an /rtp on joining to move the bot off it. A teleport can carry the
+ * player to another server of the network, and a /pay sent while that happens is a /pay nobody
+ * answers, which is how a payout ends up with an operator.
+ */
+const RTP_AFTER_SPAWN_MS = 3_000;
+const RTP_SETTLE_MS = 15_000;
+/** While the bot is dead, how often it asks the server again to respawn it. */
+const RESPAWN_RETRY_MS = 5_000;
 
 /** With no route from the gateway yet, how long the bot waits before asking again. */
 const ROUTE_RETRY_MS = 10_000;
@@ -202,6 +218,19 @@ export function reconnectGapMs(failedLogins: number, random: () => number = Math
 /** Whether a kick says the server is not letting this account in yet: maintenance, or a session it still holds. */
 export function isHeldOffKick(text: string): boolean {
   return /already online|under maintenance/i.test(text);
+}
+
+/**
+ * In a menu that /rtp answers with, the entry for the overworld: by its label, else a grass block.
+ * Never the nether or the end, where a random spot is far likelier to kill the bot.
+ */
+export function pickRtpSlot(
+  entries: readonly { slot: number; name: string; label: string }[],
+): number | undefined {
+  const named = entries.find((entry) => /overworld/i.test(entry.label));
+  if (named) return named.slot;
+  return entries.find((entry) => entry.name === 'grass_block' && !/nether|\bend\b/i.test(entry.label))
+    ?.slot;
 }
 
 const NBT_TYPES = new Set([
@@ -333,6 +362,8 @@ export class MinecraftWorker {
   private failedLogins = 0;
   /** Set when a session spawns, cleared when the server answers its first /bal. No job is claimed while set. */
   private awaitingFirstAnswer = false;
+  /** Set from spawn until RTP_SETTLE_MS after the join's /rtp. No /bal goes and no job is claimed while set. */
+  private teleporting = false;
   /** /bal probes in this session that got no answer; enough of them and the bot logs in again. */
   private unansweredProbes = 0;
   /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
@@ -591,9 +622,15 @@ export class MinecraftWorker {
       this.run(this.heartbeat(true), 'heartbeat');
       this.run(this.snapshot(), 'inventory snapshot');
       this.schedule(() => this.run(this.heartbeat(true), 'heartbeat'), 15_000);
-      // The balance: once shortly after joining (the server is still sending its join messages
-      // straight away), again after every movement of money, and otherwise only now and then.
-      this.balanceSoon(8_000);
+      // The balance: once the join's /rtp has settled (see randomTeleport), again after every
+      // movement of money, and otherwise only now and then.
+      this.teleporting = true;
+      const rtpTimer = setTimeout(() => {
+        this.timers.delete(rtpTimer);
+        this.randomTeleport(bot, connectionController);
+      }, RTP_AFTER_SPAWN_MS);
+      rtpTimer.unref();
+      this.timers.add(rtpTimer);
       this.scheduleIdleBalance();
       this.scheduleRelog();
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
@@ -733,6 +770,13 @@ export class MinecraftWorker {
       if (isBanKick(text)) this.banned = true;
       else if (isHeldOffKick(text)) this.heldOff = true;
     });
+    /* Mineflayer respawns a dead bot by itself, but asks once and says nothing. A death is logged
+     * and the respawn asked for again until the bot is back on its feet: the owner asked for this
+     * with the join's /rtp (2026-10-28), which can put the bot somewhere that kills it. */
+    bot.on('death', () => {
+      this.log.warn({ position: bot.entity?.position, dimension: bot.game?.dimension }, 'Bot died; respawning');
+      this.respawnUntilAlive(bot, connectionController, 1);
+    });
     bot.on('error', (error) => this.log.error({ err: error }, 'Mineflayer error'));
     bot.once('end', (reason) => {
       connectionController.abort();
@@ -761,6 +805,7 @@ export class MinecraftWorker {
        * went unanswered, and it was back to stalled logins seconds later. */
       if (!spawned || this.awaitingFirstAnswer) this.failedLogins += 1;
       this.awaitingFirstAnswer = false;
+      this.teleporting = false;
       if (!this.stopped && this.banned) {
         /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
          * straight away, which is exactly the reconnect loop this is here to stop. */
@@ -1193,6 +1238,7 @@ export class MinecraftWorker {
       this.polling ||
       this.pendingPayout ||
       this.transferring ||
+      this.teleporting ||
       Date.now() < this.balanceReplyUntil
     ) {
       const timer = setTimeout(() => {
@@ -1206,6 +1252,77 @@ export class MinecraftWorker {
     this.relogging = true;
     this.log.info('relogging');
     this.cycleConnection('relog');
+  }
+
+  /**
+   * Sends this session's one /rtp, takes the overworld if the server answers with a menu, and once
+   * the teleport has had RTP_SETTLE_MS lets the bot read its balance and, after that, claim work.
+   */
+  private randomTeleport(bot: Bot, connectionController: AbortController): void {
+    if (!this.isCurrentConnection(bot, connectionController)) return;
+    const from = bot.entity?.position?.clone();
+    const onMenu = (window: BotWindow) => this.answerRtpMenu(bot, window);
+    bot.once('windowOpen', onMenu);
+    this.sendCommand(bot, '/rtp');
+    this.log.info({ from }, 'sent /rtp');
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      bot.removeListener('windowOpen', onMenu);
+      if (!this.isCurrentConnection(bot, connectionController)) return;
+      const to = bot.entity?.position;
+      this.log.info(
+        {
+          from,
+          to,
+          movedBlocks: from && to ? Math.round(from.distanceTo(to)) : undefined,
+          dimension: bot.game?.dimension,
+        },
+        'after /rtp',
+      );
+      // A menu the click did not close would sit over every later command.
+      if (bot.currentWindow) void bot.closeWindow(bot.currentWindow);
+      this.teleporting = false;
+      this.balanceSoon(0);
+    }, RTP_SETTLE_MS);
+    timer.unref();
+    this.timers.add(timer);
+  }
+
+  /** The menu /rtp opened, if it opened one: its entries logged, and the overworld taken. */
+  private answerRtpMenu(bot: Bot, window: BotWindow): void {
+    const entries = window.containerItems().map((item) => ({
+      slot: item.slot,
+      name: item.name,
+      label: item.customName ? describeKick(item.customName) : item.displayName,
+    }));
+    const slot = pickRtpSlot(entries);
+    this.log.info({ title: describeKick(window.title), entries, slot }, '/rtp opened a menu');
+    if (slot === undefined) {
+      this.log.warn('no overworld entry in the /rtp menu; closing it');
+      void bot.closeWindow(window);
+      return;
+    }
+    bot.clickWindow(slot, 0, 0).then(
+      () => this.log.info({ slot }, 'took the overworld in the /rtp menu'),
+      (error: unknown) => this.log.warn({ err: error, slot }, 'could not click the /rtp menu'),
+    );
+  }
+
+  /** Asks the server every RESPAWN_RETRY_MS to respawn the bot until it has health again. */
+  private respawnUntilAlive(bot: Bot, connectionController: AbortController, attempt: number): void {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.isCurrentConnection(bot, connectionController)) return;
+      if (bot.health > 0) {
+        this.log.info({ position: bot.entity?.position, dimension: bot.game?.dimension }, 'Bot respawned');
+        return;
+      }
+      this.log.warn({ attempt }, 'Bot still dead; asking to respawn again');
+      bot.respawn();
+      this.respawnUntilAlive(bot, connectionController, attempt + 1);
+    }, RESPAWN_RETRY_MS);
+    timer.unref();
+    this.timers.add(timer);
   }
 
   /** Reads the balance after a short delay; several calls inside the delay make one /bal. */
@@ -1227,13 +1344,14 @@ export class MinecraftWorker {
    * Not while a /pay is waiting for its answer: the two replies would share the window, and a
    * payout's confirmation is the one that must not be confused with anything. Nor while a /pay is
    * about to go: a /bal sent then would land inside the server's command cooldown and get the /pay
-   * refused (see COMMAND_GAP_MS). It is retried a few seconds later instead.
+   * refused (see COMMAND_GAP_MS). Nor while the join's /rtp settles: an answer lost to the teleport
+   * would count against the session as unanswered. It is retried a few seconds later instead.
    */
   private requestBalance(): void {
     const bot = this.bot;
     const connectionController = this.connectionController;
     if (!bot?.entity || !connectionController || connectionController.signal.aborted) return;
-    if (this.pendingPayout || this.payoutPreparing || this.transferring) {
+    if (this.pendingPayout || this.payoutPreparing || this.transferring || this.teleporting) {
       this.balanceSoon(BALANCE_AFTER_MOVE_MS);
       return;
     }
@@ -1421,13 +1539,17 @@ export class MinecraftWorker {
             ? 'transfer_in_progress'
             : this.relogDue
               ? 'relog_pending'
-              : /* Not until the server has answered a /bal in this session. On 2026-10-28 a
-                 * payout went out two seconds after every rejoin onto a region that was still
-                 * coming up, got no answer, and waited for an operator: five times in three
-                 * hours. A server that does not run /bal will not run /pay either. */
-                this.awaitingFirstAnswer
-                ? 'commands_unanswered'
-                : undefined;
+              : this.teleporting
+                ? 'teleporting'
+                : bot.health <= 0
+                  ? 'dead'
+                  : /* Not until the server has answered a /bal in this session. On 2026-10-28 a
+                     * payout went out two seconds after every rejoin onto a region that was still
+                     * coming up, got no answer, and waited for an operator: five times in three
+                     * hours. A server that does not run /bal will not run /pay either. */
+                    this.awaitingFirstAnswer
+                    ? 'commands_unanswered'
+                    : undefined;
 
     /* Logged on change. A gate that refuses silently is why a queued payout looked identical to a
      * bot with nothing to do, through several rounds of looking in the wrong place. */

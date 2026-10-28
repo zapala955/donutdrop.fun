@@ -800,11 +800,11 @@ test('reads its balance on join, after money moves and only now and then otherwi
   assert.match(source, /const BALANCE_IDLE_MIN_MS = 20 \* 60_000;/);
   assert.match(source, /BALANCE_IDLE_MIN_MS \+ Math\.floor\(Math\.random\(\) \* \(BALANCE_IDLE_MAX_MS - BALANCE_IDLE_MIN_MS\)\)/);
   assert.match(source, /this\.scheduleIdleBalance\(\);/);
-  // Never while a /pay waits for its answer, nor while one waits to be sent.
+  // Never while a /pay waits for its answer, nor while one waits to be sent, nor mid-/rtp.
   const request = source.slice(source.indexOf('private requestBalance(): void {'));
   assert.match(
     request.slice(0, 600),
-    /if \(this\.pendingPayout \|\| this\.payoutPreparing \|\| this\.transferring\)/,
+    /if \(this\.pendingPayout \|\| this\.payoutPreparing \|\| this\.transferring \|\| this\.teleporting\)/,
   );
   // Only inside its own window, and logged verbatim whether or not it was understood.
   assert.match(source, /if \(Date\.now\(\) < this\.balanceReplyUntil\) \{/);
