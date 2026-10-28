@@ -1,19 +1,25 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { inflateSync } from 'node:zlib';
 import { describe, it } from 'node:test';
 import {
   CARD_HEIGHT,
   CARD_WIDTH,
   compactMoney,
-  encodePng,
+  measureText,
   multiplierText,
   renderWinCard,
-  textWidth,
+  winCardSvg,
 } from '../src/lib/win-card.js';
 
-/* The win card is drawn on the server from the round the database holds, as pixel art: the game's
- * font and the brand sprites, generated from the frontend's own files (scripts/card-art.mjs). */
+/* The win card is drawn on the server from the round the database holds, in the link preview's own
+ * clothes: the site's fonts (assets/fonts) and the pixel donut, generated from the frontend's art
+ * (scripts/card-art.mjs). */
+
+const crash = { gameName: 'Crash', wagerMinor: 230_000n, payoutMinor: 12_466_000n };
+
+/** Every piece of text on the card, in order. */
+const texts = (svg: string) =>
+  [...svg.matchAll(/<(?:text|tspan)[^>]*>([^<]+)</g)].map((match) => match[1]!.replace(/&#215;/g, '×'));
 
 describe('the card art', () => {
   it('is generated from the frontend files as they are now', async () => {
@@ -35,83 +41,43 @@ describe('the figures on a card', () => {
   });
 
   it('writes the multiplier rounded down to the hundredth, without trailing zeros', () => {
-    assert.equal(multiplierText(100n, 500n), '5x');
-    assert.equal(multiplierText(230_000n, 12_466_000n), '54.2x');
-    assert.equal(multiplierText(3n, 10n), '3.33x');
+    assert.equal(multiplierText(100n, 500n), '5×');
+    assert.equal(multiplierText(230_000n, 12_466_000n), '54.2×');
+    assert.equal(multiplierText(3n, 10n), '3.33×');
     assert.equal(multiplierText(0n, 10n), '');
-  });
-
-  it('measures text in font pixels, a pixel between glyphs', () => {
-    assert.equal(textWidth('', 1), 0);
-    // 'W' is five pixels wide; two of them with the gap between are eleven.
-    assert.equal(textWidth('WW', 1), 11);
-    assert.equal(textWidth('WW', 4), 44);
   });
 });
 
-function chunks(png: Buffer): { type: string; body: Buffer; crcOk: boolean }[] {
-  const out = [];
-  let offset = 8;
-  while (offset < png.length) {
-    const length = png.readUInt32BE(offset);
-    const type = png.toString('latin1', offset + 4, offset + 8);
-    const body = png.subarray(offset + 8, offset + 8 + length);
-    const crc = png.readUInt32BE(offset + 8 + length);
-    out.push({ type, body, crcOk: crc === crc32(png.subarray(offset + 4, offset + 8 + length)) });
-    offset += 12 + length;
-  }
-  return out;
-}
+describe('the card', () => {
+  it('says the game, the win, the multiplier and the bet, and nothing about who', () => {
+    assert.deepEqual(texts(winCardSvg(crash)), ['Donut', 'Luxe', 'Won on Crash', '$12.5M', '54.2×', '$230K bet']);
+  });
 
-function crc32(bytes: Buffer): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let k = 0; k < 8; k += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
+  /* 2026-10-28: the first card printed the player's name ("AriaStar8 bet $230K") and an "18+".
+   * The site masks names wherever a stranger looks, and a card is posted to strangers. */
+  it('has no name on it to print, and no age line', () => {
+    const svg = winCardSvg({ ...crash, playerName: 'AriaStar8' } as typeof crash);
+    assert.doesNotMatch(svg, /AriaStar8/);
+    assert.doesNotMatch(svg, /18\+/);
+  });
 
-describe('the card itself', () => {
-  it('encodes a PNG any reader can open', () => {
-    const pixels = Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
-    const png = encodePng(2, 2, pixels);
+  it('sets the figure smaller rather than letting it run into the donut', () => {
+    const svg = winCardSvg({ gameName: 'Case Battles', wagerMinor: 1_500_000_000n, payoutMinor: 988_000_000_000n });
+    const amount = /font-size="(\d+)" fill="#ffaa00">(\$[^<]+)</.exec(svg);
+    assert.ok(amount, 'the figure is on the card');
+    assert.ok(measureText(amount[2]!, 'Archivo', 900, Number(amount[1])) <= 650);
+  });
+
+  it('escapes what it prints', () => {
+    assert.match(winCardSvg({ ...crash, gameName: '<Slots & Co>' }), /Won on &#60;Slots &#38; Co&#62;/);
+  });
+
+  it('is a 1200 by 630 PNG, small enough to send to every preview that asks', () => {
+    const png = renderWinCard(crash);
     assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const parts = chunks(png);
-    assert.deepEqual(parts.map((part) => part.type), ['IHDR', 'IDAT', 'IEND']);
-    assert.ok(parts.every((part) => part.crcOk), 'every chunk carries its CRC');
-    const raw = inflateSync(parts[1]!.body);
-    assert.deepEqual([...raw], [0, 255, 0, 0, 0, 255, 0, 0, 0, 0, 255, 255, 255, 255]);
-  });
-
-  it('is 1200 by 630, and carries the win in gold', () => {
-    const png = renderWinCard({
-      gameName: 'Crash',
-      playerName: 'Steve',
-      wagerMinor: 230_000n,
-      payoutMinor: 12_466_000n,
-    });
-    const parts = chunks(png);
-    const header = parts[0]!.body;
-    assert.equal(header.readUInt32BE(0), CARD_WIDTH);
-    assert.equal(header.readUInt32BE(4), CARD_HEIGHT);
-    assert.equal(header[9], 2, 'RGB');
-    assert.ok(parts.every((part) => part.crcOk));
-    const raw = inflateSync(Buffer.concat(parts.filter((part) => part.type === 'IDAT').map((part) => part.body)));
-    assert.equal(raw.length, (CARD_WIDTH * 3 + 1) * CARD_HEIGHT);
-    // The headline's gold (#ffd700) is on the card.
-    let gold = 0;
-    for (let i = 0; i + 2 < raw.length; i += 1) {
-      if (raw[i] === 0xff && raw[i + 1] === 0xd7 && raw[i + 2] === 0x00) gold += 1;
-    }
-    assert.ok(gold > 1000, `expected the gold headline, found ${gold} gold pixels`);
-    // Small enough to send to every preview that asks.
-    assert.ok(png.length < 200_000, `${png.length} bytes`);
-  });
-
-  it('draws a name the font has no glyph for, rather than failing', () => {
-    assert.doesNotThrow(() =>
-      renderWinCard({ gameName: 'Slots ★', playerName: '.Ünïcode', wagerMinor: 1n, payoutMinor: 9n }),
-    );
+    assert.equal(png.toString('latin1', 12, 16), 'IHDR');
+    assert.equal(png.readUInt32BE(16), CARD_WIDTH);
+    assert.equal(png.readUInt32BE(20), CARD_HEIGHT);
+    assert.ok(png.length < 300_000, `${png.length} bytes`);
   });
 });

@@ -28,5 +28,7 @@ COPY services/discord-bot/package.json services/discord-bot/
 RUN npm ci --omit=dev --ignore-scripts --workspace @donut/api --workspace @donut/provably-fair && npm cache clean --force
 COPY --from=build /app/packages/provably-fair/dist packages/provably-fair/dist
 COPY --from=build /app/services/api-gateway/dist services/api-gateway/dist
+# The fonts the win card is drawn with (src/lib/win-card.ts).
+COPY services/api-gateway/assets services/api-gateway/assets
 USER node
 CMD ["node", "--enable-source-maps", "services/api-gateway/dist/src/server.js"]
