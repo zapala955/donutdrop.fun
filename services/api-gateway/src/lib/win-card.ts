@@ -159,11 +159,9 @@ export function renderWinCard(card: WinCard): Buffer {
   const right = CARD_WIDTH - 72;
   const width = right - left;
 
-  // The brand, top left; the game, top right.
+  // The brand, top left.
   raster.sprite(DONUT, left, 56, 5);
   raster.sprite(WORDMARK, left + DONUT.width * 5 + 24, 56 + ((DONUT.height - WORDMARK.height) * 5) / 2, 5);
-  const gameScale = fitScale(card.gameName, 5, 380);
-  raster.text(card.gameName, right - textWidth(card.gameName, gameScale), 76, gameScale, MUTED);
 
   // The win.
   const headline = `WON ${compactMoney(card.payoutMinor)}`;
