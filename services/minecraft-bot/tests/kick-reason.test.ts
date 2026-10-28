@@ -160,9 +160,31 @@ describe('an ordinary disconnect', () => {
     assert.ok(RECONNECT_GAP_MS >= 10_000);
     const ordinary = source.slice(source.indexOf('} else if (!this.stopped) {'));
     const branch = ordinary.slice(0, ordinary.indexOf('\n      }\n'));
-    assert.match(branch, /setTimeout\(\(\) => \{\s*this\.timers\.delete\(timer\);\s*this\.connect\(\);\s*\}, RECONNECT_GAP_MS\);/);
+    assert.match(branch, /const gap = reconnectGapMs\(this\.failedLogins\);/);
+    assert.match(branch, /setTimeout\(\(\) => \{\s*this\.timers\.delete\(timer\);\s*this\.connect\(\);\s*\}, gap\);/);
     assert.match(branch, /this\.timers\.add\(timer\);/);
     // An unref'd timer lets the process exit and Docker log straight back in.
     assert.doesNotMatch(branch, /\.unref\(\)/);
+  });
+
+  /* 2026-10-28, 11:13 and 11:36 UTC: while DonutSMP restarted a region, every login stalled for
+   * about 26 s and closed with no reason, and the bot went straight back in ten seconds later. Once
+   * the region was up it was refused "You are already online" for one of those half-finished
+   * logins. A login that never gets the bot in game now makes the next wait longer. */
+  it('waits longer after each login in a row that never got in game', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { RECONNECT_GAP_MS, reconnectGapMs } = await import('../src/worker.js');
+    assert.equal(reconnectGapMs(0, () => 0), RECONNECT_GAP_MS);
+    assert.equal(reconnectGapMs(1, () => 0), 30_000);
+    assert.equal(reconnectGapMs(2, () => 0), 60_000);
+    assert.equal(reconnectGapMs(3, () => 0), 120_000);
+    assert.equal(reconnectGapMs(4, () => 0), 300_000);
+    assert.equal(reconnectGapMs(40, () => 0), 300_000);
+    assert.equal(reconnectGapMs(1, () => 0.999), 30_000 + 9_990);
+    const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    // Counted when a connection ends without having spawned, and cleared the moment one does.
+    const end = source.slice(source.indexOf("bot.once('end', (reason) => {"));
+    assert.match(end.slice(0, 2000), /if \(!spawned\) this\.failedLogins \+= 1;/);
+    assert.match(source, /'Mineflayer bot spawned'\);\n\s*this\.heldOffStreak = 0;\n\s*this\.failedLogins = 0;/);
   });
 });
