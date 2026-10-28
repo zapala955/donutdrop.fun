@@ -156,6 +156,9 @@ export function isBanKick(text: string): boolean {
  */
 const HELD_OFF_RETRY_MS = 5 * 60_000;
 
+/** How long an ordinary disconnect waits before logging in again (see the `end` handler). */
+export const RECONNECT_GAP_MS = 10_000;
+
 /** Whether a kick says the server is not letting this account in yet: maintenance, or a session it still holds. */
 export function isHeldOffKick(text: string): boolean {
   return /already online|under maintenance/i.test(text);
@@ -724,8 +727,18 @@ export class MinecraftWorker {
         }, gap);
         this.timers.add(timer);
       } else if (!this.stopped) {
-        const timer = setTimeout(() => this.connect(), 10_000);
-        timer.unref();
+        /* Held open and tracked, like the waits above. It used to be unref'd, and with nothing else
+         * holding the process the bot exited the moment the connection ended; Docker restarted it
+         * at once and the new process logged in within a second, while DonutSMP still held the
+         * old session -- "You are already online", then five minutes held off. That is how one
+         * unconfirmed payout took the teller offline from 10:31 to 10:37 on 2026-10-28, and why
+         * the container had restarted 135 times. Ten seconds is long enough for the server to let
+         * the old session go. */
+        const timer = setTimeout(() => {
+          this.timers.delete(timer);
+          this.connect();
+        }, RECONNECT_GAP_MS);
+        this.timers.add(timer);
       }
     });
   }
