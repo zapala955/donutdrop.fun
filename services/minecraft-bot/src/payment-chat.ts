@@ -277,6 +277,42 @@ export function displayedAmountBounds(
   return { low: numerator / denominator, step };
 }
 
+/* "<anything> paid you", with nothing in front that a chat line would carry: player chat reaches
+ * the bot as "<name>: <text>" or "<name> » <text>", so a separator before "paid you" means it is
+ * somebody talking about a payment rather than the server announcing one. */
+const PAYMENT_LIKE_PATTERN = /^[^:»>]{1,60}\bpaid you\b/i;
+
+/**
+ * Whether a server message reads like money arriving, however it happens to be put together.
+ *
+ * Diagnostic only: nothing is credited from it. The receipt reader above is strict on purpose,
+ * and a receipt that does not take its exact shape -- a different colour, a fourth part -- is
+ * refused without a trace. The money still lands on the account, so the next /bal books it as a
+ * nameless "donutsmp" adjustment and the payer's name is gone. That happened on 2026-10-27 and
+ * 2026-10-28 for payments up to $3B while the bot was online, and nothing on record said why.
+ * Logging every such line in full is what puts the name and the real wording on record.
+ */
+export function looksLikePaymentReceipt(packet: unknown): boolean {
+  if (packet === null || typeof packet !== 'object') return false;
+  const record = packet as Record<string, unknown>;
+  if (unwrap(record['isActionBar']) === true) return false;
+  const text = flattenText(record['content'] ?? record['message'])
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length <= 200 && PAYMENT_LIKE_PATTERN.test(text);
+}
+
+/** A system chat packet's component exactly as it arrived, bounded, for a log line. */
+export function rawSystemChat(packet: unknown): string | undefined {
+  if (packet === null || typeof packet !== 'object') return undefined;
+  const record = packet as Record<string, unknown>;
+  try {
+    return JSON.stringify(record['content'] ?? record['message'])?.slice(0, 2000);
+  } catch {
+    return undefined;
+  }
+}
+
 export function parsePaymentMessage(packet: unknown): ObservedPayment | undefined {
   const notice = parsePaymentNotice(packet);
   if (!notice) return undefined;

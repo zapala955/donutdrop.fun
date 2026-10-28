@@ -292,9 +292,11 @@ export class ApiClient {
     payer: string,
     displayedAmount: string,
     payerUuid?: string,
+    /* Supplied by a caller that retries, so every attempt is the same event to the gateway. */
+    eventId: string = randomUUID(),
   ): Promise<void> {
     await this.sendEvent({
-      eventId: randomUUID(),
+      eventId,
       botId: this.config.botId,
       type: 'cash_payment_observed',
       payer,
