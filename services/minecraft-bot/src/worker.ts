@@ -90,6 +90,9 @@ const BALANCE_IDLE_MAX_MS = 40 * 60_000;
 const BALANCE_REPLY_MS = 5_000;
 /** After money moves, read the balance again this long after the last movement. */
 const BALANCE_AFTER_MOVE_MS = 4_000;
+/** Unanswered /bal probes after joining before the session is given up on, and the gap between them. */
+const COMMAND_PROBE_LIMIT = 4;
+const COMMAND_PROBE_GAP_MS = 15_000;
 /**
  * The least time between two commands this bot sends.
  *
@@ -320,8 +323,12 @@ export class MinecraftWorker {
   private heldOff = false;
   /** Refusals in a row since the bot was last in game; each makes the next wait longer. */
   private heldOffStreak = 0;
-  /** Connections in a row that ended before the bot spawned; each makes the next wait longer. */
+  /** Connections in a row that ended before the server answered a command; each makes the next wait longer. */
   private failedLogins = 0;
+  /** Set when a session spawns, cleared when the server answers its first /bal. No job is claimed while set. */
+  private awaitingFirstAnswer = false;
+  /** /bal probes in this session that got no answer; enough of them and the bot logs in again. */
+  private unansweredProbes = 0;
   /** The relog timer has gone off; no new job is claimed until the bot has logged out. */
   private relogDue = false;
   /** The current logout is a relog, so the bot comes back after RELOG_OFFLINE_*, not ten seconds. */
@@ -562,7 +569,8 @@ export class MinecraftWorker {
       this.invalidateSnapshotState();
       this.log.info({ username: bot.username, version: bot.version }, 'Mineflayer bot spawned');
       this.heldOffStreak = 0;
-      this.failedLogins = 0;
+      this.awaitingFirstAnswer = true;
+      this.unansweredProbes = 0;
       // Where the server put it, and what it says on arrival: a lobby or a holding area shows here.
       this.log.info(
         { dimension: bot.game?.dimension, gameMode: bot.game?.gameMode, position: bot.entity?.position },
@@ -642,6 +650,10 @@ export class MinecraftWorker {
         const reading = parseBalanceReply(data);
         if (reading) {
           this.balanceReplyUntil = 0;
+          // The server runs this bot's commands: payouts may go, and the login counts as good.
+          this.awaitingFirstAnswer = false;
+          this.unansweredProbes = 0;
+          this.failedLogins = 0;
           this.observedBalance = { ...reading, observedAt: new Date().toISOString() };
           this.log.info(
             { displayed: reading.displayed, low: reading.low.toString(), step: reading.step.toString() },
@@ -738,7 +750,11 @@ export class MinecraftWorker {
       const relogging = this.relogging;
       this.relogDue = false;
       this.relogging = false;
-      if (!spawned) this.failedLogins += 1;
+      /* A session the server never answered a command in is as good as a login that failed: on
+       * 2026-10-28 (14:06) wymiar spawned on a region that was still coming up, its /pay and /bal
+       * went unanswered, and it was back to stalled logins seconds later. */
+      if (!spawned || this.awaitingFirstAnswer) this.failedLogins += 1;
+      this.awaitingFirstAnswer = false;
       if (!this.stopped && this.banned) {
         /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
          * straight away, which is exactly the reconnect loop this is here to stop. */
@@ -1217,6 +1233,32 @@ export class MinecraftWorker {
     }
     this.balanceReplyUntil = Date.now() + BALANCE_REPLY_MS;
     this.sendCommand(bot, '/bal');
+    if (this.awaitingFirstAnswer) this.awaitFirstAnswer(connectionController);
+  }
+
+  /* Until the server has answered once, an unanswered /bal is asked again, and after
+   * COMMAND_PROBE_LIMIT of them the bot logs in again: a fresh login may land on a region that
+   * works, and the failed-login backoff keeps that from turning into a knock every few seconds. */
+  private awaitFirstAnswer(connectionController: AbortController): void {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.awaitingFirstAnswer) return;
+      if (this.connectionController !== connectionController || connectionController.signal.aborted) {
+        return;
+      }
+      this.unansweredProbes += 1;
+      if (this.unansweredProbes >= COMMAND_PROBE_LIMIT) {
+        this.log.warn(
+          { unansweredProbes: this.unansweredProbes },
+          'The server is not answering commands; logging in again',
+        );
+        this.cycleConnection('commands unanswered');
+        return;
+      }
+      this.balanceSoon(COMMAND_PROBE_GAP_MS);
+    }, BALANCE_REPLY_MS + 500);
+    timer.unref();
+    this.timers.add(timer);
   }
 
   /** Every command this bot sends goes through here, so the gap before a /pay can be measured. */
@@ -1373,7 +1415,13 @@ export class MinecraftWorker {
             ? 'transfer_in_progress'
             : this.relogDue
               ? 'relog_pending'
-              : undefined;
+              : /* Not until the server has answered a /bal in this session. On 2026-10-28 a
+                 * payout went out two seconds after every rejoin onto a region that was still
+                 * coming up, got no answer, and waited for an operator: five times in three
+                 * hours. A server that does not run /bal will not run /pay either. */
+                this.awaitingFirstAnswer
+                ? 'commands_unanswered'
+                : undefined;
 
     /* Logged on change. A gate that refuses silently is why a queued payout looked identical to a
      * bot with nothing to do, through several rounds of looking in the wrong place. */
