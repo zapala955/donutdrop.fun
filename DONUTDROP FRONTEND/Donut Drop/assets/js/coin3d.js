@@ -18,6 +18,7 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { itemModel, makeSprites, pixelTexture } from './mcmodels.js';
 import { glowPoints, gradePass, ironChain } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, frameMs, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 const TOSS_MS = 1700;        // up and down again
 const SETTLE_MS = 500;       // the bounce and the ring, to 2.2 s: the flat coin's length
@@ -57,11 +58,13 @@ function modelUV(geometry, faces) {
  * draw it.
  */
 export async function createCoin3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'cfcoin__gl';
@@ -110,6 +113,7 @@ export async function createCoin3d(host) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c0a09);
   scene.fog = new THREE.Fog(0x0c0a09, 5, 11);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x1a120c, horizon: 0x6a4020, ground: 0x201408, intensity: 0.5 }, wind: false });
   const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
 
   let composer = null;
@@ -120,7 +124,9 @@ export async function createCoin3d(host) {
       composer.addPass(new addons.RenderPass(scene, camera));
       composer.addPass(new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.5, 0.45, 0.85));
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.07, saturation: 1.1, lift: [0.02, 0.01, 0.0], gain: [1.05, 1.0, 0.93], vignette: 0.35 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.07, saturation: 1.1, lift: [0.02, 0.01, 0.0], gain: [1.05, 1.0, 0.93], vignette: 0.35 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.6 });
     } catch {
       composer = null;
     }
@@ -276,6 +282,7 @@ export async function createCoin3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     clock += dt;
@@ -351,6 +358,7 @@ export async function createCoin3d(host) {
       toss = null;
       pending?.resolve();
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       renderer.forceContextLoss?.();
       canvas.remove();

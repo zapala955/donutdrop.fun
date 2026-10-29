@@ -7,8 +7,8 @@
  * MinecartModel, hay bales and fences at the start, flowers at the far side, the feathers and puff a
  * chicken leaves when something hits it, the hearts, the egg, the experience orbs, a farm at the start
  * with its house, cows and sheep grazing and hens pecking, the game's own round shadows under them,
- * and its fancy clouds overhead. What is drawn rather than taken is light: the next line glowing,
- * the sky, the sun.
+ * its fancy clouds overhead, the moon, and a torch beside every sign. It is night. What is drawn
+ * rather than taken is light: the next line glowing, the sky, the stars, the torches' halos.
  *
  * Nothing here decides anything. chicken.js owns the run: it says how far the chicken has got, what
  * each line pays on the run's difficulty, and, step by step, whether the minecart came. If WebGL is
@@ -20,9 +20,10 @@
 import { reduceMotion } from './util.js';
 import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { CHICKEN, COW, MINECART, SHEEP, SHEEP_FUR, VILLAGER, buildModel, makeSprites, pixelTexture, placeEntity, poseChicken } from './mcmodels.js';
-import { blobShadow, fancyClouds, gradePass, grazers, shadowMaterial, villageHouse, villagers } from './scenery3d.js';
+import { blobShadow, fancyClouds, glowPoints, gradePass, grazers, regionUV, shadowMaterial, villageHouse, villagers } from './scenery3d.js';
 import { fontFromImage, drawText, textWidth } from './mcfont.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 const LANES = 20;
 const LANE = 2;            // a rail line every two blocks
@@ -52,11 +53,13 @@ export const laneX = (lane) => (lane < 0 ? CURB - 1.5 : CURB + lane * LANE + LAN
  * draw it.
  */
 export async function createChicken3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'chicken__gl';
@@ -81,7 +84,7 @@ export async function createChicken3d(host) {
   /* ── what is loaded ── */
   const BLOCKS = ['grass_block_top', 'dirt', 'gravel', 'rail', 'oak_planks', 'oak_sign', 'hay_block_side', 'hay_block_top', 'oak_log',
     'oak_log_top', 'oak_leaves', 'short_grass', 'poppy', 'dandelion', 'cornflower', 'oxeye_daisy', 'cobblestone', 'glass', 'oak_door_top',
-    'oak_door_bottom'];
+    'oak_door_bottom', 'torch'];
   const ENTITY = ['chicken', 'minecart', 'experience_orb', 'cow', 'sheep', 'sheep_wool', 'villager', 'villager_plains', 'villager_farmer'];
   const PARTICLE = ['heart', ...Array.from({ length: 8 }, (_, i) => `generic_${i}`)];
   let loaded;
@@ -95,7 +98,7 @@ export async function createChicken3d(host) {
       loadImage('assets/img/gui/ascii.png'),
       loadImage('assets/img/misc/shadow.png'),
       loadImage('assets/img/env/clouds.png'),
-      loadImage('assets/img/env/sun.png'),
+      loadImage('assets/img/env/moon.png'),
       tier.composer
         ? import(/* @vite-ignore */ new URL('assets/vendor/three-addons.js', document.baseURI).href).catch(() => null)
         : Promise.resolve(null),
@@ -113,8 +116,9 @@ export async function createChicken3d(host) {
 
   const reduce = reduceMotion();
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x78a7ff);
-  scene.fog = new THREE.Fog(0xb9d3ff, 40, 150);
+  scene.background = new THREE.Color(0x0a0d1e);
+  scene.fog = new THREE.Fog(0x1a1a2e, 28, 120);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x070a1c, horizon: 0x2c2442, ground: 0x0e0e08, sun: [-0.55, 0.5, 0.5], sunColor: 0x8a9ccc, intensity: 0.45 }, wind: true });
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
   scene.add(camera);
 
@@ -125,10 +129,12 @@ export async function createChicken3d(host) {
       const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.samples });
       composer = new addons.EffectComposer(renderer, target);
       composer.addPass(new addons.RenderPass(scene, camera));
-      bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.35, 0.4, 0.95);
+      bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.55, 0.45, 0.85);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.06, saturation: 1.14, lift: [0.01, 0.015, 0.03], gain: [1.03, 1.01, 0.96], vignette: 0.3 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.08, saturation: 1.06, lift: [0.008, 0.012, 0.035], gain: [1.02, 1.0, 1.04], vignette: 0.38 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.5 });
     } catch {
       composer = null;
       bloom = null;
@@ -144,10 +150,23 @@ export async function createChicken3d(host) {
   };
   const lambert = (map, opts = {}) => new THREE.MeshLambertMaterial({ map, ...opts });
 
-  /* ── light: a clear day, the sun casting shadows where the machine can afford them ── */
-  scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x5a7048, 1.05));
-  const sunLight = new THREE.DirectionalLight(0xfff0d8, 1.75);
-  const SUN_OFFSET = new THREE.Vector3(-14, 30, 18);
+  /* ── light: a clear night, the moon casting shadows where the machine can afford them ── */
+  /* After dark: a cool moon throws the long shadows, the sky fills them faintly, and the warm light
+   * is the torches' -- one at every sign, a lamp on the hen as she crosses, the farmhouse lit. The
+   * physical materials also take light from the sky (shade3d.js), so the fill is lower there. */
+  scene.add(new THREE.HemisphereLight(0x5a6a9a, 0x16140e, shading.lit ? 0.55 : 0.8));
+  const sunLight = new THREE.DirectionalLight(0xaec0ff, shading.lit ? 1.35 : 1.05);
+  // Torchlight round the hen as she crosses (the torches' light where it matters, not twenty lights),
+  // and the farmhouse door's, where the machine has a light to spare.
+  const henLamp = new THREE.PointLight(0xffb060, shading.lit ? 10 : 7, 9, 1.4);
+  henLamp.position.set(laneX(-1), 1.5, -1.2);
+  scene.add(henLamp);
+  if (tier.lights >= 2) {
+    const farmLamp = new THREE.PointLight(0xffa850, shading.lit ? 11 : 8, 12, 1.4);
+    farmLamp.position.set(-3.6, 1.6, -12.4);
+    scene.add(farmLamp);
+  }
+  const SUN_OFFSET = new THREE.Vector3(-20, 20, 18);
   sunLight.position.copy(SUN_OFFSET);
   scene.add(sunLight, sunLight.target);
   const shadows = tier.name !== 'low';
@@ -156,7 +175,7 @@ export async function createChicken3d(host) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(tier.name === 'high' ? 2048 : 1024, tier.name === 'high' ? 2048 : 1024);
-    Object.assign(sunLight.shadow.camera, { left: -22, right: 22, top: 18, bottom: -18, near: 1, far: 90 });
+    Object.assign(sunLight.shadow.camera, { left: -26, right: 26, top: 22, bottom: -22, near: 1, far: 100 });
     sunLight.shadow.bias = -0.0006;
     sunLight.shadow.normalBias = 0.03;
   }
@@ -165,7 +184,7 @@ export async function createChicken3d(host) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: { uTop: { value: new THREE.Color(0x3f7cf0) }, uLow: { value: new THREE.Color(0xbcd6ff) } },
+    uniforms: { uTop: { value: new THREE.Color(0x070a1c) }, uLow: { value: new THREE.Color(0x2c2442) } },
     vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
       uniform vec3 uTop; uniform vec3 uLow; varying vec3 vDir;
@@ -177,11 +196,30 @@ export async function createChicken3d(host) {
   }));
   sky.renderOrder = -10;
   scene.add(sky);
-  const sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: pixelTexture(THREE, sunImg), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, color: new THREE.Color(1.5, 1.4, 1.2) }));
+  const sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: pixelTexture(THREE, sunImg), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, color: new THREE.Color(1.15, 1.2, 1.35) }));
   sun.renderOrder = -9;
   scene.add(sun);
+  // The stars: points of light round the sky, as the game draws them at night.
+  const stars = (() => {
+    const count = Math.round(900 * tier.particles);
+    const pos = new Float32Array(count * 3);
+    let s = 77;
+    const rand = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < count; i += 1) {
+      const u = 0.08 + rand() * 0.92;
+      const a = rand() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u);
+      pos.set([Math.cos(a) * r * 280, u * 280, Math.sin(a) * r * 280], i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, sizeAttenuation: false, transparent: true, opacity: 0.8, depthWrite: false, fog: false, toneMapped: false }));
+    points.renderOrder = -8;
+    return points;
+  })();
+  scene.add(stars);
   const SUN_DIR = SUN_OFFSET.clone().normalize();
-  const clouds = fancyClouds(THREE, cloudImg, { y: 46, radius: tier.name === 'low' ? 170 : 240 });
+  const clouds = fancyClouds(THREE, cloudImg, { y: 46, radius: tier.name === 'low' ? 170 : 240, tint: 0x4a5070, opacity: 0.6 });
   scene.add(clouds.group);
   const shadowMat = shadowMaterial(THREE, shadowImg);
 
@@ -318,7 +356,7 @@ export async function createChicken3d(host) {
       face.width = 96;
       face.height = 48;
       const texture = pixelTexture(THREE, face);
-      const front = new THREE.MeshLambertMaterial({ map: texture });
+      const front = new THREE.MeshLambertMaterial({ map: texture, emissive: 0xffffff, emissiveMap: texture, emissiveIntensity: 0.3 });
       const sign = new THREE.Group();
       const board = new THREE.Mesh(new THREE.BoxGeometry(SIGN_W, SIGN_W / 2, 2 / 16), [wood, wood, wood, wood, front, wood]);
       board.position.y = 14 / 16 + SIGN_W / 4;
@@ -330,6 +368,22 @@ export async function createChicken3d(host) {
       scene.add(sign);
       signs.push({ face, texture, front, text: '' });
     }
+    // A torch beside every sign, built as Mines builds it: a stick two pixels square, its flame the
+    // top of the texture, and a halo round each flame (one draw for all of them).
+    const torchMat = new THREE.MeshBasicMaterial({ map: tex('torch'), color: new THREE.Color(1.3, 1.2, 1.05), toneMapped: false });
+    const torchGeo = regionUV(new THREE.BoxGeometry(2 / 16, 10 / 16, 2 / 16), [[7, 6, 9, 16], [7, 6, 9, 16], [7, 6, 9, 8], [7, 13, 9, 15], [7, 6, 9, 16], [7, 6, 9, 16]]);
+    torchGeo.translate(0, 5 / 16, 0);
+    // And two more: where the hen starts, and at the farmhouse door.
+    const spots = [...Array.from({ length: LANES }, (_, i) => [laneX(i) + SIGN_W / 2 + 0.25, -2.2]), [laneX(-1) + 1, -2.6], [-3.6, -13]];
+    const torches = new THREE.InstancedMesh(torchGeo, torchMat, spots.length);
+    const flames = [];
+    spots.forEach(([x, z], i) => {
+      torches.setMatrixAt(i, m.makeTranslation(x, 0.12, z));
+      flames.push([x, 0.12 + 9 / 16, z]);
+    });
+    torches.instanceMatrix.needsUpdate = true;
+    scene.add(torches);
+    scene.add(glowPoints(THREE, flames, { size: 1.4, color: 0xffb35a, opacity: 0.55 }).points);
   }
   const signBack = (() => {
     const c = document.createElement('canvas');
@@ -494,6 +548,7 @@ export async function createChicken3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -557,6 +612,7 @@ export async function createChicken3d(host) {
     sun.position.copy(camera.position).addScaledVector(SUN_DIR, 260);
     sun.lookAt(camera.position);
     sun.scale.setScalar(26);
+    henLamp.position.set(henAt.x, 1.5, -1.2);
     if (shadows) {
       sunLight.target.position.set(henAt.x + 3, 0, -2);
       sunLight.position.copy(sunLight.target.position).add(SUN_OFFSET);
@@ -634,6 +690,7 @@ export async function createChicken3d(host) {
       cancelAnimationFrame(raf);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },

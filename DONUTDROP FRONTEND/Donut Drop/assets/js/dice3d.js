@@ -20,6 +20,7 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { PLAYER, atlas, buildModel, itemModel, makeSprites, pixelTexture, placeEntity } from './mcmodels.js';
 import { blobShadow, fancyClouds, glowPoints, gradePass, oakTrees, regionUV, shadowMaterial, skyDome } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 import { drawText, fontFromImage, textWidth } from './mcfont.js';
 
 const SPAN = 10_000;
@@ -43,11 +44,13 @@ export const xOf = (value) => -WALL / 2 + (value / SPAN) * WALL;
  * draw it.
  */
 export async function createDice3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'dice__gl';
@@ -104,7 +107,8 @@ export async function createDice3d(host) {
   const reduce = reduceMotion();
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x78a7ff);
-  scene.fog = new THREE.Fog(0xb9d3ff, 50, 170);
+  scene.fog = new THREE.Fog(0xe9cdb4, 50, 170);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x4a7fe0, horizon: 0xf3d2b0, ground: 0x3a4a2a, sun: [-0.55, 0.5, 0.55], sunColor: 0xffd8a8, intensity: 0.6 }, wind: true });
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 500);
   scene.add(camera);
 
@@ -118,7 +122,9 @@ export async function createDice3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.38, 0.4, 0.95);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.06, saturation: 1.12, lift: [0.01, 0.015, 0.03], gain: [1.03, 1.01, 0.96], vignette: 0.24 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.06, saturation: 1.12, lift: [0.01, 0.015, 0.03], gain: [1.03, 1.01, 0.96], vignette: 0.24 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.45 });
     } catch {
       composer = null;
       bloom = null;
@@ -137,9 +143,12 @@ export async function createDice3d(host) {
   const m4 = new THREE.Matrix4();
 
   /* ── light ── */
-  scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x5a7048, 1.05));
-  const sunLight = new THREE.DirectionalLight(0xfff0d8, 1.7);
-  const SUN_OFFSET = new THREE.Vector3(-14, 30, 22);
+  /* Golden afternoon, as Fishing is lit: a warm sun low enough to throw long shadows does the
+   * work, and a cool sky fills them rather than flattening everything. The physical materials
+   * also take light from the sky (shade3d.js), so the fill is lower there than on Lambert. */
+  scene.add(new THREE.HemisphereLight(0xffe6cc, 0x3c4c66, shading.lit ? 0.72 : 1.05));
+  const sunLight = new THREE.DirectionalLight(0xffcf98, shading.lit ? 2.6 : 1.7);
+  const SUN_OFFSET = new THREE.Vector3(-20, 19, 22);
   sunLight.position.copy(SUN_OFFSET).add(new THREE.Vector3(0, 0, 4));
   sunLight.target.position.set(0, 0, 4);
   scene.add(sunLight, sunLight.target);
@@ -149,13 +158,13 @@ export async function createDice3d(host) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(tier.name === 'high' ? 2048 : 1024, tier.name === 'high' ? 2048 : 1024);
-    Object.assign(sunLight.shadow.camera, { left: -16, right: 16, top: 16, bottom: -14, near: 1, far: 90 });
+    Object.assign(sunLight.shadow.camera, { left: -20, right: 20, top: 20, bottom: -18, near: 1, far: 100 });
     sunLight.shadow.bias = -0.0006;
     sunLight.shadow.normalBias = 0.03;
   }
 
   /* ── the sky, the meadow, the trees behind the range ── */
-  const sky = skyDome(THREE);
+  const sky = skyDome(THREE, { top: 0x4a7fe0, low: 0xf3d2b0 });
   scene.add(sky);
   const sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: pixelTexture(THREE, sunImg), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, color: new THREE.Color(1.5, 1.4, 1.2) }));
   sun.renderOrder = -9;
@@ -476,6 +485,7 @@ export async function createDice3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -654,6 +664,7 @@ export async function createDice3d(host) {
       cancelAnimationFrame(raf);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },

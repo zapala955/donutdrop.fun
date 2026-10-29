@@ -23,6 +23,7 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { CREEPER, MINECART, PLAYER, atlas, buildModel, itemModel, makeSprites, pixelTexture, placeEntity, poseQuadruped } from './mcmodels.js';
 import { blobShadow, glowPoints, gradePass, ironChain, shadowMaterial } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 const GRID = 5;
 const TILES = GRID * GRID;
@@ -72,11 +73,13 @@ function regionUV(geometry, faces, size = 16) {
  * it.
  */
 export async function createMines3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'mines__gl';
@@ -136,6 +139,7 @@ export async function createMines3d(host) {
   const DARK = 0x07080d;
   scene.background = new THREE.Color(DARK);
   scene.fog = new THREE.FogExp2(DARK, 0.042);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x0b0c12, horizon: 0x4a3018, ground: 0x140c08, intensity: 0.55 }, wind: true });
   const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 200);
   scene.add(camera);
 
@@ -149,7 +153,9 @@ export async function createMines3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.55, 0.5, 0.9);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.08, saturation: 1.1, lift: [0.025, 0.015, 0.0], gain: [1.04, 1.0, 0.94], vignette: 0.18 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.08, saturation: 1.1, lift: [0.025, 0.015, 0.0], gain: [1.04, 1.0, 0.94], vignette: 0.18 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.6 });
     } catch {
       composer = null;
       bloom = null;
@@ -805,6 +811,7 @@ export async function createMines3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -1154,6 +1161,7 @@ export async function createMines3d(host) {
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },

@@ -24,6 +24,7 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { COW, HAPPY_GHAST, HAPPY_GHAST_HARNESS, PLAYER, SHEEP, SHEEP_FUR, VILLAGER, atlas, buildModel, makeSprites, pixelTexture, placeEntity, poseGhast } from './mcmodels.js';
 import { blobShadow, fancyClouds, gradePass, grazers, shadowMaterial, villageHouse, villagers } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 const PER_DOUBLING = 20;   // blocks of height a doubling of the multiplier
 const HOVER = 3;           // the ghast's height over the meadow before it goes
@@ -54,11 +55,13 @@ export const altitudeOf = (x100) => HOVER + PER_DOUBLING * Math.log2(Math.max(1,
  * it.
  */
 export async function createCrash3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'crash__gl';
@@ -111,11 +114,12 @@ export async function createCrash3d(host) {
 
   const reduce = reduceMotion();
   const scene = new THREE.Scene();
-  const DAY = new THREE.Color(0x4f8cff);
+  const DAY = new THREE.Color(0x4a7fe0);
   const HIGH = new THREE.Color(0x0b1030);
-  const DAY_LOW = new THREE.Color(0xa9caff);
+  const DAY_LOW = new THREE.Color(0xf0d2b4);
   const HIGH_LOW = new THREE.Color(0x1a2450);
   scene.fog = new THREE.Fog(DAY_LOW.clone(), 60, 260);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x4a7fe0, horizon: 0xf3d2b0, ground: 0x3a4a2a, sun: [-0.45, 0.75, 0.38], sunColor: 0xffd8a8, intensity: 0.6 }, wind: true });
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 900);
   scene.add(camera);
 
@@ -129,7 +133,9 @@ export async function createCrash3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.45, 0.4, 0.92);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.05, saturation: 1.12, lift: [0.01, 0.015, 0.035], gain: [1.02, 1.01, 0.98], vignette: 0.22 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.05, saturation: 1.12, lift: [0.01, 0.015, 0.035], gain: [1.02, 1.01, 0.98], vignette: 0.22 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.45 });
     } catch {
       composer = null;
       bloom = null;
@@ -139,11 +145,14 @@ export async function createCrash3d(host) {
   const lambert = (map, opts = {}) => new THREE.MeshLambertMaterial({ map, ...opts });
 
   /* ── light: the sun, and the sky's own blue from above ── */
-  const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x58704a, 1.1);
+  // Golden afternoon, as Fishing is lit: see dice3d.js. The sky fills; the low sun does the work.
+  const hemi = new THREE.HemisphereLight(0xffe6cc, 0x3c4c66, shading.lit ? 0.75 : 1.1);
   scene.add(hemi);
-  const sunLight = new THREE.DirectionalLight(0xfff2dc, 1.6);
-  sunLight.position.set(-30, 60, 25);
+  const sunLight = new THREE.DirectionalLight(0xffcf98, shading.lit ? 2.6 : 1.6);
+  sunLight.position.set(-30, 50, 25);
   scene.add(sunLight, sunLight.target);
+  // Soft shadows over the field the flight leaves from (medium and high).
+  shading.sun(sunLight, { size: 34, far: 160 });
 
   /* ── the sky: blue thinning to night with height, the sun, stars past the clouds ── */
   const skyMat = new THREE.ShaderMaterial({
@@ -473,6 +482,7 @@ export async function createCrash3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -634,6 +644,7 @@ export async function createCrash3d(host) {
       cancelAnimationFrame(raf);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },
@@ -643,6 +654,7 @@ export async function createCrash3d(host) {
   frameShot(0);
   cam.pos.copy(goalPos);
   cam.look.copy(goalLook);
+  shading.shadows(scene);
   try { renderer.compile(scene, camera); } catch { /* compiled on first use */ }
   raf = requestAnimationFrame(frame);
   return controls;

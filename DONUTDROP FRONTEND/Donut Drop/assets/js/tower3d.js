@@ -29,6 +29,7 @@ import { buildChest, getTHREE, loadImage, softDot } from './mc3d.js';
 import { CREEPER, PLAYER, atlas, buildModel, itemModel, makeSprites, pixelTexture, placeEntity } from './mcmodels.js';
 import { blobShadow, dragonEgg, fancyClouds, glowPoints, gradePass, oakTrees, regionUV, shadowMaterial, skyDome } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 import { drawText, fontFromImage, textWidth } from './mcfont.js';
 
 export const FLOORS = 9;
@@ -66,8 +67,8 @@ export const STOREYS = [
 ];
 /* The sky outside, by how far up the camera is (0 the foot, 1 the roof): [at, top, horizon]. */
 const SKY = [
-  [0, 0x3f7cf0, 0xbcd6ff],
-  [0.42, 0x2f6ae8, 0xd8e8ff],
+  [0, 0x4a7fe0, 0xf3d2b0],
+  [0.42, 0x3570e0, 0xf6dcc0],
   [0.62, 0x4a4aa0, 0xffb070],
   [0.8, 0x1c1850, 0x7a3a6a],
   [1, 0x05051a, 0x221338],
@@ -96,11 +97,13 @@ const floorY = (floor) => floor * STOREY;
  * draw it.
  */
 export async function createTower3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'tower__gl';
@@ -164,7 +167,8 @@ export async function createTower3d(host) {
   const reduce = reduceMotion();
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x78a7ff);
-  scene.fog = new THREE.Fog(0xb9d3ff, 45, 170);
+  scene.fog = new THREE.Fog(0xe9cdb4, 45, 170);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x4a7fe0, horizon: 0xf0d6bc, ground: 0x3a342c, sun: [0.4, 0.6, 0.5], sunColor: 0xffd8a8, intensity: 0.5 }, wind: true });
   const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 500);
   scene.add(camera);
 
@@ -178,7 +182,9 @@ export async function createTower3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.45, 0.45, 0.9);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.06, saturation: 1.14, lift: [0.012, 0.012, 0.03], gain: [1.03, 1.01, 0.97], vignette: 0.24 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.06, saturation: 1.14, lift: [0.012, 0.012, 0.03], gain: [1.03, 1.01, 0.97], vignette: 0.24 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.55 });
     } catch {
       composer = null;
       bloom = null;
@@ -206,12 +212,22 @@ export async function createTower3d(host) {
   const m4 = new THREE.Matrix4();
 
   /* ── light: the sun outside, and a lamp on the storey being climbed in that storey's colour ── */
-  const hemi = new THREE.HemisphereLight(0xd8e6ff, 0x5a6a48, 1.0);
+  /* Golden afternoon at the foot, as Fishing is lit (see dice3d.js), and the storey's lamp doing
+   * more of the work inside, as Blackjack's lamp does over its table. On the physical look the sky
+   * gives some light of its own (shade3d.js), so the fill is lower there. */
+  const HEMI = shading.lit ? 0.62 : 1.0;
+  const SUN = shading.lit ? 2.5 : 1.7;
+  const hemi = new THREE.HemisphereLight(0xffe6cc, 0x3c4c5a, HEMI);
   scene.add(hemi);
-  const sunLight = new THREE.DirectionalLight(0xfff0d8, 1.7);
+  const sunLight = new THREE.DirectionalLight(0xffcf98, SUN);
   scene.add(sunLight, sunLight.target);
-  const inner = new THREE.PointLight(0xffc888, tier.name === 'low' ? 6 : 5, 10, 1.3);
+  const inner = new THREE.PointLight(0xffc888, tier.name === 'low' ? 6 : 8, 10, 1.3);
   scene.add(inner);
+  /* A soft light from the player's side, as Mines has one over the player's shoulder: the chests
+   * face the camera, the storey's lamp hangs behind them and the ceiling shades them from the sun,
+   * so without it their fronts sat near black. No shadow; it follows the camera up the tower. */
+  const faceLight = new THREE.DirectionalLight(0xfff0e0, shading.lit ? 1.15 : 0.55);
+  scene.add(faceLight, faceLight.target);
   const shadows = tier.name !== 'low';
   if (shadows) {
     renderer.shadowMap.enabled = true;
@@ -226,7 +242,7 @@ export async function createTower3d(host) {
   scene.add(flashLight);
 
   /* ── the sky: the day going as the tower goes, the clouds halfway up, stars at the top ── */
-  const sky = skyDome(THREE);
+  const sky = skyDome(THREE, { top: 0x4a7fe0, low: 0xf3d2b0 });
   scene.add(sky);
   const sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: pixelTexture(THREE, sunImg), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, color: new THREE.Color(1.5, 1.4, 1.2) }));
   sun.renderOrder = -9;
@@ -824,6 +840,7 @@ export async function createTower3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -927,9 +944,9 @@ export async function createTower3d(host) {
       sun.lookAt(camera.position);
       sun.material.color.setRGB(1.5, 1.4 - smooth(0.45, 0.8, t) * 0.6, 1.2 - smooth(0.45, 0.8, t) * 0.8);
       sun.material.opacity = 1 - smooth(0.82, 0.95, t);
-      sunLight.intensity = lerp(1.7, 0.35, smooth(0.5, 0.95, t));
-      sunLight.color.setRGB(1, lerp(0.94, 0.62, smooth(0.45, 0.8, t)), lerp(0.85, 0.5, smooth(0.45, 0.8, t)));
-      hemi.intensity = lerp(1.0, 0.6, smooth(0.6, 1, t));
+      sunLight.intensity = lerp(SUN, 0.35, smooth(0.5, 0.95, t));
+      sunLight.color.setRGB(1, lerp(0.81, 0.62, smooth(0.45, 0.8, t)), lerp(0.6, 0.5, smooth(0.45, 0.8, t)));
+      hemi.intensity = lerp(HEMI, HEMI * 0.6, smooth(0.6, 1, t));
       const focusY = climber.y + 1;
       sunLight.target.position.set(0, focusY, -1);
       sunLight.position.copy(sunLight.target.position).addScaledVector(sunDir, 30);
@@ -938,6 +955,8 @@ export async function createTower3d(host) {
       innerColour.lerp(wantColour, reduce ? 1 : 1 - Math.exp(-dt * 3));
       inner.color.copy(innerColour);
       inner.position.set(0.5, focusY + 1.2, -1.6);
+      faceLight.target.position.set(0, focusY, CHEST_Z);
+      faceLight.position.set(camera.position.x - 2, camera.position.y + 3, camera.position.z + 4);
     }
     clouds.step(reduce ? 0 : dt);
 
@@ -1157,6 +1176,7 @@ export async function createTower3d(host) {
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },

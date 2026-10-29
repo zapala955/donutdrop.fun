@@ -25,6 +25,7 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import { ENDERMAN, END_CRYSTAL, SHULKER_BOX, atlas, buildModel, makeSprites, pixelTexture, placeEntity, poseShulkerBox } from './mcmodels.js';
 import { dragonEgg, glowPoints, gradePass } from './scenery3d.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 /* The board, in the units plinko.js uses: one peg gap. Mirrored from plinko.js. */
 const TOP = 1.1;
@@ -77,11 +78,13 @@ function regionUV(geometry, faces, size = 16) {
  * it.
  */
 export async function createPlinko3d(host) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'plinko__gl';
@@ -135,6 +138,7 @@ export async function createPlinko3d(host) {
   const VOID = 0x0c0912;
   scene.background = new THREE.Color(VOID);
   scene.fog = new THREE.FogExp2(VOID, 0.011);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x140c26, horizon: 0x6a4a8a, ground: 0x3a3428, intensity: 0.6 }, wind: false });
   const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
   scene.add(camera);
 
@@ -148,7 +152,9 @@ export async function createPlinko3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.55, 0.45, 0.9);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.07, saturation: 1.12, lift: [0.02, 0.0, 0.035], gain: [1.0, 0.97, 1.04], vignette: 0.18 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.07, saturation: 1.12, lift: [0.02, 0.0, 0.035], gain: [1.0, 0.97, 1.04], vignette: 0.18 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.5 });
     } catch {
       composer = null;
       bloom = null;
@@ -165,11 +171,20 @@ export async function createPlinko3d(host) {
   const lambert = (map, opts = {}) => new THREE.MeshLambertMaterial({ map, ...opts });
 
   /* ── light: the End has no sun; a still, cool light everywhere, brighter when the sky flashes ── */
-  const hemi = new THREE.HemisphereLight(0xc8b8e0, 0x2c2436, 1.25);
+  // Where a machine draws physically (shade3d.js) the void's own light is lower and a lamp does the work.
+  const HEMI = shading.lit ? 0.7 : 1.25;
+  const hemi = new THREE.HemisphereLight(0xc8b8e0, 0x2c2436, HEMI);
   scene.add(hemi);
-  const front = new THREE.DirectionalLight(0xf0e8ff, 0.9);
+  const front = new THREE.DirectionalLight(0xf0e8ff, shading.lit ? 0.45 : 0.9);
   front.position.set(-3, 6, 12);
   scene.add(front, front.target);
+  /* A cold lamp high in front, as Blackjack's lamp hangs over its table: the pegs throw soft shadows
+   * on the obsidian, and the board's edges fall away into the dark. Aimed at the board's middle
+   * whenever its size changes (layout). Medium and high only. */
+  const lamp = new THREE.SpotLight(0xece0ff, 0, 46, 0.5, 0.75, 1.2);
+  lamp.position.set(-3.5, 12, 15);
+  scene.add(lamp, lamp.target);
+  if (shading.sun(lamp, { near: 4, far: 46, normalBias: 0.02 })) lamp.intensity = 85;
 
   /* ── the sky: the end sky's noise, tinted as the game tints it, round everything ── */
   const skyTex = pixelTexture(THREE, skyImg);
@@ -498,6 +513,8 @@ export async function createPlinko3d(host) {
     look.set(0, -0.35 + dist * tanV, 0);
     camera.position.set(0, look.y + Math.sin(PITCH) * dist, Math.cos(PITCH) * dist);
     camera.lookAt(look);
+    lamp.target.position.set(0, board.height * 0.5, 0);
+    lamp.position.set(-3.5, board.height + 7, 15);
     camera.updateMatrixWorld();
     // The row's ends: the outer edges of the first and last slots, at the boxes' front faces.
     a.set((0.5 - board.mid) * G, SLOT / 2, SLOT + 0.02).project(camera);
@@ -573,6 +590,7 @@ export async function createPlinko3d(host) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -593,7 +611,7 @@ export async function createPlinko3d(host) {
     }
     const f = flashPower * Math.max(0, 1 - (now - flashAt) / 1600) * (0.75 + 0.25 * Math.sin((now - flashAt) / 40));
     skyMat.color.setRGB(SKY.r + f * 0.6, SKY.g + f * 0.22, SKY.b + f * 0.75);
-    hemi.intensity = 1.25 + f * 1.4;
+    hemi.intensity = HEMI + f * 1.4;
     if (!reduce) skyTex.offset.set(clock * 0.002, 0);
 
     // The pearls where plinko.js says they are, turned to the camera.
@@ -730,6 +748,7 @@ export async function createPlinko3d(host) {
       cancelAnimationFrame(raf);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },
@@ -738,6 +757,8 @@ export async function createPlinko3d(host) {
   resize();
   // Compiled now, the board's materials included, so the first pearl costs no frame.
   buildBoard(12);
+  // The pegs, the pearls, the boxes and the endermen cast; the wall and the island take it.
+  shading.shadows(scene);
   try { renderer.compile(scene, camera); } catch { /* compiled on first use */ }
   raf = requestAnimationFrame(frame);
   return controls;

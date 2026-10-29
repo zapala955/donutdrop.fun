@@ -25,6 +25,7 @@ import { BLAZE, buildModel, makeSprites, pixelTexture, placeEntity, poseBlaze } 
 import { blobShadow, glowPoints, gradePass, ironChain, shadowMaterial } from './scenery3d.js';
 import { fontFromImage, drawText, textWidth } from './mcfont.js';
 import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { shadeScene, shadedTHREE, smoothen } from './shade3d.js';
 
 const R_RIM = 3.2;      // the bowl's lip
 const R_TRACK = 2.72;   // where the ball runs
@@ -54,11 +55,13 @@ function seeded(seed) {
  * it. `order` is the wheel's numbers in their order round it, `red` the red ones.
  */
 export async function createRoulette3d(host, { order, red }) {
-  const THREE = await getTHREE();
+  const threeCore = await getTHREE();
   const probe = document.createElement('canvas');
   const probeGl = probe.getContext('webgl2');
   if (!probeGl) return null;
   const tier = chooseTier(probeGl);
+  // Physical materials on medium and high, Lambert on low: the lit look (shade3d.js).
+  const THREE = shadedTHREE(threeCore, tier);
   probeGl.getExtension('WEBGL_lose_context')?.loseContext();
   const canvas = document.createElement('canvas');
   canvas.className = 'roulette__gl';
@@ -113,6 +116,7 @@ export async function createRoulette3d(host, { order, red }) {
   const HAZE = 0x2a0806;
   scene.background = new THREE.Color(0x140403);
   scene.fog = new THREE.FogExp2(HAZE, 0.04);
+  const shading = shadeScene(THREE, { tier, renderer, scene, env: { top: 0x1a0606, horizon: 0x8a3a12, ground: 0x2a0c06, intensity: 0.5 }, wind: false });
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
   scene.add(camera);
 
@@ -126,7 +130,9 @@ export async function createRoulette3d(host, { order, red }) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.5, 0.45, 0.88);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
-      composer.addPass(gradePass(THREE, addons, { contrast: 1.09, saturation: 1.1, lift: [0.03, 0.008, 0.0], gain: [1.05, 0.98, 0.92], vignette: 0.15 }));
+      composer.addPass(gradePass(THREE, addons, { sharpen: 0, contrast: 1.09, saturation: 1.1, lift: [0.03, 0.008, 0.0], gain: [1.05, 0.98, 0.92], vignette: 0.15 }));
+      // Smooth, not sharp: soft shadow in the corners, and the edges blended (shade3d.js).
+      smoothen(THREE, addons, composer, camera, { tier, ao: 0.6 });
     } catch {
       composer = null;
       bloom = null;
@@ -598,6 +604,7 @@ export async function createRoulette3d(host, { order, red }) {
       if (now < nextFrameAt - 2) return;
       nextFrameAt = now - nextFrameAt > FRAME_MS ? now + FRAME_MS : nextFrameAt + FRAME_MS;
     }
+    shading.tick(now / 1000);
     const elapsed = (now - last) / 1000;
     const dt = Math.min(0.05, elapsed);
     last = now;
@@ -779,6 +786,7 @@ export async function createRoulette3d(host, { order, red }) {
       cancelAnimationFrame(raf);
       canvas.removeEventListener('webglcontextlost', onLost);
       composer?.dispose();
+      shading.dispose();
       renderer.dispose();
       canvas.remove();
     },
