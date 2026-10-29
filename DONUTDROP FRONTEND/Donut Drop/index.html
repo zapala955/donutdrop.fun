@@ -111,6 +111,8 @@
 <!-- home.css is gone from here: the home view is the lobby below, and luxe-home.css owns it. -->
 <!-- the header above each game: icon, name, "How it works" -->
 <link rel="stylesheet" href="assets/css/gamehead.css" />
+<!-- the 2D/3D switch on every game with a 3D scene (assets/js/view3d.js) -->
+<link rel="stylesheet" href="assets/css/view3d.css" />
 <!-- the offer card in the corner, on every page (assets/js/nudge.js) -->
 <link rel="stylesheet" href="assets/css/nudge.css" />
 <!-- the pop-up dialog with one button (assets/js/popups.js) -->
@@ -206,6 +208,7 @@
 <link rel="modulepreload" href="assets/js/winfx.js" />
 <link rel="modulepreload" href="assets/js/share.js" />
 <link rel="modulepreload" href="assets/js/blockart.js" />
+<link rel="modulepreload" href="assets/js/view3d.js" />
 <link rel="modulepreload" href="assets/js/routing.js" />
 <link rel="modulepreload" href="assets/js/reveal.js" />
 <link rel="modulepreload" href="assets/js/wheel.js" />
@@ -221,6 +224,7 @@
 <link rel="modulepreload" href="assets/js/audio.js" />
 <link rel="modulepreload" href="assets/js/mc3d.js" />
 <link rel="modulepreload" href="assets/js/mcmodels.js" />
+<link rel="modulepreload" href="assets/js/scenery3d.js" />
 <link rel="modulepreload" href="assets/js/slots3d-bastion.js" />
 <link rel="modulepreload" href="assets/js/slots3d-monument.js" />
 <!-- ── end module preloads ── -->
@@ -381,6 +385,10 @@
         </button>
         <button class="ihint lvl__tip" type="button" id="lvlTip" hidden
                 aria-label="VIP progress" data-tip="VIP progress"></button>
+        <!-- 3D or 2D for every game (assets/js/view3d.js); the same switch is on each game's panel. -->
+        <button class="lxicon view3dbtn" id="view3dBtn" type="button" aria-pressed="true" aria-label="Games in 3D: switch to 2D">
+          <span class="view3dbtn__txt" aria-hidden="true">3D</span>
+        </button>
         <button class="lxicon mute" id="muteBtn" type="button" data-muted="0" aria-pressed="false" aria-label="Mute sound">
           <svg class="mute__on" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="M16 9a4.25 4.25 0 0 1 0 6"/><path d="M18.5 6.5a7.75 7.75 0 0 1 0 11"/></svg>
           <svg class="mute__off" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="m16.5 9.5 5 5m0-5-5 5"/></svg>

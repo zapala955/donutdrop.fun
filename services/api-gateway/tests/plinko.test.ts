@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -156,5 +157,53 @@ describe('plinko routes', () => {
   it('reads only the newest balls into the live feed', async () => {
     const activity = await read('services/api-gateway/src/routes/activity.ts');
     assert.match(activity, /FROM \(SELECT \* FROM plinko_bets ORDER BY created_at DESC LIMIT \$1\) b/);
+  });
+});
+
+describe('plinko in 3D', () => {
+  const front = (relative: string) => read(`DONUTDROP FRONTEND/Donut Drop/${relative}`);
+  const img = (relative: string) => path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/img', relative);
+
+  it('draws the End only from the game’s own pictures and models', async () => {
+    const end = await front('assets/js/plinko3d.js');
+    const quoted = (list: string) => {
+      const body = end.match(new RegExp(`const ${list} = \\[([^;]+)\\];`))?.[1] ?? '';
+      return [...body.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    };
+    const colours = quoted('COLOURS');
+    assert.deepEqual(colours, ['yellow', 'orange', 'red', 'magenta']);
+    for (const name of quoted('BLOCKS')) assert.ok(existsSync(img(`block/${name}.png`)), `block ${name}`);
+    for (const name of [...quoted('ENTITY'), ...colours.map((c) => `shulker_${c}`)]) assert.ok(existsSync(img(`entity/${name}.png`)), `entity ${name}`);
+    for (const [name, frames] of [['glitter', 8], ['generic', 8]] as const) {
+      for (let i = 0; i < frames; i += 1) assert.ok(existsSync(img(`particle/${name}_${i}.png`)), `${name}_${i}`);
+    }
+    for (const [, file] of end.matchAll(/loadImage\('assets\/img\/([^']+)'\)/g)) assert.ok(existsSync(img(file!)), file);
+    // The end rod is its block model: a four-pixel base one deep, a two-pixel rod fifteen long.
+    assert.ok(end.includes('new THREE.BoxGeometry(4 / 16, 1 / 16, 4 / 16), [[2, 6, 6, 7]'));
+    assert.ok(end.includes('new THREE.BoxGeometry(2 / 16, 15 / 16, 2 / 16), [[0, 0, 2, 15]'));
+    // The shulker box opens as ShulkerBoxModel does: half a block up, 270 degrees round.
+    const models = await front('assets/js/mcmodels.js');
+    assert.match(models, /parts\.lid\.position\.y = 24 - open \* 0\.5 \* 16;\n\s*parts\.lid\.rotation\.y = open \* 270 \* \(Math\.PI \/ 180\);/);
+    assert.match(models, /\{ name: 'rightArm', pivot: \[-5, -12, 0\], cubes: endermanLimb\(false\) \}/);
+    for (const model of ['def: SHULKER_BOX', 'def: ENDERMAN', 'def: END_CRYSTAL']) assert.ok(end.includes(model), model);
+  });
+
+  it('draws the balls the page moves, and keeps the page’s row of payouts under its boxes', async () => {
+    const [end, page, css] = await Promise.all([front('assets/js/plinko3d.js'), front('assets/js/plinko.js'), front('assets/css/plinko.css')]);
+    // The board's geometry is the page's: the same row heights, the same ball.
+    for (const constant of ['const TOP = 1.1;', 'const ROW = 0.9;', 'const FOOT = 0.9;', 'const BALL_R = 0.26;']) {
+      assert.ok(end.includes(constant), constant);
+      assert.ok(page.includes(constant), constant);
+    }
+    assert.match(page, /await import\('\.\/plinko3d\.js'\)/);
+    assert.match(page, /if \(board3d\) \{\n\s*board3d\.balls\(balls\.map\(\(ball\) => positionOf\(ball, now - ball\.start\)\)\);/);
+    assert.match(page, /board3d\?\.strike\(ball\.points\[ball\.hit\]\.peg\);/);
+    assert.match(page, /board3d\?\.land\(bet\.slot, bet\.multiplierBps\);/);
+    assert.match(css, /\.plinko\[data-render="3d"\] \.plinko__slots \{\n  width: var\(--row-width, auto\);\n  margin: 8px 0 0 var\(--row-left, 0px\);\n\}/);
+    assert.match(end, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    // No layout forced while balls land or the page paints.
+    assert.doesNotMatch(page, /void node\.offsetWidth/);
+    const paintSlots = page.slice(page.indexOf('function paintSlots()'), page.indexOf('function paintReadout()'));
+    assert.doesNotMatch(paintSlots, /clientWidth/);
   });
 });

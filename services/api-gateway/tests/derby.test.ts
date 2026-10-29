@@ -137,7 +137,7 @@ describe('mob derby: the page and the track', () => {
     assert.match(models, /\{ u: 22, v: 0, x: 4, y: -5, z: -5, w: 1, h: 3, d: 1 \}/);
     assert.match(models, /w: 8, h: 16, d: 6, inflate: 1\.75/);
     assert.match(models, /\{ name: 'redThing', cubes: \[\{ u: 14, v: 4, x: -1, y: -2, z: -3, w: 2, h: 2, d: 2 \}\] \}/);
-    assert.match(lake, /import \{ chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    assert.match(lake, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
     assert.match(lake, /const shadows = tier\.name !== 'low';/);
   });
 

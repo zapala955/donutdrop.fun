@@ -313,6 +313,25 @@ const CUES = {
     noise(ctx, { start: 0.1, duration: 1.2, gain: 0.18, frequency: 260, q: 0.5 });
     tone(ctx, { freq: 48, type: 'sine', duration: 1.4, gain: 0.25, sweepTo: 30 });
   },
+  /* ── the mine ── */
+  /** A pickaxe on stone: a dry knock, a gritty top and a dull body. Pitched by caller per crack. */
+  dig(ctx) {
+    noise(ctx, { duration: 0.07, gain: 0.16, frequency: 1500, q: 1.1 });
+    noise(ctx, { duration: 0.04, gain: 0.06, frequency: 4200, q: 1.4 });
+    tone(ctx, { freq: 210, type: 'triangle', duration: 0.07, gain: 0.08, sweepTo: 140 });
+  },
+  /** TNT lit: a thin, bright hiss that runs on under the fuse. */
+  fuse(ctx) {
+    noise(ctx, { duration: 0.9, gain: 0.09, frequency: 5200, q: 0.9 });
+    noise(ctx, { start: 0.02, duration: 0.7, gain: 0.05, frequency: 2600, q: 1.2 });
+  },
+  /** TNT going off: a hard crack over a long low roar, and the sub-bass under it. */
+  explode(ctx) {
+    noise(ctx, { duration: 0.12, gain: 0.32, frequency: 1800, q: 0.5 });
+    noise(ctx, { duration: 1.1, gain: 0.34, frequency: 160, q: 0.35 });
+    noise(ctx, { start: 0.04, duration: 0.6, gain: 0.16, frequency: 600, q: 0.6 });
+    tone(ctx, { freq: 70, type: 'sine', duration: 0.9, gain: 0.3, sweepTo: 28 });
+  },
   /** Something enormous landed. Used sparingly or it stops meaning anything. */
   jackpot(ctx) {
     CUES.anvil(ctx);

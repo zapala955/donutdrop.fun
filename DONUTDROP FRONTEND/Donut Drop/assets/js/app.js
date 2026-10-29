@@ -72,6 +72,7 @@ import { initNotices } from './notices.js';
 import { initWinFx } from './winfx.js';
 import { initShareLanding } from './share.js';
 import { initBlockArt } from './blockart.js';
+import { mountViewToggle } from './view3d.js';
 import {
   appPath, currentRouteName, migrateLegacyHashRoute, navigate, onNavigate,
 } from './routing.js';
@@ -1589,6 +1590,9 @@ initTicker(document.getElementById('tickerRoot'));
     paintMute();
   }
 }
+
+/* The top bar's 3D/2D switch: every game page follows it (view3d.js). */
+mountViewToggle($('#view3dBtn'));
 
 $('#loginBtn').addEventListener('click', openLoginModal);
 $('#depositBtn').addEventListener('click', openDepositModal);

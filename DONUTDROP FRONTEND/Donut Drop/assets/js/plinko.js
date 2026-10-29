@@ -12,12 +12,19 @@
  *
  * Motion: the ball's fall, a peg lighting as it is struck, a slot dipping as a ball lands. With
  * reduced motion a ball lands the moment it is answered, and nothing moves.
+ *
+ * The board is drawn in WebGL (plinko3d.js), its own chunk, at the graphics the player picked or the
+ * machine can manage: ender pearls through end rods into shulker boxes, in the End. This page still
+ * moves every ball; the 3D board only draws them where it is told. The row of slots stays this page's
+ * own, set under the boxes where the board says they stand; without WebGL the flat board is back.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const RISKS = [
   ['low', 'Low'],
@@ -27,6 +34,7 @@ const RISKS = [
 const MAX_QUEUED = 4; // drops waiting for the server
 const MAX_FALLING = 24; // balls on the board at once
 const RECENT = 8;
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 /* The board in units of one peg gap. Peg row r (0-based, from the top) has r + 3 pegs; the slots sit
  * under the gaps of the last row, so a board of n rows is n + 2 gaps wide. */
@@ -56,6 +64,9 @@ let lastTick = 0;
 let pendingSay = [];
 let sayTimer = 0;
 let boardRows = 0;
+let slotsDense = false; // measured when the board's size changes, never while painting
+let board3d = null; // the End, once it is up
+let boardTried = null;
 
 /* ─────────── numbers ─────────── */
 
@@ -137,6 +148,7 @@ async function load() {
   buildSlots();
   resize();
   paint();
+  if (config) void startBoard();
 }
 
 async function refreshSeed() {
@@ -272,6 +284,7 @@ function frame(now) {
     while (ball.hit + 1 < ball.points.length - 1 && elapsed >= ball.times[ball.hit + 1]) {
       ball.hit += 1;
       flashes.set(ball.points[ball.hit].peg, now);
+      board3d?.strike(ball.points[ball.hit].peg);
       if (now - lastTick > 45) {
         lastTick = now;
         playSound('reeltick');
@@ -294,6 +307,7 @@ function land(ball) {
   recent.unshift({ slot: bet.slot, rows: bet.rows, multiplierBps: bet.multiplierBps, payoutMinor: bet.payoutMinor, stakeMinor: bet.stakeMinor });
   recent = recent.slice(0, RECENT);
   bump(bet.slot);
+  board3d?.land(bet.slot, bet.multiplierBps);
   const x = bet.multiplierBps / 10_000;
   playSound(x >= 10 ? 'reward' : x >= 1 ? 'win' : 'coin');
   queueSay(bet);
@@ -322,9 +336,10 @@ function settleIfDone() {
 function bump(slot) {
   const node = root?.querySelector(`.plinko__slot[data-slot="${slot}"]`);
   if (!node) return;
+  // The light starts again on the next frame rather than by forcing a layout now: a burst of balls
+  // landing was a burst of synchronous layouts on a slow machine.
   node.classList.remove('is-hit');
-  void node.offsetWidth;
-  node.classList.add('is-hit');
+  requestAnimationFrame(() => node.classList.add('is-hit'));
   if (reduceMotion()) return;
   // `translate`, not `transform`: a slot standing its number on end is already rotated.
   node.animate(
@@ -356,6 +371,106 @@ function queueSay(bet) {
   }, 500);
 }
 
+/* ─────────── the End ─────────── */
+
+function startBoard() {
+  if (boardTried || !wants3d()) return boardTried;
+  boardTried = (async () => {
+    const host = $('.plinko__view', root);
+    try {
+      const { createPlinko3d } = await import('./plinko3d.js');
+      const built = await createPlinko3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        boardTried = null;
+        return;
+      }
+      if (!built) {
+        // No WebGL here: the flat board is all there is, and its graphics have nothing to choose.
+        $('.plinko__gfx', root).hidden = true;
+        return;
+      }
+      built.onLost = () => {
+        if (board3d === built) board3d = null;
+        built.dispose();
+        root.dataset.render = '2d';
+        resize();
+      };
+      // The slots sit under the shulker boxes, wherever the board's camera has put them.
+      built.onLayout = ({ left, width }) => {
+        const holder = $('#plinkoSlots', root);
+        holder.style.setProperty('--row-left', `${left.toFixed(1)}px`);
+        holder.style.setProperty('--row-width', `${width.toFixed(1)}px`);
+        measureSlots();
+        paintSlots();
+      };
+      built.onCue = (cue) => {
+        if (cue === 'teleport') playSound('portal', { rate: 1.8 });
+      };
+      board3d = built;
+      root.dataset.render = '3d';
+      board3d.setBoard(boardRows || rows);
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return boardTried;
+}
+
+function setGraphics(value) {
+  if (busy() || !GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (board3d) {
+    board3d.dispose();
+    board3d = null;
+    boardTried = null;
+    root.dataset.render = '2d';
+    resize();
+    if (config) void startBoard();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the board away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (busy()) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && board3d) {
+    board3d.dispose();
+    board3d = null;
+    boardTried = null;
+    root.dataset.render = '2d';
+    resize();
+  }
+  if (on && config) void startBoard();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#plinkoView', root), { disabled: Boolean(busy()) });
+  const select = root && $('#plinkoGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = board3d?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+  select.disabled = busy();
+}
+
 /* ─────────── the board ─────────── */
 
 function readPalette() {
@@ -375,7 +490,7 @@ function resize() {
   if (!canvas) return;
   const n = rows;
   boardRows = n;
-  const wrap = canvas.parentElement;
+  const wrap = canvas.closest('.plinko__board');
   wrap.style.setProperty('--gaps', String(n + 2));
   wrap.style.setProperty('--depth', String(TOP + (n - 1) * ROW + FOOT));
   const width = canvas.clientWidth;
@@ -384,10 +499,22 @@ function resize() {
   canvas.width = Math.max(1, Math.round(width * dpr));
   canvas.height = Math.max(1, Math.round(height * dpr));
   draw(performance.now());
+  board3d?.setBoard(n);
+  measureSlots();
   if ($('.plinko__slot', root)) paintSlots();
 }
 
+/** Whether the slots are too narrow for their numbers lying down: read when the size changes. */
+function measureSlots() {
+  const holder = root && $('#plinkoSlots', root);
+  if (holder) slotsDense = holder.clientWidth / (rows + 1) < 26;
+}
+
 function draw(now) {
+  if (board3d) {
+    board3d.balls(balls.map((ball) => positionOf(ball, now - ball.start)));
+    return;
+  }
   if (!ctx || !canvas.width) return;
   if (!palette) readPalette();
   const n = boardRows;
@@ -447,6 +574,7 @@ function paint() {
   paintSlots();
   paintReadout();
   paintControls();
+  paintGraphics();
 }
 
 function buildSlots() {
@@ -467,11 +595,10 @@ function buildSlots() {
 function paintSlots() {
   const slots = table();
   const holder = $('#plinkoSlots', root);
-  const dense = holder.clientWidth / (rows + 1) < 26;
-  holder.toggleAttribute('data-dense', dense);
+  holder.toggleAttribute('data-dense', slotsDense);
   root.querySelectorAll('.plinko__slot').forEach((node, slot) => {
     const bps = slots?.[slot];
-    const text = bps ? short(bps, dense) : '—';
+    const text = bps ? short(bps, slotsDense) : '—';
     if (node.textContent !== text) node.textContent = text;
     node.setAttribute('aria-label', bps ? `${times(bps)}` : 'unavailable');
   });
@@ -523,6 +650,7 @@ function paintControls() {
   $('#plinkoRows', root).textContent = String(rows);
   $('#plinkoRowsDown', root).disabled = locked || rows <= (config?.minRows ?? 8);
   $('#plinkoRowsUp', root).disabled = locked || rows >= (config?.maxRows ?? 16);
+  paintGraphics();
   const falling = $('#plinkoFalling', root);
   const inAir = balls.length + queue.length;
   falling.textContent = inAir ? `${inAir} ball${inAir === 1 ? '' : 's'} falling` : '';
@@ -538,7 +666,7 @@ function build() {
         <ol class="plinko__recent" id="plinkoRecent" aria-label="Your last balls, newest first"></ol>
       </div>
       <div class="plinko__board">
-        <canvas id="plinkoCanvas" aria-hidden="true"></canvas>
+        <div class="plinko__view"><canvas id="plinkoCanvas" aria-hidden="true"></canvas></div>
         <div class="plinko__slots" id="plinkoSlots" role="list" aria-label="What each slot pays, left to right"></div>
       </div>
     </section>
@@ -567,6 +695,11 @@ function build() {
         </button>
         <p class="plinko__hint" id="plinkoHint" aria-live="polite"></p>
         <p class="plinko__falling" id="plinkoFalling"></p>
+        ${viewSwitch('plinkoView')}
+        <label class="plinko__gfx" for="plinkoGfx">
+          <span>Graphics</span>
+          <select id="plinkoGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
     <div class="plinko__say" id="plinkoSay" role="status" aria-atomic="true"></div>`;
@@ -593,6 +726,11 @@ function build() {
     rows = Math.min(config?.maxRows ?? 16, Math.max(config?.minRows ?? 8, rows + Number(button.dataset.step)));
     paint();
   }));
+  $('#plinkoGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#plinkoView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   $('#plinkoForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
     drop();

@@ -74,6 +74,7 @@ export function buildModel(THREE, layers) {
         group.position.set(...(def.pivot || [0, 0, 0]));
         const r = def.rot || [0, 0, 0];
         group.rotation.set(r[0], r[1], r[2], 'ZYX');
+        if (def.scale) group.scale.setScalar(def.scale);
         group.userData.rest = { position: group.position.clone(), rotation: group.rotation.clone() };
         parent.add(group);
         parts[key] = group;
@@ -618,6 +619,127 @@ export const CHICKEN = {
     { name: 'leftWing', pivot: [4, 13, 0], cubes: [{ u: 24, v: 13, x: -1, y: 0, z: -3, w: 1, h: 4, d: 6 }] },
   ],
 };
+/** CreeperModel: the head and body on one pivot, four six-pixel legs. 64 x 32. It walks as a
+ * quadruped does, so poseQuadruped moves it. */
+const creeperLeg = [{ u: 0, v: 16, x: -2, y: 0, z: -2, w: 4, h: 6, d: 4 }];
+export const CREEPER = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'head', pivot: [0, 6, 0], cubes: [{ u: 0, v: 0, x: -4, y: -8, z: -4, w: 8, h: 8, d: 8 }] },
+    { name: 'body', pivot: [0, 6, 0], cubes: [{ u: 16, v: 16, x: -4, y: 0, z: -2, w: 8, h: 12, d: 4 }] },
+    { name: 'rightHindLeg', pivot: [-2, 18, 4], cubes: creeperLeg },
+    { name: 'leftHindLeg', pivot: [2, 18, 4], cubes: creeperLeg },
+    { name: 'rightFrontLeg', pivot: [-2, 18, -4], cubes: creeperLeg },
+    { name: 'leftFrontLeg', pivot: [2, 18, -4], cubes: creeperLeg },
+  ],
+};
+/** ShulkerModel's shell, as a shulker box wears it: the lid over the base, both pivoted at the
+ * bottom. The box opens as ShulkerBoxModel.setupAnim opens it -- see poseShulkerBox. 64 x 64. */
+export const SHULKER_BOX = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    { name: 'lid', pivot: [0, 24, 0], cubes: [{ u: 0, v: 0, x: -8, y: -16, z: -8, w: 16, h: 12, d: 16 }] },
+    { name: 'base', pivot: [0, 24, 0], cubes: [{ u: 0, v: 28, x: -8, y: -8, z: -8, w: 16, h: 8, d: 16 }] },
+  ],
+};
+/** ShulkerBoxModel.setupAnim: the lid rises half a block and turns 270 degrees as it opens (0 to 1). */
+export function poseShulkerBox(parts, open) {
+  parts.lid.position.y = 24 - open * 0.5 * 16;
+  parts.lid.rotation.y = open * 270 * (Math.PI / 180);
+}
+/** EndermanModel: HumanoidModel stretched -- thirty-pixel arms and legs, the head and body fourteen
+ * pixels up. 64 x 32; the eyes are a second layer on the same mesh (enderman_eyes). */
+const endermanLimb = (mirror) => [{ u: 56, v: 0, x: -1, y: -2, z: -1, w: 2, h: 30, d: 2, mirror }];
+export const ENDERMAN = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    {
+      name: 'head', pivot: [0, -13, 0], cubes: [{ u: 0, v: 0, x: -4, y: -8, z: -4, w: 8, h: 8, d: 8 }],
+      children: [{ name: 'hat', cubes: [{ u: 0, v: 16, x: -4, y: -8, z: -4, w: 8, h: 8, d: 8, inflate: -0.5 }] }],
+    },
+    { name: 'body', pivot: [0, -14, 0], cubes: [{ u: 32, v: 16, x: -4, y: 0, z: -2, w: 8, h: 12, d: 4 }] },
+    { name: 'rightArm', pivot: [-5, -12, 0], cubes: endermanLimb(false) },
+    { name: 'leftArm', pivot: [5, -12, 0], cubes: endermanLimb(true) },
+    { name: 'rightLeg', pivot: [-2, -5, 0], cubes: [{ u: 56, v: 0, x: -1, y: 0, z: -1, w: 2, h: 30, d: 2 }] },
+    { name: 'leftLeg', pivot: [2, -5, 0], cubes: [{ u: 56, v: 0, x: -1, y: 0, z: -1, w: 2, h: 30, d: 2, mirror: true }] },
+  ],
+};
+/** EndCrystalModel's crystal: two glass cubes, the inner at 0.875, the cube inside that at 0.765625
+ * (its base left off, as the crystals on the End's obsidian pillars are spawned without one).
+ * 64 x 32 (the texture is drawn at twice that). The glass turns as EndCrystalRenderer turns it. */
+export const END_CRYSTAL = {
+  texW: 64,
+  texH: 32,
+  parts: [{
+    name: 'outerGlass', cubes: [{ u: 0, v: 0, x: -4, y: -4, z: -4, w: 8, h: 8, d: 8 }],
+    children: [{
+      name: 'innerGlass', scale: 0.875, cubes: [{ u: 0, v: 0, x: -4, y: -4, z: -4, w: 8, h: 8, d: 8 }],
+      children: [{ name: 'cube', scale: 0.765625, cubes: [{ u: 32, v: 0, x: -4, y: -4, z: -4, w: 8, h: 8, d: 8 }] }],
+    }],
+  }],
+};
+/** BlazeModel: the head, and twelve rods round it in three rings that turn and bob (poseBlaze). 64 x 32. */
+export const BLAZE = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'head', cubes: [{ u: 0, v: 0, x: -4, y: -4, z: -4, w: 8, h: 8, d: 8 }] },
+    ...Array.from({ length: 12 }, (_, i) => ({ name: `rod${i}`, cubes: [{ u: 0, v: 16, x: 0, y: 0, z: 0, w: 2, h: 8, d: 2 }] })),
+  ],
+};
+/** BlazeModel.setupAnim: four rods a ring at radius 9, 7 and 5, each ring turning its own way. */
+export function poseBlaze(parts, ticks) {
+  let a = ticks * Math.PI * -0.1;
+  for (let i = 0; i < 4; i += 1, a += Math.PI / 2) parts[`rod${i}`].position.set(Math.cos(a) * 9, -2 + Math.cos((i * 2 + ticks) * 0.25), Math.sin(a) * 9);
+  a = Math.PI / 4 + ticks * Math.PI * 0.03;
+  for (let i = 4; i < 8; i += 1, a += Math.PI / 2) parts[`rod${i}`].position.set(Math.cos(a) * 7, 2 + Math.cos((i * 2 + ticks) * 0.25), Math.sin(a) * 7);
+  a = 0.47123894 + ticks * Math.PI * -0.05;
+  for (let i = 8; i < 12; i += 1, a += Math.PI / 2) parts[`rod${i}`].position.set(Math.cos(a) * 5, 11 + Math.cos((i * 1.5 + ticks) * 0.5), Math.sin(a) * 5);
+}
+/** HappyGhastModel (the grown one): a sixteen-pixel body and nine tentacles under it, the whole
+ * layer drawn at four times size (place it at a quarter block a pixel). 64 x 64 (the texture is drawn
+ * at twice that). The tentacles sway as GhastModel.animateTentacles sways them: poseGhast. */
+const tentacle = (i, h, x, z) => ({ name: `tentacle${i}`, pivot: [x, 7, z], cubes: [{ u: 0, v: 0, x: -1, y: 0, z: -1, w: 2, h, d: 2 }] });
+export const HAPPY_GHAST = {
+  texW: 64,
+  texH: 64,
+  parts: [{
+    name: 'body', pivot: [0, 16, 0], cubes: [{ u: 0, v: 0, x: -8, y: -8, z: -8, w: 16, h: 16, d: 16 }],
+    children: [
+      tentacle(0, 5, -3.75, -5), tentacle(1, 7, 1.25, -5), tentacle(2, 4, 6.25, -5),
+      tentacle(3, 5, -6.25, 0), tentacle(4, 5, -1.25, 0), tentacle(5, 7, 3.75, 0),
+      tentacle(6, 8, -3.75, 5), tentacle(7, 8, 1.25, 5), tentacle(8, 5, 6.25, 5),
+    ],
+  }],
+};
+/** HappyGhastHarnessModel: the harness over the body and the goggles across its front. 64 x 64. */
+export const HAPPY_GHAST_HARNESS = {
+  texW: 64,
+  texH: 64,
+  parts: [
+    { name: 'harness', pivot: [0, 24, 0], cubes: [{ u: 0, v: 0, x: -8, y: -16, z: -8, w: 16, h: 16, d: 16 }] },
+    { name: 'goggles', pivot: [0, 14, -5.5], cubes: [{ u: 0, v: 32, x: -8, y: -2.5, z: -2.5, w: 16, h: 5, d: 5, inflate: 0.15 }] },
+  ],
+};
+/** GhastModel.animateTentacles: each tentacle swings 0.2 either side of 0.4, out of step with the next. */
+export function poseGhast(parts, ticks) {
+  for (let i = 0; i < 9; i += 1) parts[`tentacle${i}`].rotation.x = 0.2 * Math.sin(ticks * 0.3 + i) + 0.4;
+}
+/** MinecartModel: the floor and four sides round it, flat-packed as the game packs them. 64 x 32. */
+export const MINECART = {
+  texW: 64,
+  texH: 32,
+  parts: [
+    { name: 'bottom', pivot: [0, 4, 0], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 0, v: 10, x: -10, y: -8, z: -1, w: 20, h: 16, d: 2 }] },
+    { name: 'front', pivot: [-9, 4, 0], rot: [0, (3 * Math.PI) / 2, 0], cubes: [{ u: 0, v: 0, x: -8, y: -9, z: -1, w: 16, h: 8, d: 2 }] },
+    { name: 'back', pivot: [9, 4, 0], rot: [0, Math.PI / 2, 0], cubes: [{ u: 0, v: 0, x: -8, y: -9, z: -1, w: 16, h: 8, d: 2 }] },
+    { name: 'left', pivot: [0, 4, -7], rot: [0, Math.PI, 0], cubes: [{ u: 0, v: 0, x: -8, y: -9, z: -1, w: 16, h: 8, d: 2 }] },
+    { name: 'right', pivot: [0, 4, 7], cubes: [{ u: 0, v: 0, x: -8, y: -9, z: -1, w: 16, h: 8, d: 2 }] },
+  ],
+};
 /** QuadrupedModel.setupAnim's walk: the legs swing as cos(0.6662 t) x 1.4 x speed, diagonals together. */
 export function poseQuadruped(parts, walk, speed, headPitch = 0) {
   const swing = Math.cos(walk * 0.6662) * 1.4 * speed;
@@ -650,12 +772,49 @@ export function atlas(THREE, images, frame, cols) {
   return { map: pixelTexture(THREE, c), cols, rows };
 }
 
+const opaqueSources = new WeakMap();
+/** Whether every pixel of an image is fully opaque (looked at once per image). */
+function isOpaque(source) {
+  if (opaqueSources.has(source)) return opaqueSources.get(source);
+  let opaque = false;
+  try {
+    const w = source.width;
+    const h = source.height;
+    if (w && h && w * h <= 512 * 512) {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(source, 0, 0);
+      const data = g.getImageData(0, 0, w, h).data;
+      opaque = true;
+      for (let i = 3; i < data.length; i += 4) if (data[i] < 255) { opaque = false; break; }
+    }
+  } catch {
+    opaque = false;
+  }
+  opaqueSources.set(source, opaque);
+  return opaque;
+}
+
+/**
+ * A texture drawn as Minecraft draws one: each pixel a sharp square up close. A solid texture (a
+ * block's) also gets mipmaps and anisotropic filtering, as the game's own mipmap levels do, so a
+ * floor running into the distance holds still instead of crawling; one with see-through pixels
+ * keeps to plain nearest sampling, since averaged-down alpha would eat its thin cut-outs.
+ */
 export function pixelTexture(THREE, source) {
   const t = new THREE.CanvasTexture(source);
   t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
   t.colorSpace = THREE.SRGBColorSpace;
+  if (isOpaque(source)) {
+    t.minFilter = THREE.NearestMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 16;
+  } else {
+    t.minFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+  }
   return t;
 }
 

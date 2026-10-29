@@ -4,6 +4,10 @@
  * that takes a game, and the answer arrives already settled; this file only animates the coin
  * onto the side the server named and shows the seeds that prove it. The host learns their result
  * from the live stream: when one of their open games leaves the board, it is re-read and played.
+ *
+ * The flip is tossed in WebGL where the browser can (coin3d.js, its own chunk): a gold-and-iron
+ * coin off an anvil in a smithy. Without WebGL, or for a player who has chosen 2D (view3d.js), the
+ * flat coin spins instead, for the same 2.2 seconds.
  */
 import {
   state,
@@ -18,6 +22,7 @@ import { $, el, money, clamp, reduceMotion } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, clientSeed } from './api.js';
+import { onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 let root = null;
 
@@ -30,6 +35,8 @@ const watching = new Set();
 const shown = new Set();
 
 let pollTimer = 0;
+/** Set once this browser has shown it cannot draw the 3D coin: the flat one from then on. */
+let no3dCoin = false;
 let refreshing = false;
 
 /* ─────────── holding the wallet still ───────────
@@ -499,7 +506,19 @@ function showFlip(game, { replay = false, counted = false } = {}) {
   }
   proof.append(summary, formula, list);
 
-  body.append(players, coin, verdict, proof);
+  // The 2D/3D switch, for the next flip: this one is already in the air.
+  const switchRow = el('div', 'cfstage__view');
+  switchRow.innerHTML = viewSwitch('cfView');
+  const group = switchRow.firstElementChild;
+  group.hidden = no3dCoin;
+  paintViewSwitch(null, group);
+  onViewSwitch(group, (on) => {
+    setWants3d(on);
+    playSound('click');
+    paintViewSwitch(null, group);
+  });
+
+  body.append(players, coin, verdict, switchRow, proof);
   openModal('Coinflip', (host) => host.append(body));
 
   const land = () => {
@@ -527,7 +546,39 @@ function showFlip(game, { replay = false, counted = false } = {}) {
     return;
   }
   playSound('coin');
-  faces.style.setProperty('--cf-turns', `${turns * 360}deg`);
-  coin.dataset.spin = '1';
-  window.setTimeout(land, 2_200);
+  const spinFlat = () => {
+    faces.style.setProperty('--cf-turns', `${turns * 360}deg`);
+    coin.dataset.spin = '1';
+    window.setTimeout(land, 2_200);
+  };
+  if (!wants3d() || no3dCoin) {
+    spinFlat();
+    return;
+  }
+  coin.dataset.render = '3d';
+  void toss3d(coin, game.result).then((tossed) => {
+    if (tossed) {
+      land();
+      return;
+    }
+    delete coin.dataset.render;
+    spinFlat();
+  });
+}
+
+/** The coin tossed off the anvil (coin3d.js); false when it could not be drawn. */
+async function toss3d(coin, result) {
+  try {
+    const { createCoin3d } = await import('./coin3d.js');
+    const built = await createCoin3d(coin);
+    if (!built) {
+      no3dCoin = true;
+      return false;
+    }
+    built.onCue = (name) => { if (name === 'land') playSound('anvil', { rate: 1.6 }); };
+    await built.flip(result);
+    return true;
+  } catch {
+    return false;
+  }
 }

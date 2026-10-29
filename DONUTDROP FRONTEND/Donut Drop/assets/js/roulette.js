@@ -1,4 +1,9 @@
-/* roulette.js — one server-owned European wheel shared by every browser. */
+/* roulette.js — one server-owned European wheel shared by every browser.
+ *
+ * The wheel is drawn in WebGL (roulette3d.js), its own chunk, at the graphics the player picked or
+ * the machine can manage: a fire charge on a wheel in a Nether fortress, blazes watching. This page
+ * still says which pocket and how long; the 3D wheel only runs the ball there. Without WebGL the flat
+ * wheel turns as it always has. */
 import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
 import { onNavigate } from './routing.js';
@@ -6,6 +11,9 @@ import { tableAvatar } from './table-avatar.js';
 import { linkPlayer } from './player-link.js';
 import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
+import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const ORDER = Object.freeze([
   0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14,
@@ -36,6 +44,7 @@ const CHIPS = Object.freeze([
   [500_000_000n, '$500M'],
   [1_000_000_000n, '$1B'],
 ]);
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 const OUTSIDE = Object.freeze([
   ['low', '1–18'],
   ['even', 'Even'],
@@ -65,6 +74,8 @@ let spinHold = null;
 /* The round this page put chips on. A refresh that left before the chip did comes back without
  * it in `yourBets`; this keeps such a snapshot from letting the hold go a moment too early. */
 let chipsRoundId = null;
+let wheel3d = null; // the fortress's wheel, once it is up
+let wheelTried = null;
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -96,6 +107,101 @@ export function mountRoulette(view) {
     });
   }
   void refresh();
+  void startWheel();
+}
+
+/* ─────────── the wheel in 3D ─────────── */
+
+function startWheel() {
+  if (wheelTried || !wants3d()) return wheelTried;
+  wheelTried = (async () => {
+    const host = $('.roulette__wheelwrap', root);
+    try {
+      const { createRoulette3d } = await import('./roulette3d.js');
+      const built = await createRoulette3d(host, { order: ORDER, red: RED });
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        wheelTried = null;
+        return;
+      }
+      if (!built) {
+        // No WebGL here: the flat wheel is all there is, and its graphics have nothing to choose.
+        $('.roulette__gfx', root).hidden = true;
+        return;
+      }
+      built.onLost = () => {
+        if (wheel3d === built) wheel3d = null;
+        built.dispose();
+        root.dataset.render = '2d';
+      };
+      built.onCue = (cue, at) => {
+        if (cue === 'bounce') playSound('click', { rate: 1.3 - at * 0.08 });
+        else if (cue === 'settle') playSound('tick');
+        else if (cue === 'shoot') playSound('boost');
+        else if (cue === 'burst') playSound('shatter', { rate: 1.3 });
+      };
+      wheel3d = built;
+      root.dataset.render = '3d';
+      const shown = Number($('#rouletteResult', root)?.textContent);
+      if (Number.isInteger(shown)) wheel3d.rest(ORDER.indexOf(shown));
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return wheelTried;
+}
+
+function setGraphics(value) {
+  if (!GRAPHICS.some(([id]) => id === value) || value === graphicsPref() || $('#rouletteWheel', root)?.classList.contains('is-spinning')) {
+    paintGraphics();
+    return;
+  }
+  setGraphicsPref(value);
+  if (wheel3d) {
+    wheel3d.dispose();
+    wheel3d = null;
+    wheelTried = null;
+    root.dataset.render = '2d';
+    void startWheel();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the wheel away for the flat board, 3D builds it again. */
+function setView(on) {
+  if ($('#rouletteWheel', root)?.classList.contains('is-spinning')) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && wheel3d) {
+    wheel3d.dispose();
+    wheel3d = null;
+    wheelTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on) void startWheel();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#rouletteView', root), { disabled: Boolean($('#rouletteWheel', root)?.classList.contains('is-spinning')) });
+  const select = root && $('#rouletteGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = wheel3d?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
 }
 
 function build() {
@@ -111,6 +217,11 @@ function build() {
         <div class="roulette__hub"><b id="rouletteResult">—</b></div>
       </div>
       <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
+      ${viewSwitch('rouletteView')}
+      <label class="roulette__gfx" for="rouletteGfx">
+        <span>Graphics</span>
+        <select id="rouletteGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+      </label>
     </section>
 
     <section class="roulette__board">
@@ -186,6 +297,11 @@ function build() {
     chips.append(button);
   }
   root.addEventListener('click', onClick);
+  $('#rouletteGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#rouletteView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   syncSelection();
 }
 
@@ -402,7 +518,7 @@ function paintClock() {
   const stale = Boolean(snapshot) && !connectionFresh();
   const clock = $('#rouletteClock', root);
   if (clock) {
-    clock.textContent = stale
+    const text = stale
       ? 'RECONNECTING'
       : !snapshot?.round && snapshot?.config?.paused
         ? 'PAUSED'
@@ -411,8 +527,9 @@ function paintClock() {
           : remaining > 0
             ? `${(remaining / 1000).toFixed(1)}s`
             : 'SETTLING';
+    if (clock.textContent !== text) clock.textContent = text;
   }
-  root.dataset.phase = stale
+  const phase = stale
     ? 'reconnecting'
     : !snapshot?.round
       ? 'paused'
@@ -421,11 +538,20 @@ function paintClock() {
         : remaining > 0
           ? 'betting'
           : 'settling';
-  root.dataset.connection = stale ? 'stale' : 'live';
-  root.classList.toggle('is-locked', !isBettingOpen());
+  if (root.dataset.phase !== phase) root.dataset.phase = phase;
+  const connection = stale ? 'stale' : 'live';
+  if (root.dataset.connection !== connection) root.dataset.connection = connection;
+  const open = isBettingOpen();
+  root.classList.toggle('is-locked', !open);
+  /* Ten times a second, but the board is only repainted when something it shows has changed:
+   * re-setting fifty buttons' state every tick was a style pass every tick on a slow machine. */
+  const key = `${phase}|${open}|${placing}|${state.authenticated}|${amountMinor}|${snapshot?.round?.id}|${roundAllowanceMinor()}|${Boolean(snapshot)}`;
+  if (key === paintedClockKey) return;
+  paintedClockKey = key;
   paintPhase();
   paintControls();
 }
+let paintedClockKey = '';
 
 async function refresh() {
   if (polling || !root?.isConnected) return;
@@ -692,6 +818,7 @@ function setWheel(result) {
   const wheel = $('#rouletteWheel', root);
   wheel.style.transition = 'none';
   wheel.style.transform = `rotate(${wheelRotation}deg)`;
+  wheel3d?.rest(index);
 }
 
 /**
@@ -780,9 +907,12 @@ function spinTo(result, bets, opensAt) {
   if (animationMs === 0) {
     wheel.style.transition = 'none';
     wheel.style.transform = `rotate(${wheelRotation}deg)`;
+    wheel3d?.rest(index);
     finish();
     return;
   }
+  // The fortress's wheel runs the ball into the same pocket in the same time.
+  wheel3d?.spin(index, animationMs);
 
   takeSpinHold();
   wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
@@ -798,6 +928,7 @@ function announceResult(result, bets) {
   if (!bets.length) return;
   const staked = bets.reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
   const paid = bets.reduce((sum, bet) => sum + BigInt(bet.payoutMinor || '0'), 0n);
+  if (paid > 0n) wheel3d?.cheer(paid >= staked * 5n);
   toast({
     kind: paid > 0n ? 'win' : 'lose',
     title: paid > 0n ? `${result} hit — you won` : `${result} hit`,

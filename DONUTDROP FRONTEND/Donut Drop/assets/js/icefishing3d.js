@@ -20,7 +20,8 @@
 import { reduceMotion } from './util.js';
 import { getTHREE, loadImage } from './mc3d.js';
 import { COD, PLAYER, SALMON, atlas, buildModel, itemModel, makeSprites, pixelTexture, placeEntity, poseCod, poseSalmon } from './mcmodels.js';
-import { chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { gradePass } from './scenery3d.js';
 
 const PLAYER_PIXEL = 0.9375 / 16;
 const GRID = 5;
@@ -71,7 +72,7 @@ export async function createIce3d(host, { catches, icon }) {
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.1 * BRIGHTNESS;
   const scale = (n) => Math.max(1, Math.round(n * tier.particles));
   const FRAME_MS = frameMs(tier);
   let nextFrameAt = 0;
@@ -118,12 +119,13 @@ export async function createIce3d(host, { catches, icon }) {
   let bloom = null;
   if (addons) {
     try {
-      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.antialias ? 4 : 0 });
+      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.samples });
       composer = new addons.EffectComposer(renderer, target);
       composer.addPass(new addons.RenderPass(scene, camera));
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.6, 0.55, 0.92);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
+      composer.addPass(gradePass(THREE, addons, { contrast: 1.04, saturation: 1.04, lift: [0.0, 0.008, 0.02], gain: [0.99, 1.0, 1.02], vignette: 0.16 }));
     } catch {
       composer = null;
       bloom = null;

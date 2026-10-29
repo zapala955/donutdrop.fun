@@ -354,7 +354,7 @@ describe('fishing: the page and the dive', () => {
 
   it('asks of a machine only what it can do, and steps down when it cannot keep up', async () => {
     const lake = await front('assets/js/fishing3d.js');
-    assert.match(lake, /import \{ chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    assert.match(lake, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
     for (const use of ['tier.particles', 'tier.creatures', 'tier.view', 'tier.waves', 'tier.mirror', 'tier.composer', 'tier.antialias', 'frameMs(tier)', 'minFpsFor(tier)']) {
       assert.ok(lake.includes(use), use);
     }

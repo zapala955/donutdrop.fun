@@ -19,6 +19,9 @@
   --mines-tnt: var(--red);
   /* The live feed's profit green, so a win reads the same here as in the feed. */
   --mines-win: #35d07f;
+  /* The cave (mines3d.js): its dark, and the shade drawn in at its edges. */
+  --mines-cave: #07080d;
+  --mines-vignette: rgba(0, 0, 0, .55);
   --mines-ease: cubic-bezier(.22, 1, .36, 1);
 
   display: grid;
@@ -62,6 +65,13 @@
 }
 .mines__readout span { font: 600 .75rem/1.3 var(--mono); color: var(--muted); }
 
+/* The board and the banner over it; in 3D, the cave too. */
+.mines__pit {
+  position: relative;
+  width: min(100%, 520px);
+  margin: 0 auto;
+}
+
 .mines__board {
   position: relative;
   display: grid;
@@ -69,7 +79,6 @@
   gap: 8px;
   width: min(100%, 520px);
   aspect-ratio: 1;
-  margin: 0 auto;
   padding: 12px;
   border-radius: 16px;
   background: linear-gradient(180deg, #0d0d10, #08080a);
@@ -322,12 +331,68 @@
   white-space: nowrap;
 }
 
+/* ─────────── the cave (mines3d.js) ─────────── */
+.mines[data-render="3d"] .mines__pit {
+  width: 100%;
+  aspect-ratio: 16 / 10.5;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--mines-cave);
+  box-shadow: inset 0 0 0 1px var(--ob-line);
+}
+.mines__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.mines[data-render="3d"] .mines__pit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 55%, transparent 58%, var(--mines-vignette));
+  pointer-events: none;
+}
+/* The flat field stays for the keyboard and a screen reader, out of sight and out of the pointer's
+ * way: the arrow keys move a white outline in the cave instead. */
+.mines[data-render="3d"] .mines__board {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+/* Over the cave the result sits at the top, clear of the field it describes. */
+.mines[data-render="3d"] .mines__banner { top: 14px; z-index: 2; transform: translateX(-50%); }
+
+.mines__gfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--faint);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.mines__gfx select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font: inherit;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+.mines__gfx select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.mines__gfx[hidden] { display: none; }
+
 /* ─────────── narrower screens ─────────── */
 @media (max-width: 1180px) {
   .mines { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
 }
 @media (max-width: 560px) {
   .mines { gap: 12px; }
+  .mines[data-render="3d"] .mines__pit { aspect-ratio: 4 / 4.4; border-radius: 12px; }
   .mines__stage { padding: 10px; border-radius: 16px; }
   .mines__board { gap: 7px; padding: 8px; border-radius: 14px; }
   .mtile { border-radius: 8px; }

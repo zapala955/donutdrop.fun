@@ -17,7 +17,8 @@ import { getTHREE, loadImage, softDot } from './mc3d.js';
 import {
   CHICKEN, COW, PIG, SHEEP, SHEEP_FUR, VILLAGER, atlas, buildModel, makeSprites, pixelTexture, placeEntity, poseChicken, poseQuadruped,
 } from './mcmodels.js';
-import { chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { gradePass } from './scenery3d.js';
 import { drawText, fontFromImage, textWidth } from './mcfont.js';
 
 const TRACK = 46;            // blocks from the gate to the line
@@ -73,7 +74,7 @@ export async function createDerby3d(host, { racers }) {
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.05 * BRIGHTNESS;
   // The shader-pack sun: real shadows on medium and high, none on a low-end machine.
   const shadows = tier.name !== 'low';
   renderer.shadowMap.enabled = shadows;
@@ -123,12 +124,13 @@ export async function createDerby3d(host, { racers }) {
   let bloom = null;
   if (addons) {
     try {
-      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.antialias ? 4 : 0 });
+      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.samples });
       composer = new addons.EffectComposer(renderer, target);
       composer.addPass(new addons.RenderPass(scene, camera));
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.35, 0.5, 1.2);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
+      composer.addPass(gradePass(THREE, addons, { contrast: 1.04, saturation: 1.08, lift: [0.008, 0.008, 0.012], gain: [1.02, 1.01, 0.98], vignette: 0.16 }));
     } catch {
       composer = null;
       bloom = null;

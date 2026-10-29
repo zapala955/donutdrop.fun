@@ -253,6 +253,56 @@
 }
 
 /* ─────────── narrower screens ─────────── */
+/* ─────────── the meadow (chicken3d.js) ─────────── */
+.chicken__view { display: none; }
+.chicken[data-render="3d"] .chicken__view {
+  position: relative;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 16 / 8.5;
+  overflow: hidden;
+  border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+.chicken__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* The flat road stays for a screen reader, out of sight. */
+.chicken[data-render="3d"] .chicken__road {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.chicken__gfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-s2);
+  margin-top: var(--lx-s1, 4px);
+  color: var(--lx-faint);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.chicken__gfx[hidden] { display: none; }
+.chicken__gfx select {
+  height: 32px;
+  padding: 0 var(--lx-s2);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  font: inherit;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+.chicken__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.chicken__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
 @media (max-width: 1023px) {
   .chicken { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
   .chicken__stage { padding: var(--lx-s4) var(--lx-s3); }

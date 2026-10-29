@@ -20,6 +20,8 @@
   --dice-lose: rgba(255, 34, 34, .62);
   --dice-well: var(--lx-1);
   --dice-grip: rgba(10, 10, 12, .55);
+  /* The 3D range's sky, behind the canvas until its first frame. */
+  --dice-sky: #78a7ff;
 
   display: grid;
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
@@ -313,12 +315,51 @@ body.lx .dice__field--read:hover { border-color: var(--lx-4); }
 }
 
 /* ─────────── narrower screens ─────────── */
+/* ─────────── the 3D range (dice3d.js) ───────────
+ * Over the track, never instead of it: the slider under it is still how the line is drawn. */
+.dice__scene { display: none; }
+.dice[data-render="3d"] .dice__stage { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: var(--lx-s4); }
+.dice[data-render="3d"] .dice__scene {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 7;
+  overflow: hidden;
+  border-radius: var(--lx-r);
+  background: var(--dice-sky);
+}
+.dice__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+
+.dice__gfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-s2);
+  margin-top: var(--lx-s1, 4px);
+  color: var(--lx-faint);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.dice__gfx select {
+  height: 32px;
+  padding: 0 var(--lx-s2);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  cursor: pointer;
+}
+.dice__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.dice__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
 @media (max-width: 1023px) {
   .dice { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
   .dice__stage { gap: var(--lx-s4); padding: var(--lx-s4) var(--lx-s3); }
 }
 @media (max-width: 560px) {
   .dice { --dice-marker: 56px; }
+  .dice[data-render="3d"] .dice__scene { aspect-ratio: 16 / 10; }
   .dice__board { padding: var(--lx-s4) var(--lx-s3) var(--lx-s3); }
   .dice__recent { justify-content: flex-start; }
   .dice__chip { min-width: 46px; }

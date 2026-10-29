@@ -7,10 +7,11 @@
  *           at most 1 (less on a dense phone screen), no antialiasing, no glow, no post-processing,
  *           a third of the particles, fewer creatures, a shorter view into the fog, and a steady
  *           thirty frames a second -- the whole scene stepped thirty times, not only drawn.
- *   medium  most laptops: resolution up to 1.5, glow at half resolution, most of the effects, sixty
- *           frames a second at most (a fast screen gets no more, and the machine keeps its breath).
- *   high    a real graphics card: resolution up to 2, multisampling, full glow, everything, as many
- *           frames as the screen shows.
+ *   medium  most laptops: the screen's resolution up to 2, light multisampling (2x), glow at half
+ *           resolution, most of the effects, sixty frames a second at most (a fast screen gets no
+ *           more, and the machine keeps its breath).
+ *   high    a real graphics card: resolution up to 2, 4x multisampling, full glow, everything, as
+ *           many frames as the screen shows.
  *
  * The guess comes from the GPU's own name where the browser gives it (WEBGL_debug_renderer_info),
  * the device's memory and cores, and whether it is a phone. A player can overrule it from the game's
@@ -19,11 +20,15 @@
  */
 
 export const TIERS = {
-  low: { name: 'low', ratio: 1, mobileRatio: 0.75, antialias: false, bloom: false, composer: false, particles: 0.35, creatures: 0.5, view: 0.7, waves: 40, fps: 30, mirror: false, lights: 1 },
-  medium: { name: 'medium', ratio: 1.5, mobileRatio: 1, antialias: false, bloom: true, bloomScale: 0.5, composer: true, particles: 0.7, creatures: 0.8, view: 0.85, waves: 72, fps: 60, mirror: true, lights: 2 },
-  high: { name: 'high', ratio: 2, mobileRatio: 1.5, antialias: true, bloom: true, bloomScale: 1, composer: true, particles: 1, creatures: 1, view: 1, waves: 128, fps: 0, mirror: true, lights: 4 },
+  low: { name: 'low', ratio: 1, mobileRatio: 0.75, antialias: false, samples: 0, bloom: false, composer: false, particles: 0.35, creatures: 0.5, view: 0.7, waves: 40, fps: 30, mirror: false, lights: 1 },
+  medium: { name: 'medium', ratio: 2, mobileRatio: 1, antialias: false, samples: 2, bloom: true, bloomScale: 0.5, composer: true, particles: 0.7, creatures: 0.8, view: 0.85, waves: 72, fps: 60, mirror: true, lights: 2 },
+  high: { name: 'high', ratio: 2, mobileRatio: 1.5, antialias: true, samples: 4, bloom: true, bloomScale: 1, composer: true, particles: 1, creatures: 1, view: 1, waves: 128, fps: 0, mirror: true, lights: 4 },
 };
 const ORDER = ['low', 'medium', 'high'];
+
+/** How bright every scene is drawn: each one's own exposure is multiplied by this, on every tier,
+ * so the whole site's 3D can be lifted or dimmed in one place. */
+export const BRIGHTNESS = 1.35;
 
 const isMobile = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')
   || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent || ''));

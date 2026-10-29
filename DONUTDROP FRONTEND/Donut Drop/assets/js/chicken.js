@@ -9,12 +9,19 @@
  * The road scrolls inside its own box and follows the chicken; the page itself never scrolls
  * sideways. Motion is two things: the chicken's hop to the next lane, and the minecart coming down
  * on a hit. With reduced motion both become an instant change of state.
+ *
+ * The road is drawn in WebGL (chicken3d.js), its own chunk, at the graphics the player picked or the
+ * machine can manage: rail lines across a meadow, a sign at each with what it pays, the chicken
+ * hopping over them. The flat road stays under it, out of sight, for a screen reader, and comes back
+ * whole without WebGL.
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const LANES = 20;
 const EDGE_BPS = 1000n;
@@ -27,6 +34,7 @@ const MODES = {
   hardcore: { hit: 1, of: 2, label: 'Hardcore' },
 };
 const MODE_NAMES = Object.keys(MODES);
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
 let config = null;
@@ -36,6 +44,8 @@ let busy = false;
 let pressed = null; // 'start' | 'step' | 'cashout'
 let stakeText = '1m';
 let mode = 'easy';
+let road3d = null; // the meadow, once it is up
+let roadTried = null;
 
 /* ─────────── the maths, mirrored from lib/chicken.ts ─────────── */
 
@@ -134,6 +144,7 @@ async function start() {
       { idempotencyKey: key },
     ));
     game = response.game;
+    road3d?.reset();
     playSound('click');
     say(`Run started on ${MODES[mode].label}. Lane 1 pays ${times(game.nextMultiplierBps)}.`);
     await refreshSeed();
@@ -163,6 +174,7 @@ async function step() {
   try {
     const response = await api.post(`/v1/chicken/games/${game.id}/step`, { lane });
     game = response.game;
+    if (road3d) await road3d.step(lane, game.outcome === 'hit');
     if (game.outcome === 'hit') {
       paint();
       follow(true);
@@ -212,6 +224,7 @@ async function cashOut() {
 function finished() {
   if (game?.outcome !== 'cashout') return;
   playSound('win');
+  road3d?.celebrate(game.multiplierBps);
   const across = game.crossed === LANES ? ' from the far side' : '';
   say(`Cashed out${across} at ${times(game.multiplierBps)} for ${money(Number(game.payoutMinor))}.`);
 }
@@ -278,6 +291,118 @@ function paint() {
   paintRoad();
   paintReadout();
   paintControls();
+  paintGraphics();
+  syncRoad();
+}
+
+/* ─────────── the meadow ─────────── */
+
+function startRoad() {
+  if (roadTried || !wants3d()) return roadTried;
+  roadTried = (async () => {
+    const host = $('.chicken__view', root);
+    try {
+      const { createChicken3d } = await import('./chicken3d.js');
+      const built = await createChicken3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        roadTried = null;
+        return;
+      }
+      if (!built) {
+        // No WebGL here: the flat road is all there is, and its graphics have nothing to choose.
+        $('.chicken__gfx', root).hidden = true;
+        return;
+      }
+      built.onLost = () => {
+        if (road3d === built) road3d = null;
+        built.dispose();
+        root.dataset.render = '2d';
+        paint();
+        follow(false);
+      };
+      built.onCue = (cue) => {
+        if (cue === 'hop') playSound('tick');
+        else if (cue === 'cart') playSound('boost');
+        else if (cue === 'hit') {
+          playSound('slam');
+          try { navigator.vibrate?.(60); } catch { /* not every browser lets a page vibrate */ }
+        } else if (cue === 'egg') playSound('coin');
+      };
+      road3d = built;
+      root.dataset.render = '3d';
+      syncRoad();
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return roadTried;
+}
+
+/** The meadow as the run stands: how far, what every line pays, and how it ended. */
+function syncRoad() {
+  if (!road3d) return;
+  const name = roadMode();
+  road3d.sync({
+    crossed: game?.crossed ?? 0,
+    // The game's font has no multiplication sign: a plain x, as a sign written in the game would read.
+    labels: Array.from({ length: LANES }, (_, lane) => times(multiplierBps(name, lane + 1)).replace('×', 'x')),
+    over: over(),
+    outcome: game?.outcome ?? null,
+    cartLane: over() ? game.cartLane : null,
+  });
+}
+
+function setGraphics(value) {
+  if (busy || inPlay() || !GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (road3d) {
+    road3d.dispose();
+    road3d = null;
+    roadTried = null;
+    root.dataset.render = '2d';
+    void startRoad();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the road away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (busy) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && road3d) {
+    road3d.dispose();
+    road3d = null;
+    roadTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on) void startRoad();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#chickenView', root), { disabled: Boolean(busy) });
+  const select = root && $('#chickenGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = road3d?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+  select.disabled = inPlay() || busy;
 }
 
 /** Puts a sprite over the middle of a lane, at the height the stylesheet gives it. */
@@ -424,6 +549,7 @@ function build() {
         <b id="chickenNow">—</b>
         <span id="chickenNext"></span>
       </div>
+      <div class="chicken__view" aria-hidden="true"></div>
       <div class="chicken__road" id="chickenRoad" tabindex="0" aria-label="Twenty lanes of rails, crossed left to right">
         <div class="chicken__track" role="list">
           <div class="clane clane--start" role="listitem" aria-label="The starting curb"></div>
@@ -454,6 +580,11 @@ function build() {
         </button>
         <button class="chicken__cash" id="chickenCash" type="button" hidden>Cash out</button>
         <p class="chicken__hint" id="chickenHint" aria-live="polite"></p>
+        ${viewSwitch('chickenView')}
+        <label class="chicken__gfx" for="chickenGfx">
+          <span>Graphics</span>
+          <select id="chickenGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
     <div class="chicken__say" id="chickenSay" role="status" aria-atomic="true"></div>`;
@@ -490,6 +621,11 @@ function build() {
     else void start();
   });
   $('#chickenCash', root).addEventListener('click', () => void cashOut());
+  $('#chickenGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#chickenView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   // The lanes' positions move with the layout; keep the sprites over them.
   window.addEventListener('resize', () => { if (root?.isConnected) { paintRoad(); follow(false); } });
 }
@@ -515,4 +651,5 @@ export function mountChicken(section) {
     });
   }
   void load();
+  void startRoad();
 }
