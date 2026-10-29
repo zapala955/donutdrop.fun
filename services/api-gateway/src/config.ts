@@ -647,6 +647,32 @@ const environmentSchema = z
      * they are ready to use it, so the default is "any age" (ten years). Lower it to keep the entry
      * for recent accounts only; 0 closes it, leaving sign-up as the only moment a code counts. */
     REFERRAL_LATE_ENTRY_DAYS: z.coerce.number().int().min(0).max(3650).default(3650),
+    /* Crowns: the best multiplier per house game inside a rolling window, at or above a minimum
+     * stake, kept by a sweeper that reads finished rounds (lib/crowns.ts). The window is what makes
+     * a crown fall when nobody beats it. Bounties are staff-set prizes for the first round that
+     * reaches a multiplier; the cap is per bounty. */
+    CROWNS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    CROWN_WINDOW_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+    CROWN_MIN_STAKE_MINOR: positiveBigintString.default('1000000'),
+    CROWN_SWEEP_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
+    CROWN_BOUNTY_MAX_PRIZE_MINOR: positiveBigintString.default('1000000000'),
+    /* The house pool (lib/staking.ts): players stake balance and share STAKING_SHARE_BPS of the
+     * house's daily game result, profit and loss, scaled by how full the pool is against its cap.
+     * OFF until an operator opens it: it puts the house's own result on the table. The sweep interval
+     * is boot-only; the rest can be changed live. */
+    STAKING_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    STAKING_SHARE_BPS: z.coerce.number().int().min(0).max(5_000).default(2_000),
+    STAKING_POOL_CAP_MINOR: positiveBigintString.default('50000000000'),
+    STAKING_MIN_STAKE_MINOR: positiveBigintString.default('10000000'),
+    STAKING_MAX_PER_PLAYER_MINOR: positiveBigintString.default('5000000000'),
+    STAKING_UNSTAKE_HOURS: z.coerce.number().int().min(1).max(720).default(48),
+    STAKING_SWEEP_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
     /* Daily codes: a personal one-use code the community bot DMs to members who opted in, redeemed
      * for a random prize from nothing up to the ceiling (lib/daily-codes.ts). Whether the bot SENDS
      * them is a dashboard switch (default off); this is whether the gateway will PAY them. The day's
@@ -1562,6 +1588,18 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     minesDuelLobbyTtlMinutes: env.MINES_DUEL_LOBBY_TTL_MINUTES,
     minesDuelPlaySeconds: env.MINES_DUEL_PLAY_SECONDS,
     referralLateEntryDays: env.REFERRAL_LATE_ENTRY_DAYS,
+    crownsEnabled: env.CROWNS_ENABLED,
+    crownWindowDays: env.CROWN_WINDOW_DAYS,
+    crownMinStakeMinor: BigInt(env.CROWN_MIN_STAKE_MINOR),
+    crownSweepSeconds: env.CROWN_SWEEP_SECONDS,
+    crownBountyMaxPrizeMinor: BigInt(env.CROWN_BOUNTY_MAX_PRIZE_MINOR),
+    stakingEnabled: env.STAKING_ENABLED,
+    stakingShareBps: env.STAKING_SHARE_BPS,
+    stakingPoolCapMinor: BigInt(env.STAKING_POOL_CAP_MINOR),
+    stakingMinStakeMinor: BigInt(env.STAKING_MIN_STAKE_MINOR),
+    stakingMaxPerPlayerMinor: BigInt(env.STAKING_MAX_PER_PLAYER_MINOR),
+    stakingUnstakeHours: env.STAKING_UNSTAKE_HOURS,
+    stakingSweepSeconds: env.STAKING_SWEEP_SECONDS,
     dailyCodesEnabled: env.DAILY_CODES_ENABLED,
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),

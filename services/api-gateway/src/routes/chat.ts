@@ -71,6 +71,7 @@ interface MessageRow {
   wagered_minor: string | null;
   creator_code: string | null;
   creator_platform: string | null;
+  crowns?: string[] | null;
 }
 
 /**
@@ -81,11 +82,16 @@ interface MessageRow {
  * of a *new* request does not take away a code that was already granted. The code itself is read
  * from `referral_codes` rather than from `requested_code`, because an admin can approve under a
  * different code and a player can rename theirs afterwards -- the tag shows the code that works.
+ *
+ * The crowns are the games the author holds a crown on right now (lib/crowns.ts): at most one
+ * current reign per game, so the subquery reads a handful of rows at most.
  */
 const MESSAGE_SELECT = `
   SELECT m.id, m.body, m.created_at, u.minecraft_username AS author,
          m.user_id AS author_id, u.role, t.wagered_minor,
-         creator.code AS creator_code, creator.platform AS creator_platform
+         creator.code AS creator_code, creator.platform AS creator_platform,
+         (SELECT array_agg(cr.game ORDER BY cr.game) FROM crown_reigns cr
+           WHERE cr.user_id = m.user_id AND cr.ended_at IS NULL) AS crowns
     FROM chat_messages m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN user_wager_totals t ON t.user_id = m.user_id
@@ -146,6 +152,7 @@ function present(config: AppConfig, row: MessageRow) {
     isStaff: row.role === 'admin',
     ...decorate(config, row.wagered_minor ?? null),
     ...mediaTag(config, row),
+    ...(config.crownsEnabled && row.crowns?.length ? { crowns: row.crowns } : {}),
     createdAt: row.created_at,
   };
 }

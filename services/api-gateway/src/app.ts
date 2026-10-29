@@ -42,6 +42,8 @@ import { registerEconomyRoutes } from './routes/economy.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMinecraftInternalRoutes } from './routes/minecraft-in.js';
 import { registerInsightRoutes } from './routes/insights.js';
+import { registerCrownRoutes } from './routes/crowns.js';
+import { registerStakingRoutes } from './routes/staking.js';
 import { registerReferralRoutes } from './routes/referrals.js';
 import { registerShareRoutes } from './routes/shares.js';
 import { registerPromotionRoutes } from './routes/promotions.js';
@@ -65,6 +67,8 @@ import { registerVipRoutes } from './routes/vip.js';
 import { registerMediaTestRoutes } from './routes/media-test.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { startAntiDrainMonitor } from './lib/anti-drain.js';
+import { startCrownSweeper } from './lib/crowns.js';
+import { startStakingJobs } from './lib/staking.js';
 import { startTellerSweeper } from './lib/teller-sweeper.js';
 import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
@@ -271,6 +275,8 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerDiscordRewardRoutes(app, db, config);
   await registerInsightRoutes(app, db, config);
   await registerShareRoutes(app, db, config);
+  await registerCrownRoutes(app, db, config);
+  await registerStakingRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   await registerMediaTestRoutes(app, db, config);
   await registerNotificationRoutes(app, db, config);
@@ -282,6 +288,8 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerAdminPayoutRoutes(app, db, config);
   await registerAdminDiscordRoutes(app, db, config);
   startAntiDrainMonitor(app, db, config);
+  startCrownSweeper(app, db, config);
+  startStakingJobs(app, db, config);
   /* Registers nothing at all unless DISCORD_CONTROL_ENABLED is on — see the note in the module.
    * Sits next to the admin routes because that is what it is: a second, narrower door into the
    * same privileges, and the two belong where a reader finds them together. */

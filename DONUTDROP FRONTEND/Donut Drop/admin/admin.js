@@ -513,6 +513,13 @@ async function loadOverview() {
       false,
       amountText(m.wallet_staff_minor ?? 0),
     ],
+    /* Owed to players like a balance, just locked in the house pool (lib/staking.ts). */
+    [
+      'House pool',
+      compactAmount(m.staked_total_minor ?? 0),
+      false,
+      amountText(m.staked_total_minor ?? 0),
+    ],
     [
       'Wagered today',
       compactAmount(m.wagered_today_minor ?? 0),
@@ -2359,6 +2366,7 @@ async function loadEconomy() {
   const totals = economy.totals ?? {};
   renderStats($('economyStats'), [
     ['Wallet liability', amountText(totals.wallet_total_minor ?? 0)],
+    ['Staked in the house pool', amountText(totals.staked_total_minor ?? 0)],
     ['Lifetime ledger credits', amountText(totals.ledger_credits_minor ?? 0)],
     ['Lifetime ledger debits', amountText(totals.ledger_debits_minor ?? 0)],
     ['Cash received', amountText(totals.cash_received_minor ?? 0)],
@@ -3635,6 +3643,8 @@ const GROUP_LABELS = {
   minesduel: 'Mines Duel',
   payouts: 'Payouts & anti-drain',
   dailycodes: 'Daily codes',
+  crowns: 'Crowns & bounties',
+  staking: 'House pool',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',

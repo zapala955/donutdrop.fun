@@ -52,7 +52,8 @@ describe('admin dashboard figures', () => {
     );
     assert.ok(allowed.length > 40, 'the kind constraint was found');
     /* Not the house's money either way: a tip moves cash between two players, the piggy bank
-     * was retired before it took a stake, and a media test top-up is play money on a test twin. */
+     * was retired before it took a stake, a media test top-up is play money on a test twin, and a
+     * house-pool stake or its payback moves a player's own money into the pool and out again. */
     const neutral = [
       'tip_sent',
       'tip_received',
@@ -60,6 +61,8 @@ describe('admin dashboard figures', () => {
       'piggy_claim',
       'piggy_break',
       'demo_topup',
+      'staking_stake',
+      'staking_release',
     ];
     const placed = new Set<string>([
       ...GAMES.flatMap((game) => [...game.stakes, ...game.payouts, ...game.refunds]),

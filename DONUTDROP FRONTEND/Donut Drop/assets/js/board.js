@@ -8,6 +8,7 @@
  * is a number that can be stale in a way the player cannot see.
  */
 import { state, bus, refreshLeaderboard, refreshStatistics } from './store.js';
+import { mountCrowns } from './crowns.js';
 import { tableAvatar } from './table-avatar.js';
 import { linkPlayer } from './player-link.js';
 import { $, el, money, pct } from './util.js';
@@ -50,6 +51,7 @@ let loading = false;
 // ─────────── leaderboard ───────────
 
 export function mountLeaderboard(view) {
+  mountCrowns($('#crownsRoot', view));
   boardRoot = $('#boardRoot', view);
   if (!boardRoot) return;
   if (!boardRoot.dataset.built) {

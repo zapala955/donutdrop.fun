@@ -124,6 +124,10 @@
 <!-- the notification bell in the top bar (assets/js/notices.js); its rules are scoped to .notif
      and outweigh the skin sheets' generic ones, so it need not load after them -->
 <link rel="stylesheet" href="assets/css/notices.css" />
+<!-- the crowns and bounties above the leaderboard (assets/js/crowns.js); scoped to .crowns -->
+<link rel="stylesheet" href="assets/css/crowns.css" />
+<!-- the house pool on the Rewards page (assets/js/staking.js); scoped to .pool -->
+<link rel="stylesheet" href="assets/css/staking.css" />
 <!-- the not-affiliated notice at the foot of every page -->
 <link rel="stylesheet" href="assets/css/sitefoot.css" />
 <!-- the content area's loader, from the first paint until the router shows a page -->
@@ -219,6 +223,8 @@
 <link rel="modulepreload" href="assets/js/slots3d.js" />
 <link rel="modulepreload" href="assets/js/mystery.js" />
 <link rel="modulepreload" href="assets/js/fx.js" />
+<link rel="modulepreload" href="assets/js/staking.js" />
+<link rel="modulepreload" href="assets/js/crowns.js" />
 <link rel="modulepreload" href="assets/js/settings.js" />
 <link rel="modulepreload" href="assets/js/profanity.js" />
 <link rel="modulepreload" href="assets/js/audio.js" />
@@ -1145,6 +1151,8 @@
           data-tip="Your referral share from invited players builds here until you claim it."></button></h1>
       </header>
       <div class="rake" id="rewardsRoot"></div>
+      <!-- the house pool (assets/js/staking.js); empty while it is closed and nothing is staked -->
+      <div class="pool" id="stakingRoot"></div>
     </section>
 
     <!-- ─────── DAILY REWARDS ─────── -->
@@ -1192,6 +1200,8 @@
           aria-label="Every board covers the last 30 days, so the top is always reachable."
           data-tip="Every board covers the last 30 days, so the top is always reachable."></button></h1>
       </header>
+      <!-- the crowns and bounties (assets/js/crowns.js) above the boards -->
+      <div class="crowns" id="crownsRoot"></div>
       <div class="board" id="boardRoot"></div>
     </section>
 

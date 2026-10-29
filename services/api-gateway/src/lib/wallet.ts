@@ -114,7 +114,15 @@ export type WalletKind =
   | 'daily_code_reward'
   /* Media test mode: play money paid into a creator's test twin, and only ever into a twin. The
    * twin is outside the house figures (staffPredicate), so this is not a cost to the house. */
-  | 'demo_topup';
+  | 'demo_topup'
+  /* Crowns: the prize of a bounty, paid to the first round that reached it. Referenced by the
+   * bounty's own id, so a bounty can be paid once and only once (lib/crowns.ts). */
+  | 'bounty_reward'
+  /* The house pool (lib/staking.ts): balance moved into a stake (debit, by the stake's id), paid
+   * back when it unlocks (by the same id), and a winning day's slice (by the stake-day's id). */
+  | 'staking_stake'
+  | 'staking_release'
+  | 'staking_reward';
 
 /**
  * Credits the wallet and writes the matching ledger row.

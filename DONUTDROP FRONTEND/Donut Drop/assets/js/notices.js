@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { state, bus } from './store.js';
 import { $, money } from './util.js';
 import { toast } from './ui.js';
+import { crownGameName, formatX } from './crowns.js';
 
 /* While the stream is up a notice says when to look; while it is down, this often instead. */
 const FALLBACK_POLL_MS = 30_000;
@@ -29,6 +30,7 @@ const ICONS = {
   staff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6z"/><path d="m9 12 2 2 4-4"/></svg>',
   coins: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="7" rx="5" ry="2.5"/><path d="M4 7v4c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V7"/><path d="M10 15.4c.9 1.3 2.8 2.1 5 2.1 2.8 0 5-1.1 5-2.5v-4c0-1.4-2.2-2.5-5-2.5"/></svg>',
   bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  crown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16l1-10-5 4-4-7-4 7-5-4z"/><path d="M5 21h14"/></svg>',
 };
 
 /* What each kind says. A kind the page does not know yet is left out rather than shown blank. */
@@ -56,6 +58,37 @@ const KINDS = {
   discord_tag_reward: { icon: 'gift', title: () => 'Discord reward', detail: () => 'For wearing the server tag today' },
   discord_invite_reward: { icon: 'gift', title: () => 'Discord invite reward', detail: () => 'Someone you invited linked their account' },
   signup_bonus: { icon: 'gift', title: () => 'Welcome bonus', detail: () => 'To start you off' },
+  /* Crowns (crowns.js): the figure is the multiplier, not money. */
+  crown_lost: {
+    icon: 'crown',
+    title: (n) => `${crownGameName(n.game)} crown taken`,
+    detail: (n) =>
+      n.byMultiplierX100
+        ? `${n.from ?? 'Someone'} hit ${formatX(n.byMultiplierX100)}. Beat it to take it back`
+        : 'Someone beat your record',
+    figure: (n) => formatX(n.multiplierX100),
+  },
+  crown_expired: {
+    icon: 'crown',
+    title: (n) => `${crownGameName(n.game)} crown ran out`,
+    detail: () => 'Your record is 30 days old. Set a new one',
+    figure: (n) => formatX(n.multiplierX100),
+  },
+  bounty_won: {
+    icon: 'gift',
+    title: () => 'Bounty won',
+    detail: (n) => `First to ${formatX(n.multiplierX100)} on ${crownGameName(n.game)}`,
+  },
+  /* The house pool (staking.js): a settled day across the player's stakes, and a stake paid back. */
+  staking_day: {
+    icon: 'coins',
+    title: (n) => (Number(n.amountMinor) < 0 ? 'House pool: losing day' : 'House pool: winning day'),
+    detail: (n) =>
+      Number(n.amountMinor) < 0
+        ? `Your share of ${n.to ?? 'the day'}, taken off your stake`
+        : `Your share of ${n.to ?? 'the day'}, in your balance`,
+  },
+  staking_released: { icon: 'back', title: () => 'Stake paid back', detail: () => 'Your unstaked amount is back in your balance' },
 };
 
 const READY = {
@@ -78,6 +111,7 @@ let retryTimer = 0;
 
 /** "+$12.4M" for money in, "$12.4M" for a withdrawal, "-$2M" for a debit. */
 function amountText(n) {
+  if (KINDS[n.kind]?.figure) return KINDS[n.kind].figure(n);
   const value = Number(n.amountMinor) || 0;
   if (KINDS[n.kind]?.out) return money(value);
   return value < 0 ? money(value) : '+' + money(value);

@@ -59,6 +59,8 @@ export function initLiveEvents() {
   // Per player: a deposit, a paid or refunded withdrawal, a tip or a reward landed. The bell
   // (notices.js) re-reads itself and app.js checks for a deposit to announce.
   source.addEventListener('notice', () => window.dispatchEvent(new CustomEvent('donut:notice')));
+  // A crown changed hands or fell, or a bounty moved. The crowns panel (crowns.js) re-reads itself.
+  source.addEventListener('crowns', () => window.dispatchEvent(new CustomEvent('donut:crowns')));
   source.addEventListener('settings', () => {
     once('chat', () => refreshChat());
     window.dispatchEvent(new CustomEvent('donut:roulette'));
