@@ -10,6 +10,7 @@ import {
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { mountStaking } from './staking.js';
 
 /* One tier. The daily, weekly and monthly clocks were retired server-side, and whatever they
  * still owed was folded into this one, so nobody lost a balance in the move.
@@ -24,6 +25,7 @@ let ticker = 0;
 let claiming = '';
 
 export function mountRewards(view) {
+  mountStaking($('#stakingRoot', view));
   root = $('#rewardsRoot', view);
   if (!root) return;
   if (!root.dataset.built) {

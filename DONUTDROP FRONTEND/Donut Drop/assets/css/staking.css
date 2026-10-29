@@ -1,0 +1,91 @@
+/* staking.css — the house pool on the Rewards page (assets/js/staking.js).
+ *
+ * Scoped to .pool so the skin sheets that load later have nothing generic to argue with, and
+ * coloured from the skin's own tokens (dopamine.css) with fallbacks. */
+
+.pool { display: grid; gap: 12px; margin-top: 18px; }
+.pool:empty { display: none; }
+
+.pool .pool__head { display: grid; gap: 4px; }
+.pool .pool__title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--lx-gold-hi, #f0c35a);
+}
+.pool .pool__lede, .pool .pool__note {
+  margin: 0;
+  font-size: .76rem;
+  color: var(--muted, rgba(242, 238, 230, .6));
+}
+
+.pool .pool__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) {
+  .pool .pool__grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.pool .pool__card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--dd-panel, linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9)));
+  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(227, 161, 58, .09));
+  min-width: 0;
+}
+.pool .pool__sub { margin: 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--lx-ink, #f2eee6); }
+.pool .pool__big { font-family: var(--mono, ui-monospace, monospace); font-size: 1.15rem; font-weight: 800; color: var(--lx-gold-hi, #f0c35a); }
+
+.pool .pool__bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.pool .pool__fill { display: block; height: 100%; border-radius: inherit; background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a)); }
+
+.pool .pool__form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
+.pool .pool__input {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .3);
+  color: var(--lx-ink, #f2eee6);
+  font: inherit;
+  font-size: .82rem;
+}
+.pool .pool__chip, .pool .pool__go {
+  padding: 7px 11px;
+  border-radius: 7px;
+  font-weight: 800;
+  font-size: .74rem;
+  cursor: pointer;
+}
+.pool .pool__chip { border: 1px solid rgba(255, 255, 255, .14); background: transparent; color: var(--lx-ink, #f2eee6); }
+.pool .pool__go { border: 0; color: #1a1306; background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a)); }
+.pool .pool__chip:disabled, .pool .pool__go:disabled { opacity: .5; cursor: default; }
+
+.pool .pool__chart { display: flex; align-items: flex-end; gap: 4px; height: 70px; padding-top: 4px; }
+.pool .pool__day {
+  flex: 1 1 0;
+  height: var(--h, 4%);
+  min-width: 4px;
+  border-radius: 3px 3px 0 0;
+  background: #3fb27f;
+}
+.pool .pool__day[data-tone="loss"] { background: #d0533f; }
+
+.pool .pool__totals { margin: 0; font-size: .78rem; color: var(--lx-ink, #f2eee6); }
+.pool .pool__lots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pool .pool__lot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dd-ttile, linear-gradient(180deg, #2a2418, #1e1a11));
+  font-size: .78rem;
+  color: var(--lx-ink, #f2eee6);
+}
+.pool .pool__lot[data-status="closed"] { opacity: .6; }
+.pool .pool__lotamt strong { font-family: var(--mono, ui-monospace, monospace); }
+.pool .pool__dim, .pool .pool__state { color: var(--muted, rgba(242, 238, 230, .55)); font-size: .7rem; }

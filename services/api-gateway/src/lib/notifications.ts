@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.js';
 import type { DbClient } from './db.js';
 import { publishLiveSoon } from './live-events.js';
+import { maskedName } from './masked-name.js';
 
 /**
  * notifications.ts — the bell in the top bar: what happened to a player's money that they did not
@@ -15,6 +16,10 @@ import { publishLiveSoon } from './live-events.js';
  * the moment it happens on the page that did it; a deposit landing from the game, a withdrawal the
  * bot has paid, a tip, an invite reaching its bar or a staff adjustment happens somewhere else, and
  * that is what a bell is for.
+ *
+ * Crowns (lib/crowns.ts) are news of the same kind and read the same way: a crown somebody else
+ * took, or one whose round left the window, is an ended reign; a bounty won is a won bounty. Both
+ * rows already exist, so the bell stores nothing for them either.
  */
 
 /**
@@ -61,15 +66,21 @@ export function noticeSoon(userId: string): void {
 
 export interface NotificationItem {
   readonly id: string;
-  /** A ledger kind from NOTICE_KINDS, or 'withdrawal_paid'. */
+  /** A ledger kind from NOTICE_KINDS, 'withdrawal_paid', 'crown_lost', 'crown_expired' or 'bounty_won'. */
   readonly kind: string;
   readonly amountMinor: string;
   readonly at: string;
   readonly unread: boolean;
-  /** Who sent a tip. */
+  /** Who sent a tip, or (masked) who took a crown. */
   readonly from: string | null;
   /** The in-game name a withdrawal was paid to. */
   readonly to: string | null;
+  /** The game a crown or a bounty was on. */
+  readonly game?: string | null;
+  /** The crown that was lost, or the multiplier that won a bounty, in hundredths. */
+  readonly multiplierX100?: string | null;
+  /** The multiplier that took the crown, in hundredths. */
+  readonly byMultiplierX100?: string | null;
 }
 
 /** Money waiting for the player to collect it. Shown above the list, never counted as unread. */
@@ -91,7 +102,7 @@ export async function readNotifications(
   config: AppConfig,
   userId: string,
 ): Promise<NotificationFeed> {
-  const [user, ledger, paid, ready] = await Promise.all([
+  const [user, ledger, paid, ready, crowns, bounties, poolDays, poolReleases] = await Promise.all([
     client.query<{ read_at: Date | null; referral_blocked: boolean }>(
       `SELECT notifications_read_at AS read_at, referral_blocked_at IS NOT NULL AS referral_blocked
          FROM users WHERE id = $1`,
@@ -132,6 +143,69 @@ export async function readNotifications(
                 WHERE referrer_id = $1 AND voided_at IS NULL)::text AS referrals_minor`,
       [userId],
     ),
+    /* Crowns this player lost. Beating your own record ends your own reign, and is not news. */
+    config.crownsEnabled
+      ? client.query<{
+          id: string;
+          game: string;
+          multiplier_x100: string;
+          ended_at: Date;
+          ended_reason: 'beaten' | 'expired';
+          by_name: string | null;
+          by_multiplier_x100: string | null;
+        }>(
+          `SELECT r.id, r.game, r.multiplier_x100::text AS multiplier_x100, r.ended_at, r.ended_reason,
+                  CASE WHEN n.id IS NULL THEN NULL ELSE ${maskedName('nu.minecraft_username')} END AS by_name,
+                  n.multiplier_x100::text AS by_multiplier_x100
+             FROM crown_reigns r
+             LEFT JOIN crown_reigns n ON n.id = r.ended_by
+             LEFT JOIN users nu ON nu.id = n.user_id
+            WHERE r.user_id = $1 AND r.ended_at IS NOT NULL
+              AND r.ended_at >= now() - make_interval(days => $2)
+              AND (n.id IS NULL OR n.user_id <> r.user_id)
+            ORDER BY r.ended_at DESC
+            LIMIT $3`,
+          [userId, NOTICE_DAYS, NOTICE_LIMIT],
+        )
+      : Promise.resolve({ rows: [] }),
+    config.crownsEnabled
+      ? client.query<{
+          id: string;
+          game: string;
+          prize_minor: string;
+          winning_multiplier_x100: string;
+          won_at: Date;
+        }>(
+          `SELECT id, game, prize_minor::text AS prize_minor,
+                  winning_multiplier_x100::text AS winning_multiplier_x100, won_at
+             FROM crown_bounties
+            WHERE winner_user_id = $1 AND won_at >= now() - make_interval(days => $2)
+            ORDER BY won_at DESC
+            LIMIT $3`,
+          [userId, NOTICE_DAYS, NOTICE_LIMIT],
+        )
+      : Promise.resolve({ rows: [] }),
+    /* The house pool (lib/staking.ts): each settled day's result across the player's stakes, and
+     * a stake paid back once it unlocked. Read whether or not the pool takes new stakes: what is
+     * in keeps settling after it closes. */
+    client.query<{ day: string; result_minor: string; settled_at: Date }>(
+      `SELECT d.day::text AS day, sum(d.result_minor)::text AS result_minor, s.settled_at
+         FROM staking_lot_days d JOIN staking_days s ON s.day = d.day
+        WHERE d.user_id = $1 AND s.settled_at >= now() - make_interval(days => $2)
+        GROUP BY d.day, s.settled_at
+       HAVING sum(d.result_minor) <> 0
+        ORDER BY s.settled_at DESC
+        LIMIT $3`,
+      [userId, NOTICE_DAYS, NOTICE_LIMIT],
+    ),
+    client.query<{ id: string; released_minor: string; closed_at: Date }>(
+      `SELECT id, released_minor::text AS released_minor, closed_at
+         FROM staking_lots
+        WHERE user_id = $1 AND status = 'closed' AND closed_at >= now() - make_interval(days => $2)
+        ORDER BY closed_at DESC
+        LIMIT $3`,
+      [userId, NOTICE_DAYS, NOTICE_LIMIT],
+    ),
   ]);
 
   const readAt = user.rows[0]?.read_at ? new Date(user.rows[0].read_at) : null;
@@ -156,6 +230,48 @@ export async function readNotifications(
       unread: isUnread(new Date(row.paid_at)),
       from: null,
       to: row.payee_username,
+    })),
+    ...crowns.rows.map((row) => ({
+      id: row.id,
+      kind: row.ended_reason === 'expired' ? 'crown_expired' : 'crown_lost',
+      amountMinor: '0',
+      at: new Date(row.ended_at).toISOString(),
+      unread: isUnread(new Date(row.ended_at)),
+      from: row.by_name,
+      to: null,
+      game: row.game,
+      multiplierX100: row.multiplier_x100,
+      byMultiplierX100: row.by_multiplier_x100,
+    })),
+    ...bounties.rows.map((row) => ({
+      id: row.id,
+      kind: 'bounty_won',
+      amountMinor: row.prize_minor,
+      at: new Date(row.won_at).toISOString(),
+      unread: isUnread(new Date(row.won_at)),
+      from: null,
+      to: null,
+      game: row.game,
+      multiplierX100: row.winning_multiplier_x100,
+      byMultiplierX100: null,
+    })),
+    ...poolDays.rows.map((row) => ({
+      id: `staking-day:${row.day}`,
+      kind: 'staking_day',
+      amountMinor: row.result_minor,
+      at: new Date(row.settled_at).toISOString(),
+      unread: isUnread(new Date(row.settled_at)),
+      from: null,
+      to: row.day,
+    })),
+    ...poolReleases.rows.map((row) => ({
+      id: row.id,
+      kind: 'staking_released',
+      amountMinor: row.released_minor,
+      at: new Date(row.closed_at).toISOString(),
+      unread: isUnread(new Date(row.closed_at)),
+      from: null,
+      to: null,
     })),
   ];
   merged.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? 1 : -1));

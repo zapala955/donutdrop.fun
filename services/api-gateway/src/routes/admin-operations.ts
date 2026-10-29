@@ -309,6 +309,8 @@ export async function registerAdminOperationRoutes(
            WHERE ${NOT_STAFF})::text AS wallet_total_minor,
          (SELECT coalesce(sum(w.balance_minor), 0) FROM user_wallets w JOIN users u ON u.id = w.user_id
            WHERE ${staffPredicate('u')})::text AS wallet_staff_minor,
+         (SELECT coalesce(sum(principal_minor), 0) FROM staking_lots WHERE status <> 'closed')::text
+           AS staked_total_minor,
          (SELECT coalesce(sum(e.amount_minor), 0) FROM wager_events e JOIN users u ON u.id = e.user_id
            WHERE e.created_at >= date_trunc('day', now()) AND ${NOT_STAFF})::text
            AS wagered_today_minor,
@@ -385,6 +387,8 @@ export async function registerAdminOperationRoutes(
       db.query<EntityRow>(
         `SELECT
            (SELECT coalesce(sum(balance_minor), 0) FROM user_wallets)::text AS wallet_total_minor,
+           (SELECT coalesce(sum(principal_minor), 0) FROM staking_lots
+             WHERE status <> 'closed')::text AS staked_total_minor,
            (SELECT coalesce(sum(amount_minor), 0) FROM wallet_transactions
              WHERE amount_minor > 0)::text AS ledger_credits_minor,
            (SELECT coalesce(-sum(amount_minor), 0) FROM wallet_transactions

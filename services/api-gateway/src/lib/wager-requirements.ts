@@ -105,7 +105,7 @@ export async function wagerRequirementRemaining(client: DbClient, userId: string
 export async function assertWagerRequirementMet(
   client: DbClient,
   userId: string,
-  action: 'withdrawing' | 'tipping',
+  action: 'withdrawing' | 'tipping' | 'staking',
 ): Promise<void> {
   await client.query('SELECT 1 FROM user_wallets WHERE user_id = $1 FOR UPDATE', [userId]);
   const remaining = await wagerRequirementRemaining(client, userId);

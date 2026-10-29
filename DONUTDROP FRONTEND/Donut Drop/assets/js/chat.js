@@ -36,6 +36,7 @@ import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, API_BASE_URL } from './api.js';
 import { linkPlayer } from './player-link.js';
+import { crownGameName } from './crowns.js';
 
 // Recovery-only fallback. New messages arrive over /v1/live while the connection is healthy.
 const POLL_MS = 30_000;
@@ -1295,6 +1296,15 @@ function buildMessage(message) {
     badge.dataset.tier = message.vip.tier;
     badge.textContent = message.vip.label.toUpperCase();
     top.append(badge);
+  }
+
+  /* The crowns the author holds right now (crowns.js): one gold crown, the games in its title, a
+   * count beside it when there is more than one. */
+  if (Array.isArray(message.crowns) && message.crowns.length) {
+    const crown = el('i', 'msg__badge msg__badge--crown');
+    crown.textContent = message.crowns.length > 1 ? `♛ ${message.crowns.length}` : '♛';
+    crown.title = `Crown: ${message.crowns.map(crownGameName).join(', ')}`;
+    top.append(crown);
   }
 
   const when = el('span', 'msg__t');

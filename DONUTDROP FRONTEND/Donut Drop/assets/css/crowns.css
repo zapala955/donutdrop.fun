@@ -1,0 +1,194 @@
+/* crowns.css — the crowns and bounties above the leaderboard (assets/js/crowns.js).
+ *
+ * Everything is scoped to .crowns so the skin sheets that load later have nothing generic to argue
+ * with. Colours come from the skin's own tokens (dopamine.css) with fallbacks, so a theme that
+ * moves the gold moves the crowns with it. */
+
+.crowns { display: grid; gap: 14px; margin-bottom: 18px; }
+.crowns:empty { display: none; }
+
+.crowns .crowns__head { display: grid; gap: 4px; }
+.crowns .crowns__title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--lx-gold-hi, #f0c35a);
+}
+.crowns .crowns__lede, .crowns .crowns__note {
+  margin: 0;
+  font-size: .78rem;
+  color: var(--muted, rgba(242, 238, 230, .6));
+}
+
+.crowns .crowns__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.crowns .crown {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 12px 12px 11px;
+  border-radius: 10px;
+  background: var(--dd-tile, linear-gradient(180deg, #2e2819, #211c12));
+  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(227, 161, 58, .09));
+  min-width: 0;
+}
+.crowns .crown[data-you="1"] {
+  box-shadow: var(--dd-edge-hi, inset 0 0 0 1px rgba(227, 161, 58, .32)), var(--dd-glow, 0 0 22px -10px rgba(227, 161, 58, .4));
+}
+.crowns .crown[data-you="1"]::after {
+  content: 'YOURS';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #1a1306;
+  background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a));
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+.crowns .crown__game {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lx-ink, #f2eee6);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: .82rem;
+  min-width: 0;
+}
+.crowns .crown__game:hover .crown__name { color: var(--lx-gold-hi, #f0c35a); }
+.crowns .crown__art { width: 26px; height: 26px; image-rendering: pixelated; flex: none; }
+.crowns .crown__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.crowns .crown__x {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--lx-gold-hi, #f0c35a);
+  overflow-wrap: anywhere;
+}
+.crowns .crown__x::before { content: '\265B\00A0'; font-size: .9em; }
+.crowns .crown__x--empty { color: var(--muted, rgba(242, 238, 230, .45)); font-size: 1.05rem; }
+.crowns .crown__x--empty::before { content: none; }
+
+.crowns .crown__who { display: flex; align-items: center; gap: 6px; font-size: .78rem; min-width: 0; color: var(--lx-ink, #f2eee6); }
+.crowns .crown__who .dtable__avatar { width: 20px; height: 20px; flex: none; }
+.crowns .crown__holder { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.crowns .crown__meta, .crowns .crown__you { font-size: .7rem; color: var(--muted, rgba(242, 238, 230, .55)); }
+.crowns .crown__you { color: var(--lx-gold, #e3a13a); }
+
+.crowns .crowns__lower {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 10px;
+}
+@media (max-width: 900px) {
+  .crowns .crowns__lower { grid-template-columns: minmax(0, 1fr); }
+}
+
+.crowns .crowns__panel {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--dd-panel, linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9)));
+  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(227, 161, 58, .09));
+  min-width: 0;
+}
+.crowns .crowns__sub { margin: 0; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--lx-ink, #f2eee6); }
+
+.crowns .bounty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--dd-ttile, linear-gradient(180deg, #2a2418, #1e1a11));
+}
+.crowns .bounty[data-status="open"] { box-shadow: var(--dd-edge-hi, inset 0 0 0 1px rgba(227, 161, 58, .32)); }
+.crowns .bounty[data-status="won"], .crowns .bounty[data-status="expired"] { opacity: .72; }
+.crowns .bounty__what, .crowns .bounty__prize { display: grid; gap: 2px; min-width: 0; }
+.crowns .bounty__prize { text-align: right; }
+.crowns .bounty__goal { font-size: .8rem; color: var(--lx-ink, #f2eee6); }
+.crowns .bounty__rule, .crowns .bounty__when { font-size: .68rem; color: var(--muted, rgba(242, 238, 230, .55)); }
+.crowns .bounty__amount { font-family: var(--mono, ui-monospace, monospace); font-weight: 800; color: var(--lx-gold-hi, #f0c35a); }
+.crowns .bounty__cancel {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font-size: .68rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: transparent;
+  color: var(--lx-ink, #f2eee6);
+  cursor: pointer;
+}
+
+.crowns .bounty-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.crowns .bounty-form__title { grid-column: 1 / -1; margin: 0; font-size: .74rem; color: var(--lx-gold, #e3a13a); }
+.crowns .bounty-form__field { display: grid; gap: 3px; font-size: .66rem; color: var(--muted, rgba(242, 238, 230, .6)); }
+.crowns .bounty-form__input {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(0, 0, 0, .3);
+  color: var(--lx-ink, #f2eee6);
+  font: inherit;
+  font-size: .78rem;
+}
+.crowns .bounty-form__go {
+  align-self: end;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: .74rem;
+  color: #1a1306;
+  background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a));
+  cursor: pointer;
+}
+.crowns .bounty-form__go:disabled, .crowns .bounty__cancel:disabled { opacity: .5; cursor: default; }
+
+.crowns .crowns__feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.crowns .crowns__feeditem { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--lx-ink, #f2eee6); min-width: 0; }
+.crowns .crowns__feeditem .dtable__avatar { width: 18px; height: 18px; flex: none; }
+.crowns .crowns__feedname { font-weight: 700; }
+.crowns .crowns__feedtext { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crowns .crowns__feedago { margin-left: auto; flex: none; font-size: .66rem; color: var(--muted, rgba(242, 238, 230, .5)); }
+
+/* The crown a holder wears on their chat lines (assets/js/chat.js). Outside .crowns on purpose:
+ * the chat is not on the leaderboard. */
+.msg__badge.msg__badge--crown {
+  color: #1a1306;
+  background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a));
+  font-weight: 800;
+}
+
+/* Phones: two crowns a row, so nine games are three screens shorter. */
+@media (max-width: 600px) {
+  .crowns .crowns__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .crowns .crown { padding: 10px; gap: 4px; }
+  .crowns .crown__x { font-size: 1.15rem; }
+  .crowns .crown__x--empty { font-size: .9rem; }
+  .crowns .crown[data-empty="1"] .crown__who { display: none; }
+  .crowns .crown__meta, .crowns .crown__you { font-size: .64rem; }
+  .crowns .crown[data-you="1"]::after { top: 8px; right: 8px; }
+}

@@ -30,6 +30,8 @@ type SettingGroup =
   | 'minesduel'
   | 'payouts'
   | 'dailycodes'
+  | 'crowns'
+  | 'staking'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -804,6 +806,82 @@ export const runtimeSettingDefinitions = {
     label: 'A player’s first daily code pays at least this (0 = ordinary draw)',
     min: 0n,
     max: BIGINT_MAX,
+  },
+
+  /* ── crowns ──
+   *
+   * Read by the sweeper on every pass and by the board on every request. A longer window keeps
+   * crowns longer; a higher stake floor makes them harder to take. The sweep interval is boot-only. */
+  crownsEnabled: {
+    kind: 'boolean',
+    group: 'crowns',
+    label: 'Crowns and bounties are kept and shown',
+  },
+  crownWindowDays: {
+    kind: 'integer',
+    group: 'crowns',
+    label: 'A crown falls when its round is older than this (days)',
+    min: 1n,
+    max: 365n,
+  },
+  crownMinStakeMinor: {
+    kind: 'bigint',
+    group: 'crowns',
+    label: 'Smallest stake a round needs to take a crown',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  crownBountyMaxPrizeMinor: {
+    kind: 'bigint',
+    group: 'crowns',
+    label: 'Largest prize staff may put on one bounty',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── house pool ──
+   *
+   * Read on every stake and by the settler for each day it settles, so a change applies from the
+   * next settled day. Closing the pool stops new stakes; what is in keeps settling and unlocking. */
+  stakingEnabled: {
+    kind: 'boolean',
+    group: 'staking',
+    label: 'The house pool takes new stakes',
+  },
+  stakingShareBps: {
+    kind: 'integer',
+    group: 'staking',
+    label: 'Share of the daily house result a full pool gets (bps)',
+    min: 0n,
+    max: 5_000n,
+  },
+  stakingPoolCapMinor: {
+    kind: 'bigint',
+    group: 'staking',
+    label: 'Most the pool may hold (a full pool earns the whole share)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  stakingMinStakeMinor: {
+    kind: 'bigint',
+    group: 'staking',
+    label: 'Smallest stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  stakingMaxPerPlayerMinor: {
+    kind: 'bigint',
+    group: 'staking',
+    label: 'Most one player may have staked',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  stakingUnstakeHours: {
+    kind: 'integer',
+    group: 'staking',
+    label: 'Cool-down before an unstaked amount is paid back (hours)',
+    min: 1n,
+    max: 720n,
   },
 
   /* ── media test mode ──

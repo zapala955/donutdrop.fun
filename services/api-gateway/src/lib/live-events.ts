@@ -22,6 +22,8 @@ export type LiveTopic =
   // A mines duel opened, was taken, had a player finish, or settled. Carries nothing about a
   // player's tiles: a refresh reads what the reader is allowed to see.
   | 'minesduel'
+  // A crown changed hands or fell, or a bounty was won or ran out (lib/crowns.ts).
+  | 'crowns'
   // Per player: something for the notification bell landed -- a deposit, a withdrawal paid or
   // refunded, a tip, a reward (lib/notifications.ts). The page re-reads the bell and the deposits.
   | 'notice';
