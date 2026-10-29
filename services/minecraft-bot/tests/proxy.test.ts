@@ -4,7 +4,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { after, before, describe, it } from 'node:test';
 import type { Logger } from 'pino';
-import type { ApiClient, BotProxy } from '../src/api-client.js';
+import type { ApiClient, BotProxy, ConnectionRoute } from '../src/api-client.js';
 import { loadBotConfig } from '../src/config.js';
 import { describeRoute, openTunnel, proxiedConnect } from '../src/proxy.js';
 import type { TransferAdapter } from '../src/transfer-adapter.js';
@@ -234,10 +234,10 @@ describe('the route in the logs', () => {
 
 describe('how the worker learns its route', () => {
   type RouteHarness = {
-    knownRoute: { proxy: BotProxy | null } | undefined;
+    knownRoute: ConnectionRoute | undefined;
     routeRevision: string | undefined;
     bot: unknown;
-    resolveRoute(): Promise<BotProxy | null>;
+    resolveRoute(): Promise<ConnectionRoute>;
     heartbeat(online: boolean): Promise<void>;
   };
 
@@ -267,7 +267,7 @@ describe('how the worker learns its route', () => {
   }
 
   it('remembers the last answer and uses it when the gateway cannot be asked', async () => {
-    const assigned = proxy({ host: 'gate.example.net', port: 1080 });
+    const assigned = { proxy: proxy({ host: 'gate.example.net', port: 1080 }), parked: false };
     let reachable = true;
     const harness = worker({
       connectionRoute: async () => {
