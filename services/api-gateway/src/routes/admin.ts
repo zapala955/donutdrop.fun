@@ -26,6 +26,7 @@ import {
 } from '../lib/bot-proxy.js';
 import { queueWithdrawalJob, refundWithdrawal } from './cash-withdrawals.js';
 import { safeText } from '../lib/sanitize.js';
+import { addWagerRequirement, requirementFor } from '../lib/wager-requirements.js';
 import {
   LADDER_CEILING_MINOR,
   LADDER_FLOOR_MINOR,
@@ -139,6 +140,11 @@ const balanceAdjustSchema = z
       .string()
       .regex(/^-?[1-9]\d{0,12}$/, 'A non-zero whole amount in minor units'),
     reason: safeText(3, 256),
+    /* A credit is a giveaway unless it says otherwise, and a giveaway is free money: wagered like
+     * the signup bonus before it can leave. Only a refund of the player's own money (a payout that
+     * never arrived, a round a bug ate) sends false. Leaving it out locks, because the mistake that
+     * costs the house is the unlocked giveaway, not the locked refund. Ignored on a debit. */
+    wagerLock: z.boolean().optional(),
   })
   .strict();
 
@@ -900,6 +906,11 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
          VALUES ($1, $2, $3, $4, 'admin_adjustment', $5)`,
         [adjustmentId, params.id, delta.toString(), balanceAfter, adjustmentId],
       );
+      const wagerLock =
+        delta > 0n && body.wagerLock !== false
+          ? requirementFor(delta, config.signupBonusWagerMultiplier)
+          : 0n;
+      await addWagerRequirement(client, params.id, wagerLock);
       await appendAudit(client, config, {
         actorUserId: actor,
         action: delta > 0n ? 'user.balance.credit' : 'user.balance.debit',
@@ -909,12 +920,13 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
           reason: body.reason,
           amountMinor: delta.toString(),
           balanceAfterMinor: balanceAfter,
+          wagerLockMinor: wagerLock.toString(),
         },
       });
       // The player's pill and bell: a staff adjustment is news to the account it lands on.
       publishLiveSoon('balance', [params.id]);
       noticeSoon(params.id);
-      return { balanceMinor: balanceAfter, adjustmentId };
+      return { balanceMinor: balanceAfter, adjustmentId, wagerLockMinor: wagerLock.toString() };
     });
   });
 

@@ -49,9 +49,9 @@ function recordingClient(remaining: string | null) {
 }
 
 describe('the wager requirement', () => {
-  it('owes the signup bonus five times and a deposit once, by default', () => {
+  it('owes free money once and a deposit once, by default', () => {
     assert.equal(config.signupBonusMinor, 2_000_000n);
-    assert.equal(config.signupBonusWagerMultiplier, 5);
+    assert.equal(config.signupBonusWagerMultiplier, 1);
     assert.equal(config.depositWagerMultiplier, 1);
     assert.equal(requirementFor(2_000_000n, 5), 10_000_000n);
     assert.equal(requirementFor(750n, 1), 750n);
@@ -122,6 +122,45 @@ describe('the wager requirement', () => {
     assert.match(transfers, /assertWagerRequirementMet\(client, userId, 'withdrawing'\)/);
   });
 
+  it('locks every kind of free money, not only the signup bonus', async () => {
+    /* The streak, quest rewards, Lava Rain shares and admin giveaways were credited with no
+     * requirement at all, so an alt could collect them and withdraw having never placed a bet. Each
+     * credit must be followed, before the next statement that could commit, by its lock at the
+     * signup bonus's multiplier. */
+    const [engagement, social, admin, daily, discord, crowns] = await Promise.all([
+      read('services/api-gateway/src/routes/engagement.ts'),
+      read('services/api-gateway/src/routes/social.ts'),
+      read('services/api-gateway/src/routes/admin.ts'),
+      read('services/api-gateway/src/lib/daily-codes.ts'),
+      read('services/api-gateway/src/lib/discord-rewards.ts'),
+      read('services/api-gateway/src/lib/crowns.ts'),
+    ]);
+    // `credit` is the line that pays: the ledger kind as the credit writes it.
+    const lockedAfter = (source: string, credit: string, amount: string, file: string) => {
+      const at = source.indexOf(credit);
+      assert.ok(at > 0, `${file} no longer pays with ${credit}`);
+      const lock = `requirementFor(${amount}, config.signupBonusWagerMultiplier)`;
+      const after = source.slice(at, at + 900);
+      assert.ok(after.includes(lock), `${credit} in ${file} is credited without a wager lock`);
+    };
+    lockedAfter(engagement, "'quest_reward',", 'reward', 'engagement.ts');
+    lockedAfter(engagement, "'streak_reward',", 'reward', 'engagement.ts');
+    lockedAfter(social, "'rain_claim',\n", 'each', 'social.ts');
+    lockedAfter(admin, "$4, 'admin_adjustment', $5)", 'delta', 'admin.ts');
+    lockedAfter(daily, "'daily_code_reward', row.id)", 'prize', 'daily-codes.ts');
+    lockedAfter(crowns, "'bounty_reward', bounty.id)", 'prize', 'crowns.ts');
+    assert.match(discord, /creditWallet\(client, userId, amount, kind, rewardId\);\s+await addWagerRequirement\(/);
+    // A giveaway locks unless the operator says it is a refund; a debit never adds anything.
+    assert.match(admin, /delta > 0n && body\.wagerLock !== false/);
+  });
+
+  it('gives the admin panel a giveaway and a refund, never one ambiguous credit', async () => {
+    const panel = await read('DONUTDROP FRONTEND/Donut Drop/admin/admin.js');
+    assert.match(panel, /lever\('Give money'[\s\S]{0,700}wagerLock: true/);
+    assert.match(panel, /lever\('Refund'[\s\S]{0,700}wagerLock: false/);
+    assert.doesNotMatch(panel, /lever\('Credit balance'/);
+  });
+
   it('only widens the ledger kinds, adding signup_bonus', async () => {
     /* Narrowing a CHECK is validated against rows that already exist, which is how migration 030
      * took production down. 048 must keep every kind 039 allowed. */
@@ -152,7 +191,7 @@ describe('the public promotions', () => {
       const response = await app.inject({ method: 'GET', url: '/v1/promotions' });
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), {
-        signupBonus: { amountMinor: '2000000', wagerMultiplier: 5, wagerMinor: '10000000' },
+        signupBonus: { amountMinor: '2000000', wagerMultiplier: 1, wagerMinor: '2000000' },
         // The lifetime share too: signed out, the invite page shows the whole deal (2026-10-25).
         referral: { bonusMinor: '20000000', bonusWagerMinor: '50000000', revshareWagerBps: 50 },
         depositWagerMultiplier: 1,

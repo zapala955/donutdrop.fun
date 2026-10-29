@@ -812,7 +812,7 @@ const environmentSchema = z
     /* The signup bonus, and what must be wagered before money can leave an account. 0 switches the
      * bonus off; a multiplier of 0 lifts that requirement. See lib/wager-requirements.ts. */
     SIGNUP_BONUS_MINOR: nonNegativeBigintString.default('2000000'),
-    SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(5),
+    SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     DEPOSIT_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     /* Discord OAuth. The client secret is file-backed like every other credential, and the
      * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect

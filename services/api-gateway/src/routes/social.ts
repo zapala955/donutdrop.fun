@@ -12,7 +12,11 @@ import { liveEvents } from '../lib/live-events.js';
 import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
-import { assertWagerRequirementMet } from '../lib/wager-requirements.js';
+import {
+  addWagerRequirement,
+  assertWagerRequirementMet,
+  requirementFor,
+} from '../lib/wager-requirements.js';
 
 /**
  * The social suite: the vault jackpot readout, lava rain, and player-to-player tips.
@@ -229,6 +233,14 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
                 each,
                 'rain_claim',
                 deterministicUuid('rain_claim', event.id, claim.user_id),
+              );
+              /* A share of the house's pool is free money like the signup bonus. The entry bar
+               * only asks for an hour's wagering, which an alt clears once and then collects every
+               * drop; this makes each share wagered before it can leave. */
+              await addWagerRequirement(
+                client,
+                claim.user_id,
+                requirementFor(each, config.signupBonusWagerMultiplier),
               );
             }
           }

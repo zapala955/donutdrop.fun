@@ -11,6 +11,7 @@ import {
 import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith } from '../lib/validation.js';
+import { addWagerRequirement, requirementFor } from '../lib/wager-requirements.js';
 
 /**
  * Quests, daily streaks, and the faction war.
@@ -137,6 +138,12 @@ export async function registerEngagementRoutes(
           'quest_reward',
           questReferenceId(userId, body.questCode),
         );
+        // Free money, wagered like the signup bonus before it can leave (lib/wager-requirements).
+        await addWagerRequirement(
+          client,
+          userId,
+          requirementFor(reward, config.signupBonusWagerMultiplier),
+        );
         await client.query(
           `UPDATE quest_progress
               SET claimed_at = now(), claimed_reward_minor = $3, balance_after_minor = $4,
@@ -232,6 +239,13 @@ export async function registerEngagementRoutes(
           reward,
           'streak_reward',
           streakReferenceId(userId, today),
+        );
+        /* The wager bar above is off by default, so without this the streak was the one reward an
+         * alt could claim every day and withdraw having never placed a bet. */
+        await addWagerRequirement(
+          client,
+          userId,
+          requirementFor(reward, config.signupBonusWagerMultiplier),
         );
 
         await client.query(

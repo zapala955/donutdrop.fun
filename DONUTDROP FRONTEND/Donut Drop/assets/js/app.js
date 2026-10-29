@@ -870,18 +870,21 @@ function timesWord(multiplier) {
  *
  * A screen of its own, like the cooldown below, rather than a form whose Continue never enables:
  * the amount field would invite typing a figure the server is certain to refuse. The number is the
- * server's, and so is the reason: deposits and the signup bonus, at whatever the admin panel says.
+ * server's, and so is the reason: deposits, and free money at the signup bonus's multiplier, at
+ * whatever the admin panel says. "Free money" names every kind, because a player who only ever
+ * redeemed a daily code was told it was the signup bonus holding their withdrawal.
  */
 function paintWithdrawLocked(host, owedMinor) {
   const deposit = Number(state.promotions?.depositWagerMultiplier ?? 0);
   const bonus = Number(state.promotions?.signupBonus?.wagerMultiplier ?? 0);
+  const free = 'free money (signup bonus, codes, rewards, rain, giveaways)';
   let why = 'Every bet you place counts towards it.';
   if (deposit > 0 && bonus > 0) {
-    why = `Deposits are wagered ${timesWord(deposit)} and the signup bonus ${timesWord(bonus)} before they can be withdrawn. ${why}`;
+    why = `Deposits are wagered ${timesWord(deposit)} and ${free} ${timesWord(bonus)} before they can be withdrawn. ${why}`;
   } else if (deposit > 0) {
     why = `Deposits are wagered ${timesWord(deposit)} before they can be withdrawn. ${why}`;
   } else if (bonus > 0) {
-    why = `The signup bonus is wagered ${timesWord(bonus)} before it can be withdrawn. ${why}`;
+    why = `Free money (signup bonus, codes, rewards, rain, giveaways) is wagered ${timesWord(bonus)} before it can be withdrawn. ${why}`;
   }
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
     <p class="auth__lede">Wager <b class="mono" id="wdLockAmt"></b> more to unlock withdrawals.</p>

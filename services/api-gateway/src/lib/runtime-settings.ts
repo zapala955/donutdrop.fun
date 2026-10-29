@@ -230,7 +230,7 @@ export const runtimeSettingDefinitions = {
   signupBonusWagerMultiplier: {
     kind: 'integer',
     group: 'rewards',
-    label: 'Signup bonus wager before withdrawing (x bonus)',
+    label: 'Free money wager before withdrawing (x amount: bonus, codes, rewards, rain, giveaways)',
     min: 0n,
     max: 100n,
   },

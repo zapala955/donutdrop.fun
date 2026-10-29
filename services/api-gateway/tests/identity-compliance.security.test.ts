@@ -326,7 +326,8 @@ describe('identity and compliance hardening', () => {
     const requirement = statements.find(({ sql }) =>
       sql.includes('INSERT INTO user_wager_requirements'),
     );
-    assert.deepEqual(requirement?.values, [newUserId, '10000000']);
+    // Wagered once: free money carries the same 1x a deposit does.
+    assert.deepEqual(requirement?.values, [newUserId, '2000000']);
   });
 
   it('completes and credits every confirmed payment after its timer expires', async () => {

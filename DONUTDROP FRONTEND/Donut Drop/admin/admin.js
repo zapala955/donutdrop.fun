@@ -1542,15 +1542,36 @@ function renderPlayerActions(user, data) {
     });
   }
 
-  lever('Credit balance', null, async () => {
+  /* Two credits, because the server has to know which one this is. A giveaway is free money and is
+     wagered like the signup bonus before it can be withdrawn; a refund is the player's own money
+     coming back and can leave at once. One button with a checkbox would be one missed tick away
+     from a giveaway that cashes out the same minute. */
+  lever('Give money', null, async () => {
     const answer = await confirmAmount(
-      `Add to ${user.minecraft_username}'s site balance. Currently ` +
-        `${amountText(data.balanceMinor)}. Writes an admin_adjustment to the ledger.`,
-      { label: 'Amount to add' },
+      `Give ${user.minecraft_username} free money (a giveaway, a prize, a gift). Currently ` +
+        `${amountText(data.balanceMinor)}. It is wagered like the signup bonus before it can ` +
+        'be withdrawn. Writes an admin_adjustment to the ledger.',
+      { label: 'Amount to give' },
     );
     if (!answer) return false;
-    const result = await api.post(`/v1/admin/users/${id}/balance`, answer);
-    toast(`Credited. New balance ${amountText(result.balanceMinor)}.`, 'ok');
+    const result = await api.post(`/v1/admin/users/${id}/balance`, { ...answer, wagerLock: true });
+    toast(
+      `Credited. New balance ${amountText(result.balanceMinor)}; ` +
+        `${amountText(result.wagerLockMinor)} to wager before withdrawing.`,
+      'ok',
+    );
+  });
+
+  lever('Refund', null, async () => {
+    const answer = await confirmAmount(
+      `Return ${user.minecraft_username}'s own money (a payout that never arrived, a round a bug ` +
+        `ate). Currently ${amountText(data.balanceMinor)}. Withdrawable at once, with no wager: ` +
+        'never use this for a giveaway.',
+      { label: 'Amount to return' },
+    );
+    if (!answer) return false;
+    const result = await api.post(`/v1/admin/users/${id}/balance`, { ...answer, wagerLock: false });
+    toast(`Refunded. New balance ${amountText(result.balanceMinor)}.`, 'ok');
   });
 
   lever('Debit balance', 'danger', async () => {

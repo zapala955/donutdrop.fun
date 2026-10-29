@@ -458,8 +458,11 @@ function paintResult(card) {
     );
     card.appendChild(
       paragraph(
-        `Added to your balance, ${result.username}. It is playable now, and can be withdrawn once ` +
-          `you have wagered ${money(Number(result.wagerMinor))}.`,
+        /* "Once you have wagered X" read as a fresh count from zero. The figure is ADDED to whatever
+         * was still owed, so a player who already owed something wagered X and found the
+         * withdrawal still locked. */
+        `Added to your balance, ${result.username}. It is playable now, and adds ` +
+          `${money(Number(result.wagerMinor))} to what you wager before withdrawing.`,
       ),
     );
     typed = '';
