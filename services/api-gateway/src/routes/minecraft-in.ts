@@ -463,9 +463,9 @@ export async function registerMinecraftInternalRoutes(
       const authenticated = verifyBotSignature(request, config);
       const body = parseWith(connectionRouteSchema, request.body);
       requireMatchingBotId(authenticated.botId, body.botId);
-      const result = await db.query<BotProxyColumns>(
+      const result = await db.query<BotProxyColumns & { parked: boolean }>(
         `SELECT proxy_type, proxy_host, proxy_port, proxy_username, proxy_password_encrypted,
-                proxy_revision, proxy_updated_at
+                proxy_revision, proxy_updated_at, parked_at IS NOT NULL AS parked
            FROM bot_accounts WHERE id = $1`,
         [body.botId],
       );
@@ -480,7 +480,13 @@ export async function registerMinecraftInternalRoutes(
           throw new AppError(500, 'BOT_PROXY_UNREADABLE', 'The saved proxy password cannot be read');
         }
       }
-      return sendAuthenticatedBotResponse(reply, authenticated, request.body, { proxy });
+      /* Switched off for manual play (migration 083): stay out of the game. Sent only when true, so
+       * a bot from before the field existed -- whose reader refuses unknown keys -- is only ever
+       * confused while an operator has it switched off, and then falls back to its last route. */
+      return sendAuthenticatedBotResponse(reply, authenticated, request.body, {
+        proxy,
+        ...(row?.parked ? { parked: true } : {}),
+      });
     },
   );
 
@@ -610,6 +616,9 @@ export async function registerMinecraftInternalRoutes(
           WHERE bot_id = $1 AND attempts < 5 AND available_at <= now() AND status = 'queued'
             AND (kind IN ('cash_payout', 'admin_payout', 'reconnect', 'vault_sweep', 'vault_release')
                  OR $2::boolean)
+            -- Nothing for a bot an operator has switched off for manual play (migration 083).
+            AND NOT EXISTS (SELECT 1 FROM bot_accounts parked
+                             WHERE parked.id = bot_jobs.bot_id AND parked.parked_at IS NOT NULL)
             AND NOT (bot_jobs.kind = ANY($3::text[]) AND EXISTS (
               SELECT 1 FROM bot_jobs ahead
                WHERE ahead.bot_id = bot_jobs.bot_id AND ahead.status = 'queued'

@@ -78,8 +78,19 @@ const botProxySchema = z
     password: z.string().min(1).max(255).nullable(),
   })
   .strict();
-const connectionRouteResponseSchema = z.object({ proxy: botProxySchema.nullable() }).strict();
+/* `parked` is present, and true, only while an operator has the bot switched off for manual play
+ * (gateway migration 083). */
+const connectionRouteResponseSchema = z
+  .object({ proxy: botProxySchema.nullable(), parked: z.literal(true).optional() })
+  .strict();
 export type BotProxy = z.infer<typeof botProxySchema>;
+
+/** How to reach the server, and whether to stay out of it for now. */
+export interface ConnectionRoute {
+  readonly proxy: BotProxy | null;
+  /** Switched off by an operator so they can log into the account by hand. */
+  readonly parked: boolean;
+}
 
 const botJobSchema = z
   .object({
@@ -352,12 +363,13 @@ export class ApiClient {
   }
 
   /** The proxy this bot is assigned, or null to connect directly. Asked before every login. */
-  async connectionRoute(): Promise<BotProxy | null> {
+  async connectionRoute(): Promise<ConnectionRoute> {
     const response = await this.post('/connection-route', {
       eventId: randomUUID(),
       botId: this.config.botId,
     });
-    return connectionRouteResponseSchema.parse(response).proxy;
+    const route = connectionRouteResponseSchema.parse(response);
+    return { proxy: route.proxy, parked: route.parked === true };
   }
 
   async claimJob(): Promise<BotJob | null> {
