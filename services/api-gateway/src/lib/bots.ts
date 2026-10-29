@@ -56,6 +56,8 @@ export async function pickBot(
        FROM bot_accounts
       WHERE id = ANY($1::uuid[]) AND role = $2 AND status = 'online'
         AND last_heartbeat_at > now() - interval '45 seconds'
+        -- Switched off for manual play: out the moment an operator says, not 45 seconds later.
+        AND parked_at IS NULL
       ORDER BY last_heartbeat_at DESC`,
     [provisioned, role],
   );
@@ -110,6 +112,7 @@ export async function findVaultBot(
        FROM bot_accounts
       WHERE id = ANY($1::uuid[]) AND role = 'vault' AND status <> 'quarantined'
         AND last_heartbeat_at > now() - make_interval(secs => $2)
+        AND parked_at IS NULL
       ORDER BY last_heartbeat_at DESC NULLS LAST
       LIMIT 1`,
     [provisioned, silenceSeconds],

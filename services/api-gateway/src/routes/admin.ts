@@ -84,6 +84,13 @@ const botQuarantineSchema = z
     reason: safeText(3, 256),
   })
   .strict();
+/* Off for manual play, or back on. */
+const botManualPlaySchema = z
+  .object({
+    off: z.boolean(),
+    reason: safeText(3, 256),
+  })
+  .strict();
 /* Teller or vault. The teller is the account players see; the vault holds the float behind it. */
 const botRoleSchema = z
   .object({
@@ -223,7 +230,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
               b.role, b.tracked_balance_minor,
               b.observed_balance_low_minor, b.observed_balance_step_minor,
-              b.observed_balance_display, b.observed_balance_at,
+              b.observed_balance_display, b.observed_balance_at, b.parked_at,
               ${PROXY_SUMMARY_COLUMNS},
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
@@ -398,6 +405,43 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       return { bot: { id: params.id, adjustedMinor: delta.toString() } };
     });
   });
+
+  /* Switches a bot off so the owner can log into its account by hand, or back on.
+   *
+   * Off: the bot learns it from the connection route it re-reads every few seconds, finishes any
+   * payout it is part-way through, logs out and stays out (migration 083). No job is handed to it
+   * meanwhile and players are not sent to it to deposit. On: it logs back in within half a minute,
+   * so the owner should be out of the account by then or DonutSMP calls it "already online". */
+  app.patch(
+    '/v1/admin/bots/:id/manual-play',
+    { preHandler: guards.requireAdmin },
+    async (request) => {
+      const params = parseWith(idSchema, request.params);
+      const body = parseWith(botManualPlaySchema, request.body);
+      const actor = requireActor(request.authUser?.id);
+      return db.transaction(async (client) => {
+        const updated = await client.query<{ id: string; username: string; parked_at: Date | null }>(
+          `UPDATE bot_accounts
+              SET parked_at = CASE WHEN $2 THEN coalesce(parked_at, now()) ELSE NULL END,
+                  parked_by = CASE WHEN $2 THEN coalesce(parked_by, $3::uuid) ELSE NULL END,
+                  updated_at = now()
+            WHERE id = $1
+            RETURNING id, username, parked_at`,
+          [params.id, body.off, actor],
+        );
+        const bot = updated.rows[0];
+        if (!bot) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+        await appendAudit(client, config, {
+          actorUserId: actor,
+          action: body.off ? 'bot.manual_play.start' : 'bot.manual_play.end',
+          targetType: 'bot_account',
+          targetId: params.id,
+          details: { reason: body.reason },
+        });
+        return { bot };
+      });
+    },
+  );
 
   app.patch(
     '/v1/admin/bots/:id/quarantine',

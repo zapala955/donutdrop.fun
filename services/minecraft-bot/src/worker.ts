@@ -8,6 +8,7 @@ import type {
   BotJob,
   BotProxy,
   CashPayoutBotJob,
+  ConnectionRoute,
   InternalTransferBotJob,
 } from './api-client.js';
 import { itemFingerprint } from './fingerprint.js';
@@ -139,6 +140,10 @@ const RESPAWN_RETRY_MS = 5_000;
 
 /** With no route from the gateway yet, how long the bot waits before asking again. */
 const ROUTE_RETRY_MS = 10_000;
+/** While switched off for manual play: how often the bot asks whether it may log in again. */
+const PARKED_RECHECK_MS = 30_000;
+/** While in game: how often the bot asks whether an operator has switched it off. */
+const MANUAL_PLAY_CHECK_MS = 10_000;
 /** How long a login gets, from opening the connection to spawning, before it is started again. */
 const LOGIN_TIMEOUT_MS = 90_000;
 
@@ -373,7 +378,9 @@ export class MinecraftWorker {
   /* A field rather than the bare constant so tests can wait milliseconds, not seconds. */
   private relogRetryMs = RELOG_RETRY_MS;
   /** The gateway's last answer on how to connect, used when it cannot be asked. */
-  private knownRoute: { proxy: BotProxy | null } | undefined;
+  private knownRoute: ConnectionRoute | undefined;
+  /** The "switched off for manual play" message has been logged for the current stretch. */
+  private parkedNoted = false;
   /** The proxy assignment the current connection was opened with; undefined when direct. */
   private routeRevision: string | undefined;
   private timers = new Set<NodeJS.Timeout>();
@@ -470,7 +477,17 @@ export class MinecraftWorker {
     if (this.stopped) return;
     this.invalidateSnapshotState();
     void this.resolveRoute().then(
-      (proxy) => this.openConnection(proxy),
+      (route) => {
+        if (route.parked) {
+          this.stayParked();
+          return;
+        }
+        if (this.parkedNoted) {
+          this.parkedNoted = false;
+          this.log.info('Switched back on by an operator; logging in');
+        }
+        this.openConnection(route.proxy);
+      },
       (error: unknown) => {
         if (this.stopped) return;
         this.log.error(
@@ -487,19 +504,51 @@ export class MinecraftWorker {
     );
   }
 
-  private async resolveRoute(): Promise<BotProxy | null> {
+  private async resolveRoute(): Promise<ConnectionRoute> {
     try {
-      const proxy = await this.api.connectionRoute();
-      this.knownRoute = { proxy };
-      return proxy;
+      const route = await this.api.connectionRoute();
+      this.knownRoute = route;
+      return route;
     } catch (error) {
       if (!this.knownRoute) throw error;
       this.log.warn(
         { err: error, via: describeRoute(this.knownRoute.proxy) },
         'Could not ask the gateway for the route; using the last one it gave',
       );
-      return this.knownRoute.proxy;
+      // Including "switched off": an unreachable gateway must not let a parked bot back in.
+      return this.knownRoute;
     }
+  }
+
+  /* Switched off for manual play: the owner is (or is about to be) in this account by hand, and
+   * DonutSMP lets one session per account in, so the bot stays out and asks again every
+   * PARKED_RECHECK_MS until an operator switches it back on. Held open and tracked, like every
+   * other wait before a login. */
+  private stayParked(): void {
+    if (this.stopped) return;
+    if (!this.parkedNoted) {
+      this.parkedNoted = true;
+      this.log.warn('Switched off for manual play by an operator; staying out of the game');
+    }
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      this.connect();
+    }, PARKED_RECHECK_MS);
+    this.timers.add(timer);
+  }
+
+  /* While in game: has an operator switched this bot off? If so it logs out -- but never in the
+   * middle of a payout or a transfer, which would leave money in an unknown state; the next check,
+   * MANUAL_PLAY_CHECK_MS later, takes it once that is done. Back at the login, the route keeps it
+   * out (stayParked). */
+  private async checkManualPlay(): Promise<void> {
+    if (this.stopped || !this.bot?.entity) return;
+    const route = await this.api.connectionRoute();
+    this.knownRoute = route;
+    if (!route.parked) return;
+    if (this.pendingPayout || this.payoutPreparing || this.transferring || this.polling) return;
+    this.log.warn('Switched off for manual play by an operator; logging out');
+    this.cycleConnection('manual play');
   }
 
   private openConnection(proxy: BotProxy | null): void {
@@ -634,6 +683,8 @@ export class MinecraftWorker {
       this.scheduleIdleBalance();
       this.scheduleRelog();
       this.schedule(() => this.run(this.snapshot(), 'inventory snapshot'), 30_000);
+      // An operator switching the bot off for manual play takes effect within this.
+      this.schedule(() => this.run(this.checkManualPlay(), 'manual play check'), MANUAL_PLAY_CHECK_MS);
       /* Polled whatever the transfer flag says. BOT_TRANSFERS_ENABLED governs what the bot may do
        * with an ITEM, not whether it may ask for work: cash payouts share this queue and move a
        * number with the server's own /pay. Gating the poll on it meant a deployment with item

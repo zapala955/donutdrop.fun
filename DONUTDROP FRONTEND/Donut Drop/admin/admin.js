@@ -1652,6 +1652,14 @@ async function loadBots() {
           bot.status === 'quarantined' ? 'bad' : bot.status === 'degraded' ? 'warn' : 'ok',
         ),
       );
+      /* Switched off for manual play. "Logging out" while its heartbeats still arrive (it may be
+         finishing a payout), then "off": the moment it is safe to join on the account by hand. */
+      if (bot.parked_at) {
+        const beating =
+          bot.last_heartbeat_at !== null &&
+          Date.now() - new Date(bot.last_heartbeat_at).getTime() < 25_000;
+        status.append(' ', pill(beating ? 'logging out…' : 'off for manual play', 'warn'));
+      }
       tr.append(status);
       const recon = document.createElement('td');
       recon.append(
@@ -1746,7 +1754,45 @@ async function loadBots() {
         }
       });
 
-      actions.append(rejoin, pay, roleButton, reconcile, proxyButton);
+      /* Off for manual play, so the owner can join DonutSMP on the bot's account by hand: the bot
+         finishes any payout it is sending, logs out and stays out until switched back on. */
+      const parked = Boolean(bot.parked_at);
+      const manual = document.createElement('button');
+      manual.type = 'button';
+      manual.className = 'btn';
+      manual.textContent = parked ? 'Reconnect' : 'Off for manual play';
+      manual.title = parked
+        ? 'Let the bot log back in. Leave its account in your own game first.'
+        : 'Log the bot out and keep it out, so you can join DonutSMP on its account';
+      manual.addEventListener('click', async () => {
+        const reason = await confirmAction(
+          parked
+            ? `Let ${bot.username} log back in? Leave its account in your own game first, or ` +
+                'DonutSMP will say it is already online. It is back within about half a minute.'
+            : `Switch ${bot.username} off so you can play on its account? It finishes any payout ` +
+                'it is sending, logs out within about ten seconds and stays out until you press ' +
+                'Reconnect. Players cannot deposit to it meanwhile, and withdrawals wait.',
+        );
+        if (!reason) return;
+        manual.disabled = true;
+        try {
+          await api.patch(`/v1/admin/bots/${bot.id}/manual-play`, { off: !parked, reason });
+          toast(
+            parked
+              ? `${bot.username} is logging back in.`
+              : `${bot.username} is logging out. Join once it shows "off for manual play".`,
+            'ok',
+          );
+          await loadBots();
+          // Its heartbeats stop once it is out; look again then, so the badge turns to "off".
+          if (!parked) setTimeout(() => void loadBots(), 26_000);
+        } catch (error) {
+          toast(`${error.code}: ${error.message}`, 'bad');
+          manual.disabled = false;
+        }
+      });
+
+      actions.append(manual, rejoin, pay, roleButton, reconcile, proxyButton);
 
       const quarantining = bot.status !== 'quarantined';
       const button = document.createElement('button');
