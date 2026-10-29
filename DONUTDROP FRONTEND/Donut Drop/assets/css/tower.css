@@ -16,6 +16,8 @@
   --tower-gem-ring: rgba(0, 145, 196, .55);
   --tower-loss-wash: rgba(255, 34, 34, .14);
   --tower-gold-ring: rgba(255, 170, 0, .55);
+  /* The 3D tower's sky, behind the canvas until its first frame. */
+  --tower-sky: #78a7ff;
   --tower-tile-h: 52px;
   --tower-gap: var(--lx-s2);
 
@@ -51,6 +53,9 @@
 }
 .tower__readout span { color: var(--lx-mute); font: 600 .8125rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
 
+/* The board and its banner, together: the flat tower, or the 3D one over it. */
+.tower__pit { position: relative; width: min(100%, 480px); }
+
 /* Floor 1 is first in the markup and at the bottom of the screen: the reading order is the
    climbing order. */
 .tower__board {
@@ -58,7 +63,7 @@
   display: flex;
   flex-direction: column-reverse;
   gap: var(--tower-gap);
-  width: min(100%, 480px);
+  width: 100%;
 }
 
 .tfloor {
@@ -231,6 +236,52 @@
   white-space: nowrap;
 }
 
+/* ─────────── the 3D tower (tower3d.js) ─────────── */
+.tower[data-render="3d"] .tower__pit {
+  width: 100%;
+  aspect-ratio: 16 / 10.5;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--tower-sky);
+  box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+.tower__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* The flat tower stays for the keyboard and a screen reader, out of sight and out of the pointer's
+ * way: the arrow keys move a white outline round a chest instead. */
+.tower[data-render="3d"] .tower__board {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+/* Over the tower the result sits at the top, clear of the chests it describes. */
+.tower[data-render="3d"] .tower__banner { top: 14px; z-index: 2; transform: translateX(-50%); }
+
+.tower__gfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-s2);
+  margin-top: var(--lx-s1, 4px);
+  color: var(--lx-faint);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.tower__gfx select {
+  height: 32px;
+  padding: 0 var(--lx-s2);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  cursor: pointer;
+}
+.tower__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.tower__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+.tower__gfx[hidden] { display: none; }
+
 /* ─────────── narrower screens ─────────── */
 @media (max-width: 1023px) {
   .tower { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
@@ -240,6 +291,7 @@
   /* Still a 44px target, the floor's tiles 8px apart: nine floors fit a phone without scrolling
      inside the board. */
   .tower { --tower-tile-h: 44px; }
+  .tower[data-render="3d"] .tower__pit { aspect-ratio: 4 / 4.6; border-radius: 12px; }
   .ttile { font-size: .8125rem; }
   .tower__readout b { font-size: 1.0625rem; }
 }

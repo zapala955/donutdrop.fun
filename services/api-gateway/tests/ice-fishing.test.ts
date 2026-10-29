@@ -113,7 +113,7 @@ describe('ice fishing: the page and the lake', () => {
       assert.ok(existsSync(path.join(root, 'DONUTDROP FRONTEND/Donut Drop', file!)), file);
     }
     assert.match(lake, /const hit = raycaster\.intersectObject\(tiles, false\)\[0\];/);
-    assert.match(lake, /import \{ chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    assert.match(lake, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
   });
 
   it('is a page of its own: route, view, lobby card, sidebar, feed, search and sitemap', async () => {

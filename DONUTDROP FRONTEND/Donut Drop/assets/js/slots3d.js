@@ -26,8 +26,10 @@
 import { reduceMotion } from './util.js';
 import { getTHREE, loadImage, crop, softDot } from './mc3d.js';
 import { atlas, pixelTexture, makeSprites } from './mcmodels.js';
+import { gradePass } from './scenery3d.js';
 import { buildBastionStage } from './slots3d-bastion.js';
 import { buildMonumentStage } from './slots3d-monument.js';
+import { BRIGHTNESS } from './quality3d.js';
 
 const TILE = 128;            // one symbol in the drum atlas
 const ATLAS_COLS = 4;
@@ -162,7 +164,7 @@ export async function createMachine3d(host, { strips, symbols, scatter, lines, i
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.0 * BRIGHTNESS;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   // The drums are big wheels; only the band behind the glass is drawn.
@@ -221,6 +223,7 @@ export async function createMachine3d(host, { strips, symbols, scatter, lines, i
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.4, 0.4, 1.1);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
+      composer.addPass(gradePass(THREE, addons, { contrast: 1.03, saturation: 1.05, vignette: 0.12 }));
     } catch {
       composer = null;
       bloom = null;

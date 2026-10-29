@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -371,5 +372,41 @@ describe('the roulette does not spoil its own spin', () => {
     assert.match(faceRule.slice(0, faceRule.indexOf('}')), /min-width:\s*0/);
     // The full figure survives truncation through the accessible name.
     assert.match(source, /you have \$\{money\(Number\(own\)\)\} on this/);
+  });
+});
+
+describe('roulette in 3D', () => {
+  const repo = path.resolve(import.meta.dirname, '../../..');
+  const front = (relative: string) => readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop', relative), 'utf8');
+  const img = (relative: string) => path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/img', relative);
+
+  it('draws the fortress only from the game’s own pictures and models', async () => {
+    const hall = await front('assets/js/roulette3d.js');
+    const body = hall.match(/const BLOCKS = \[([^;]+)\];/)?.[1] ?? '';
+    const blocks = [...body.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    assert.ok(blocks.length > 15);
+    for (const name of blocks) assert.ok(existsSync(img(`block/${name}.png`)), `block ${name}`);
+    for (const [, file] of hall.matchAll(/loadImage\('assets\/img\/([^']+)'\)/g)) assert.ok(existsSync(img(file!)), file);
+    for (let i = 0; i < 8; i += 1) assert.ok(existsSync(img(`particle/generic_${i}.png`)), `generic_${i}`);
+    // BlazeModel's rods: four a ring at radius 9, 7 and 5, as setupAnim turns them.
+    const models = await front('assets/js/mcmodels.js');
+    assert.match(models, /Math\.cos\(a\) \* 9, -2 \+ Math\.cos\(\(i \* 2 \+ ticks\) \* 0\.25\), Math\.sin\(a\) \* 9/);
+    assert.match(models, /Math\.cos\(a\) \* 5, 11 \+ Math\.cos\(\(i \* 1\.5 \+ ticks\) \* 0\.5\), Math\.sin\(a\) \* 5/);
+    assert.ok(hall.includes('def: BLAZE'));
+    // The numbers are the game's font, on the pockets' own concrete.
+    assert.match(hall, /drawText\(g, font, text,/);
+    assert.match(hall, /img\[number === 0 \? 'green_concrete' : red\.has\(number\) \? 'red_concrete' : 'black_concrete'\]/);
+  });
+
+  it('runs the ball into the server’s pocket in the page’s time, and keeps the flat wheel for everyone else', async () => {
+    const [hall, page] = await Promise.all([front('assets/js/roulette3d.js'), front('assets/js/roulette.js')]);
+    assert.match(page, /await import\('\.\/roulette3d\.js'\)/);
+    assert.match(page, /wheel3d\?\.spin\(index, animationMs\);/);
+    assert.match(page, /wheel3d\?\.rest\(index\);/);
+    // The ball ends in exactly the pocket asked for: at the end of the spin it is put there.
+    assert.match(hall, /if \(u >= 1\) \{\n\s*rest\(spin\.index\);/);
+    assert.match(hall, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    // The clock repaints the board only when something on it has changed.
+    assert.match(page, /if \(key === paintedClockKey\) return;/);
   });
 });

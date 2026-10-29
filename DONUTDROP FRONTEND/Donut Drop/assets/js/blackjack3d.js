@@ -18,6 +18,8 @@
 import { reduceMotion } from './util.js';
 import { getTHREE, loadImage, crop, softDot } from './mc3d.js';
 import { VILLAGER, buildModel, makeSprites, pixelTexture, placeEntity } from './mcmodels.js';
+import { gradePass } from './scenery3d.js';
+import { BRIGHTNESS } from './quality3d.js';
 
 const B = 0.5;                // one block
 const PIXEL = B / 16;         // one model pixel
@@ -96,7 +98,7 @@ export async function createTable3d(host) {
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.05 * BRIGHTNESS;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const ROOM = 0x140c08;
@@ -142,6 +144,7 @@ export async function createTable3d(host) {
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.38, 0.4, 1.7);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
+      composer.addPass(gradePass(THREE, addons, { contrast: 1.04, saturation: 1.05, lift: [0.012, 0.006, 0.0], gain: [1.02, 1.0, 0.97], vignette: 0.14 }));
     } catch {
       composer = null;
       bloom = null;

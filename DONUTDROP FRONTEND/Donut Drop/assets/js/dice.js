@@ -9,6 +9,11 @@
  * the multiplier. Every one of them moves the other three. Over and Under swap sides and keep the
  * chance, so the multiplier does not change under the player's hand.
  *
+ * Over the track, in WebGL (dice3d.js, its own chunk), an archery range: the line drawn on a wall
+ * between the winning lime and the losing red, and an arrow from Steve's bow where the roll lands.
+ * The track and its slider stay as they are under it, the one way the line is set; a browser
+ * without WebGL, or a player who switches to 2D (view3d.js), has the track alone.
+ *
  * Motion is one thing: the marker sliding to where the roll landed. With reduced motion it is
  * simply there.
  */
@@ -17,6 +22,8 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, sta
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 /* Mirrors lib/dice.ts, so a line is priced before the server is asked. */
 const SPAN = 10_000;
@@ -24,6 +31,7 @@ const EDGE_BPS = 1_000;
 const MIN_CHANCE = 100; // 1.00%
 const MAX_CHANCE = 8_900; // 89.00%
 const RECENT = 8;
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
 let config = null;
@@ -34,6 +42,8 @@ let direction = 'under';
 let target = 5_000; // the line, in hundredths: 50.00
 let recent = []; // newest first
 let last = null; // the last roll this page showed
+let range3d = null; // the 3D range, once it is up
+let rangeTried = null;
 
 /* ─────────── the maths, mirrored from lib/dice.ts ─────────── */
 
@@ -90,6 +100,7 @@ async function load() {
     recent = [];
   }
   paint();
+  if (config) void startRange();
 }
 
 async function refreshSeed() {
@@ -157,9 +168,14 @@ function trackX(value) {
   return thumb / 2 + (value / SPAN) * (track.clientWidth - thumb);
 }
 
-/** Slides the marker to the roll, and resolves when it is there. */
+/** Slides the marker to the roll, and resolves when it is there: in 3D, when the arrow is in the wall. */
 function land(bet) {
   last = bet;
+  if (range3d) {
+    $('#diceMarker', root).hidden = false;
+    paintMarker();
+    return range3d.shoot(bet.roll, bet.win, bet.multiplierBps);
+  }
   const marker = $('#diceMarker', root);
   const from = marker.hidden ? trackX(bet.roll) : Number(marker.dataset.x || 0);
   const to = trackX(bet.roll);
@@ -201,6 +217,97 @@ export async function playTestRoll({ won, u }) {
   }
 }
 
+/* ─────────── the 3D range ─────────── */
+
+function startRange() {
+  if (rangeTried || !wants3d()) return rangeTried;
+  rangeTried = (async () => {
+    const host = $('.dice__scene', root);
+    try {
+      const { createDice3d } = await import('./dice3d.js');
+      const built = await createDice3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        rangeTried = null;
+        return;
+      }
+      if (!built) return;
+      built.onLost = () => {
+        if (range3d === built) range3d = null;
+        built.dispose();
+        root.dataset.render = '2d';
+      };
+      built.onCue = cue;
+      range3d = built;
+      range3d.setLine(target, direction);
+      root.dataset.render = '3d';
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return rangeTried;
+}
+
+/** The range's sounds: the bow drawn and loosed, the arrow going in, fireworks for a big win. */
+function cue(name) {
+  if (name === 'draw') playSound('click', { rate: 0.6 });
+  else if (name === 'shoot') playSound('cast', { rate: 1.3 });
+  else if (name === 'hit') playSound('tick', { rate: 0.7 });
+  else if (name === 'firework') playSound('shatter', { rate: 1.5 });
+}
+
+function setGraphics(value) {
+  if (busy || !GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (range3d) {
+    range3d.dispose();
+    range3d = null;
+    rangeTried = null;
+    root.dataset.render = '2d';
+    if (config) void startRange();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the range away and leaves the track, 3D builds it again. */
+function setView(on) {
+  if (busy) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && range3d) {
+    range3d.dispose();
+    range3d = null;
+    rangeTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on && config) void startRange();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#diceView', root), { disabled: Boolean(busy) });
+  const select = root && $('#diceGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = range3d?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+  select.disabled = busy;
+}
+
 /* One polite, whole sentence per roll. */
 function say(text) {
   const node = $('#diceSay', root);
@@ -217,6 +324,7 @@ function paint() {
   paintMarker();
   paintRecent();
   paintControls();
+  paintGraphics();
 }
 
 /** The line, the two sides of it, and the three fields that describe it. */
@@ -225,6 +333,7 @@ function paintLine(skip = null) {
   const bps = multiplierBps(chance);
   const track = $('.dice__track', root);
   track.dataset.side = direction;
+  range3d?.setLine(target, direction);
   track.style.setProperty('--line-ratio', String(target / SPAN));
 
   const range = $('#diceLine', root);
@@ -340,6 +449,8 @@ function build() {
         <ol class="dice__recent" id="diceRecent" aria-label="Your last rolls, newest first"></ol>
       </div>
 
+      <div class="dice__scene"></div>
+
       <div class="dice__board">
         <div class="dice__rail">
           <div class="dice__marker" id="diceMarker" role="img" hidden><b>50.00</b></div>
@@ -397,6 +508,11 @@ function build() {
           <span id="diceGoLabel">Loading…</span>
         </button>
         <p class="dice__hint" id="diceHint" aria-live="polite"></p>
+        ${viewSwitch('diceView')}
+        <label class="dice__gfx" for="diceGfx">
+          <span>Graphics</span>
+          <select id="diceGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
     <div class="dice__say" id="diceSay" role="status" aria-atomic="true"></div>`;
@@ -444,6 +560,11 @@ function build() {
     event.preventDefault();
     void roll();
   });
+  $('#diceGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#diceView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   // Enter in a dial rolls too, the way it does in the stake field.
   root.querySelectorAll('.dice__dials input').forEach((input) => input.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;

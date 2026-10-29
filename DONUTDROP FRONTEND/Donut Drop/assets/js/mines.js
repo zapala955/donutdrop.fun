@@ -8,16 +8,24 @@
  *
  * Motion is two things: a diamond settling into its block, and the TNT going off. With reduced
  * motion both become an instant change of state, and nothing shakes.
+ *
+ * The field is drawn in WebGL (mines3d.js), its own chunk, at the graphics the player picked or the
+ * machine can manage: a cave with the blocks on its floor, picked with the pointer. The flat field
+ * stays under it, out of sight, for the keyboard and a screen reader -- the arrow keys move a white
+ * outline in the cave -- and comes back whole without WebGL.
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const TILES = 25;
 const QUICK_MINES = [1, 3, 5, 10, 24];
 const EDGE_BPS = 1000n;
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
 let view = null;
@@ -29,6 +37,8 @@ let pressed = null; // 'start' | 'cashout' | tile index
 let stakeText = '1m';
 let mineCount = 3;
 let focusTile = 12;
+let field = null; // the 3D cave, once it is up
+let fieldTried = null;
 
 /* ─────────── the maths, mirrored from lib/mines.ts ─────────── */
 
@@ -87,6 +97,8 @@ async function load() {
     game = null;
   }
   paint();
+  syncField();
+  if (config) void startField();
 }
 
 async function refreshSeed() {
@@ -126,6 +138,7 @@ async function start() {
     ));
     game = response.game;
     focusTile = 12;
+    field?.reset(true);
     playSound('click');
     say(`Game started with ${mineCount} TNT. Pick a tile.`);
     await refreshSeed();
@@ -158,10 +171,13 @@ async function reveal(tile) {
     const before = game.revealed.length;
     game = response.game;
     if (game.outcome === 'mine') {
-      boom(tile);
+      if (field) await field.dig(tile, true);
+      else boom(tile);
+      field?.reveal(game.mineTiles ?? [], tile);
       say(`TNT. You lost ${money(Number(game.stakeMinor))}.`);
     } else {
-      gem(tile);
+      if (field) await field.dig(tile, false);
+      else gem(tile);
       if (game.status === 'settled') {
         finished();
       } else {
@@ -206,6 +222,8 @@ async function cashOut() {
 function finished() {
   if (game?.outcome !== 'cashout') return;
   playSound('win');
+  field?.reveal(game.mineTiles ?? [], null);
+  field?.celebrate(game.multiplierBps);
   say(`Cashed out at ${times(game.multiplierBps)} for ${money(Number(game.payoutMinor))}.`);
 }
 
@@ -214,6 +232,109 @@ function randomTile() {
   const hidden = [];
   for (let tile = 0; tile < TILES; tile += 1) if (!game.revealed.includes(tile)) hidden.push(tile);
   if (hidden.length) void reveal(hidden[Math.floor(Math.random() * hidden.length)]);
+}
+
+/* ─────────── the cave ─────────── */
+
+function startField() {
+  if (fieldTried || !wants3d()) return fieldTried;
+  fieldTried = (async () => {
+    const host = $('.mines__pit', root);
+    try {
+      const { createMines3d } = await import('./mines3d.js');
+      const built = await createMines3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        fieldTried = null;
+        return;
+      }
+      if (!built) {
+        // No WebGL here: the flat field is all there is, and its graphics have nothing to choose.
+        $('.mines__gfx', root).hidden = true;
+        return;
+      }
+      built.onLost = () => {
+        if (field === built) field = null;
+        built.dispose();
+        root.dataset.render = '2d';
+      };
+      built.onPick = (tile) => {
+        focusTile = tile;
+        void reveal(tile);
+      };
+      built.onCue = cue;
+      field = built;
+      root.dataset.render = '3d';
+      syncField();
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return fieldTried;
+}
+
+/** The cave's sounds: the pickaxe on stone, the fuse, the blast, the diamonds coming in. */
+function cue(name, at = 0) {
+  if (name === 'crack') playSound('dig', { rate: 0.85 + at * 0.04 });
+  else if (name === 'break') playSound('dig', { rate: 0.7 });
+  else if (name === 'gem') playSound('tick');
+  else if (name === 'fuse') playSound('fuse');
+  else if (name === 'boom') {
+    playSound('explode');
+    try { navigator.vibrate?.(80); } catch { /* not every browser lets a page vibrate */ }
+  } else if (name === 'collect') playSound('absorb');
+  else if (name === 'firework') playSound('shatter', { rate: 1.5 });
+}
+
+/** The cave as the game stands: the blocks mined, and once it is over, what was in the rest. */
+function syncField() {
+  if (!field) return;
+  if (game) {
+    field.setBoard(game.revealed);
+    if (game.status === 'settled') field.reveal(game.mineTiles ?? [], game.mineHit ?? null);
+  } else {
+    field.reset(false);
+  }
+  field.setActive(inPlay() && !busy);
+}
+
+function setGraphics(value) {
+  if (busy || inPlay() || !GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (field) {
+    field.dispose();
+    field = null;
+    fieldTried = null;
+    root.dataset.render = '2d';
+    if (config) void startField();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the cave away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (busy) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && field) {
+    field.dispose();
+    field = null;
+    fieldTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on && config) void startField();
+  paintGraphics();
 }
 
 /* ─────────── motion ─────────── */
@@ -262,6 +383,21 @@ function paint() {
   paintBoard();
   paintReadout();
   paintControls();
+  paintGraphics();
+  field?.setActive(inPlay() && !busy);
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#minesView', root), { disabled: Boolean(busy) });
+  const select = root && $('#minesGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = field?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+  select.disabled = inPlay() || busy;
 }
 
 function paintBoard() {
@@ -384,8 +520,10 @@ function build() {
         <b id="minesNow">—</b>
         <span id="minesNext"></span>
       </div>
-      <div class="mines__board" id="minesBoard" role="group" aria-label="Twenty-five tiles, use the arrow keys to move and Enter to turn a tile">
-        ${tiles}
+      <div class="mines__pit">
+        <div class="mines__board" id="minesBoard" role="group" aria-label="Twenty-five tiles, use the arrow keys to move and Enter to turn a tile">
+          ${tiles}
+        </div>
         <div class="mines__banner" id="minesBanner" hidden><b></b><span></span></div>
       </div>
     </section>
@@ -413,6 +551,11 @@ function build() {
         </button>
         <button class="mines__random" id="minesRandom" type="button" hidden>Random tile</button>
         <p class="mines__hint" id="minesHint" aria-live="polite"></p>
+        ${viewSwitch('minesView')}
+        <label class="mines__gfx" for="minesGfx">
+          <span>Graphics</span>
+          <select id="minesGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
     <div class="mines__say" id="minesSay" role="status" aria-atomic="true"></div>`;
@@ -440,6 +583,11 @@ function build() {
     else void start();
   });
   $('#minesRandom', root).addEventListener('click', randomTile);
+  $('#minesGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#minesView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
 
   const board = $('#minesBoard', root);
   board.addEventListener('click', (event) => {
@@ -460,6 +608,12 @@ function build() {
     paintBoard();
     tileNode(index)?.focus();
   });
+  // The keyboard's place on the field, shown in the cave as a white outline.
+  board.addEventListener('focusin', (event) => {
+    const tile = event.target.closest('.mtile');
+    if (tile?.matches(':focus-visible')) field?.setFocus(Number(tile.dataset.tile));
+  });
+  board.addEventListener('focusout', () => field?.setFocus(-1));
 }
 
 export function mountMines(section) {
@@ -479,6 +633,7 @@ export function mountMines(section) {
       if (event.detail === 'logout') {
         game = null;
         seedHash = null;
+        field?.reset(false);
       }
       if (!busy) paint();
     });

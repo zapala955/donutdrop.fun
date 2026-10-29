@@ -470,7 +470,7 @@ describe('the slots page', () => {
     assert.match(page, /return machine\.land\(next, \{/);
     // No WebGL, or a lost context, leaves the flat reels in charge; they stay current for screen readers.
     assert.match(machine, /if \(!\(probe\.getContext\('webgl2'\) \|\| probe\.getContext\('webgl'\)\)\) return null;/);
-    assert.match(page, /if \(!built\) return;/);
+    assert.match(page, /if \(!built\) \{\s*root\.dataset\.no3d = '';\s*return;\s*\}/);
     assert.match(page, /built\.onLost = \(\) => \{\s*machine = null;\s*built\.dispose\(\);\s*root\.dataset\.render = '2d';/);
     assert.match(page, /onStop: \(reel\) => \{\s*paintReel\(reel, grid\[reel\]\);/);
     assert.match(css, /\.slots\[data-render="3d"\] \.slots__reels \{[^}]*clip: rect\(0 0 0 0\);/);

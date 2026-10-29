@@ -18,6 +18,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const HOLES = 25;
 const QUICK_THIN = [1, 3, 5, 10, 20];
@@ -128,12 +129,19 @@ const logEntry = (g) => ({ outcome: g.outcome, bps: g.outcome === 'cashout' ? g.
 /* ─────────── the lake ─────────── */
 
 function startLake() {
-  if (lakeTried) return lakeTried;
+  if (lakeTried || !wants3d()) return lakeTried;
   lakeTried = (async () => {
     const host = $('.icefish__lake', root);
     try {
       const { createIce3d } = await import('./icefishing3d.js');
       const built = await createIce3d(host, { catches: config.catches.map((c) => c.id), icon });
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        lakeTried = null;
+        return;
+      }
       if (!built) return;
       built.onLost = () => {
         if (lake === built) lake = null;
@@ -181,6 +189,28 @@ function setGraphics(value) {
     root.dataset.render = '2d';
     if (config) void startLake();
   }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the lake away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (busy) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && lake) {
+    lake.dispose();
+    lake = null;
+    lakeTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on && config) void startLake();
   paintGraphics();
 }
 
@@ -404,6 +434,7 @@ function paintThin() {
 }
 
 function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#icefishView', root), { disabled: Boolean(busy) });
   const select = root && $('#icefishGfx', root);
   if (!select) return;
   const pref = graphicsPref();
@@ -543,6 +574,7 @@ function build() {
         <span class="icefish__label">Last games</span>
         <ol class="icefish__log" id="icefishLog"></ol>
         <p class="icefish__logempty" id="icefishLogEmpty">No games yet.</p>
+        ${viewSwitch('icefishView')}
         <label class="icefish__gfx" for="icefishGfx">
           <span>Graphics</span>
           <select id="icefishGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
@@ -577,6 +609,10 @@ function build() {
   });
   $('#icefishRandom', root).addEventListener('click', randomHole);
   $('#icefishGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#icefishView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   $('#icefishForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
     if (inPlay()) void cashOut();

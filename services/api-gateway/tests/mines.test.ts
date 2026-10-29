@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -128,5 +129,48 @@ describe('mines routes', () => {
     assert.ok(kinds(migration, 'wallet_transactions_kind_check').has('mines_payout'));
     assert.ok(kinds(migration, 'wager_events_source_check').has('mines'));
     assert.match(migration, /CREATE UNIQUE INDEX mines_games_one_active_idx ON mines_games \(user_id\) WHERE status = 'active'/);
+  });
+});
+
+describe('mines in 3D', () => {
+  const front = (relative: string) => read(`DONUTDROP FRONTEND/Donut Drop/${relative}`);
+  const img = (relative: string) => path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/img', relative);
+
+  it('draws the cave only from the game’s own pictures and models', async () => {
+    const cave = await front('assets/js/mines3d.js');
+    const quoted = (list: string) => {
+      const body = cave.match(new RegExp(`const ${list} = \\[([^;]+)\\];`))?.[1] ?? '';
+      return [...body.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    };
+    const ores = quoted('ORES');
+    assert.deepEqual(ores, ['coal', 'iron', 'gold', 'redstone', 'lapis', 'diamond']);
+    for (const name of [...quoted('BLOCKS'), ...ores.map((o) => `deepslate_${o}_ore`)]) assert.ok(existsSync(img(`block/${name}.png`)), `block ${name}`);
+    // The ten stages a block cracks through as it is mined.
+    for (let i = 0; i < 10; i += 1) assert.ok(existsSync(img(`block/destroy_stage_${i}.png`)), `destroy_stage_${i}`);
+    for (const name of quoted('ENTITY')) assert.ok(existsSync(img(`entity/${name}.png`)), `entity ${name}`);
+    for (const name of quoted('PARTICLE')) assert.ok(existsSync(img(`particle/${name}.png`)), `particle ${name}`);
+    for (const [name, frames] of [['explosion', 16], ['generic', 8], ['spark', 8]] as const) {
+      for (let i = 0; i < frames; i += 1) assert.ok(existsSync(img(`particle/${name}_${i}.png`)), `${name}_${i}`);
+    }
+    for (const [, file] of cave.matchAll(/loadImage\('assets\/img\/([^']+)'\)/g)) assert.ok(existsSync(img(file!)), file);
+    for (const model of ['{ material: steveMat, def: PLAYER }', '{ material: creeperMat, def: CREEPER }']) assert.ok(cave.includes(model), model);
+    // The creeper is CreeperModel's: head and body on one pivot six pixels down, legs at eighteen.
+    const models = await front('assets/js/mcmodels.js');
+    assert.match(models, /export const CREEPER = \{\n  texW: 64,\n  texH: 32,/);
+    assert.match(models, /\{ name: 'rightHindLeg', pivot: \[-2, 18, 4\], cubes: creeperLeg \}/);
+    // TntRenderer: a white flash every other five ticks, a swell to 1.3 in the last ten.
+    assert.match(cave, /const white = Math\.floor\(e \/ 250\) % 2 === 0;/);
+    assert.match(cave, /s \*= 1 \+ f \* 0\.3;/);
+  });
+
+  it('asks of a low-end machine only what it can do, and keeps the flat field for everyone else', async () => {
+    const [cave, page, css] = await Promise.all([front('assets/js/mines3d.js'), front('assets/js/mines.js'), front('assets/css/mines.css')]);
+    assert.match(cave, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
+    for (const use of ['tier.particles', 'tier.lights', 'tier.composer', 'tier.antialias', 'frameMs(tier)', 'minFpsFor(tier)']) assert.ok(cave.includes(use), use);
+    // The cave is its own chunk, loaded only when the page can draw it; the board stays for the keyboard.
+    assert.match(page, /await import\('\.\/mines3d\.js'\)/);
+    assert.match(page, /if \(field\) await field\.dig\(tile, true\);\n\s*else boom\(tile\);/);
+    assert.match(page, /board\.addEventListener\('focusin'/);
+    assert.match(css, /\.mines\[data-render="3d"\] \.mines__board \{\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  opacity: 0;\n  pointer-events: none;\n\}/);
   });
 });

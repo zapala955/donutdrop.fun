@@ -21,6 +21,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { onViewChange, setWants3d, wants3d as wantsScenes } from './view3d.js';
 
 const DEAL_MS = 340; // shoe to seat
 const DEAL_GAP_MS = 170; // between cards on the deal
@@ -464,7 +465,8 @@ async function reload() {
 
 /* ─────────── the 3D table ─────────── */
 
-const wants3d = () => globalThis.DonutPrefs?.get?.().bjView !== '2d';
+// The site's one 2D/3D choice (view3d.js); the table's own older setting, if any, still says 2D.
+const wants3d = () => wantsScenes() && globalThis.DonutPrefs?.get?.().bjView !== '2d';
 
 /** The 2D/3D switch: which is on, and that it cannot change in the middle of a deal. */
 function paintView() {
@@ -526,7 +528,8 @@ function stop3d() {
 
 function chooseView(mode) {
   if (busy) return;
-  globalThis.DonutPrefs?.update?.({ bjView: mode === '2d' ? '2d' : undefined });
+  setWants3d(mode !== '2d');
+  globalThis.DonutPrefs?.update?.({ bjView: undefined });
   if (mode === '2d') stop3d();
   else void start3d();
   paintView();
@@ -594,6 +597,17 @@ function build() {
   for (const button of root.querySelectorAll('#bjView button')) {
     button.addEventListener('click', () => chooseView(button.dataset.mode));
   }
+  // The same choice made anywhere else (the top bar, the settings page): 2D at once, 3D when the
+  // table is on screen, and never in the middle of a deal.
+  onViewChange(function follow() {
+    if (busy) {
+      setTimeout(follow, 600);
+      return;
+    }
+    if (!wants3d()) stop3d();
+    else if (root?.offsetParent) void start3d();
+    paintView();
+  });
 
   /* H, S, D while a hand is live -- unless the player is typing, or the page is not showing. */
   document.addEventListener('keydown', (event) => {

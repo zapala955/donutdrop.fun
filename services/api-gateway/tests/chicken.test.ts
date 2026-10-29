@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -241,5 +242,36 @@ describe('the chicken page', () => {
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
     assert.match(sprite, /viewBox="0 0 16 16" shape-rendering="crispEdges"/);
+  });
+});
+
+describe('chicken in 3D', () => {
+  const front = (relative: string) => readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop', relative), 'utf8');
+  const img = (relative: string) => path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/img', relative);
+
+  it('lays the meadow out of the game’s own pictures and models', async () => {
+    const meadow = await front('assets/js/chicken3d.js');
+    const quoted = (list: string) => [...(meadow.match(new RegExp(`const ${list} = \\[([^;]+)\\];`))?.[1] ?? '').matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    for (const name of quoted('BLOCKS')) assert.ok(existsSync(img(`block/${name}.png`)), `block ${name}`);
+    for (const name of quoted('ENTITY')) assert.ok(existsSync(img(`entity/${name}.png`)), `entity ${name}`);
+    for (const [, file] of meadow.matchAll(/loadImage\('assets\/img\/([^']+)'\)/g)) assert.ok(existsSync(img(file!)), file);
+    // MinecartModel (shared in mcmodels.js): the floor turned flat and four sides round it.
+    const models = await front('assets/js/mcmodels.js');
+    assert.ok(models.includes("{ name: 'bottom', pivot: [0, 4, 0], rot: [Math.PI / 2, 0, 0], cubes: [{ u: 0, v: 10, x: -10, y: -8, z: -1, w: 20, h: 16, d: 2 }] }"));
+    assert.ok(models.includes("{ name: 'front', pivot: [-9, 4, 0], rot: [0, (3 * Math.PI) / 2, 0]"));
+    assert.ok(meadow.includes('def: MINECART'));
+    assert.ok(meadow.includes('def: CHICKEN'));
+    // What a line pays, on its sign, in the game's font.
+    assert.match(meadow, /drawText\(g, font, text,/);
+  });
+
+  it('hops when the page says, and keeps the flat road for a screen reader', async () => {
+    const [meadow, page, css] = await Promise.all([front('assets/js/chicken3d.js'), front('assets/js/chicken.js'), front('assets/css/chicken.css')]);
+    assert.match(page, /await import\('\.\/chicken3d\.js'\)/);
+    // The hop (and the minecart) play out before the page says what happened.
+    assert.match(page, /game = response\.game;\n\s*if \(road3d\) await road3d\.step\(lane, game\.outcome === 'hit'\);/);
+    assert.match(page, /times\(multiplierBps\(name, lane \+ 1\)\)\.replace\('×', 'x'\)/);
+    assert.match(css, /\.chicken\[data-render="3d"\] \.chicken__road \{\n  position: absolute;\n  width: 1px;/);
+    assert.match(meadow, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
   });
 });

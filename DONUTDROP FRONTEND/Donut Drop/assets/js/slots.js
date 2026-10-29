@@ -27,6 +27,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { createMachine3d } from './slots3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 /* What each machine's page says and shows. `art` is the item sprite (assets/img/items) for each
  * symbol the server names, real sprites drawn pixel-sharp; `prefix` keeps the two pages' element ids
@@ -148,6 +149,7 @@ function createSlotsGame(game) {
 
   /** Builds the 3D machine over the flat reels. Any failure leaves the flat reels in charge. */
   async function startMachine() {
+    if (!wants3d()) return;
     machineTried = true;
     try {
       const built = await createMachine3d($('.slots__window', root), {
@@ -161,7 +163,16 @@ function createSlotsGame(game) {
         onAuto: () => $(`#${P}Auto`, root)?.click(),
         onTurbo: () => $(`#${P}Turbo`, root)?.click(),
       });
-      if (!built) return;
+      if (!built) {
+        root.dataset.no3d = '';
+        return;
+      }
+      if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        machineTried = false;
+        return;
+      }
       built.onLost = () => {
         machine = null;
         built.dispose();
@@ -176,6 +187,33 @@ function createSlotsGame(game) {
       machine = null;
       root.dataset.render = '2d';
     }
+  }
+
+  /** The 2D/3D switch (view3d.js): 2D puts the machine away for the flat reels, 3D builds it again. */
+  function setView(on) {
+    if (spinning) {
+      // Switched somewhere else mid-spin: followed once the reels stop.
+      if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+      paintView();
+      return;
+    }
+    if (on !== wants3d()) {
+      setWants3d(on);
+      playSound('click');
+    }
+    if (!on && machine) {
+      machine.dispose();
+      machine = null;
+      machineTried = false;
+      root.dataset.render = '2d';
+      if (config) for (let reel = 0; reel < 5; reel += 1) paintReel(reel);
+    }
+    if (on && config && !machineTried) void startMachine();
+    paintView();
+  }
+
+  function paintView() {
+    if (root) paintViewSwitch(root, $(`#${P}View`, root), { disabled: spinning });
   }
 
   function setMode(mode) {
@@ -638,6 +676,7 @@ function createSlotsGame(game) {
 
   function paint() {
     if (!root) return;
+    paintView();
     paintControls();
     paintStats();
     paintFree();
@@ -824,6 +863,7 @@ function createSlotsGame(game) {
             <div><dt>Best</dt><dd id="${P}Best"></dd></div>
           </dl>
           <button class="slots__paytable" id="${P}Paytable" type="button">Paytable</button>
+          ${viewSwitch(`${P}View`)}
         </form>
       </aside>
       <div class="slots__say" id="${P}Say" role="status" aria-atomic="true"></div>`;
@@ -850,6 +890,9 @@ function createSlotsGame(game) {
     });
     $(`#${P}Turbo`, root).addEventListener('click', () => { turbo = !turbo; paintControls(); });
     $(`#${P}Paytable`, root).addEventListener('click', openPaytable);
+    onViewSwitch($(`#${P}View`, root), setView);
+    // The same choice made anywhere else: 2D at once, 3D only for the machine on screen.
+    onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
 
     /* Space spins, as on every slot machine, but only on this page and never while typing or on a
      * control (a focused button already answers Space itself). */

@@ -10,6 +10,11 @@
  * Only the floor being climbed can be pressed. One tab stop sits on it; the left and right arrows
  * move between its tiles and Enter or Space turns one.
  *
+ * The tower is drawn in WebGL (tower3d.js), its own chunk, at the graphics the player picked or the
+ * machine can manage: nine storeys of stone brick with a row of chests on each, Steve climbing the
+ * ladder as he clears them. The flat tower stays underneath for the keyboard and a screen reader,
+ * for a browser without WebGL, and for a player who switches to 2D (view3d.js).
+ *
  * Motion is two things: a gem settling into its tile, and the TNT going off. With reduced motion
  * both become an instant change of state, and nothing shakes.
  */
@@ -18,6 +23,8 @@ import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const FLOORS = 9;
 const EDGE_BPS = 1000n;
@@ -30,6 +37,7 @@ const MODES = {
   expert: { tiles: 3, traps: 2, label: 'Expert' },
 };
 const MODE_NAMES = Object.keys(MODES);
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
 let config = null;
@@ -40,6 +48,8 @@ let pressed = null; // 'start' | 'cashout' | tile index
 let stakeText = '1m';
 let mode = 'easy';
 let focusTile = 0;
+let tower3d = null; // the 3D tower, once it is up
+let towerTried = null;
 
 /* ─────────── the maths, mirrored from lib/tower.ts ─────────── */
 
@@ -91,6 +101,7 @@ async function load() {
     game = null;
   }
   paint();
+  if (config) void startTower();
 }
 
 async function refreshSeed() {
@@ -163,11 +174,12 @@ async function pick(tile) {
   try {
     const response = await api.post(`/v1/tower/games/${game.id}/pick`, { tile, floor });
     game = response.game;
+    if (tower3d) await tower3d.open(floor, tile, game.outcome === 'trap');
     if (game.outcome === 'trap') {
-      boom(floor, tile);
+      if (!tower3d) boom(floor, tile);
       say(`TNT on floor ${floor + 1}. You lost ${money(Number(game.stakeMinor))}.`);
     } else {
-      gem(floor, tile);
+      if (!tower3d) gem(floor, tile);
       if (over()) {
         finished();
       } else {
@@ -210,6 +222,7 @@ async function cashOut() {
 function finished() {
   if (game?.outcome !== 'cashout') return;
   playSound('win');
+  tower3d?.celebrate(game.multiplierBps);
   const top = game.picks.length === FLOORS ? ' from the top' : '';
   say(`Cashed out${top} at ${times(game.multiplierBps)} for ${money(Number(game.payoutMinor))}.`);
 }
@@ -217,6 +230,122 @@ function finished() {
 function randomPick() {
   if (!inPlay()) return;
   void pick(Math.floor(Math.random() * game.tiles));
+}
+
+/* ─────────── the 3D tower ─────────── */
+
+function startTower() {
+  if (towerTried || !wants3d()) return towerTried;
+  towerTried = (async () => {
+    const host = $('.tower__pit', root);
+    try {
+      const { createTower3d } = await import('./tower3d.js');
+      const built = await createTower3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        towerTried = null;
+        return;
+      }
+      if (!built) return;
+      built.onLost = () => {
+        if (tower3d === built) tower3d = null;
+        built.dispose();
+        root.dataset.render = '2d';
+      };
+      built.onPick = (tile) => {
+        focusTile = tile;
+        void pick(tile);
+      };
+      built.onCue = cue;
+      tower3d = built;
+      root.dataset.render = '3d';
+      syncTower();
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return towerTried;
+}
+
+/** The tower's sounds: a chest's lid, the emerald, the ladder, the fuse and the blast, the haul. */
+function cue(name) {
+  if (name === 'open') playSound('click', { rate: 0.7 });
+  else if (name === 'gem') playSound('tick');
+  else if (name === 'climb') playSound('click', { rate: 1.7 });
+  else if (name === 'fuse') playSound('fuse');
+  else if (name === 'boom') {
+    playSound('explode');
+    try { navigator.vibrate?.(80); } catch { /* not every browser lets a page vibrate */ }
+  } else if (name === 'collect') playSound('absorb');
+  else if (name === 'firework') playSound('shatter', { rate: 1.5 });
+}
+
+/** The 3D tower as the game stands: the chests opened, the storey Steve is on, what each pays. */
+function syncTower() {
+  if (!tower3d) return;
+  const name = boardMode();
+  tower3d.sync({
+    tiles: MODES[name].tiles,
+    floor: game ? game.picks.length : 0,
+    picks: game?.picks ?? [],
+    over: over(),
+    traps: over() ? game.trapTiles ?? null : null,
+    trapHit: over() && game.outcome === 'trap' ? game.trapHit : null,
+    pays: Array.from({ length: FLOORS }, (_, floor) => times(multiplierBps(name, floor + 1))),
+  });
+  tower3d.setActive(inPlay() && !busy);
+}
+
+function setGraphics(value) {
+  if (busy || inPlay() || !GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (tower3d) {
+    tower3d.dispose();
+    tower3d = null;
+    towerTried = null;
+    root.dataset.render = '2d';
+    if (config) void startTower();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the tower away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (busy) {
+    // Switched somewhere else in the middle of a round: followed once the round lets go.
+    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
+    paintGraphics();
+    return;
+  }
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && tower3d) {
+    tower3d.dispose();
+    tower3d = null;
+    towerTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on && config) void startTower();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#towerView', root), { disabled: Boolean(busy) });
+  const select = root && $('#towerGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = tower3d?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+  select.disabled = inPlay() || busy;
 }
 
 /* ─────────── motion ─────────── */
@@ -268,6 +397,8 @@ function paint() {
   paintBoard();
   paintReadout();
   paintControls();
+  paintGraphics();
+  syncTower();
 }
 
 /** Each floor's tiles, rebuilt only when the mode changes how many a floor has. */
@@ -432,9 +563,11 @@ function build() {
         <b id="towerNow">—</b>
         <span id="towerNext"></span>
       </div>
+      <div class="tower__pit">
       <div class="tower__board" id="towerBoard" role="group" aria-label="Nine floors, climbed from the bottom. Use the left and right arrow keys to choose a tile on your floor and Enter to turn it">
         ${floors}
-        <div class="tower__banner" id="towerBanner" hidden><b></b><span></span></div>
+      </div>
+      <div class="tower__banner" id="towerBanner" hidden><b></b><span></span></div>
       </div>
     </section>
 
@@ -456,6 +589,11 @@ function build() {
         </button>
         <button class="tower__random" id="towerRandom" type="button" hidden>Random pick</button>
         <p class="tower__hint" id="towerHint" aria-live="polite"></p>
+        ${viewSwitch('towerView')}
+        <label class="tower__gfx" for="towerGfx">
+          <span>Graphics</span>
+          <select id="towerGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
     <div class="tower__say" id="towerSay" role="status" aria-atomic="true"></div>`;
@@ -491,6 +629,11 @@ function build() {
     else void start();
   });
   $('#towerRandom', root).addEventListener('click', randomPick);
+  $('#towerGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#towerView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
 
   const board = $('#towerBoard', root);
   board.addEventListener('click', (event) => {
@@ -509,6 +652,12 @@ function build() {
     paintBoard();
     tileNode(game.floor, next)?.focus();
   });
+  // The keyboard's place on the floor, shown in the tower as a white outline round a chest.
+  board.addEventListener('focusin', (event) => {
+    const tile = event.target.closest('.ttile');
+    if (tile?.matches(':focus-visible')) tower3d?.setFocus(Number(tile.dataset.tile));
+  });
+  board.addEventListener('focusout', () => tower3d?.setFocus(-1));
 }
 
 export function mountTower(section) {

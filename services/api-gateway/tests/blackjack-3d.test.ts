@@ -17,8 +17,8 @@ describe('the 3D blackjack table', () => {
     // Its own chunk: a player on the flat table never downloads it.
     assert.match(page, /const \{ createTable3d \} = await import\('\.\/blackjack3d\.js'\);/);
     assert.doesNotMatch(page, /^import .*blackjack3d/m);
-    assert.match(page, /const wants3d = \(\) => globalThis\.DonutPrefs\?\.get\?\.\(\)\.bjView !== '2d';/);
-    assert.match(page, /globalThis\.DonutPrefs\?\.update\?\.\(\{ bjView: mode === '2d' \? '2d' : undefined \}\);/);
+    assert.match(page, /const wants3d = \(\) => wantsScenes\(\) && globalThis\.DonutPrefs\?\.get\?\.\(\)\.bjView !== '2d';/);
+    assert.match(page, /setWants3d\(mode !== '2d'\);/);
     assert.match(page, /<div class="bj__view" id="bjView" role="group" aria-label="Table view">/);
     // No WebGL: the switch goes and the flat table stays.
     assert.match(page, /if \(!built\) \{\s*no3d = true;/);

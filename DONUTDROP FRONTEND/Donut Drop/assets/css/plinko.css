@@ -25,6 +25,9 @@
   /* The live feed's profit green, so a win reads the same here as in the feed. */
   --plinko-win: #35d07f;
   --plinko-ease: cubic-bezier(.22, 1, .36, 1);
+  /* The End (plinko3d.js): its void, and the shade drawn in at the canvas's edges. */
+  --plinko-void: #0c0912;
+  --plinko-vignette: rgba(0, 0, 0, .5);
 
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -290,6 +293,57 @@
   white-space: nowrap;
 }
 
+/* ─────────── the End (plinko3d.js) ─────────── */
+.plinko__view { position: relative; }
+.plinko[data-render="3d"] .plinko__board { width: 100%; padding: 0 0 10px; }
+.plinko[data-render="3d"] .plinko__view {
+  aspect-ratio: 16 / 10.5;
+  overflow: hidden;
+  border-radius: 14px 14px 6px 6px;
+  background: var(--plinko-void);
+}
+.plinko[data-render="3d"] .plinko__view::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 45%, transparent 62%, var(--plinko-vignette));
+  pointer-events: none;
+}
+.plinko[data-render="3d"] #plinkoCanvas { display: none; }
+/* Past the flat canvas's own rule, which sizes any canvas on the board to the board's shape. */
+.plinko__board .plinko__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; aspect-ratio: auto; }
+/* The payouts stay the page's own row, set under the shulker boxes wherever the camera has them. */
+.plinko[data-render="3d"] .plinko__slots {
+  width: var(--row-width, auto);
+  margin: 8px 0 0 var(--row-left, 0px);
+}
+
+.plinko__gfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--faint);
+  font-size: .75rem;
+  font-weight: 700;
+}
+.plinko__gfx[hidden] { display: none; }
+.plinko__gfx select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font: inherit;
+  font-size: .8125rem;
+  cursor: pointer;
+}
+.plinko__gfx select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.plinko__gfx select:disabled { cursor: not-allowed; opacity: .6; }
+
 /* ─────────── narrower screens ─────────── */
 @media (max-width: 1180px) {
   .plinko { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
@@ -298,6 +352,7 @@
   .plinko { gap: 12px; }
   .plinko__stage { gap: 10px; padding: 10px; border-radius: 16px; }
   .plinko__board { padding: 6px 4px 8px; border-radius: 14px; }
+  .plinko[data-render="3d"] .plinko__view { aspect-ratio: 4 / 4.6; border-radius: 12px 12px 4px 4px; }
   .plinko__slots { gap: 2px; }
   .plinko__slot { height: 26px; border-radius: 4px; }
   .plinko__slots[data-dense] .plinko__slot { height: 34px; }

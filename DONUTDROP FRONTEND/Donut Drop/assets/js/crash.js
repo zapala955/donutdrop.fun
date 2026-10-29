@@ -10,6 +10,11 @@
  *
  * Motion is one thing: the curve. With reduced motion it is redrawn four times a second instead of
  * every frame, and the bust does not shake.
+ *
+ * The round is drawn in WebGL (crash3d.js), its own chunk, at the graphics the player picked or the
+ * machine can manage: Steve on a happy ghast, climbing off a meadow through the clouds for as long
+ * as the round lasts, until the lightning finds him. This page still owns the round and tells the
+ * sky every frame where it stands; without WebGL it draws its curve.
  */
 import { API_BASE_URL, api, idempotencyKey } from './api.js';
 import { linkPlayer } from './player-link.js';
@@ -17,12 +22,15 @@ import { bus, refreshBalance, state } from './store.js';
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const BUST_HOLD_MS = 2600; // how long a bust stays on the stage before the countdown takes over
 const LIVE_POLL_MS = 5_000; // a safety net under the live stream
 const BLIND_POLL_MS = 1_000; // no live stream: poll while a round is in the air
 const QUICK_STAKES = [1_000_000, 10_000_000, 100_000_000, 1_000_000_000];
 const QUICK_TARGETS = [[null, 'Off'], [150, '1.5×'], [200, '2×'], [500, '5×'], [1000, '10×']];
+const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
 let view = null;
@@ -45,6 +53,8 @@ let palette = null;
 let canvas = null;
 let ctx = null;
 let size = { w: 0, h: 0, dpr: 1 };
+let sky = null; // the 3D round, once it is up
+let skyTried = null;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const growth = () => Number(snap?.config?.growthPerSecond) || 0.07;
@@ -437,6 +447,90 @@ function paintPlayers() {
   }));
 }
 
+/* ─────────── the sky ─────────── */
+
+function startSky() {
+  if (skyTried || !wants3d()) return skyTried;
+  skyTried = (async () => {
+    const host = $('.crash__plot', root);
+    try {
+      const { createCrash3d } = await import('./crash3d.js');
+      const built = await createCrash3d(host);
+      if (!built) root.dataset.no3d = '';
+      else if (!wants3d()) {
+        // Switched to 2D while it was loading.
+        built.dispose();
+        skyTried = null;
+        return;
+      }
+      if (!built) {
+        // No WebGL here: the curve is all there is, and its graphics have nothing to choose.
+        $('.crash__gfx', root).hidden = true;
+        return;
+      }
+      built.onLost = () => {
+        if (sky === built) sky = null;
+        built.dispose();
+        root.dataset.render = '2d';
+        lastDraw = 0;
+      };
+      built.onCue = (cue) => {
+        if (cue === 'strike') playSound('thunder');
+        else if (cue === 'firework') playSound('shatter', { rate: 1.5 });
+      };
+      sky = built;
+      root.dataset.render = '3d';
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      paintGraphics();
+    } catch {
+      root.dataset.render = '2d';
+    }
+  })();
+  return skyTried;
+}
+
+function setGraphics(value) {
+  if (!GRAPHICS.some(([id]) => id === value) || value === graphicsPref()) return;
+  setGraphicsPref(value);
+  playSound('click');
+  if (sky) {
+    sky.dispose();
+    sky = null;
+    skyTried = null;
+    root.dataset.render = '2d';
+    void startSky();
+  }
+  paintGraphics();
+}
+
+/** The 2D/3D switch (view3d.js): 2D puts the sky away for the flat board, 3D builds it again. */
+function setView(on) {
+  if (on !== wants3d()) {
+    setWants3d(on);
+    playSound('click');
+  }
+  if (!on && sky) {
+    sky.dispose();
+    sky = null;
+    skyTried = null;
+    root.dataset.render = '2d';
+  }
+  if (on) void startSky();
+  paintGraphics();
+}
+
+function paintGraphics() {
+  if (root) paintViewSwitch(root, $('#crashView', root));
+  const select = root && $('#crashGfx', root);
+  if (!select) return;
+  const pref = graphicsPref();
+  if (select.value !== pref) select.value = pref;
+  const chosen = sky?.tier;
+  const auto = chosen ? `Auto · ${chosen[0].toUpperCase()}${chosen.slice(1)}` : 'Auto';
+  const option = $('option[value="auto"]', select);
+  if (option.textContent !== auto) option.textContent = auto;
+}
+
 /* ─────────── the stage ─────────── */
 
 function readPalette() {
@@ -474,6 +568,7 @@ function gridStep(span) {
 }
 
 function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
+  if (sky) return;
   const { w, h, dpr } = size;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
@@ -592,6 +687,7 @@ function render(now) {
     big.textContent = x100(point);
     status.textContent = bust === frozen ? 'Busted' : `Busted at ${x100(point)}`;
     bar.hidden = true;
+    sky?.update({ phase, x100: point, id: bust?.roundId ?? null, mine: bust === lastBust ? lastBust?.mine : myBet(), cashouts: markersFor(bust?.bets, point).length });
   } else if (phase === 'betting') {
     const left = Math.max(0, Date.parse(snap.round.startedAt) - serverNow());
     const total = (snap.config?.bettingSeconds || 10) * 1000;
@@ -600,6 +696,7 @@ function render(now) {
     status.textContent = myBet() ? 'You are in. Launching in' : 'Place your bet. Launching in';
     bar.hidden = false;
     bar.style.transform = `scaleX(${Math.min(1, left / total)})`;
+    sky?.update({ phase, id: snap.round.id });
   } else if (phase === 'running') {
     const x = liveX100();
     const seconds = (serverNow() - Date.parse(snap.round.startedAt)) / 1000;
@@ -612,11 +709,13 @@ function render(now) {
         ? `Current payout ${money(Number((BigInt(bet.stakeMinor) * BigInt(x)) / 100n))}`
         : 'In the air';
     bar.hidden = true;
+    sky?.update({ phase, seconds, growth: growth(), id: snap.round.id, mine: bet, cashouts: markersFor(snap.bets, x).length });
   } else {
     drawCurve(0, 100);
     big.textContent = '—';
     status.textContent = snap ? 'Crash is closed right now' : 'Connecting…';
     bar.hidden = true;
+    sky?.update({ phase: 'closed' });
   }
 
   if (phase !== lastPhase) {
@@ -675,6 +774,11 @@ function build() {
         </button>
         <p class="crash__hint" id="crashHint" aria-live="polite"></p>
         <p class="crash__mine" id="crashMine" hidden></p>
+        ${viewSwitch('crashView')}
+        <label class="crash__gfx" for="crashGfx">
+          <span>Graphics</span>
+          <select id="crashGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+        </label>
       </form>
     </aside>
 
@@ -708,6 +812,11 @@ function build() {
     paintControls();
   }));
   $('#crashForm', root).addEventListener('submit', (event) => { event.preventDefault(); primary(); });
+  $('#crashGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
+  onViewSwitch($('#crashView', root), setView);
+  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
+  // once, 3D only for the page on screen (the others build theirs when they are next opened).
+  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
 
   /* Space places the bet or cashes out -- unless the player is typing, or the page is hidden. */
   document.addEventListener('keydown', (event) => {
@@ -759,4 +868,5 @@ export function mountCrash(section) {
   frame = requestAnimationFrame(render);
   resize();
   void refresh();
+  void startSky();
 }

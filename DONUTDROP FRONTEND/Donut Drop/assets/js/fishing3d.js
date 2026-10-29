@@ -26,7 +26,8 @@ import {
   BOAT, COD, DOLPHIN, GUARDIAN, PLAYER, SALMON, SQUID, WARDEN, atlas, buildModel, drownedModel, itemModel,
   makeSprites, pixelTexture, placeEntity, poseCod, poseDolphin, poseGuardian, poseSalmon, poseSquid,
 } from './mcmodels.js';
-import { chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor } from './quality3d.js';
+import { gradePass } from './scenery3d.js';
 
 /* ─────────── the dive ─────────── */
 
@@ -163,7 +164,7 @@ export async function createPond3d(host, { sinker = 'feather', catches = [], ico
   renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.05 * BRIGHTNESS;
   const scale = (n) => Math.max(1, Math.round(n * tier.particles));
   const FRAME_MS = frameMs(tier);
   let nextFrameAt = 0;
@@ -228,12 +229,13 @@ export async function createPond3d(host, { sinker = 'feather', catches = [], ico
   let bloom = null;
   if (addons) {
     try {
-      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.antialias ? 4 : 0 });
+      const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: tier.samples });
       composer = new addons.EffectComposer(renderer, target);
       composer.addPass(new addons.RenderPass(scene, camera));
       bloom = new addons.UnrealBloomPass(new THREE.Vector2(4, 4), 0.6, 0.55, 1.1);
       composer.addPass(bloom);
       composer.addPass(new addons.OutputPass());
+      composer.addPass(gradePass(THREE, addons, { contrast: 1.04, saturation: 1.06, lift: [0.0, 0.006, 0.014], gain: [1.01, 1.0, 0.99], vignette: 0.16 }));
     } catch {
       composer = null;
       bloom = null;

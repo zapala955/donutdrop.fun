@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -195,5 +196,39 @@ describe('crash routes', () => {
     assert.match(activity, /FROM crash_bets b[\s\S]*?WHERE b\.status <> 'active'/);
     const blackjack = await read('services/api-gateway/src/routes/blackjack.ts');
     assert.match(blackjack, /publishLiveSoon\('activity'\)/);
+  });
+});
+
+describe('crash in 3D', () => {
+  const front = (relative: string) => readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop', relative), 'utf8');
+  const img = (relative: string) => path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/img', relative);
+
+  it('flies the happy ghast from the game’s own pictures and models', async () => {
+    const sky = await front('assets/js/crash3d.js');
+    const quoted = (list: string) => [...(sky.match(new RegExp(`const ${list} = \\[([^;]+)\\];`))?.[1] ?? '').matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    for (const name of quoted('BLOCKS')) assert.ok(existsSync(img(`block/${name}.png`)), `block ${name}`);
+    for (const name of quoted('ENTITY')) assert.ok(existsSync(img(`entity/${name}.png`)), `entity ${name}`);
+    for (const [, file] of sky.matchAll(/loadImage\('assets\/img\/([^']+)'\)/g)) assert.ok(existsSync(img(file!)), file);
+    for (let i = 0; i < 8; i += 1) assert.ok(existsSync(img(`particle/spark_${i}.png`)), `spark_${i}`);
+    // HappyGhastModel: nine tentacles under a sixteen-pixel body, drawn four times over; the harness's
+    // goggles across its front; the tentacles swaying as GhastModel.animateTentacles sways them.
+    const models = await front('assets/js/mcmodels.js');
+    assert.match(models, /tentacle\(6, 8, -3\.75, 5\), tentacle\(7, 8, 1\.25, 5\)/);
+    assert.match(models, /\{ name: 'goggles', pivot: \[0, 14, -5\.5\], cubes: \[\{ u: 0, v: 32, x: -8, y: -2\.5, z: -2\.5, w: 16, h: 5, d: 5, inflate: 0\.15 \}\] \}/);
+    assert.match(models, /rotation\.x = 0\.2 \* Math\.sin\(ticks \* 0\.3 \+ i\) \+ 0\.4;/);
+    assert.match(sky, /const GHAST_PX = 4 \/ 16;/);
+    // Steve sits as PlayerModel sits a rider: legs out at 1.41 rad, splayed by 0.31.
+    assert.match(sky, /P\.rightLeg\.rotation\.set\(-1\.41, 0\.31, 0\);/);
+  });
+
+  it('climbs with the round, smoothly, and leaves the curve for everyone else', async () => {
+    const [sky, page] = await Promise.all([front('assets/js/crash3d.js'), front('assets/js/crash.js')]);
+    // Height from the round's own clock, not from the floored hundredths, so the climb never steps.
+    assert.match(sky, /round\.x = Math\.exp\(growth \* Math\.max\(0, seconds\)\);/);
+    assert.match(sky, /export const altitudeOf = \(x100\) => HOVER \+ PER_DOUBLING \* Math\.log2\(Math\.max\(1, x100 \/ 100\)\);/);
+    assert.match(page, /await import\('\.\/crash3d\.js'\)/);
+    assert.match(page, /sky\?\.update\(\{ phase, seconds, growth: growth\(\), id: snap\.round\.id, mine: bet,/);
+    assert.match(page, /function drawCurve\(seconds, topX100, \{ bust = false, markers = \[\] \} = \{\}\) \{\n  if \(sky\) return;/);
+    assert.match(sky, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
   });
 });

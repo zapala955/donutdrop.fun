@@ -13,6 +13,7 @@
  */
 import { isMuted, setMuted, getVolume, setVolume, playSound } from './audio-engine.js';
 import { el } from './util.js';
+import { onViewChange, setWants3d, wants3d } from './view3d.js';
 
 const prefs = () => globalThis.DonutPrefs;
 /* What a fresh custom theme starts from: amethyst fading into gold, a pair that shows the
@@ -101,7 +102,14 @@ function appearance(save) {
     checked: prefs().get().motion === 'reduce',
     onChange: (on) => save({ motion: on ? 'reduce' : undefined }),
   });
-  sec.append(themeField(save), motion.line);
+  const games3d = switchRow({
+    title: 'Games in 3D',
+    hint: 'Draws the games as Minecraft scenes. Off, every game shows its flat board instead: lighter on an older machine. The same switch is in the top bar and on every game.',
+    checked: wants3d(),
+    onChange: (on) => setWants3d(on),
+  });
+  onViewChange((on) => { games3d.input.checked = on; });
+  sec.append(themeField(save), motion.line, games3d.line);
   return sec;
 }
 
