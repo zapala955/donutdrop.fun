@@ -122,7 +122,10 @@ export type WalletKind =
    * back when it unlocks (by the same id), and a winning day's slice (by the stake-day's id). */
   | 'staking_stake'
   | 'staking_release'
-  | 'staking_reward';
+  | 'staking_reward'
+  /* Weekly quests (lib/weekly-quests.ts): a deposit race place or a recruit quest share, referenced
+   * by its payout row, so a round can pay a player once and only once. */
+  | 'weekly_quest_reward';
 
 /**
  * Credits the wallet and writes the matching ledger row.

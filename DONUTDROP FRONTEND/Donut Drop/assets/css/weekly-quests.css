@@ -1,0 +1,84 @@
+/* weekly-quests.css — the week's two quests on the Quests page (assets/js/weekly-quests.js).
+ * Scoped to .wq. Luxe tokens only, so a theme picked in Settings repaints it like every other card;
+ * the crates page's material (--dd-panel) when the dopamine skin is on, a plain card when it is not. */
+
+.wq { display: grid; gap: var(--lx-s3); margin-bottom: var(--lx-s5); min-width: 0; }
+.wq[hidden] { display: none; }
+
+.wq__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-s2); flex-wrap: wrap; }
+.wq__h { margin: 0; font: 800 1.125rem/1.2 var(--lx-ui); color: var(--lx-ink); }
+.wq__clock { color: var(--lx-mute); font-size: .8125rem; }
+.wq__clock b { color: var(--lx-gold); }
+
+.wq__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s3); }
+@media (max-width: 860px) { .wq__grid { grid-template-columns: minmax(0, 1fr); } }
+
+.wq__card {
+  display: flex; flex-direction: column; gap: var(--lx-s3); min-width: 0;
+  padding: var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--dd-panel, var(--lx-2));
+  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(255, 255, 255, .06)), var(--lx-shade);
+}
+.wq__top { display: grid; gap: var(--lx-s1); }
+.wq__tag {
+  justify-self: start; padding: 2px 8px; border-radius: var(--lx-r-pill);
+  background: var(--lx-gold-wash); color: var(--lx-gold);
+  font: 800 .6875rem/1.4 var(--lx-ui); letter-spacing: .06em; text-transform: uppercase;
+}
+.wq__title { margin: 0; font: 800 1.5rem/1.15 var(--lx-ui); color: var(--lx-ink); }
+.wq__title b { color: var(--lx-gold); }
+.wq__rule { margin: 0; color: var(--lx-mute); font-size: .8125rem; line-height: 1.5; }
+
+.wq__prizes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--lx-s2); margin: 0; padding: 0; list-style: none; }
+.wq__prizes li {
+  display: grid; gap: 2px; padding: var(--lx-s2); border-radius: var(--lx-r-s);
+  background: var(--lx-1); text-align: center;
+}
+.wq__prizes span { color: var(--lx-faint); font: 700 .6875rem/1.2 var(--lx-ui); text-transform: uppercase; letter-spacing: .05em; }
+.wq__prizes b { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.wq__prizes li:first-child b { color: var(--lx-gold); }
+
+.wq__you { margin: 0; color: var(--lx-text, var(--lx-ink)); font-size: .875rem; line-height: 1.45; }
+.wq__you b { color: var(--lx-ink); }
+.wq__hint { display: block; margin-top: 2px; color: var(--lx-faint); font-size: .75rem; }
+.wq__go { justify-self: start; align-self: flex-start; text-decoration: none; }
+.wq__share { margin: 0; color: var(--lx-mute); font-size: .8125rem; }
+.wq__share b { color: var(--lx-gold); }
+
+.wq__board { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.wq__row {
+  display: grid; grid-template-columns: 2ch minmax(0, 1fr) auto 5.5ch; align-items: center; gap: var(--lx-s2);
+  padding: 6px var(--lx-s2); border-radius: var(--lx-r-s); background: var(--lx-1);
+  font-size: .8125rem;
+}
+.wq__row.is-you { box-shadow: inset 0 0 0 1px var(--lx-gold); }
+.wq__rank { color: var(--lx-faint); }
+.wq__row:nth-child(-n + 3) .wq__rank { color: var(--lx-gold); font-weight: 800; }
+.wq__who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lx-ink); }
+.wq__amt { color: var(--lx-mute); font-variant-numeric: tabular-nums; }
+.wq__prize { color: var(--lx-gold); text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wq__empty { padding: var(--lx-s2); color: var(--lx-faint); font-size: .8125rem; }
+
+.wq__progress { display: flex; align-items: center; gap: var(--lx-s2); flex-wrap: wrap; }
+.wq__pips { display: inline-flex; gap: 4px; }
+.wq__pip { width: 14px; height: 14px; border-radius: 3px; background: var(--lx-4); }
+.wq__pip.is-on { background: var(--lx-gold); box-shadow: 0 0 10px -3px var(--lx-gold); }
+
+.wq__friends { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.wq__friends li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem 4.5rem 1.25rem; align-items: center; gap: var(--lx-s2);
+  font-size: .75rem;
+}
+.wq__friends li.wq__fhead { color: var(--lx-faint); font: 700 .625rem/1.2 var(--lx-ui); letter-spacing: .05em; text-transform: uppercase; }
+.wq__bar { display: block; height: 6px; border-radius: 3px; background: var(--lx-4); overflow: hidden; }
+.wq__bar i { display: block; height: 100%; width: calc(var(--p, 0) * 100%); background: var(--lx-gold); }
+.wq__friends li.is-on .wq__bar i { background: var(--lx-gold-hi); }
+.wq__ok { color: var(--lx-gold); font-weight: 800; text-align: center; }
+
+.wq__last { margin: 0; color: var(--lx-faint); font-size: .75rem; }
+.wq__fine { margin: 0; color: var(--lx-faint); font-size: .75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wq__pip.is-on { box-shadow: none; }
+}

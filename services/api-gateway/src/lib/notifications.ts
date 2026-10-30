@@ -66,7 +66,8 @@ export function noticeSoon(userId: string): void {
 
 export interface NotificationItem {
   readonly id: string;
-  /** A ledger kind from NOTICE_KINDS, 'withdrawal_paid', 'crown_lost', 'crown_expired' or 'bounty_won'. */
+  /** A ledger kind from NOTICE_KINDS, 'withdrawal_paid', 'crown_lost', 'crown_expired', 'bounty_won',
+   * 'staking_day', 'staking_released' or 'quest_won'. */
   readonly kind: string;
   readonly amountMinor: string;
   readonly at: string;
@@ -81,6 +82,8 @@ export interface NotificationItem {
   readonly multiplierX100?: string | null;
   /** The multiplier that took the crown, in hundredths. */
   readonly byMultiplierX100?: string | null;
+  /** A weekly quest prize's place in the deposit race (1 for a recruit quest share). */
+  readonly rank?: number | null;
 }
 
 /** Money waiting for the player to collect it. Shown above the list, never counted as unread. */
@@ -102,7 +105,7 @@ export async function readNotifications(
   config: AppConfig,
   userId: string,
 ): Promise<NotificationFeed> {
-  const [user, ledger, paid, ready, crowns, bounties, poolDays, poolReleases] = await Promise.all([
+  const [user, ledger, paid, ready, crowns, bounties, poolDays, poolReleases, quests] = await Promise.all([
     client.query<{ read_at: Date | null; referral_blocked: boolean }>(
       `SELECT notifications_read_at AS read_at, referral_blocked_at IS NOT NULL AS referral_blocked
          FROM users WHERE id = $1`,
@@ -206,6 +209,16 @@ export async function readNotifications(
         LIMIT $3`,
       [userId, NOTICE_DAYS, NOTICE_LIMIT],
     ),
+    /* Weekly quests (lib/weekly-quests.ts): a place in the deposit race or a share of the recruit
+     * pot, paid by the sweeper after the week. Read whether or not the quests are still on. */
+    client.query<{ id: string; quest: string; rank: number; amount_minor: string; created_at: Date }>(
+      `SELECT p.id, r.quest, p.rank, p.amount_minor::text AS amount_minor, p.created_at
+         FROM weekly_quest_payouts p JOIN weekly_quest_rounds r ON r.id = p.round_id
+        WHERE p.user_id = $1 AND p.created_at >= now() - make_interval(days => $2)
+        ORDER BY p.created_at DESC
+        LIMIT $3`,
+      [userId, NOTICE_DAYS, NOTICE_LIMIT],
+    ),
   ]);
 
   const readAt = user.rows[0]?.read_at ? new Date(user.rows[0].read_at) : null;
@@ -272,6 +285,17 @@ export async function readNotifications(
       unread: isUnread(new Date(row.closed_at)),
       from: null,
       to: null,
+    })),
+    ...quests.rows.map((row) => ({
+      id: row.id,
+      kind: 'quest_won',
+      amountMinor: row.amount_minor,
+      at: new Date(row.created_at).toISOString(),
+      unread: isUnread(new Date(row.created_at)),
+      from: null,
+      to: null,
+      game: row.quest,
+      rank: row.rank,
     })),
   ];
   merged.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? 1 : -1));

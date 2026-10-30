@@ -126,6 +126,8 @@
 <link rel="stylesheet" href="assets/css/notices.css" />
 <!-- the crowns and bounties above the leaderboard (assets/js/crowns.js); scoped to .crowns -->
 <link rel="stylesheet" href="assets/css/crowns.css" />
+<!-- the week's deposit race and recruit quest on the Quests page (assets/js/weekly-quests.js); scoped to .wq -->
+<link rel="stylesheet" href="assets/css/weekly-quests.css" />
 <!-- the house pool on the Rewards page (assets/js/staking.js); scoped to .pool -->
 <link rel="stylesheet" href="assets/css/staking.css" />
 <!-- the not-affiliated notice at the foot of every page -->
@@ -226,6 +228,7 @@
 <link rel="modulepreload" href="assets/js/staking.js" />
 <link rel="modulepreload" href="assets/js/crowns.js" />
 <link rel="modulepreload" href="assets/js/settings.js" />
+<link rel="modulepreload" href="assets/js/weekly-quests.js" />
 <link rel="modulepreload" href="assets/js/profanity.js" />
 <link rel="modulepreload" href="assets/js/audio.js" />
 <link rel="modulepreload" href="assets/js/mc3d.js" />
@@ -1111,6 +1114,8 @@
         <h1>Quests &amp; Streak <button class="ihint" type="button" aria-label="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."
           data-tip="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."></button></h1>
       </header>
+      <!-- the week's quests with their prize pots (assets/js/weekly-quests.js); hidden while they are off -->
+      <div class="wq" id="weeklyQuestsRoot" hidden></div>
       <div class="quests" id="questRoot"></div>
     </section>
 
