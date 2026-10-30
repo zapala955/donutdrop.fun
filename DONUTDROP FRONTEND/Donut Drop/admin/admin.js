@@ -3667,6 +3667,7 @@ const GROUP_LABELS = {
   crowns: 'Crowns & bounties',
   staking: 'House pool',
   weeklyQuests: 'Weekly quests',
+  feedback: 'Feedback',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',
@@ -3781,6 +3782,44 @@ const REFERRAL_FILTERS = [
   ['Bonus pending', 'pending'],
   ['Blocked', 'blocked'],
 ];
+
+/* Player feedback and the 3D survey (routes/feedback.ts). Every note reaches the page as text. */
+async function loadFeedback() {
+  const data = await api.get('/v1/admin/feedback?limit=200');
+  const yes = Number(data.survey?.yes ?? 0);
+  const no = Number(data.survey?.no ?? 0);
+  const voters = yes + no;
+  const share = (count) => (voters ? `${Math.round((count / voters) * 100)}%` : '—');
+  const note = $('feedbackNote');
+  if (note) {
+    note.textContent = voters
+      ? `${voters} players answered the 3D survey; ${share(yes)} like the 3D games.`
+      : 'Nobody has answered the 3D survey yet.';
+  }
+  renderStats($('feedbackStats'), [
+    ['Like 3D', `${yes} (${share(yes)})`],
+    ['Prefer 2D', `${no} (${share(no)})`, voters > 0 && no > yes],
+    ['Notes shown', String(data.notes?.length ?? 0)],
+    ['Paid notes', String(data.paid?.notes ?? 0)],
+    ['Paid out', compactAmount(data.paid?.totalMinor ?? '0')],
+  ]);
+  table($('feedbackTable'), ['When', 'Player', '3D games', 'Note', 'Paid'], data.notes ?? [], (row) => {
+    const tr = document.createElement('tr');
+    const vote = document.createElement('td');
+    vote.append(row.likes3d ? pill('likes 3D', 'ok') : pill('prefers 2D', 'bad'));
+    const text = cell(row.message);
+    text.style.whiteSpace = 'pre-wrap';
+    text.style.maxWidth = '60ch';
+    tr.append(
+      cell(row.createdAt),
+      cell(row.player),
+      vote,
+      text,
+      cell(Number(row.rewardMinor) > 0 ? compactAmount(row.rewardMinor) : '—', { mono: true }),
+    );
+    return tr;
+  });
+}
 
 async function loadReferrals() {
   const params = new URLSearchParams({ state: referralState.state, limit: '100' });
@@ -4474,6 +4513,7 @@ const LOADERS = {
     await loadDiscordBot();
   },
   referrals: loadReferrals,
+  feedback: loadFeedback,
   audit: loadAudit,
   system: loadSystem,
 };

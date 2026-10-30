@@ -128,6 +128,8 @@
 <link rel="stylesheet" href="assets/css/crowns.css" />
 <!-- the week's deposit race and recruit quest on the Quests page (assets/js/weekly-quests.js); scoped to .wq -->
 <link rel="stylesheet" href="assets/css/weekly-quests.css" />
+<!-- the feedback window: the 3D survey and a note (assets/js/feedback.js); scoped to .fb -->
+<link rel="stylesheet" href="assets/css/feedback.css" />
 <!-- the house pool on the Rewards page (assets/js/staking.js); scoped to .pool -->
 <link rel="stylesheet" href="assets/css/staking.css" />
 <!-- the not-affiliated notice at the foot of every page -->
@@ -209,6 +211,7 @@
 <link rel="modulepreload" href="assets/js/nudge.js" />
 <link rel="modulepreload" href="assets/js/popups.js" />
 <link rel="modulepreload" href="assets/js/daily-code.js" />
+<link rel="modulepreload" href="assets/js/feedback.js" />
 <link rel="modulepreload" href="assets/js/testmode.js" />
 <link rel="modulepreload" href="assets/js/notices.js" />
 <link rel="modulepreload" href="assets/js/winfx.js" />
@@ -460,6 +463,12 @@
       <button class="menu__row" id="dailyCodeBtn" type="button" role="menuitem" data-closes-menu>
         <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/><path d="M13 5v3M13 11v2M13 16v3"/></svg>
         <span>Daily code</span>
+      </button>
+      <!-- Feedback and the 3D survey (assets/js/feedback.js); the label carries the reward while a
+           note would earn it, and the row is hidden while feedback is off. -->
+      <button class="menu__row menu__row--hi" id="feedbackBtn" type="button" role="menuitem" data-closes-menu hidden>
+        <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
+        <span>Feedback</span>
       </button>
       <a class="menu__row" href="/fairness" data-route="fairness" role="menuitem">
         <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>

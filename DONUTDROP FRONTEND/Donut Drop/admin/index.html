@@ -83,6 +83,7 @@
           <button class="tab" type="button" data-panel="programs" aria-selected="false">
             Programs
           </button>
+          <button class="tab" type="button" data-panel="feedback" aria-selected="false">Feedback</button>
           <button class="tab" type="button" data-panel="audit" aria-selected="false">Audit</button>
           <button class="tab" type="button" data-panel="system" aria-selected="false">
             System
@@ -388,6 +389,23 @@
             <button class="btn" type="button" id="createQuest">Create quest</button>
           </div>
           <div class="tablewrap"><table class="grid" id="questTable"></table></div>
+        </section>
+
+        <!-- Player feedback and the 3D survey (routes/feedback.ts), newest first. -->
+        <section class="panel" data-panel="feedback" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Feedback</h2>
+              <span class="hint" id="feedbackNote"></span>
+            </div>
+            <button class="btn" type="button" data-refresh="feedback">Refresh</button>
+          </div>
+          <div class="stats" id="feedbackStats"></div>
+          <p class="hint">
+            The survey counts each player once, by their latest answer. A note is paid only the first
+            time an account sends one, and only once it has played the minimum (System → Feedback).
+          </p>
+          <div class="tablewrap"><table class="grid" id="feedbackTable"></table></div>
         </section>
 
         <section class="panel" data-panel="audit" hidden>

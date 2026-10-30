@@ -33,6 +33,7 @@ type SettingGroup =
   | 'crowns'
   | 'staking'
   | 'weeklyQuests'
+  | 'feedback'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -945,6 +946,28 @@ export const runtimeSettingDefinitions = {
     max: 168n,
   },
 
+  /* ── feedback ──
+   *
+   * Read on every note. The reward is paid once per account, for its first note; 0 pays nothing. */
+  feedbackEnabled: {
+    kind: 'boolean',
+    group: 'feedback',
+    label: 'Players can send feedback and answer the 3D survey',
+  },
+  feedbackRewardMinor: {
+    kind: 'bigint',
+    group: 'feedback',
+    label: "Reward for an account's first note (once per account, 0 = none)",
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  feedbackMinWagerMinor: {
+    kind: 'bigint',
+    group: 'feedback',
+    label: 'Lifetime wager an account needs before its note is paid',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
 
   /* ── media test mode ──
    *

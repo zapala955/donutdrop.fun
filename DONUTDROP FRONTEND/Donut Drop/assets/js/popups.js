@@ -6,6 +6,7 @@
  *   signed out                  → register now: the signup bonus, opening the login form
  *   signed in                   → this week's quests (weekly-quests.js): the deposit race and the
  *                                 recruit quest, each its own pop-up with its own rest
+ *   signed in, reward unclaimed → feedback and the 3D survey (feedback.js), opening its window
  *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
  *   signed in, Discord unlinked → the Discord page, where the link code is
  *   signed in                   → invite & earn
@@ -28,6 +29,7 @@ import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
 import { pendingReferralCode } from './referrals.js';
 import { placeName, readWeeklyQuests, timeLeft } from './weekly-quests.js';
+import { openFeedback, readFeedbackStatus } from './feedback.js';
 
 const ANY_KEY = 'dw.popup.any';
 const NUDGE_KEY = 'dw.nudge.next';
@@ -117,6 +119,24 @@ async function pick() {
   const quest = await questPopup(due);
   if (quest) return quest;
 
+  // Feedback and the 3D survey, while this account's first note would still be paid.
+  if (due('feedback')) {
+    const status = await readFeedbackStatus();
+    if (status?.enabled && status.eligible) {
+      return {
+        id: 'feedback',
+        eyebrow: 'Feedback',
+        title: ['Tell us what you think, get ', money(Number(status.rewardMinor)), ''],
+        line: 'Two questions: do you like the 3D games, and what should we add or fix? Paid once per account.',
+        cta: 'Give feedback',
+        action: openFeedback,
+        art: 'enchanted_book.png',
+        later: 'Not now',
+        seenFor: 2 * DAY_MS,
+        usedFor: 30 * DAY_MS,
+      };
+    }
+  }
 
   // A game that is still new, once for each game; it stops being offered when it stops being new.
   const fresh = SPOTLIGHT_GAMES.filter(isNewGame).find((game) => due(`game:${game.route}`));
@@ -282,7 +302,9 @@ function show(popup) {
     go.type = 'button';
     go.addEventListener('click', () => {
       close('used');
-      openLogin();
+      // A pop-up with its own window (feedback) opens it; the rest open the login form.
+      if (popup.action) void popup.action();
+      else openLogin();
     });
   }
   go.textContent = popup.cta;

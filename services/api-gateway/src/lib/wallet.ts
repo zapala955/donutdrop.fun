@@ -125,7 +125,9 @@ export type WalletKind =
   | 'staking_reward'
   /* Weekly quests (lib/weekly-quests.ts): a deposit race place or a recruit quest share, referenced
    * by its payout row, so a round can pay a player once and only once. */
-  | 'weekly_quest_reward';
+  | 'weekly_quest_reward'
+  /* Feedback (lib/feedback.ts): the reward for an account's first note, referenced by the note. */
+  | 'feedback_reward';
 
 /**
  * Credits the wallet and writes the matching ledger row.

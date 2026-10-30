@@ -701,6 +701,14 @@ const environmentSchema = z
      * deposit and play, and the deposit race waits out deposits still being confirmed. */
     WEEKLY_QUEST_GRACE_HOURS: z.coerce.number().int().min(0).max(168).default(24),
     WEEKLY_QUEST_SWEEP_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
+    /* Player feedback (lib/feedback.ts): a note and the 3D survey, the first note paid once. The
+     * wager floor keeps a fresh alt from collecting the reward for one sentence. */
+    FEEDBACK_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    FEEDBACK_REWARD_MINOR: nonNegativeBigintString.default('1000000'),
+    FEEDBACK_MIN_WAGER_MINOR: nonNegativeBigintString.default('1000000'),
     /* Daily codes: a personal one-use code the community bot DMs to members who opted in, redeemed
      * for a random prize from nothing up to the ceiling (lib/daily-codes.ts). Whether the bot SENDS
      * them is a dashboard switch (default off); this is whether the gateway will PAY them. The day's
@@ -1638,6 +1646,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     recruitFriendWagerMinor: BigInt(env.RECRUIT_FRIEND_WAGER_MINOR),
     weeklyQuestGraceHours: env.WEEKLY_QUEST_GRACE_HOURS,
     weeklyQuestSweepSeconds: env.WEEKLY_QUEST_SWEEP_SECONDS,
+    feedbackEnabled: env.FEEDBACK_ENABLED,
+    feedbackRewardMinor: BigInt(env.FEEDBACK_REWARD_MINOR),
+    feedbackMinWagerMinor: BigInt(env.FEEDBACK_MIN_WAGER_MINOR),
     dailyCodesEnabled: env.DAILY_CODES_ENABLED,
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
