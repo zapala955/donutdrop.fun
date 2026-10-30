@@ -28,11 +28,6 @@ export function linkCookieName(config: AppConfig): string {
   return config.secureCookies ? '__Host-du_link' : 'du_link';
 }
 
-/** Binds an email sign-in code to the browser that asked for it (routes/email.ts). */
-export function emailLoginCookieName(config: AppConfig): string {
-  return config.secureCookies ? '__Host-du_elogin' : 'du_elogin';
-}
-
 /**
  * The CSRF cookie is deliberately readable by the browser application, which makes it the one
  * cookie a sibling subdomain could otherwise overwrite for the parent domain. Overwriting it

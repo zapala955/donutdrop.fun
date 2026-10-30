@@ -35,9 +35,6 @@ const FILE_BACKED_SETTINGS = [
    * mints admin sessions, this one reads a public profile, and the process holding this one runs
    * in a server anybody can join. See lib/community-bot-auth.ts. */
   'COMMUNITY_BOT_HMAC_KEY',
-  /* The Resend API key sends the sign-in and confirmation codes. Anyone holding it can send mail
-   * as the site's domain, so it is file-backed like every other credential. */
-  'RESEND_API_KEY',
   /* The half of the Turnstile pair that proves a challenge was really solved. The site key beside
    * it is public by design and printed into the page; this one is what stops somebody minting
    * their own "passed" answer, so it is read the same careful way as every other secret here. */
@@ -835,11 +832,6 @@ const environmentSchema = z
      * whatever this is (discord_rewards is keyed on the Discord), so it bounds how many accounts one
      * person can sign in to from one Discord, not what they can collect. Live in the admin panel. */
     DISCORD_MAX_ACCOUNTS: z.coerce.number().int().min(1).max(25).default(5),
-    /* Email codes (lib/mailer.ts, routes/email.ts): linking an email, signing in with a code, and
-     * confirming a withdrawal to a different Minecraft name. Off until both are set; the key is a
-     * Resend API key (re_...), the sender an address on a domain verified there. */
-    RESEND_API_KEY: z.string().default(''),
-    EMAIL_FROM: z.string().max(200).default(''),
     /* ── the Discord control plane ──
      *
      * A private guild acts as a remote control for the platform: read commands, moderation
@@ -1662,8 +1654,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,
     discordMaxAccounts: env.DISCORD_MAX_ACCOUNTS,
-    resendApiKey: env.RESEND_API_KEY,
-    emailFrom: env.EMAIL_FROM,
     discordControlEnabled: env.DISCORD_CONTROL_ENABLED,
     discordBotToken: env.DISCORD_BOT_TOKEN,
     discordGuildId: env.DISCORD_GUILD_ID,

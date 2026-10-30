@@ -453,14 +453,6 @@
   background: var(--panel);
 }
 .acct__facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
-/* A quiet action inside a panel (Settings: Remove email, Cancel). */
-.acct__textbtn {
-  align-self: flex-start; padding: 2px 0; border: 0; background: none; cursor: pointer;
-  color: var(--faint); font: inherit; font-size: .8125rem; font-weight: 600;
-}
-.acct__textbtn:hover { color: var(--text); text-decoration: underline; }
-.acct__textbtn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; border-radius: 3px; }
-.acct__textbtn:disabled { opacity: .5; cursor: default; }
 .acct__facts > div {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   padding: 9px 11px; border-radius: var(--r-s); background: var(--panel2);

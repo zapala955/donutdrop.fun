@@ -26,7 +26,6 @@ import { registerAdminPayoutRoutes } from './routes/admin-payouts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerPayLoginRoutes } from './routes/auth-pay.js';
-import { registerEmailRoutes } from './routes/email.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerCashDepositRoutes } from './routes/cash-deposits.js';
 import { registerCashWithdrawalRoutes } from './routes/cash-withdrawals.js';
@@ -238,7 +237,6 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerLiveEventRoutes(app, db, config);
   await registerAuthRoutes(app, db, config);
   await registerPayLoginRoutes(app, db, config);
-  await registerEmailRoutes(app, db, config);
   await registerAccountRoutes(app, db, config);
   await registerAvatarRoutes(app, db);
   await registerActivityRoutes(app, db, config);

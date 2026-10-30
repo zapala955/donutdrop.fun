@@ -5,7 +5,6 @@ import {
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
-  emailLoginAvailable, startEmailLogin, completeEmailLogin, requestWithdrawCode,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
   refreshUpgradeConfig, refreshPromotions,
@@ -466,18 +465,7 @@ function openLoginModal() {
           <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
         </div>
       </form>
-      <p class="auth__alt" id="linkEmailAlt" hidden>
-        <button class="auth__altbtn" type="button" id="linkEmailGo">Email linked? Sign in with a code instead</button>
-      </p>
       <div id="linkProgress" role="status"></div>`;
-
-    /* The second way in: a code sent to an email linked in Settings. Offered only when the server
-     * says email is set up; it opens its own small card (openEmailLoginModal). */
-    const emailAlt = $('#linkEmailAlt', body);
-    void emailLoginAvailable().then((available) => {
-      if (available && emailAlt.isConnected && !$('#linkForm', body).hidden) emailAlt.hidden = false;
-    });
-    $('#linkEmailGo', body).addEventListener('click', () => openEmailLoginModal());
 
     const form = $('#linkForm', body);
     const field = $('#linkField', body);
@@ -624,7 +612,6 @@ function openLoginModal() {
         const challenge = await startLogin(username, challengeToken, code || undefined);
         go.dataset.state = 'success';
         form.hidden = true;
-        emailAlt.hidden = true;
         /* The command, the amount, and one button that copies it.
          *
          * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
@@ -683,98 +670,6 @@ function openLoginModal() {
     });
 
     input.focus();
-  }, { variant: 'auth' });
-}
-
-/**
- * Sign in with a code sent to the email linked to an account (Settings links it).
- *
- * Two steps in one card: the address, then the six-digit code from the mail. The server answers the
- * first the same whether or not the address belongs to anybody, so this card says "if it is linked"
- * rather than guessing. The code works only in this browser (a cookie the first step set).
- */
-function openEmailLoginModal() {
-  openModal('Sign in with email', (body) => {
-    body.innerHTML = `<h3 class="auth__title" aria-hidden="true">Sign in with email</h3>
-      <p class="auth__lede" id="elLede">For accounts with an email linked in Settings. We send a
-        six-digit code to it.</p>
-      <hr class="auth__rule">
-      <form id="elForm" novalidate>
-        <label class="auth__label" for="elEmail">Email</label>
-        <div class="auth__field" id="elEmailField">
-          <input id="elEmail" class="auth__input" type="email" maxlength="254" required
-                 autocomplete="email" autocapitalize="none" spellcheck="false"
-                 placeholder="you@example.com">
-        </div>
-        <div class="auth__coderow" id="elCodeRow" hidden>
-          <label class="auth__label" for="elCode">Code from the email</label>
-          <div class="auth__field" id="elCodeField">
-            <input id="elCode" class="auth__input mono" type="text" inputmode="numeric"
-                   maxlength="6" autocomplete="one-time-code" spellcheck="false" placeholder="123456">
-          </div>
-        </div>
-        <p class="auth__err" id="elError" role="alert" hidden></p>
-        <div class="auth__foot">
-          <button class="btn btn--go auth__go" type="submit" id="elGo" disabled>Send code</button>
-        </div>
-      </form>
-      <button class="btn auth__back" type="button" id="elBack">Sign in with Minecraft instead</button>`;
-
-    const form = $('#elForm', body);
-    const email = $('#elEmail', body);
-    const codeRow = $('#elCodeRow', body);
-    const code = $('#elCode', body);
-    const go = $('#elGo', body);
-    const lede = $('#elLede', body);
-    const inlineError = $('#elError', body);
-    let step = 'email';
-
-    const setError = (message) => {
-      inlineError.textContent = message;
-      inlineError.hidden = !message;
-    };
-    const sync = () => {
-      go.disabled = step === 'email'
-        ? !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())
-        : !/^\d{6}$/.test(code.value.trim());
-    };
-    email.addEventListener('input', () => { setError(''); sync(); });
-    code.addEventListener('input', () => {
-      const digits = code.value.replace(/\D/g, '').slice(0, 6);
-      if (code.value !== digits) code.value = digits;
-      setError('');
-      sync();
-    });
-    $('#elBack', body).addEventListener('click', () => openLoginModal());
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      if (go.disabled) return;
-      go.disabled = true;
-      go.dataset.state = 'loading';
-      try {
-        if (step === 'email') {
-          const sent = await startEmailLogin(email.value.trim());
-          step = 'code';
-          email.readOnly = true;
-          codeRow.hidden = false;
-          lede.textContent = `If ${sent.sentTo} is linked to an account, a code is on its way. It works for ${sent.expiresInMinutes} minutes, in this browser.`;
-          go.textContent = 'Sign in';
-          go.dataset.state = '';
-          sync();
-          code.focus();
-          return;
-        }
-        const user = await completeEmailLogin(code.value.trim());
-        closeModal();
-        toast({ kind: 'win', title: 'Signed in', body: user.minecraftUsername });
-      } catch (error) {
-        go.dataset.state = '';
-        setError(error?.message || 'That did not work. Try again.');
-        sync();
-      }
-    });
-    email.focus();
   }, { variant: 'auth' });
 }
 
@@ -963,15 +858,9 @@ async function openWithdrawModal() {
         approves it first.</p>
 
       <span class="auth__label">Paying</span>
-      <div class="auth__field auth__field--static" id="wdPayeeStatic">
+      <div class="auth__field auth__field--static">
         <span class="auth__value mono">${escapeText(info.payeeUsername || state.user?.minecraftUsername || '—')}</span>
       </div>
-      <div class="auth__field" id="wdPayeeField" hidden>
-        <input id="wdPayee" class="auth__input mono" type="text" maxlength="16"
-               autocomplete="off" autocapitalize="none" spellcheck="false"
-               placeholder="Minecraft name to pay">
-      </div>
-      <p class="auth__note" id="wdOther"></p>
 
       <button class="btn btn--go auth__go" type="submit" id="wdGo" disabled>Continue</button>
     </form>`;
@@ -981,36 +870,6 @@ async function openWithdrawModal() {
   const input = $('#wdAmount', host);
   const go = $('#wdGo', host);
   const inlineError = $('#wdError', host);
-  const ownName = info.payeeUsername || state.user?.minecraftUsername || '';
-  const payeeInput = $('#wdPayee', host);
-
-  /* Paying a different Minecraft name: confirmed by a code sent to the account's email, and only
-   * once that email has been on the account for a day (routes/email.ts). Said here either way, so
-   * nobody looks for the option in vain. */
-  const other = info.otherPayee || {};
-  const otherNote = $('#wdOther', host);
-  let otherOpen = false;
-  if (!other.available) {
-    otherNote.hidden = true;
-  } else if (!other.email) {
-    otherNote.innerHTML = 'To pay a different Minecraft name, link an email in <a href="/settings">Settings</a>.';
-  } else if (!other.ready) {
-    const when = other.readyAt ? new Date(other.readyAt).toLocaleString() : 'a day after linking it';
-    otherNote.textContent = `Your email can confirm payouts to a different name from ${when}.`;
-  } else {
-    otherNote.innerHTML = '<button class="auth__altbtn" type="button" id="wdOtherGo">Pay a different Minecraft name</button>';
-    $('#wdOtherGo', host).addEventListener('click', () => {
-      otherOpen = true;
-      $('#wdPayeeStatic', host).hidden = true;
-      $('#wdPayeeField', host).hidden = false;
-      otherNote.textContent = `A code goes to ${other.email} to confirm it.`;
-      payeeInput.focus();
-      sync();
-    });
-  }
-  const payeeOf = () => (otherOpen ? payeeInput.value.trim() : ownName);
-  const payeeValid = () =>
-    !otherOpen || /^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/.test(payeeOf());
 
   const amountOf = () => parseAmount(input.value);
   const setError = (message) => {
@@ -1020,11 +879,8 @@ async function openWithdrawModal() {
   };
   const sync = () => {
     const amount = amountOf();
-    go.disabled = !(
-      amount !== null && amount >= minimum && amount <= state.balance && payeeValid()
-    );
+    go.disabled = !(amount !== null && amount >= minimum && amount <= state.balance);
   };
-  payeeInput.addEventListener('input', sync);
 
   input.addEventListener('input', () => {
     setError('');
@@ -1049,9 +905,7 @@ async function openWithdrawModal() {
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     if (go.disabled) return;
-    const payee = payeeOf();
-    const isOther = otherOpen && payee.toLowerCase() !== ownName.toLowerCase();
-    confirmWithdraw(host, amountOf(), info, threshold, isOther ? payee : null);
+    confirmWithdraw(host, amountOf(), info, threshold);
   });
   input.focus();
 }
@@ -1080,14 +934,9 @@ function paintWithdrawCooldown(host, remainingSeconds) {
   tick();
 }
 
-/**
- * Step two: the exact figure and the exact name, with nothing else competing for attention.
- *
- * `otherPayee` = a different Minecraft name: the step then first sends a code to the account's
- * email for exactly this amount and name, and Send stays shut until it is typed in.
- */
-function confirmWithdraw(host, amount, info, threshold, otherPayee = null) {
-  const payee = otherPayee || info.payeeUsername || state.user?.minecraftUsername || '—';
+/** Step two: the exact figure and the exact name, with nothing else competing for attention. */
+function confirmWithdraw(host, amount, info, threshold) {
+  const payee = info.payeeUsername || state.user?.minecraftUsername || '—';
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Confirm</h3>
     <p class="auth__lede">This cannot be undone from the site once the bot has sent it.</p>
     <hr class="auth__rule">
@@ -1096,55 +945,15 @@ function confirmWithdraw(host, amount, info, threshold, otherPayee = null) {
       <div class="auth__crow"><span>To</span><b class="mono">${escapeText(payee)}</b></div>
       <div class="auth__crow"><span>Balance after</span><b class="mono">${escapeText(money(state.balance - amount))}</b></div>
     </div>
-    ${otherPayee
-      ? `<p class="auth__note" id="wdcCodeNote">${escapeText(payee)} is not your own name. We send a
-         code to ${escapeText(info.otherPayee?.email || 'your email')} to confirm it.</p>
-         <div class="auth__field" id="wdcCodeField" hidden>
-           <input id="wdcCode" class="auth__input mono" type="text" inputmode="numeric" maxlength="6"
-                  autocomplete="one-time-code" spellcheck="false" placeholder="Code from the email">
-         </div>`
-      : ''}
     ${amount > threshold
       ? `<p class="auth__note">Over ${escapeText(money(threshold))}, so an operator approves it
          before the bot sends anything. Your balance is held until then.</p>`
       : ''}
     <p class="auth__err" id="wdcError" role="alert" hidden></p>
-    ${otherPayee
-      ? '<button class="btn btn--go auth__go" type="button" id="wdcCodeSend">Send code</button>'
-      : ''}
-    <button class="btn btn--go auth__go" type="button" id="wdcSend" ${otherPayee ? 'hidden disabled' : ''}>Send ${escapeText(money(amount))}</button>
+    <button class="btn btn--go auth__go" type="button" id="wdcSend">Send ${escapeText(money(amount))}</button>
     <button class="btn auth__back" type="button" id="wdcBack">Back</button>`;
 
   $('#wdcBack', host).addEventListener('click', () => openWithdrawModal());
-  const codeInput = $('#wdcCode', host);
-  if (otherPayee) {
-    const codeSend = $('#wdcCodeSend', host);
-    const send = $('#wdcSend', host);
-    codeSend.addEventListener('click', async () => {
-      const error = $('#wdcError', host);
-      codeSend.disabled = true;
-      codeSend.dataset.state = 'loading';
-      error.hidden = true;
-      try {
-        const sent = await requestWithdrawCode(String(amount), payee);
-        $('#wdcCodeNote', host).textContent = `Code sent to ${sent.sentTo}. It works for ${sent.expiresInMinutes} minutes, for this amount and this name only.`;
-        $('#wdcCodeField', host).hidden = false;
-        codeSend.hidden = true;
-        send.hidden = false;
-        codeInput.focus();
-      } catch (failure) {
-        codeSend.disabled = false;
-        codeSend.dataset.state = '';
-        error.textContent = failure?.message || 'The code could not be sent.';
-        error.hidden = false;
-      }
-    });
-    codeInput.addEventListener('input', () => {
-      const digits = codeInput.value.replace(/\D/g, '').slice(0, 6);
-      if (codeInput.value !== digits) codeInput.value = digits;
-      send.disabled = digits.length !== 6;
-    });
-  }
   $('#wdcSend', host).addEventListener('click', async (event) => {
     const button = event.currentTarget;
     const error = $('#wdcError', host);
@@ -1152,10 +961,7 @@ function confirmWithdraw(host, amount, info, threshold, otherPayee = null) {
     button.dataset.state = 'loading';
     button.textContent = 'Sending…';
     try {
-      const result = await requestCashWithdrawal(
-        String(amount),
-        otherPayee ? { payeeUsername: payee, emailCode: codeInput.value.trim() } : null,
-      );
+      const result = await requestCashWithdrawal(String(amount));
       await refreshBalance();
       paintWithdrawStatus(host, result.withdrawal);
       pollWithdrawal(result.withdrawal.id, host);
@@ -1253,7 +1059,7 @@ async function pollLink(challengeId, body) {
 const isTransient = (error) => !error?.status || error.status === 429 || error.status >= 500;
 
 /* The sign-in window, as opposed to deposit and withdraw, which share its variant. */
-const signInOpen = () => $('#modal').open && Boolean($('#linkForm, #elForm', $('#modalBody')));
+const signInOpen = () => $('#modal').open && Boolean($('#linkForm', $('#modalBody')));
 
 /**
  * Signs in a confirmed login, and offers a retry only if that fails.
