@@ -69,7 +69,7 @@ describe('the /rtp on joining', () => {
     );
     // A session that ends mid-teleport does not leave the next one held.
     const end = text.slice(text.indexOf("bot.once('end', (reason) => {"));
-    assert.match(end.slice(0, 2500), /this\.awaitingFirstAnswer = false;\n\s*this\.teleporting = false;/);
+    assert.match(end.slice(0, 2500), /this\.awaitingAnswer = false;\n\s*this\.teleporting = false;/);
   });
 });
 

@@ -182,8 +182,8 @@ describe('an ordinary disconnect', () => {
     const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     // Counted when a connection ends before the server answered a command, and cleared when one does.
     const end = source.slice(source.indexOf("bot.once('end', (reason) => {"));
-    assert.match(end.slice(0, 2500), /if \(!spawned \|\| this\.awaitingFirstAnswer\) this\.failedLogins \+= 1;/);
-    assert.match(source, /this\.awaitingFirstAnswer = false;\n\s*this\.unansweredProbes = 0;\n\s*this\.failedLogins = 0;/);
+    assert.match(end.slice(0, 2500), /if \(!spawned \|\| this\.awaitingAnswer\) this\.failedLogins \+= 1;/);
+    assert.match(source, /this\.awaitingAnswer = false;\n\s*this\.unansweredProbes = 0;\n\s*this\.failedLogins = 0;/);
   });
 
   /* 2026-10-28 14:06: wymiar spawned on a region still coming up and sent a /pay two seconds later.
@@ -192,14 +192,26 @@ describe('an ordinary disconnect', () => {
     const { readFile } = await import('node:fs/promises');
     const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     const gate = source.slice(source.indexOf('private captureJobClaimState()'));
-    assert.match(gate.slice(0, 3000), /this\.awaitingFirstAnswer\s*\? 'commands_unanswered'/);
+    assert.match(gate.slice(0, 3000), /this\.awaitingAnswer\s*\? 'commands_unanswered'/);
     // Every session starts unproven.
-    assert.match(source, /'Mineflayer bot spawned'\);\n\s*this\.heldOffStreak = 0;\n\s*this\.awaitingFirstAnswer = true;\n\s*this\.unansweredProbes = 0;/);
-    // An unanswered probe is asked again, and after the limit the bot logs in again.
-    assert.match(source, /if \(this\.awaitingFirstAnswer\) this\.awaitFirstAnswer\(connectionController\);/);
-    const probe = source.slice(source.indexOf('private awaitFirstAnswer('));
+    assert.match(source, /'Mineflayer bot spawned'\);\n\s*this\.heldOffStreak = 0;\n\s*this\.awaitingAnswer = true;\n\s*this\.unansweredProbes = 0;/);
+    // Every /bal is watched: unanswered, it is asked again, and after the limit the bot logs in again.
+    assert.match(source, /this\.lastBalanceSentAt = Date\.now\(\);\n\s*this\.sendCommand\(bot, '\/bal'\);\n\s*this\.awaitAnswer\(connectionController, this\.lastBalanceSentAt\);/);
+    const probe = source.slice(source.indexOf('private awaitAnswer('));
+    assert.match(probe, /if \(this\.lastBalanceAnswerAt >= sentAt\) return;/);
     assert.match(probe, /if \(this\.unansweredProbes >= COMMAND_PROBE_LIMIT\) \{[\s\S]*?this\.cycleConnection\('commands unanswered'\);/);
     assert.match(probe, /this\.balanceSoon\(COMMAND_PROBE_GAP_MS\);/);
     assert.match(source, /const COMMAND_PROBE_LIMIT = 4;/);
+  });
+
+  /* 2026-10-30 17:45: a session that had answered all along froze. Its /bal went unanswered and a
+   * minute later a 175M /pay went into the same silence, unconfirmable either way. */
+  it('stops claiming the moment any /bal goes unanswered, not only the first of a session', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const source = (await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    const probe = source.slice(source.indexOf('private awaitAnswer('));
+    assert.match(probe.slice(0, 800), /if \(!this\.awaitingAnswer\) \{\s*this\.awaitingAnswer = true;/);
+    // And the next answer lifts it.
+    assert.match(source, /this\.lastBalanceAnswerAt = Date\.now\(\);\n\s*this\.awaitingAnswer = false;/);
   });
 });

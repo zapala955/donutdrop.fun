@@ -114,6 +114,34 @@ async function runPayout(
 const confirm = (harness: Harness) =>
   harness.pendingPayout?.settle({ payee: 'Sfouga55', displayedAmount: '24M' });
 
+/* 2026-10-30 17:45: the server froze mid-session. The idle /bal went unanswered, and a minute later
+ * a 175M /pay went into the same silence and could not be confirmed either way. */
+describe('a /pay after the server left a /bal unanswered', () => {
+  type Silence = Harness & { lastBalanceSentAt: number; lastBalanceAnswerAt: number; awaitingAnswer: boolean };
+
+  it('is not sent, and goes back in the queue rather than to a refund or an operator', async () => {
+    const { harness, chats, completion } = payoutHarness();
+    const silent = harness as Silence;
+    silent.lastBalanceSentAt = Date.now() - 6_000; // asked, and the window has passed
+    silent.lastBalanceAnswerAt = Date.now() - 60_000; // the last answer is older than that
+    await harness.pollJobs();
+    assert.equal(chats.filter((chat) => chat.text.startsWith('/pay ')).length, 0, 'a /pay was sent into the silence');
+    assert.deepEqual(completion(), { outcome: 'failed', options: { retryable: true, errorCode: 'PAYOUT_NOT_SENT' } });
+    // And the bot stops claiming until the server answers again.
+    assert.equal(silent.awaitingAnswer, true);
+  });
+
+  it('is sent as usual once the last /bal was answered', async () => {
+    const { harness, chats, completion } = payoutHarness();
+    const answered = harness as Silence;
+    answered.lastBalanceSentAt = Date.now() - 6_000;
+    answered.lastBalanceAnswerAt = Date.now() - 5_500;
+    await runPayout(harness, confirm);
+    assert.equal(chats.filter((chat) => chat.text.startsWith('/pay ')).length, 1);
+    assert.equal(completion()?.outcome, 'completed');
+  });
+});
+
 describe('a /pay and the server\'s command cooldown', () => {
   it('waits out the gap after the bot\'s last command before sending /pay', async () => {
     const { harness, chats, completion } = payoutHarness();
