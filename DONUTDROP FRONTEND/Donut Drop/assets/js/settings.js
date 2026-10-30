@@ -104,7 +104,7 @@ function appearance(save) {
   });
   const games3d = switchRow({
     title: 'Games in 3D',
-    hint: 'Draws the games as Minecraft scenes. Off, every game shows its flat board instead: lighter on an older machine. The same switch is in the top bar and on every game.',
+    hint: 'Draws the games as Minecraft scenes. Off, the games show their flat boards instead: lighter on an older machine. Mob Derby and Ice Fishing are always in 3D. The same switch is in the top bar and on each of the other games.',
     checked: wants3d(),
     onChange: (on) => setWants3d(on),
   });

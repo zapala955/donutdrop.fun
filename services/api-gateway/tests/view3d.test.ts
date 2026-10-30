@@ -6,8 +6,8 @@ import { describe, it } from 'node:test';
 const repo = path.resolve(import.meta.dirname, '../../..');
 const front = (relative: string) => readFile(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop', relative), 'utf8');
 
-/* Each page with a 3D scene: its file, the scene's variable, its once-only promise, and the id stem
- * of its graphics setting. */
+/* Each page with a 3D scene and the switch: its file, the scene's variable, its once-only promise,
+ * and the id stem of its graphics setting. */
 const PAGES = [
   ['mines', 'field', 'fieldTried', 'mines'],
   ['plinko', 'board3d', 'boardTried', 'plinko'],
@@ -15,10 +15,14 @@ const PAGES = [
   ['crash', 'sky', 'skyTried', 'crash'],
   ['chicken', 'road3d', 'roadTried', 'chicken'],
   ['fishing', 'pond', 'pondTried', 'fishing'],
-  ['icefishing', 'lake', 'lakeTried', 'icefish'],
-  ['derby', 'track', 'trackTried', 'derby'],
   ['tower', 'tower3d', 'towerTried', 'tower'],
   ['dice', 'range3d', 'rangeTried', 'dice'],
+] as const;
+
+/* The pages that are always in 3D, with no switch: the same four things. */
+const ALWAYS = [
+  ['icefishing', 'lake', 'lakeTried', 'icefish', '.icefish__lake'],
+  ['derby', 'track', 'trackTried', 'derby', '.derby__track'],
 ] as const;
 
 describe('the 2D/3D switch', () => {
@@ -72,7 +76,8 @@ describe('the 2D/3D switch', () => {
   it('shows a loading screen, not the flat board, while a wanted scene is on its way', async () => {
     const view = await front('assets/js/view3d.js');
     // Up only when 3D is wanted, WebGL has not already failed, and no scene is drawn yet.
-    assert.ok(view.includes(`if (!root || !host || !wants3d() || 'no3d' in root.dataset || root.dataset.render === '3d') return;`));
+    assert.ok(view.includes(`export function sceneLoading(root, host, wanted = wants3d()) {`));
+    assert.ok(view.includes(`if (!root || !host || !wanted || 'no3d' in root.dataset || root.dataset.render === '3d') return;`));
     assert.ok(view.includes(`if (root.dataset.render !== 'loading') root.dataset.render = 'loading';`));
     assert.ok(view.includes(`if (root?.dataset.render === 'loading') root.dataset.render = '2d';`));
     const css = await front('assets/css/view3d.css');
@@ -95,6 +100,22 @@ describe('the 2D/3D switch', () => {
         assert.match(js, new RegExp(`\\n  if \\(!${tried}\\) sceneLoading\\(root, \\$\\('[^']+', root\\)\\);\\n  void load\\(\\);\\n\\}\\n`));
         assert.match(js, /\n  if \(config\) (void|await) start[A-Za-z]+\(\);\n  else sceneLoaded\(root\);\n/);
       }
+    });
+  }
+
+  for (const [page, , tried, stem, host] of ALWAYS) {
+    it(`${page}: is always in 3D, with no switch, and shows the loading screen the same way`, async () => {
+      const js = await front(`assets/js/${page}.js`);
+      assert.match(js, /import \{ sceneLoaded, sceneLoading \} from '\.\/view3d\.js';/);
+      for (const gone of ['wants3d', 'setWants3d', 'viewSwitch', 'onViewChange', 'function setView', `${stem}View`]) {
+        assert.ok(!js.includes(gone), `${page} still has ${gone}`);
+      }
+      // Builds the scene whatever the site's switch says; only a machine without WebGL gets the flat board.
+      assert.ok(js.includes(`if (${tried}) return ${tried};`));
+      assert.ok(js.includes(`if (!built) {\n        root.dataset.no3d = '';\n        return;\n      }`));
+      assert.ok(js.includes(`sceneLoading(root, host, true);\n    try {`));
+      assert.ok(js.includes(`} finally {\n      sceneLoaded(root);\n    }\n  })();`));
+      assert.ok(js.includes(`if (!${tried}) sceneLoading(root, $('${host}', root), true);\n  void load();`));
     });
   }
 
@@ -131,7 +152,7 @@ describe('the 2D/3D switch', () => {
     const index = await front('index.html');
     assert.match(index, /<link rel="stylesheet" href="assets\/css\/view3d\.css" \/>/);
     // Every graphics setting is one label whose only class ends in __gfx, which the rule above relies on.
-    for (const [page, , , stem] of PAGES) {
+    for (const [page, , , stem] of [...PAGES, ...ALWAYS]) {
       const js = await front(`assets/js/${page}.js`);
       assert.match(js, new RegExp(`<label class="${stem}__gfx" for="${stem}Gfx">`));
     }

@@ -60,6 +60,20 @@
 
   var current = read();
 
+  /* 3D is every game's default. A 2D choice saved before that was settled (30 October 2026) -- the
+   * site's switch, or blackjack's own older one -- is cleared once, so every player starts in 3D
+   * again; a 2D chosen after it is kept. */
+  if (current.view3dDefault !== 1) {
+    delete current.view;
+    delete current.bjView;
+    current.view3dDefault = 1;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(current));
+    } catch (error) {
+      /* storage refused: this tab starts in 3D all the same */
+    }
+  }
+
   /* sRGB to OKLCH (Björn Ottosson's OKLab), so a picked colour can be held to the ladder's
    * lightness and keep only its hue and chroma. */
   function hexToOklch(hex) {

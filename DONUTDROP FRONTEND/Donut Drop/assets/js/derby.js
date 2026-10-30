@@ -12,7 +12,8 @@
  *
  * The track is drawn in WebGL (derby3d.js), its own chunk, at the graphics the player picked or the
  * machine can manage; without WebGL the flat lanes run the same race. The order and the result are in
- * the page as text too.
+ * the page as text too. The race is always in 3D: the site's 2D/3D switch does not reach this page,
+ * and the flat lanes are only for a machine without WebGL.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
@@ -21,7 +22,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { sceneLoaded, sceneLoading } from './view3d.js';
 import { faceIcons, raceScript } from './derbyrace.js';
 
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
@@ -132,21 +133,17 @@ async function send(stake) {
 
 /** Builds the 3D track over the flat lanes, once, as its own download. Any failure leaves the lanes. */
 function startTrack() {
-  if (trackTried || !wants3d()) return trackTried;
+  if (trackTried) return trackTried;
   trackTried = (async () => {
     const host = $('.derby__track', root);
-    sceneLoading(root, host);
+    sceneLoading(root, host, true);
     try {
       const { createDerby3d } = await import('./derby3d.js');
       const built = await createDerby3d(host, { racers: racers() });
-      if (!built) root.dataset.no3d = '';
-      else if (!wants3d()) {
-        // Switched to 2D while it was loading.
-        built.dispose();
-        trackTried = null;
+      if (!built) {
+        root.dataset.no3d = '';
         return;
       }
-      if (!built) return;
       built.onLost = () => {
         if (track === built) track = null;
         built.dispose();
@@ -183,28 +180,6 @@ function setGraphics(value) {
   paintGraphics();
 }
 
-/** The 2D/3D switch (view3d.js): 2D puts the track away for the flat board, 3D builds it again. */
-function setView(on) {
-  if (phase !== 'idle') {
-    // Switched somewhere else in the middle of a round: followed once the round lets go.
-    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
-    paintGraphics();
-    return;
-  }
-  if (on !== wants3d()) {
-    setWants3d(on);
-    playSound('click');
-  }
-  if (!on) sceneLoaded(root);
-  if (!on && track) {
-    track.dispose();
-    track = null;
-    trackTried = null;
-    root.dataset.render = '2d';
-  }
-  if (on && config) void startTrack();
-  paintGraphics();
-}
 
 /** The flat lanes: each racer's face, moved along its lane by the same race. */
 function buildLanes() {
@@ -430,7 +405,6 @@ function paintPicker() {
   }
 }
 function paintGraphics() {
-  if (root) paintViewSwitch(root, $('#derbyView', root), { disabled: Boolean(phase !== 'idle') });
   const select = root && $('#derbyGfx', root);
   if (!select) return;
   const pref = graphicsPref();
@@ -570,7 +544,6 @@ function build() {
         <span class="derby__label">Last races</span>
         <ol class="derby__log" id="derbyLog"></ol>
         <p class="derby__logempty" id="derbyLogEmpty">No races yet.</p>
-        ${viewSwitch('derbyView')}
         <label class="derby__gfx" for="derbyGfx">
           <span>Graphics</span>
           <select id="derbyGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
@@ -603,10 +576,6 @@ function build() {
     $(`.derby__pick[data-id="${next}"]`, root)?.focus();
   });
   $('#derbyGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
-  onViewSwitch($('#derbyView', root), setView);
-  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
-  // once, 3D only for the page on screen (the others build theirs when they are next opened).
-  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   $('#derbyForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
     void race();
@@ -651,6 +620,6 @@ export function mountDerby(section) {
     });
   }
   // A scene still to be built comes up behind the loading screen, not after the flat board.
-  if (!trackTried) sceneLoading(root, $('.derby__track', root));
+  if (!trackTried) sceneLoading(root, $('.derby__track', root), true);
   void load();
 }

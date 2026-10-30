@@ -129,7 +129,7 @@ describe('settings: themes', () => {
     assert.equal(kept.prefs.update({ theme: 'nether', hideBalance: true }), true);
     assert.equal(kept.attrs.get('data-lxtheme'), 'nether');
     assert.equal(kept.attrs.get('data-hide-balance'), '1');
-    assert.deepEqual(JSON.parse(kept.store.get('lx:prefs')!), { theme: 'nether', hideBalance: true });
+    assert.deepEqual(JSON.parse(kept.store.get('lx:prefs')!), { view3dDefault: 1, theme: 'nether', hideBalance: true });
     assert.deepEqual(kept.events, ['lx:prefs']);
     kept.prefs.update({ theme: undefined, hideBalance: undefined });
     assert.equal(kept.attrs.has('data-lxtheme'), false);
@@ -148,6 +148,18 @@ describe('settings: themes', () => {
     for (const name of ['data-chat-size', 'data-motion', 'data-chat-wins', 'data-hide-balance']) {
       assert.equal(attrs.has(name), false, name);
     }
+  });
+
+  it('starts every player in 3D once: a 2D saved before 3D became the default is cleared', async () => {
+    const old = await boot({ theme: 'moss', view: '2d', bjView: '2d' });
+    assert.deepEqual(old.prefs.get(), { theme: 'moss', view3dDefault: 1 });
+    assert.deepEqual(JSON.parse(old.store.get('lx:prefs')!), { theme: 'moss', view3dDefault: 1 });
+    // A 2D chosen after that is kept.
+    const chosen = await boot({ view: '2d', view3dDefault: 1 });
+    assert.equal(chosen.prefs.get()['view'], '2d');
+    // Storage refused: this tab starts in 3D all the same.
+    const refused = await boot({ view: '2d' }, { storageWorks: false });
+    assert.equal(refused.prefs.get()['view'], undefined);
   });
 });
 

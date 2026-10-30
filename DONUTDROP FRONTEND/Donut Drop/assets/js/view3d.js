@@ -87,9 +87,10 @@ const LOADING = `
     <span class="scene3d-load__label">Loading 3D</span>
   </div>`;
 
-/** The loading screen over `host`, while 3D is wanted and `root`'s scene is not drawn yet. */
-export function sceneLoading(root, host) {
-  if (!root || !host || !wants3d() || 'no3d' in root.dataset || root.dataset.render === '3d') return;
+/** The loading screen over `host`, while 3D is wanted and `root`'s scene is not drawn yet. A game
+ * that is always in 3D (Mob Derby, Ice Fishing) passes `wanted` true: the switch does not reach it. */
+export function sceneLoading(root, host, wanted = wants3d()) {
+  if (!root || !host || !wanted || 'no3d' in root.dataset || root.dataset.render === '3d') return;
   if (!host.querySelector(':scope > .scene3d-load')) host.insertAdjacentHTML('beforeend', LOADING);
   if (root.dataset.render !== 'loading') root.dataset.render = 'loading';
 }
