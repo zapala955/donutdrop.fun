@@ -7,11 +7,14 @@ import { state, bus, refreshQuests, claimQuest, claimStreak } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { mountWeeklyQuests } from './weekly-quests.js';
 
 let root = null;
 let countdownTimer = 0;
 
 export function mountQuests(view) {
+  // The week's quests sit above the daily ones and read signed out too.
+  mountWeeklyQuests($('#weeklyQuestsRoot', view));
   root = $('#questRoot', view);
   if (!root) return;
   if (!root.dataset.built) {

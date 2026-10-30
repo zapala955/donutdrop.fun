@@ -72,6 +72,7 @@ const KIND_LABEL = {
   staking_stake: 'House pool stake',
   staking_release: 'House pool payback',
   staking_reward: 'House pool profit',
+  weekly_quest_reward: 'Weekly quest prize',
   mines_duel_stake: 'Mines Duel stake',
   mines_duel_win: 'Mines Duel win',
   mines_duel_refund: 'Mines Duel refund',

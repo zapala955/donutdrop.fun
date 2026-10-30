@@ -32,6 +32,7 @@ type SettingGroup =
   | 'dailycodes'
   | 'crowns'
   | 'staking'
+  | 'weeklyQuests'
   | 'jackpot'
   | 'rain'
   | 'social'
@@ -883,6 +884,67 @@ export const runtimeSettingDefinitions = {
     min: 1n,
     max: 720n,
   },
+
+  /* ── weekly quests ──
+   *
+   * A round freezes its pot and thresholds when it opens on Monday, so a change here applies from
+   * the next week; switching them off stops new rounds, and an open one still settles and pays.
+   * The race's split and the sweep interval are boot-only. */
+  weeklyQuestsEnabled: {
+    kind: 'boolean',
+    group: 'weeklyQuests',
+    label: 'Weekly quests open each Monday and are shown',
+  },
+  depositRacePotMinor: {
+    kind: 'bigint',
+    group: 'weeklyQuests',
+    label: 'Deposit race: prize pot per week',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  depositRaceMinDepositMinor: {
+    kind: 'bigint',
+    group: 'weeklyQuests',
+    label: 'Deposit race: least a player must deposit and play to place',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  recruitQuestPotMinor: {
+    kind: 'bigint',
+    group: 'weeklyQuests',
+    label: 'Recruit quest: prize pot per week, split among everyone who finishes',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  recruitQuestFriends: {
+    kind: 'integer',
+    group: 'weeklyQuests',
+    label: 'Recruit quest: new friends needed',
+    min: 1n,
+    max: 50n,
+  },
+  recruitFriendDepositMinor: {
+    kind: 'bigint',
+    group: 'weeklyQuests',
+    label: 'Recruit quest: what each friend must deposit',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  recruitFriendWagerMinor: {
+    kind: 'bigint',
+    group: 'weeklyQuests',
+    label: 'Recruit quest: what each friend must wager',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  weeklyQuestGraceHours: {
+    kind: 'integer',
+    group: 'weeklyQuests',
+    label: 'Hours after the week before a round settles',
+    min: 0n,
+    max: 168n,
+  },
+
 
   /* ── media test mode ──
    *

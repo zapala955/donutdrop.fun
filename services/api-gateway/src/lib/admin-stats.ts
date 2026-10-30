@@ -154,6 +154,7 @@ export const PROMO_KINDS: Readonly<Record<string, string>> = Object.freeze({
   daily_code_reward: 'Daily codes',
   bounty_reward: 'Bounties',
   staking_reward: 'House pool',
+  weekly_quest_reward: 'Weekly quests',
 });
 
 export const ITEM_BUYBACK_KINDS = ['item_sale'] as const;

@@ -4,6 +4,8 @@
  * with a backdrop, for the moments that deserve one:
  *
  *   signed out                  → register now: the signup bonus, opening the login form
+ *   signed in                   → this week's quests (weekly-quests.js): the deposit race and the
+ *                                 recruit quest, each its own pop-up with its own rest
  *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
  *   signed in, Discord unlinked → the Discord page, where the link code is
  *   signed in                   → invite & earn
@@ -25,6 +27,7 @@ import { IMG, SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
 import { pendingReferralCode } from './referrals.js';
+import { placeName, readWeeklyQuests, timeLeft } from './weekly-quests.js';
 
 const ANY_KEY = 'dw.popup.any';
 const NUDGE_KEY = 'dw.nudge.next';
@@ -110,6 +113,11 @@ async function pick() {
     };
   }
 
+  // This week's quests, first: they are what brings deposits and players in. Not on their own page.
+  const quest = await questPopup(due);
+  if (quest) return quest;
+
+
   // A game that is still new, once for each game; it stops being offered when it stops being new.
   const fresh = SPOTLIGHT_GAMES.filter(isNewGame).find((game) => due(`game:${game.route}`));
   if (fresh) {
@@ -163,6 +171,58 @@ async function pick() {
     };
   }
   return null;
+}
+
+/**
+ * The week's quests, one pop-up each: the deposit race while it is open, the recruit quest unless
+ * this player has already finished it. Every figure is the board's (GET /v1/quests/weekly).
+ */
+async function questPopup(due) {
+  if (currentRouteName() === 'quests') return null;
+  const wantRace = due('quest:deposit_race');
+  const wantRecruit = due('quest:recruit');
+  if (!wantRace && !wantRecruit) return null;
+  const board = await readWeeklyQuests();
+  if (!board?.enabled || !board.depositRace || !board.recruit) return null;
+  const left = timeLeft(board.endsAt);
+
+  if (wantRace) {
+    const race = board.depositRace;
+    const prizes = race.prizes.map((prize, index) => `${placeName(index + 1)} ${money(Number(prize))}`).join(', ');
+    const rank = race.you?.rank;
+    return {
+      id: 'quest:deposit_race',
+      eyebrow: 'Weekly quest · ends in ' + left,
+      title: ['', money(Number(race.potMinor)), ' deposit race'],
+      line: rank
+        ? `You are ${placeName(rank)} right now. The biggest deposits of the week win: ${prizes}.`
+        : `The biggest deposits of the week win: ${prizes}. Deposit and play at least ${money(Number(race.minDepositMinor))} to place.`,
+      cta: 'See the race',
+      href: '/quests',
+      art: 'gold_block.png',
+      later: 'Not now',
+      seenFor: DAY_MS,
+      usedFor: 3 * DAY_MS,
+    };
+  }
+
+  const recruit = board.recruit;
+  if (recruit.you?.done) return null;
+  return {
+    id: 'quest:recruit',
+    eyebrow: 'Weekly quest · ends in ' + left,
+    title: [`Bring ${recruit.friendsNeeded} friends, share `, money(Number(recruit.potMinor)), ''],
+    line: `Invite new players with your link. Each deposits ${money(Number(recruit.friendDepositMinor))} and wagers ${money(Number(recruit.friendWagerMinor))} this week. `
+      + (recruit.finishers > 0
+        ? `${recruit.finishers} finished so far.`
+        : 'Nobody has finished yet: the first takes the whole pot.'),
+    cta: 'Start recruiting',
+    href: '/quests',
+    art: 'totem.png',
+    later: 'Not now',
+    seenFor: DAY_MS,
+    usedFor: 3 * DAY_MS,
+  };
 }
 
 function show(popup) {

@@ -673,6 +673,34 @@ const environmentSchema = z
     STAKING_MAX_PER_PLAYER_MINOR: positiveBigintString.default('5000000000'),
     STAKING_UNSTAKE_HOURS: z.coerce.number().int().min(1).max(720).default(48),
     STAKING_SWEEP_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
+    /* Weekly quests (lib/weekly-quests.ts): two quests per UTC week, each with its own pot. The
+     * deposit race splits its pot by rank among the players who deposited and played the most; the
+     * recruit quest splits its pot equally among the players whose new friends each deposited and
+     * played enough. A round freezes these figures when it opens, so a change applies from the next
+     * week. The split is boot-only; the rest can be changed live. */
+    WEEKLY_QUESTS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    DEPOSIT_RACE_POT_MINOR: positiveBigintString.default('10000000'),
+    DEPOSIT_RACE_SPLIT_BPS: z
+      .string()
+      .regex(/^\d{1,5}(,\d{1,5}){0,9}$/, 'comma-separated basis points, highest place first')
+      .default('5000,3000,2000')
+      .transform((value) => value.split(',').map(Number))
+      .refine(
+        (curve) => curve.every((bps) => bps > 0) && curve.reduce((sum, bps) => sum + bps, 0) <= 10_000,
+        'every place must get something, and the places may not add up to more than the pot',
+      ),
+    DEPOSIT_RACE_MIN_DEPOSIT_MINOR: positiveBigintString.default('10000000'),
+    RECRUIT_QUEST_POT_MINOR: positiveBigintString.default('10000000'),
+    RECRUIT_QUEST_FRIENDS: z.coerce.number().int().min(1).max(50).default(3),
+    RECRUIT_FRIEND_DEPOSIT_MINOR: positiveBigintString.default('10000000'),
+    RECRUIT_FRIEND_WAGER_MINOR: positiveBigintString.default('10000000'),
+    /* Hours after the week before a round settles: the recruit quest's late friends get them to
+     * deposit and play, and the deposit race waits out deposits still being confirmed. */
+    WEEKLY_QUEST_GRACE_HOURS: z.coerce.number().int().min(0).max(168).default(24),
+    WEEKLY_QUEST_SWEEP_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
     /* Daily codes: a personal one-use code the community bot DMs to members who opted in, redeemed
      * for a random prize from nothing up to the ceiling (lib/daily-codes.ts). Whether the bot SENDS
      * them is a dashboard switch (default off); this is whether the gateway will PAY them. The day's
@@ -1600,6 +1628,16 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     stakingMaxPerPlayerMinor: BigInt(env.STAKING_MAX_PER_PLAYER_MINOR),
     stakingUnstakeHours: env.STAKING_UNSTAKE_HOURS,
     stakingSweepSeconds: env.STAKING_SWEEP_SECONDS,
+    weeklyQuestsEnabled: env.WEEKLY_QUESTS_ENABLED,
+    depositRacePotMinor: BigInt(env.DEPOSIT_RACE_POT_MINOR),
+    depositRaceSplitBps: env.DEPOSIT_RACE_SPLIT_BPS,
+    depositRaceMinDepositMinor: BigInt(env.DEPOSIT_RACE_MIN_DEPOSIT_MINOR),
+    recruitQuestPotMinor: BigInt(env.RECRUIT_QUEST_POT_MINOR),
+    recruitQuestFriends: env.RECRUIT_QUEST_FRIENDS,
+    recruitFriendDepositMinor: BigInt(env.RECRUIT_FRIEND_DEPOSIT_MINOR),
+    recruitFriendWagerMinor: BigInt(env.RECRUIT_FRIEND_WAGER_MINOR),
+    weeklyQuestGraceHours: env.WEEKLY_QUEST_GRACE_HOURS,
+    weeklyQuestSweepSeconds: env.WEEKLY_QUEST_SWEEP_SECONDS,
     dailyCodesEnabled: env.DAILY_CODES_ENABLED,
     dailyCodeMaxPrizeMinor: BigInt(env.DAILY_CODE_MAX_PRIZE_MINOR),
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),

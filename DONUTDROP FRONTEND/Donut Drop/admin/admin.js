@@ -3666,6 +3666,7 @@ const GROUP_LABELS = {
   dailycodes: 'Daily codes',
   crowns: 'Crowns & bounties',
   staking: 'House pool',
+  weeklyQuests: 'Weekly quests',
   duels: 'Duels',
   coinflip: 'Coinflip',
   jackpot: 'Jackpot',

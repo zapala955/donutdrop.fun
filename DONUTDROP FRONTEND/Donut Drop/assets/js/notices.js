@@ -34,6 +34,9 @@ const ICONS = {
 };
 
 /* What each kind says. A kind the page does not know yet is left out rather than shown blank. */
+const PLACES = ['1st', '2nd', '3rd'];
+const placeName = (rank) => PLACES[(Number(rank) || 1) - 1] ?? `${rank}th`;
+
 const KINDS = {
   cash_deposit: { icon: 'in', title: () => 'Deposit credited', detail: () => 'Paid in from the game' },
   pay_login_deposit: { icon: 'in', title: () => 'Sign-in payment credited', detail: () => 'Your sign-in payment, in your balance' },
@@ -73,6 +76,12 @@ const KINDS = {
     title: (n) => `${crownGameName(n.game)} crown ran out`,
     detail: () => 'Your record is 30 days old. Set a new one',
     figure: (n) => formatX(n.multiplierX100),
+  },
+  /* Weekly quests (weekly-quests.js): a deposit race place, or a share of the recruit pot. */
+  quest_won: {
+    icon: 'gift',
+    title: (n) => (n.game === 'deposit_race' ? `Deposit race: ${placeName(n.rank)} place` : 'Recruit quest finished'),
+    detail: () => 'Your weekly quest prize is in your balance',
   },
   bounty_won: {
     icon: 'gift',
