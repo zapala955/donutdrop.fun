@@ -30,7 +30,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const SINKERS = [
   { id: 'feather', label: 'Feather', note: 'Drifts down' },
@@ -174,6 +174,7 @@ async function load() {
   }
   paint();
   if (config) await startPond();
+  else sceneLoaded(root);
   if (state.authenticated && config && !round && phase === 'idle') await resume();
 }
 
@@ -217,6 +218,7 @@ function startPond() {
   if (pondTried || !wants3d()) return pondTried;
   pondTried = (async () => {
     const host = $('.fishing__pond', root);
+    sceneLoading(root, host);
     try {
       const { createPond3d } = await import('./fishing3d.js');
       const built = await createPond3d(host, { sinker, catches: Object.keys(config.catches), icon });
@@ -250,6 +252,8 @@ function startPond() {
     } catch {
       pond = null;
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return pondTried;
@@ -283,6 +287,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && pond) {
     pond.dispose();
     pond = null;
@@ -999,5 +1004,7 @@ export function mountFishing(section) {
       if (phase === 'idle') paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!pondTried) sceneLoading(root, $('.fishing__pond', root));
   void load();
 }

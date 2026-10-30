@@ -171,6 +171,6 @@ describe('mines in 3D', () => {
     assert.match(page, /await import\('\.\/mines3d\.js'\)/);
     assert.match(page, /if \(field\) await field\.dig\(tile, true\);\n\s*else boom\(tile\);/);
     assert.match(page, /board\.addEventListener\('focusin'/);
-    assert.match(css, /\.mines\[data-render="3d"\] \.mines__board \{\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  opacity: 0;\n  pointer-events: none;\n\}/);
+    assert.match(css, /\.mines:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.mines__board \{\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  opacity: 0;\n  pointer-events: none;\n\}/);
   });
 });

@@ -65,7 +65,7 @@
   padding: 0;
   list-style: none;
 }
-.derby[data-render="3d"] .derby__lanes { display: none; }
+.derby:is([data-render="3d"], [data-render="loading"]) .derby__lanes { display: none; }
 .derby__lanes li { position: relative; background: var(--derby-path); box-shadow: inset 0 -3px 0 var(--derby-rail); }
 .derby__lanes img { position: absolute; left: calc(var(--at, 0) * (100% - 32px)); top: 50%; width: 32px; height: 32px; image-rendering: pixelated; transform: translateY(-50%); }
 

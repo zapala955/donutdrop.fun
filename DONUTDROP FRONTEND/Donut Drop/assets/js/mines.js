@@ -20,7 +20,7 @@ import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './ut
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const TILES = 25;
 const QUICK_MINES = [1, 3, 5, 10, 24];
@@ -99,6 +99,7 @@ async function load() {
   paint();
   syncField();
   if (config) void startField();
+  else sceneLoaded(root);
 }
 
 async function refreshSeed() {
@@ -240,6 +241,7 @@ function startField() {
   if (fieldTried || !wants3d()) return fieldTried;
   fieldTried = (async () => {
     const host = $('.mines__pit', root);
+    sceneLoading(root, host);
     try {
       const { createMines3d } = await import('./mines3d.js');
       const built = await createMines3d(host);
@@ -271,6 +273,8 @@ function startField() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return fieldTried;
@@ -327,6 +331,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && field) {
     field.dispose();
     field = null;
@@ -638,5 +643,7 @@ export function mountMines(section) {
       if (!busy) paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!fieldTried) sceneLoading(root, $('.mines__pit', root));
   void load();
 }

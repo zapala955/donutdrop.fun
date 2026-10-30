@@ -55,7 +55,7 @@ describe('tower in 3D', () => {
     assert.match(page, /if \(tower3d\) await tower3d\.open\(floor, tile, game\.outcome === 'trap'\);\n\s*if \(game\.outcome === 'trap'\) \{\n\s*if \(!tower3d\) boom\(floor, tile\);/);
     assert.match(page, /tower3d\?\.celebrate\(game\.multiplierBps\);/);
     assert.match(page, /board\.addEventListener\('focusin'/);
-    assert.match(css, /\.tower\[data-render="3d"\] \.tower__board \{\n  position: absolute;\n  inset: 0;\n  opacity: 0;\n  pointer-events: none;\n\}/);
+    assert.match(css, /\.tower:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.tower__board \{\n  position: absolute;\n  inset: 0;\n  opacity: 0;\n  pointer-events: none;\n\}/);
     // The raycaster does not know what is hidden; a hidden chest never takes a click.
     assert.match(tower, /if \(c\.tile >= tiles \|\| !c\.group\.visible\) continue;/);
   });

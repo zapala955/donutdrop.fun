@@ -612,7 +612,7 @@
 }
 
 /* ─────────── the wheel in 3D (roulette3d.js) ─────────── */
-.roulette[data-render="3d"] .roulette__wheelwrap {
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__wheelwrap {
   width: 100%;
   aspect-ratio: 1 / 0.92;
   margin: 12px 0 14px;
@@ -621,7 +621,7 @@
   background: #140403;
   box-shadow: inset 0 0 0 1px rgba(255, 190, 0, 0.14);
 }
-.roulette[data-render="3d"] .roulette__wheelwrap::after {
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__wheelwrap::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -630,10 +630,10 @@
   pointer-events: none;
 }
 .roulette__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-.roulette[data-render="3d"] .roulette__wheel,
-.roulette[data-render="3d"] .roulette__pointer { display: none; }
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__wheel,
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__pointer { display: none; }
 /* Over the fortress the result is a plate at the bottom, clear of the wheel. */
-.roulette[data-render="3d"] .roulette__hub {
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__hub {
   position: absolute;
   z-index: 2;
   left: 50%;
@@ -646,7 +646,7 @@
   background: rgba(10, 6, 6, 0.82);
   transform: translateX(-50%);
 }
-.roulette[data-render="3d"] .roulette__hub b { font-size: 28px; }
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__hub b { font-size: 28px; }
 
 .roulette__gfx {
   display: flex;

@@ -237,7 +237,7 @@
 }
 
 /* ─────────── the 3D tower (tower3d.js) ─────────── */
-.tower[data-render="3d"] .tower__pit {
+.tower:is([data-render="3d"], [data-render="loading"]) .tower__pit {
   width: 100%;
   aspect-ratio: 16 / 10.5;
   overflow: hidden;
@@ -248,14 +248,14 @@
 .tower__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 /* The flat tower stays for the keyboard and a screen reader, out of sight and out of the pointer's
  * way: the arrow keys move a white outline round a chest instead. */
-.tower[data-render="3d"] .tower__board {
+.tower:is([data-render="3d"], [data-render="loading"]) .tower__board {
   position: absolute;
   inset: 0;
   opacity: 0;
   pointer-events: none;
 }
 /* Over the tower the result sits at the top, clear of the chests it describes. */
-.tower[data-render="3d"] .tower__banner { top: 14px; z-index: 2; transform: translateX(-50%); }
+.tower:is([data-render="3d"], [data-render="loading"]) .tower__banner { top: 14px; z-index: 2; transform: translateX(-50%); }
 
 .tower__gfx {
   display: flex;
@@ -291,7 +291,7 @@
   /* Still a 44px target, the floor's tiles 8px apart: nine floors fit a phone without scrolling
      inside the board. */
   .tower { --tower-tile-h: 44px; }
-  .tower[data-render="3d"] .tower__pit { aspect-ratio: 4 / 4.6; border-radius: 12px; }
+  .tower:is([data-render="3d"], [data-render="loading"]) .tower__pit { aspect-ratio: 4 / 4.6; border-radius: 12px; }
   .ttile { font-size: .8125rem; }
   .tower__readout b { font-size: 1.0625rem; }
 }

@@ -73,7 +73,7 @@
   place-items: center;
   background: linear-gradient(var(--ice-night-top), var(--ice-night-low) 30%, var(--ice-lake) 30%);
 }
-.icefish[data-render="3d"] .icefish__flat { display: none; }
+.icefish:is([data-render="3d"], [data-render="loading"]) .icefish__flat { display: none; }
 .icefish__grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: min(78%, 56vh); aspect-ratio: 1; margin-top: 14%; }
 .icefish__grid button {
   display: grid;

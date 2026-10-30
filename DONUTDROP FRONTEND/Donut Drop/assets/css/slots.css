@@ -467,13 +467,13 @@
  * reels stay in the DOM, out of sight, because they are what a screen reader reads. The free-spin
  * bar, what the line paid and the meter float over the canvas as a HUD; the banner and the splash
  * sit on top of everything. */
-.slots[data-render="3d"] .slots__stage {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__stage {
   display: block;
   padding: 0;
   overflow: hidden;
 }
-.slots[data-render="3d"] :is(.slots__lever, .slots__corner, .slots__marquee, .slots__lines, .slots__fx) { display: none; }
-.slots[data-render="3d"] .slots__cabinet {
+.slots:is([data-render="3d"], [data-render="loading"]) :is(.slots__lever, .slots__corner, .slots__marquee, .slots__lines, .slots__fx) { display: none; }
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__cabinet {
   position: relative;
   display: block;
   width: 100%;
@@ -482,7 +482,7 @@
   background: none;
   box-shadow: none;
 }
-.slots[data-render="3d"] .slots__window {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__window {
   height: 100%;
   min-height: 600px;
   padding: 0;
@@ -490,7 +490,7 @@
   background: none;
   box-shadow: none;
 }
-.slots[data-render="3d"] .slots__window::after {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__window::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
@@ -499,7 +499,7 @@
   background: linear-gradient(transparent, var(--slots-hud-shade));
   pointer-events: none;
 }
-.slots[data-render="3d"] .slots__reels {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__reels {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -516,7 +516,7 @@
   touch-action: pan-y;
   cursor: grab;
 }
-.slots[data-render="3d"] .slots__free {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__free {
   position: absolute;
   top: 14px;
   left: 50%;
@@ -527,7 +527,7 @@
   transform: translateX(-50%);
   white-space: nowrap;
 }
-.slots[data-render="3d"] .slots__action {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__action {
   position: absolute;
   left: 20px;
   right: 230px;
@@ -537,7 +537,7 @@
   min-height: 0;
   text-align: left;
 }
-.slots[data-render="3d"] .slots__meter {
+.slots:is([data-render="3d"], [data-render="loading"]) .slots__meter {
   position: absolute;
   right: 16px;
   bottom: 14px;
@@ -698,13 +698,13 @@ body.lx .slots .slots__go[data-tone="free"],
 /* ─────────── narrower screens ─────────── */
 @media (max-width: 1023px) {
   .slots { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
-  .slots[data-render="3d"] .slots__window { height: auto; min-height: 0; aspect-ratio: 4 / 3.3; }
+  .slots:is([data-render="3d"], [data-render="loading"]) .slots__window { height: auto; min-height: 0; aspect-ratio: 4 / 3.3; }
 }
 @media (max-width: 640px) {
-  .slots[data-render="3d"] .slots__window { aspect-ratio: 4 / 4.6; }
-  .slots[data-render="3d"] .slots__action { left: 12px; right: 12px; bottom: 62px; justify-content: center; text-align: center; font-size: .875rem; }
-  .slots[data-render="3d"] .slots__meter { left: 12px; right: 12px; bottom: 10px; min-width: 0; padding: 6px 12px; }
-  .slots[data-render="3d"] .slots__free { top: 10px; font-size: .8125rem; }
+  .slots:is([data-render="3d"], [data-render="loading"]) .slots__window { aspect-ratio: 4 / 4.6; }
+  .slots:is([data-render="3d"], [data-render="loading"]) .slots__action { left: 12px; right: 12px; bottom: 62px; justify-content: center; text-align: center; font-size: .875rem; }
+  .slots:is([data-render="3d"], [data-render="loading"]) .slots__meter { left: 12px; right: 12px; bottom: 10px; min-width: 0; padding: 6px 12px; }
+  .slots:is([data-render="3d"], [data-render="loading"]) .slots__free { top: 10px; font-size: .8125rem; }
 }
 @media (max-width: 640px) {
   .slots__stage { grid-template-columns: minmax(0, 1fr); padding: var(--lx-s3, 12px); }

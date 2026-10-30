@@ -318,8 +318,8 @@ body.lx .dice__field--read:hover { border-color: var(--lx-4); }
 /* ─────────── the 3D range (dice3d.js) ───────────
  * Over the track, never instead of it: the slider under it is still how the line is drawn. */
 .dice__scene { display: none; }
-.dice[data-render="3d"] .dice__stage { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: var(--lx-s4); }
-.dice[data-render="3d"] .dice__scene {
+.dice:is([data-render="3d"], [data-render="loading"]) .dice__stage { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: var(--lx-s4); }
+.dice:is([data-render="3d"], [data-render="loading"]) .dice__scene {
   position: relative;
   display: block;
   aspect-ratio: 16 / 7;
@@ -359,7 +359,7 @@ body.lx .dice__field--read:hover { border-color: var(--lx-4); }
 }
 @media (max-width: 560px) {
   .dice { --dice-marker: 56px; }
-  .dice[data-render="3d"] .dice__scene { aspect-ratio: 16 / 10; }
+  .dice:is([data-render="3d"], [data-render="loading"]) .dice__scene { aspect-ratio: 16 / 10; }
   .dice__board { padding: var(--lx-s4) var(--lx-s3) var(--lx-s3); }
   .dice__recent { justify-content: flex-start; }
   .dice__chip { min-width: 46px; }

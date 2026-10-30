@@ -295,14 +295,14 @@
 
 /* ─────────── the End (plinko3d.js) ─────────── */
 .plinko__view { position: relative; }
-.plinko[data-render="3d"] .plinko__board { width: 100%; padding: 0 0 10px; }
-.plinko[data-render="3d"] .plinko__view {
+.plinko:is([data-render="3d"], [data-render="loading"]) .plinko__board { width: 100%; padding: 0 0 10px; }
+.plinko:is([data-render="3d"], [data-render="loading"]) .plinko__view {
   aspect-ratio: 16 / 10.5;
   overflow: hidden;
   border-radius: 14px 14px 6px 6px;
   background: var(--plinko-void);
 }
-.plinko[data-render="3d"] .plinko__view::after {
+.plinko:is([data-render="3d"], [data-render="loading"]) .plinko__view::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -310,11 +310,11 @@
   background: radial-gradient(ellipse at 50% 45%, transparent 62%, var(--plinko-vignette));
   pointer-events: none;
 }
-.plinko[data-render="3d"] #plinkoCanvas { display: none; }
+.plinko:is([data-render="3d"], [data-render="loading"]) #plinkoCanvas { display: none; }
 /* Past the flat canvas's own rule, which sizes any canvas on the board to the board's shape. */
 .plinko__board .plinko__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; aspect-ratio: auto; }
 /* The payouts stay the page's own row, set under the shulker boxes wherever the camera has them. */
-.plinko[data-render="3d"] .plinko__slots {
+.plinko:is([data-render="3d"], [data-render="loading"]) .plinko__slots {
   width: var(--row-width, auto);
   margin: 8px 0 0 var(--row-left, 0px);
 }
@@ -352,7 +352,7 @@
   .plinko { gap: 12px; }
   .plinko__stage { gap: 10px; padding: 10px; border-radius: 16px; }
   .plinko__board { padding: 6px 4px 8px; border-radius: 14px; }
-  .plinko[data-render="3d"] .plinko__view { aspect-ratio: 4 / 4.6; border-radius: 12px 12px 4px 4px; }
+  .plinko:is([data-render="3d"], [data-render="loading"]) .plinko__view { aspect-ratio: 4 / 4.6; border-radius: 12px 12px 4px 4px; }
   .plinko__slots { gap: 2px; }
   .plinko__slot { height: 26px; border-radius: 4px; }
   .plinko__slots[data-dense] .plinko__slot { height: 34px; }

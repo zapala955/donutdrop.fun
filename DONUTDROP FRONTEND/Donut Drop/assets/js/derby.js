@@ -21,7 +21,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 import { faceIcons, raceScript } from './derbyrace.js';
 
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
@@ -98,6 +98,7 @@ async function load() {
   }
   paint();
   if (config) await startTrack();
+  else sceneLoaded(root);
 }
 async function loadLog() {
   try {
@@ -134,6 +135,7 @@ function startTrack() {
   if (trackTried || !wants3d()) return trackTried;
   trackTried = (async () => {
     const host = $('.derby__track', root);
+    sceneLoading(root, host);
     try {
       const { createDerby3d } = await import('./derby3d.js');
       const built = await createDerby3d(host, { racers: racers() });
@@ -161,6 +163,8 @@ function startTrack() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return trackTried;
@@ -191,6 +195,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && track) {
     track.dispose();
     track = null;
@@ -645,5 +650,7 @@ export function mountDerby(section) {
       if (phase === 'idle') paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!trackTried) sceneLoading(root, $('.derby__track', root));
   void load();
 }

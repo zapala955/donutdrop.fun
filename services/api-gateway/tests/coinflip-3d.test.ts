@@ -32,6 +32,6 @@ describe('coinflip in 3D', () => {
     assert.match(page, /await import\('\.\/coin3d\.js'\)/);
     assert.match(page, /if \(!wants3d\(\) \|\| no3dCoin\) \{\n\s*spinFlat\(\);\n\s*return;\n\s*\}/);
     assert.match(page, /if \(tossed\) \{\n\s*land\(\);\n\s*return;\n\s*\}\n\s*delete coin\.dataset\.render;\n\s*spinFlat\(\);/);
-    assert.match(css, /\.cfcoin\[data-render='3d'\] \.cfcoin__body \{ display: none; \}/);
+    assert.match(css, /\.cfcoin:is\(\[data-render='3d'\], \[data-render='loading'\]\) \.cfcoin__body \{ display: none; \}/);
   });
 });

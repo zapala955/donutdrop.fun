@@ -379,7 +379,7 @@
 .bj__view button:disabled { cursor: default; opacity: .55; }
 .bj__view button:focus-visible { outline: 2px solid var(--lx-focus, #ffd700); outline-offset: 1px; }
 /* The flat table's shoe sits in the same corner; the switch moves it along. */
-.bj__table:not([data-render="3d"]) .bj__shoe { right: 120px; }
+.bj__table:not([data-render="3d"], [data-render="loading"]) .bj__shoe { right: 120px; }
 
 .bj__gl {
   position: absolute;
@@ -391,13 +391,13 @@
   cursor: grab;
 }
 .bj__gl:active { cursor: grabbing; }
-.bj__table[data-render="3d"] {
+.bj__table:is([data-render="3d"], [data-render="loading"]) {
   --bj-hud: rgba(10, 10, 12, .72);
   padding: 0;
   background: var(--lx-0, #0a0a0c);
 }
-.bj__table[data-render="3d"] :is(.bj__shoe, .bj__felt, .bj__rules) { display: none; }
-.bj__table[data-render="3d"] .bj__cards {
+.bj__table:is([data-render="3d"], [data-render="loading"]) :is(.bj__shoe, .bj__felt, .bj__rules) { display: none; }
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__cards {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -405,7 +405,7 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
-.bj__table[data-render="3d"] .bj__seat {
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__seat {
   position: absolute;
   left: 12px;
   right: auto;
@@ -414,19 +414,19 @@
   align-items: flex-start;
   pointer-events: none;
 }
-.bj__table[data-render="3d"] .bj__seat--dealer { top: 12px; }
-.bj__table[data-render="3d"] .bj__seat--player { bottom: 12px; }
-.bj__table[data-render="3d"] .bj__label {
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__seat--dealer { top: 12px; }
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__seat--player { bottom: 12px; }
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__label {
   padding: 6px 10px;
   border-radius: var(--lx-r, 8px);
   background: var(--bj-hud);
 }
 /* Over the dark front of the table, clear of both hands. */
-.bj__table[data-render="3d"] .bj__result { top: auto; bottom: 64px; z-index: 5; transform: translateX(-50%); }
+.bj__table:is([data-render="3d"], [data-render="loading"]) .bj__result { top: auto; bottom: 64px; z-index: 5; transform: translateX(-50%); }
 @media (max-width: 560px) {
-  .bj__table[data-render="3d"] { min-height: 460px; }
+  .bj__table:is([data-render="3d"], [data-render="loading"]) { min-height: 460px; }
   /* No room beside the switch on a phone: the flat table's shoe goes under it. */
-  .bj__table:not([data-render="3d"]) .bj__shoe { top: 56px; right: 14px; }
+  .bj__table:not([data-render="3d"], [data-render="loading"]) .bj__shoe { top: 56px; right: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bj__view button { transition: none; }

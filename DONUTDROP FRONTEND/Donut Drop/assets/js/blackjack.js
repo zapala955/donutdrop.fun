@@ -21,7 +21,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { onViewChange, setWants3d, wants3d as wantsScenes } from './view3d.js';
+import { onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes } from './view3d.js';
 
 const DEAL_MS = 340; // shoe to seat
 const DEAL_GAP_MS = 170; // between cards on the deal
@@ -483,6 +483,7 @@ function paintView() {
 function start3d() {
   if (table3d || starting3d || no3d) return starting3d;
   const host = $('.bj__table', root);
+  sceneLoading(host, host);
   starting3d = (async () => {
     let built = null;
     try {
@@ -494,12 +495,14 @@ function start3d() {
     starting3d = null;
     if (!built) {
       no3d = true;
+      sceneLoaded(host);
       paintView();
       return;
     }
     // Switched back to 2D while it was loading.
     if (!wants3d()) {
       built.dispose();
+      sceneLoaded(host);
       paintView();
       return;
     }
@@ -519,6 +522,8 @@ function start3d() {
 }
 
 function stop3d() {
+  // Still on its way: the flat table at once, and the scene is put away when it arrives.
+  sceneLoaded($('.bj__table', root));
   if (!table3d) return;
   table3d.dispose();
   table3d = null;
@@ -662,7 +667,8 @@ export function mountBlackjack(view) {
   if (!root.dataset.built) {
     build();
     root.dataset.built = '1';
-    if (wants3d()) void start3d();
   }
+  // Every opening, not only the first: 3D may have been chosen elsewhere while the table was away.
+  if (wants3d()) void start3d();
   void load();
 }

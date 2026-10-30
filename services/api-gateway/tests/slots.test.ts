@@ -473,7 +473,7 @@ describe('the slots page', () => {
     assert.match(page, /if \(!built\) \{\s*root\.dataset\.no3d = '';\s*return;\s*\}/);
     assert.match(page, /built\.onLost = \(\) => \{\s*machine = null;\s*built\.dispose\(\);\s*root\.dataset\.render = '2d';/);
     assert.match(page, /onStop: \(reel\) => \{\s*paintReel\(reel, grid\[reel\]\);/);
-    assert.match(css, /\.slots\[data-render="3d"\] \.slots__reels \{[^}]*clip: rect\(0 0 0 0\);/);
+    assert.match(css, /\.slots:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.slots__reels \{[^}]*clip: rect\(0 0 0 0\);/);
     // Reduced motion: the drums are set, not spun.
     assert.match(machine, /if \(reduce\) \{\s*controls\.showStops\(tops\);/);
   });

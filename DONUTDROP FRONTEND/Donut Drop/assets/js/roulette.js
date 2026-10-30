@@ -13,7 +13,7 @@ import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const ORDER = Object.freeze([
   0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14,
@@ -116,6 +116,7 @@ function startWheel() {
   if (wheelTried || !wants3d()) return wheelTried;
   wheelTried = (async () => {
     const host = $('.roulette__wheelwrap', root);
+    sceneLoading(root, host);
     try {
       const { createRoulette3d } = await import('./roulette3d.js');
       const built = await createRoulette3d(host, { order: ORDER, red: RED });
@@ -149,6 +150,8 @@ function startWheel() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return wheelTried;
@@ -182,6 +185,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && wheel3d) {
     wheel3d.dispose();
     wheel3d = null;

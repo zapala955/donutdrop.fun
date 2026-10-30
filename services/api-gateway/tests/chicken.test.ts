@@ -271,7 +271,7 @@ describe('chicken in 3D', () => {
     // The hop (and the minecart) play out before the page says what happened.
     assert.match(page, /game = response\.game;\n\s*if \(road3d\) await road3d\.step\(lane, game\.outcome === 'hit'\);/);
     assert.match(page, /times\(multiplierBps\(name, lane \+ 1\)\)\.replace\('×', 'x'\)/);
-    assert.match(css, /\.chicken\[data-render="3d"\] \.chicken__road \{\n  position: absolute;\n  width: 1px;/);
+    assert.match(css, /\.chicken:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.chicken__road \{\n  position: absolute;\n  width: 1px;/);
     assert.match(meadow, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
   });
 });

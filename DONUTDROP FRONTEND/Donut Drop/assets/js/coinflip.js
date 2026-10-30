@@ -22,7 +22,7 @@ import { $, el, money, clamp, reduceMotion } from './util.js';
 import { toast, openModal, closeModal } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, clientSeed } from './api.js';
-import { onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewSwitch, paintViewSwitch, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 let root = null;
 
@@ -555,7 +555,7 @@ function showFlip(game, { replay = false, counted = false } = {}) {
     spinFlat();
     return;
   }
-  coin.dataset.render = '3d';
+  sceneLoading(coin, coin);
   void toss3d(coin, game.result).then((tossed) => {
     if (tossed) {
       land();
@@ -576,6 +576,7 @@ async function toss3d(coin, result) {
       return false;
     }
     built.onCue = (name) => { if (name === 'land') playSound('anvil', { rate: 1.6 }); };
+    coin.dataset.render = '3d';
     await built.flip(result);
     return true;
   } catch {

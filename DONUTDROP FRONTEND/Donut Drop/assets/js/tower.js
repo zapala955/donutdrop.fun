@@ -24,7 +24,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const FLOORS = 9;
 const EDGE_BPS = 1000n;
@@ -102,6 +102,7 @@ async function load() {
   }
   paint();
   if (config) void startTower();
+  else sceneLoaded(root);
 }
 
 async function refreshSeed() {
@@ -238,6 +239,7 @@ function startTower() {
   if (towerTried || !wants3d()) return towerTried;
   towerTried = (async () => {
     const host = $('.tower__pit', root);
+    sceneLoading(root, host);
     try {
       const { createTower3d } = await import('./tower3d.js');
       const built = await createTower3d(host);
@@ -265,6 +267,8 @@ function startTower() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return towerTried;
@@ -325,6 +329,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && tower3d) {
     tower3d.dispose();
     tower3d = null;
@@ -680,5 +685,7 @@ export function mountTower(section) {
       if (!busy) paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!towerTried) sceneLoading(root, $('.tower__pit', root));
   void load();
 }

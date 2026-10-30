@@ -165,7 +165,7 @@ describe('mob derby: the page and the track', () => {
     const rules = css.slice(css.indexOf('/* ─────────── the track'));
     assert.ok(rules.length > 1000);
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
-    assert.match(css, /\.derby\[data-render="3d"\] \.derby__lanes \{ display: none; \}/);
+    assert.match(css, /\.derby:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.derby__lanes \{ display: none; \}/);
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   });
 });

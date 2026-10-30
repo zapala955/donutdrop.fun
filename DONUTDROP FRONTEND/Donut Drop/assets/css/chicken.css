@@ -255,7 +255,7 @@
 /* ─────────── narrower screens ─────────── */
 /* ─────────── the meadow (chicken3d.js) ─────────── */
 .chicken__view { display: none; }
-.chicken[data-render="3d"] .chicken__view {
+.chicken:is([data-render="3d"], [data-render="loading"]) .chicken__view {
   position: relative;
   display: block;
   min-width: 0;
@@ -267,7 +267,7 @@
 }
 .chicken__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 /* The flat road stays for a screen reader, out of sight. */
-.chicken[data-render="3d"] .chicken__road {
+.chicken:is([data-render="3d"], [data-render="loading"]) .chicken__road {
   position: absolute;
   width: 1px;
   height: 1px;

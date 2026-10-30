@@ -116,7 +116,7 @@
   inset: 0;
   background: linear-gradient(var(--fish-sky-top), var(--fish-sky-low) 52%, var(--fish-water) 52%, var(--fish-water-deep));
 }
-.fishing[data-render="3d"] .fishing__flat { display: none; }
+.fishing:is([data-render="3d"], [data-render="loading"]) .fishing__flat { display: none; }
 .fishing__flat::before {
   content: "";
   position: absolute;

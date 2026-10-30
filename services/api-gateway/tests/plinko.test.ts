@@ -199,7 +199,7 @@ describe('plinko in 3D', () => {
     assert.match(page, /if \(board3d\) \{\n\s*board3d\.balls\(balls\.map\(\(ball\) => positionOf\(ball, now - ball\.start\)\)\);/);
     assert.match(page, /board3d\?\.strike\(ball\.points\[ball\.hit\]\.peg\);/);
     assert.match(page, /board3d\?\.land\(bet\.slot, bet\.multiplierBps\);/);
-    assert.match(css, /\.plinko\[data-render="3d"\] \.plinko__slots \{\n  width: var\(--row-width, auto\);\n  margin: 8px 0 0 var\(--row-left, 0px\);\n\}/);
+    assert.match(css, /\.plinko:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.plinko__slots \{\n  width: var\(--row-width, auto\);\n  margin: 8px 0 0 var\(--row-left, 0px\);\n\}/);
     assert.match(end, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
     // No layout forced while balls land or the page paints.
     assert.doesNotMatch(page, /void node\.offsetWidth/);

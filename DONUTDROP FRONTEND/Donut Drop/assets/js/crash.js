@@ -23,7 +23,7 @@ import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './ut
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const BUST_HOLD_MS = 2600; // how long a bust stays on the stage before the countdown takes over
 const LIVE_POLL_MS = 5_000; // a safety net under the live stream
@@ -453,6 +453,7 @@ function startSky() {
   if (skyTried || !wants3d()) return skyTried;
   skyTried = (async () => {
     const host = $('.crash__plot', root);
+    sceneLoading(root, host);
     try {
       const { createCrash3d } = await import('./crash3d.js');
       const built = await createCrash3d(host);
@@ -484,6 +485,8 @@ function startSky() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return skyTried;
@@ -509,6 +512,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && sky) {
     sky.dispose();
     sky = null;

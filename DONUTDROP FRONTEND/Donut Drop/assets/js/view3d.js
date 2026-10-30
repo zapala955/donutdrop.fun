@@ -13,6 +13,13 @@
  * The page owns what switching means -- putting its scene away or building it again -- and paints
  * the switch with `paintViewSwitch`. While the flat board is showing, the page's root carries
  * `data-scene="2d"`, which hides its graphics setting (view3d.css): there is nothing to set.
+ *
+ * A scene takes a moment to arrive (its chunk, three.js, the textures), and the flat board is not
+ * what a player who chose 3D should see in the meantime. So from the moment the page opens until
+ * the scene is drawn, the root carries `data-render="loading"`: each game's CSS lays it out as the
+ * scene ("3d"), and a loading screen covers the place the scene will be drawn (`sceneLoading`).
+ * Whatever ends the wait -- the scene, no WebGL, an error, the switch to 2D -- takes it down
+ * (`sceneLoaded`).
  */
 
 export const wants3d = () => globalThis.DonutPrefs?.get?.().view !== '2d';
@@ -70,6 +77,26 @@ export function mountViewToggle(button) {
   button.addEventListener('click', () => setWants3d(!wants3d()));
   onViewChange(paint);
   paint();
+}
+
+/* The site's boot loader (boot.css), smaller: the donut, the walking gold bar, a word. */
+const LOADING = `
+  <div class="scene3d-load" role="status">
+    <img class="scene3d-load__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="48" height="48" draggable="false" />
+    <span class="scene3d-load__bar" aria-hidden="true"></span>
+    <span class="scene3d-load__label">Loading 3D</span>
+  </div>`;
+
+/** The loading screen over `host`, while 3D is wanted and `root`'s scene is not drawn yet. */
+export function sceneLoading(root, host) {
+  if (!root || !host || !wants3d() || 'no3d' in root.dataset || root.dataset.render === '3d') return;
+  if (!host.querySelector(':scope > .scene3d-load')) host.insertAdjacentHTML('beforeend', LOADING);
+  if (root.dataset.render !== 'loading') root.dataset.render = 'loading';
+}
+
+/** The wait is over without a scene, or the page has just marked it drawn ("3d"): the flat board. */
+export function sceneLoaded(root) {
+  if (root?.dataset.render === 'loading') root.dataset.render = '2d';
 }
 
 /** Calls `choose(true)` for 3D and `choose(false)` for 2D. */

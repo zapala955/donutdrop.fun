@@ -404,7 +404,7 @@ describe('fishing: the page and the dive', () => {
     assert.ok(rules.length > 1000);
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-    assert.match(css, /\.fishing\[data-render="3d"\] \.fishing__flat \{ display: none; \}/);
+    assert.match(css, /\.fishing:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.fishing__flat \{ display: none; \}/);
     assert.match(css, /\.fishing__zone,\n/);
   });
 });

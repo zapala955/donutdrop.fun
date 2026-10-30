@@ -21,7 +21,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const LANES = 20;
 const EDGE_BPS = 1000n;
@@ -301,6 +301,7 @@ function startRoad() {
   if (roadTried || !wants3d()) return roadTried;
   roadTried = (async () => {
     const host = $('.chicken__view', root);
+    sceneLoading(root, host);
     try {
       const { createChicken3d } = await import('./chicken3d.js');
       const built = await createChicken3d(host);
@@ -337,6 +338,8 @@ function startRoad() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return roadTried;
@@ -382,6 +385,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && road3d) {
     road3d.dispose();
     road3d = null;

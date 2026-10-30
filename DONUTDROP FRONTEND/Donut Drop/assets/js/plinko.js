@@ -24,7 +24,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const RISKS = [
   ['low', 'Low'],
@@ -149,6 +149,7 @@ async function load() {
   resize();
   paint();
   if (config) void startBoard();
+  else sceneLoaded(root);
 }
 
 async function refreshSeed() {
@@ -377,6 +378,7 @@ function startBoard() {
   if (boardTried || !wants3d()) return boardTried;
   boardTried = (async () => {
     const host = $('.plinko__view', root);
+    sceneLoading(root, host);
     try {
       const { createPlinko3d } = await import('./plinko3d.js');
       const built = await createPlinko3d(host);
@@ -415,6 +417,8 @@ function startBoard() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return boardTried;
@@ -447,6 +451,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && board3d) {
     board3d.dispose();
     board3d = null;
@@ -763,5 +768,7 @@ export function mountPlinko(section) {
       if (root) paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!boardTried) sceneLoading(root, $('.plinko__view', root));
   void load();
 }

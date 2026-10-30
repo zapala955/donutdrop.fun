@@ -247,13 +247,13 @@
 }
 /* ─────────── the sky (crash3d.js) ─────────── */
 .crash__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-.crash[data-render="3d"] .crash__plot { overflow: hidden; border-radius: 0 0 18px 18px; }
-.crash[data-render="3d"] #crashCanvas { display: none; }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__plot { overflow: hidden; border-radius: 0 0 18px 18px; }
+.crash:is([data-render="3d"], [data-render="loading"]) #crashCanvas { display: none; }
 /* Over the sky the figure sits up top, clear of the ghast, and keeps its shadow for the clouds. */
-.crash[data-render="3d"] .crash__readout { top: 54px; transform: none; z-index: 2; }
-.crash[data-render="3d"] .crash__big { text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 4px 24px rgba(0, 0, 0, .55); }
-.crash[data-render="3d"] .crash__status { color: var(--text); text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
-.crash[data-render="3d"] .crash__history { position: relative; z-index: 2; }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__readout { top: 54px; transform: none; z-index: 2; }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__big { text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 4px 24px rgba(0, 0, 0, .55); }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__status { color: var(--text); text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__history { position: relative; z-index: 2; }
 
 .crash__gfx {
   display: flex;

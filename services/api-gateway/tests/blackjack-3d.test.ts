@@ -34,7 +34,7 @@ describe('the 3D blackjack table', () => {
     // A deal or an action never starts against a table that is still being built.
     assert.equal(page.split('if (starting3d) await starting3d;').length - 1, 2);
     const css = await source('assets/css/blackjack.css');
-    assert.match(css, /\.bj__table\[data-render="3d"\] \.bj__cards \{\s*position: absolute;\s*width: 1px;\s*height: 1px;[\s\S]*?clip: rect\(0 0 0 0\);/);
+    assert.match(css, /\.bj__table:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.bj__cards \{\s*position: absolute;\s*width: 1px;\s*height: 1px;[\s\S]*?clip: rect\(0 0 0 0\);/);
   });
 
   it('draws only what it has: every texture it loads is on disk', async () => {

@@ -18,7 +18,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const HOLES = 25;
 const QUICK_THIN = [1, 3, 5, 10, 20];
@@ -97,6 +97,7 @@ async function load() {
   }
   paint();
   if (config) await startLake();
+  else sceneLoaded(root);
   syncLake();
 }
 async function refreshSeed() {
@@ -132,6 +133,7 @@ function startLake() {
   if (lakeTried || !wants3d()) return lakeTried;
   lakeTried = (async () => {
     const host = $('.icefish__lake', root);
+    sceneLoading(root, host);
     try {
       const { createIce3d } = await import('./icefishing3d.js');
       const built = await createIce3d(host, { catches: config.catches.map((c) => c.id), icon });
@@ -161,6 +163,8 @@ function startLake() {
       paintGraphics();
     } catch {
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   })();
   return lakeTried;
@@ -204,6 +208,7 @@ function setView(on) {
     setWants3d(on);
     playSound('click');
   }
+  if (!on) sceneLoaded(root);
   if (!on && lake) {
     lake.dispose();
     lake = null;
@@ -654,5 +659,7 @@ export function mountIceFishing(section) {
       if (!busy) paint();
     });
   }
+  // A scene still to be built comes up behind the loading screen, not after the flat board.
+  if (!lakeTried) sceneLoading(root, $('.icefish__lake', root));
   void load();
 }

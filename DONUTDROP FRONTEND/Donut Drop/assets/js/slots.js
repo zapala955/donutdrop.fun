@@ -27,7 +27,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { createMachine3d } from './slots3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 /* What each machine's page says and shows. `art` is the item sprite (assets/img/items) for each
  * symbol the server names, real sprites drawn pixel-sharp; `prefix` keeps the two pages' element ids
@@ -145,12 +145,14 @@ function createSlotsGame(game) {
     if (config && !spinning) for (let reel = 0; reel < 5; reel += 1) paintReel(reel);
     paint();
     if (config && !machineTried) void startMachine();
+    else if (!config) sceneLoaded(root);
   }
 
   /** Builds the 3D machine over the flat reels. Any failure leaves the flat reels in charge. */
   async function startMachine() {
     if (!wants3d()) return;
     machineTried = true;
+    sceneLoading(root, $('.slots__window', root));
     try {
       const built = await createMachine3d($('.slots__window', root), {
         strips: config.strips,
@@ -186,6 +188,8 @@ function createSlotsGame(game) {
     } catch {
       machine = null;
       root.dataset.render = '2d';
+    } finally {
+      sceneLoaded(root);
     }
   }
 
@@ -201,6 +205,7 @@ function createSlotsGame(game) {
       setWants3d(on);
       playSound('click');
     }
+    if (!on) sceneLoaded(root);
     if (!on && machine) {
       machine.dispose();
       machine = null;
@@ -932,6 +937,8 @@ function createSlotsGame(game) {
         if (!spinning) paint();
       });
     }
+    // A machine still to be built comes up behind the loading screen, not after the flat reels.
+    if (!machineTried) sceneLoading(root, $('.slots__window', root));
     void load();
   }
 }
