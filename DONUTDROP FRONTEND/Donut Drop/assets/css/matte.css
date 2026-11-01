@@ -121,9 +121,13 @@
 .ihint:hover::after, .ihint:focus-visible::after {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
-/* Against the left edge of the column a centred bubble would clip off-screen, so a hint in a page
-   heading anchors to its own left instead. */
-.phead .ihint::after { left: 0; transform: translateX(-8px) translateY(3px); }
+/* A hint in a page heading opens below it and anchors to its own left: above, the bubble would
+   slide under the sticky top bar, and centred against the left edge of the column it would clip
+   off-screen. */
+.phead .ihint::after {
+  top: calc(100% + 8px); bottom: auto;
+  left: 0; transform: translateX(-8px) translateY(-3px);
+}
 .phead .ihint:hover::after, .phead .ihint:focus-visible::after {
   transform: translateX(-8px) translateY(0);
 }
