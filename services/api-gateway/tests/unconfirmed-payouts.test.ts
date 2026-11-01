@@ -53,7 +53,7 @@ describe('the teller sweeper', () => {
   it('decides an unanswered payout before it corrects anything, and corrects nothing while one is open', async () => {
     const source = await read('src/lib/teller-sweeper.ts');
     const tick = source.slice(source.indexOf('const tick = async'), source.indexOf('const timer = setInterval'));
-    const open = tick.indexOf('const open = await openUnconfirmedPayouts(client, teller.id);');
+    const open = tick.indexOf('const open = await openUnconfirmedPayouts(client, bot.id);');
     const drift = tick.indexOf('const drift = reading.correctedTo - reading.tracked;');
     assert.ok(open > 0 && drift > open, 'the open payouts must be looked at before the drift correction');
     const gate = tick.slice(open, drift);
@@ -61,7 +61,7 @@ describe('the teller sweeper', () => {
     assert.match(gate, /if \(open\.length > 0\) \{/);
     assert.match(gate, /if \(open\.length !== 1 \|\| !only \|\| !only\.readingAfter\) return undefined;/);
     assert.match(gate, /if \(verdict === 'unclear'\) return undefined;/);
-    assert.match(gate, /return \{ botId: teller\.id, payout: only, verdict, reading \};/);
+    assert.match(gate, /return \{ botId: bot\.id, payout: only, verdict, reading \};/);
     // The verdict is applied in a transaction of its own, after the one holding the bot row.
     assert.match(tick, /if \(decided\) \{\s*await db\.transaction\(\(client\) =>\s*settleUnconfirmedPayout\(/);
   });

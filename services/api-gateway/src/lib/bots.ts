@@ -20,8 +20,10 @@ import type { DbClient } from './db.js';
  * teller and no vault. Every function here returns null for a missing vault rather than throwing,
  * and every caller treats that as "pay directly, as before". The second bot is opt-in and the
  * site keeps working until the day it is switched on.
+ *
+ * A third role, 'node', replaces the pair with a pool of equal accounts: see lib/bot-nodes.ts.
  */
-export type BotRole = 'teller' | 'vault';
+export type BotRole = 'teller' | 'vault' | 'node';
 
 export interface SelectedBot {
   readonly id: string;

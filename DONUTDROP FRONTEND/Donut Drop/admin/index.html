@@ -284,6 +284,13 @@
             <h2>Bots</h2>
             <button class="btn" type="button" data-refresh="bots">Refresh</button>
           </div>
+          <!-- The node pool: each node's holding against its equal share. Hidden until a bot is
+           made a node (Role button below). -->
+          <div id="nodePool" hidden>
+            <div class="stats" id="nodePoolStats"></div>
+            <p class="hint" id="nodePoolNote"></p>
+            <div class="tablewrap"><table class="grid" id="nodePoolTable"></table></div>
+          </div>
           <div class="tablewrap"><table class="grid" id="botTable"></table></div>
 
           <!-- Every in-game payment an operator has ordered, newest first. It sits under the bots

@@ -946,6 +946,20 @@ const environmentSchema = z
      * that sends everything above the float across in one transfer. */
     TELLER_SWEEP_THRESHOLD_MINOR: nonNegativeBigintString.default('50000000'),
     WITHDRAWAL_HOP_DELAY_SECONDS: z.coerce.number().int().min(0).max(300).default(3),
+    /* ── the node pool (lib/bot-nodes.ts) ──
+     *
+     * Bots with role 'node' share the float equally instead of a teller and a vault. Deposits go
+     * to the emptiest node and withdrawals come from the fullest, which keeps the shares even on
+     * its own; a node pays another node only when the pool is heavily skewed.
+     *
+     * NODE_REBALANCE_SKEW_BPS is how far a node may sit from its share before that counts as
+     * heavy: 5000 is half its share either way. The skew has to last NODE_REBALANCE_HOLD_MINUTES
+     * in a row, no rebalance may have gone inside NODE_REBALANCE_COOLDOWN_MINUTES, and nothing
+     * under NODE_REBALANCE_MIN_MINOR is worth a transfer. */
+    NODE_REBALANCE_SKEW_BPS: z.coerce.number().int().min(500).max(10_000).default(5000),
+    NODE_REBALANCE_HOLD_MINUTES: z.coerce.number().int().min(0).max(1440).default(30),
+    NODE_REBALANCE_COOLDOWN_MINUTES: z.coerce.number().int().min(0).max(10_080).default(360),
+    NODE_REBALANCE_MIN_MINOR: nonNegativeBigintString.default('10000000'),
     MINECRAFT_TRANSFERS_ENABLED: booleanString,
     // Website-only items mean the bot custodies nothing for players, so its real Minecraft
     // inventory is irrelevant and must not reconcile against the ledger. Enable only when
@@ -1729,6 +1743,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     tellerFloatTargetMinor: BigInt(env.TELLER_FLOAT_TARGET_MINOR),
     tellerSweepThresholdMinor: BigInt(env.TELLER_SWEEP_THRESHOLD_MINOR),
     withdrawalHopDelaySeconds: env.WITHDRAWAL_HOP_DELAY_SECONDS,
+    nodeRebalanceSkewBps: env.NODE_REBALANCE_SKEW_BPS,
+    nodeRebalanceHoldMinutes: env.NODE_REBALANCE_HOLD_MINUTES,
+    nodeRebalanceCooldownMinutes: env.NODE_REBALANCE_COOLDOWN_MINUTES,
+    nodeRebalanceMinMinor: BigInt(env.NODE_REBALANCE_MIN_MINOR),
     minecraftTransfersEnabled: env.MINECRAFT_TRANSFERS_ENABLED,
     physicalCustodyEnabled: env.PHYSICAL_CUSTODY_ENABLED,
     donutsmpApiBaseUrl: env.DONUTSMP_API_BASE_URL,

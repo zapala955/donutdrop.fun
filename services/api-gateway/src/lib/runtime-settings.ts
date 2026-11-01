@@ -1185,6 +1185,39 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: 300n,
   },
+  /* ── the node pool (lib/bot-nodes.ts) ──
+   *
+   * When nodes pay each other. Deposits and withdrawals keep the shares even on their own, so a
+   * node-to-node transfer is for a pool that stays heavily skewed: wider band, longer hold and
+   * longer cooldown all mean fewer transfers. */
+  nodeRebalanceSkewBps: {
+    kind: 'integer',
+    group: 'bots',
+    label: 'Node pool: skew before a rebalance (bps of a share)',
+    min: 500n,
+    max: 10_000n,
+  },
+  nodeRebalanceHoldMinutes: {
+    kind: 'integer',
+    group: 'bots',
+    label: 'Node pool: skew must last (minutes)',
+    min: 0n,
+    max: 1440n,
+  },
+  nodeRebalanceCooldownMinutes: {
+    kind: 'integer',
+    group: 'bots',
+    label: 'Node pool: minimum gap between rebalances (minutes)',
+    min: 0n,
+    max: 10_080n,
+  },
+  nodeRebalanceMinMinor: {
+    kind: 'bigint',
+    group: 'bots',
+    label: 'Node pool: smallest rebalance worth a transfer',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
 
   /* ── the single largest thing one roll may risk ── */
   upgradeMaxStakeMinor: {

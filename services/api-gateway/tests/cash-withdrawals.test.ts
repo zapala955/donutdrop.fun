@@ -71,6 +71,8 @@ function fakeDb(options: {
   const statements: Statement[] = [];
   const query = async (sql: string, values: unknown[] = []) => {
     statements.push({ sql, values });
+    // No node pool provisioned: the teller pays (lib/bot-nodes.ts).
+    if (sql.includes("b.role = 'node'")) return result([]);
     if (sql.includes('FROM bot_accounts')) {
       return options.botOnline === false
         ? result([])

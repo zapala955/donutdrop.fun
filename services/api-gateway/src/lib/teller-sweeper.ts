@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppConfig } from '../config.js';
+import { readPool, rebalanceNodes, type SkewWatch } from './bot-nodes.js';
 import { pickBot, queueVaultSweep, recordBotTransfer } from './bots.js';
 import type { Database, DbClient } from './db.js';
 import {
@@ -49,20 +50,27 @@ export function startTellerSweeper(
   log: FastifyBaseLogger,
 ): () => void {
   let running = false;
+  const skew: SkewWatch = { since: null };
 
-  const tick = async (): Promise<void> => {
+  /* One account's minute: its /bal against the books, an unanswered payout decided, the books
+   * corrected, and -- for the teller only -- everything above its float swept to the vault. Run
+   * for the teller and for every node of the pool; a node is never swept, the pool rebalances. */
+  const tick = async (
+    pick: (client: DbClient) => Promise<{ id: string; username: string } | null>,
+    sweep: boolean,
+  ): Promise<void> => {
     const decided = await db.transaction(async (client) => {
-      const teller = await pickBot(client, config, 'teller');
-      // No teller online: there is nothing to read and nothing to sweep.
-      if (!teller) return undefined;
-      const reading = await trustedReading(client, teller.id);
+      const bot = await pick(client);
+      // Nobody online: there is nothing to read and nothing to sweep.
+      if (!bot) return undefined;
+      const reading = await trustedReading(client, bot.id);
       // No reading yet, an old one, or one a booked movement has overtaken: wait for the next.
       if (!reading) return undefined;
 
       /* A payout the server never answered is decided from this reading, and until it is the books
        * are not corrected at all: a correction would absorb a paid payout into an adjustment and
        * make it look unpaid. See lib/unconfirmed-payouts.ts. */
-      const open = await openUnconfirmedPayouts(client, teller.id);
+      const open = await openUnconfirmedPayouts(client, bot.id);
       if (open.length > 0) {
         const [only] = open;
         if (open.length !== 1 || !only || !only.readingAfter) return undefined;
@@ -73,7 +81,7 @@ export function startTellerSweeper(
           amount: only.amount,
         });
         if (verdict === 'unclear') return undefined;
-        return { botId: teller.id, payout: only, verdict, reading };
+        return { botId: bot.id, payout: only, verdict, reading };
       }
 
       /* Reconcile first, so the sweep about to be queued is sized against a balance the console
@@ -82,7 +90,7 @@ export function startTellerSweeper(
       const drift = reading.correctedTo - reading.tracked;
       if (drift !== 0n) {
         await recordBotTransfer(client, {
-          botId: teller.id,
+          botId: bot.id,
           direction: drift > 0n ? 'in' : 'out',
           counterparty: 'donutsmp',
           amountMinor: drift > 0n ? drift : -drift,
@@ -90,12 +98,9 @@ export function startTellerSweeper(
           note: `Balance read in game with /bal: ${reading.displayed}`,
         });
       }
-      await queueVaultSweep(
-        client,
-        config,
-        { id: teller.id, username: teller.username },
-        reading.low,
-      );
+      if (sweep) {
+        await queueVaultSweep(client, config, { id: bot.id, username: bot.username }, reading.low);
+      }
       return undefined;
     });
     /* Applied in a transaction of its own, which takes the withdrawal before the wallet or the bot
@@ -113,6 +118,39 @@ export function startTellerSweeper(
     }
   };
 
+  /* Each account on its own, so one that fails to read does not keep the others' books stale. */
+  const step = async (label: string, run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      log.warn({ err: error, bot: label }, 'Bot balance check failed');
+    }
+  };
+
+  const tickAll = async (): Promise<void> => {
+    await step('teller', () => tick((client) => pickBot(client, config, 'teller'), true));
+    const pool = await readPool(db, config);
+    for (const node of pool) {
+      await step(node.username, () => tick(async () => node, false));
+    }
+    /* After every node's books are corrected, so the shares are measured against /bal. See
+     * lib/bot-nodes.ts for when a skewed pool moves money and why that is rare. */
+    if (pool.length > 1) {
+      const queued = await db.transaction((client) => rebalanceNodes(client, config, skew));
+      if (queued) {
+        log.info(
+          {
+            from: queued.from.username,
+            to: queued.to.username,
+            amountMinor: queued.amountMinor.toString(),
+            shareMinor: queued.shareMinor.toString(),
+          },
+          'Node pool rebalance queued',
+        );
+      }
+    }
+  };
+
   const timer = setInterval(() => {
     /* Wrapped rather than passed as an async callback: setInterval discards the promise, so an
      * unhandled rejection in here would otherwise take the process down. */
@@ -120,7 +158,7 @@ export function startTellerSweeper(
       if (running) return;
       running = true;
       try {
-        await tick();
+        await tickAll();
       } catch (error) {
         /* Warn, not error: the next tick retries in a minute, and nothing about the platform is
          * broken meanwhile -- the money simply stays on the teller a little longer. */

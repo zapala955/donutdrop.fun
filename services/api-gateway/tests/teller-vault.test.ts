@@ -24,7 +24,8 @@ describe('the vault never introduces itself', () => {
       'services/api-gateway/src/routes/cash-withdrawals.ts',
     ]) {
       const source = await read(file);
-      assert.match(source, /pickBot\(\w+, config, 'teller'\)/, `${file} does not ask for a teller`);
+      // A node of the pool or, without one, the teller: both public by design (lib/bot-nodes.ts).
+      assert.match(source, /pickReceivingBot\(\w+, config\)/, `${file} does not ask for a public bot`);
       /* And none of them may still be hand-rolling the "any online bot" query the role lookup
        * replaced, because that query cannot tell the two accounts apart. */
       assert.doesNotMatch(
@@ -49,6 +50,18 @@ describe('the vault never introduces itself', () => {
       // Every use feeds a bot_jobs payload. A reply body would name it in a response instead.
       assert.match(source, /bot_jobs/, 'the vault was looked up outside a job payload');
     }
+  });
+});
+
+describe('the public account a player is sent to', () => {
+  it('is a node of the pool, or the teller, and never the vault', async () => {
+    const nodes = await read('services/api-gateway/src/lib/bot-nodes.ts');
+    const pick = nodes.slice(nodes.indexOf('export async function pickReceivingBot('));
+    assert.match(pick, /chooseReceivingNode\(await readPool\(client, config\)\)/);
+    assert.match(pick, /return pickBot\(client, config, 'teller'\);/);
+    const pool = nodes.slice(nodes.indexOf('export async function readPool('));
+    assert.match(pool, /b\.role = 'node' AND b\.status <> 'quarantined'/);
+    assert.doesNotMatch(nodes, /role = 'vault'|findVaultBot/);
   });
 });
 
@@ -163,7 +176,7 @@ describe('managing the two bots', () => {
     const admin = await read('services/api-gateway/src/routes/admin.ts');
     const role = admin.slice(admin.indexOf("'/v1/admin/bots/:id/role'"));
     assert.match(role, /LAST_TELLER/);
-    assert.match(role, /WHERE role = 'teller' AND id <> \$1/);
+    assert.match(role, /WHERE role IN \('teller', 'node'\) AND id <> \$1/);
   });
 
   it('audits a role change with its before and after', async () => {

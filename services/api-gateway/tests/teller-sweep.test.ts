@@ -73,7 +73,7 @@ describe('emptying the teller into the vault', () => {
   it("sweeps from the bot's own /bal, and only from a fresh reading newer than every booked movement", async () => {
     const code = await sweeper();
     assert.doesNotMatch(code, /DonutSmpApi|fetchMoneyMinor/);
-    assert.match(code, /const reading = await trustedReading\(client, teller\.id\);/);
+    assert.match(code, /const reading = await trustedReading\(client, bot\.id\);/);
     const trusted = code.slice(code.indexOf('export async function trustedReading('));
     assert.match(trusted, /b\.observed_balance_at > now\(\) - \(\$2::integer \* interval '1 millisecond'\) AS fresh/);
     assert.match(trusted, /\(SELECT max\(t\.created_at\) FROM bot_transfers t WHERE t\.bot_id = b\.id\)/);
@@ -88,7 +88,10 @@ describe('emptying the teller into the vault', () => {
     const code = await sweeper();
     assert.match(code, /const fits = tracked >= low && tracked < low \+ step;/);
     assert.match(code, /correctedTo: fits \? tracked : low,/);
-    assert.match(code, /\{ id: teller\.id, username: teller\.username \},\s+reading\.low,/);
+    assert.match(code, /\{ id: bot\.id, username: bot\.username \}, reading\.low\)/);
+    // Only the teller is swept; a node of the pool is not swept anywhere (lib/bot-nodes.ts).
+    assert.match(code, /tick\(\(client\) => pickBot\(client, config, 'teller'\), true\)/);
+    assert.match(code, /tick\(async \(\) => node, false\)/);
   });
 
   /* A corrected balance that left no trace is a figure nobody can explain afterwards, and this

@@ -1627,9 +1627,69 @@ function renderPlayerActions(user, data) {
  * Held between renders so switching tabs does not silently reset an operator's filter. */
 const botLedgerState = { botId: null, bots: [] };
 
+/**
+ * The node pool, as the router sees it (lib/bot-nodes.ts).
+ *
+ * "Free" is what a node holds minus what it is already due to pay, which is the figure deposits
+ * and withdrawals are routed by. A node far off its share is marked; whether that is far enough
+ * and long enough for a node-to-node transfer is the sweeper's call, and the note says what it
+ * would move right now.
+ */
+function renderNodePool(pool) {
+  const host = $('nodePool');
+  if (!host) return;
+  const nodes = pool?.nodes ?? [];
+  host.hidden = nodes.length === 0;
+  if (!nodes.length) return;
+  const share = BigInt(pool.shareMinor ?? '0');
+  const band = (share * BigInt(pool.skewBps ?? 5000)) / 10000n;
+  const online = nodes.filter((node) => node.online);
+  const total = online.reduce((sum, node) => sum + (BigInt(node.freeMinor) > 0n ? BigInt(node.freeMinor) : 0n), 0n);
+  const percent = (value) => (total > 0n ? `${((Number(value) / Number(total)) * 100).toFixed(1)}%` : '—');
+  const skewed = (node) => {
+    const free = BigInt(node.freeMinor);
+    return node.online && share > 0n && (free > share + band || free < share - band);
+  };
+  renderStats($('nodePoolStats'), [
+    ['Nodes online', `${online.length} / ${nodes.length}`, online.length < nodes.length],
+    ['Pool free', compactAmount(total.toString())],
+    ['Share per node', `${compactAmount(share.toString())} (${online.length ? (100 / online.length).toFixed(0) : 0}%)`],
+    ['Skewed nodes', String(nodes.filter(skewed).length), nodes.some(skewed)],
+    ['Last rebalance', pool.lastRebalanceAt ? new Date(pool.lastRebalanceAt).toLocaleString() : 'never'],
+  ]);
+  const plan = pool.wouldRebalance;
+  $('nodePoolNote').textContent =
+    (plan
+      ? `Skewed: ${compactAmount(plan.amountMinor)} would go ${plan.from} → ${plan.to} once the skew has lasted ` +
+        `${pool.holdMinutes} min and the last rebalance is ${pool.cooldownMinutes} min old. `
+      : 'Even enough: no transfer between nodes is due. ') +
+    `Deposits go to the emptiest node, withdrawals come from the fullest. A node more than ` +
+    `${(Number(pool.skewBps) / 100).toFixed(0)}% off its share counts as skewed (System → Bots & float).`;
+  table($('nodePoolTable'), ['Node', 'Online', 'Holding', 'Owed', 'Free', 'Of pool', 'Off share'], nodes, (node) => {
+    const tr = document.createElement('tr');
+    const state = document.createElement('td');
+    state.append(node.online ? pill('online', 'ok') : pill('quiet', 'warn'));
+    const free = BigInt(node.freeMinor);
+    const off = share > 0n ? Math.round(((Number(free) - Number(share)) / Number(share)) * 100) : 0;
+    const offCell = cell(node.online ? `${off > 0 ? '+' : ''}${off}%` : '—', { mono: true });
+    if (skewed(node)) offCell.append(' ', pill('skewed', 'warn'));
+    tr.append(
+      cell(node.username),
+      state,
+      cell(compactAmount(node.trackedMinor), { mono: true }),
+      cell(compactAmount(node.owedMinor), { mono: true }),
+      cell(compactAmount(node.freeMinor), { mono: true }),
+      cell(node.online ? percent(free > 0n ? free : 0n) : '—', { mono: true }),
+      offCell,
+    );
+    return tr;
+  });
+}
+
 async function loadBots() {
   const data = await api.get('/v1/admin/bots');
   botLedgerState.bots = data.bots ?? [];
+  renderNodePool(data.pool);
   table(
     $('botTable'),
     ['Bot', 'Role', 'Holding', 'Status', 'Reconciliation', 'Transfers', 'Heartbeat', 'Open jobs', 'Proxy', ''],
@@ -1641,7 +1701,9 @@ async function loadBots() {
       /* The vault is marked, not merely named. It is the account whose username must never reach
        * a player, and an operator glancing at this table should be able to see which one that is
        * without reading the column header. */
-      role.append(pill(bot.role === 'vault' ? 'VAULT' : 'teller', bot.role === 'vault' ? 'warn' : 'ok'));
+      role.append(
+        bot.role === 'vault' ? pill('VAULT', 'warn') : pill(bot.role === 'node' ? 'node' : 'teller', 'ok'),
+      );
 
       /* What the account is really holding, as the bot's own /bal last read it (DonutSMP switched
        * its stats API off), not what this platform believes.
@@ -1750,11 +1812,8 @@ async function loadBots() {
       const roleButton = document.createElement('button');
       roleButton.type = 'button';
       roleButton.className = 'btn';
-      roleButton.textContent = bot.role === 'vault' ? 'Make teller' : 'Make vault';
-      roleButton.title =
-        bot.role === 'vault'
-          ? 'Put this account back in front of players'
-          : 'Hold the float on this account and stop showing its name to players';
+      roleButton.textContent = 'Role';
+      roleButton.title = 'Teller, vault, or a node of the pool';
       roleButton.addEventListener('click', () => void changeBotRole(bot));
 
       const reconcile = document.createElement('button');
@@ -2081,27 +2140,62 @@ async function payFromBot(bot) {
 }
 
 /**
- * Moves a bot between the two roles.
+ * Moves a bot between the three roles.
  *
  * Spelled out rather than confirmed with a shrug, because this decides which account a player is
  * told to pay from the very next deposit onward, and the whole point of the vault is that its
  * name has never been published.
  */
+const BOT_ROLES = {
+  teller: {
+    label: 'Teller: the public account, sweeps to the vault',
+    done: 'a teller',
+    warning: 'Its name is public: players are told to pay it and are paid by it.',
+  },
+  vault: {
+    label: 'Vault: holds the float, never shown to players',
+    done: 'the vault',
+    warning: 'Its name stops appearing on deposit screens, login cards and withdrawals.',
+  },
+  node: {
+    label: 'Node: one of the pool, an equal share of the float',
+    done: 'a node',
+    warning:
+      'Its name is public, like a teller: players are sent to whichever node holds the least, ' +
+      'and paid by whichever holds the most.',
+  },
+};
+
 async function changeBotRole(bot) {
-  const becomingVault = bot.role !== 'vault';
-  const reason = await confirmAction(
-    becomingVault
-      ? `Make ${bot.username} the vault? Its name stops appearing on deposit screens, login ` +
-          'cards and withdrawals, and it starts holding the float behind the teller.'
-      : `Make ${bot.username} a teller? Its name becomes public: players will be told to pay it ` +
-          'and will be paid by it.',
-  );
-  if (!reason) return;
-  await api.patch(`/v1/admin/bots/${bot.id}/role`, {
-    role: becomingVault ? 'vault' : 'teller',
-    reason,
+  const values = await editRecord({
+    title: `Role of ${bot.username}`,
+    description:
+      'Takes effect on the very next deposit. A pool of nodes replaces the teller and the vault ' +
+      'as soon as one node is online: move the vault’s money to a node first, or make it a node.',
+    fields: [
+      {
+        name: 'role',
+        label: 'Role',
+        type: 'select',
+        value: bot.role,
+        options: Object.entries(BOT_ROLES).map(([value, role]) => ({ value, label: role.label })),
+        wide: true,
+      },
+    ],
+    submitLabel: 'Next',
   });
-  toast(`${bot.username} is now ${becomingVault ? 'the vault' : 'a teller'}.`);
+  if (!values || values.role === bot.role) return;
+  const role = BOT_ROLES[values.role];
+  if (!role) return;
+  const reason = await confirmAction(`Make ${bot.username} ${role.done}? ${role.warning}`);
+  if (!reason) return;
+  try {
+    await api.patch(`/v1/admin/bots/${bot.id}/role`, { role: values.role, reason });
+    toast(`${bot.username} is now ${role.done}.`, 'ok');
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+    return;
+  }
   await loadBots();
   await loadBotLedger();
 }
@@ -2158,8 +2252,9 @@ async function reconcileBot(bot) {
 const LEDGER_REASON = {
   deposit: 'Deposit in',
   login: 'Login payment',
-  sweep: 'Swept to vault',
-  release: 'Released from vault',
+  // A node-to-node rebalance is a sweep too, and a node topping up another for a payout a release.
+  sweep: 'Swept to vault / rebalanced',
+  release: 'Released to fund a payout',
   withdrawal: 'Paid to player',
   admin_payout: 'Operator payout',
   adjustment: 'Manual adjustment',
@@ -4239,6 +4334,8 @@ function renderPayStats(data) {
   const review = part('manual_review');
   const teller = data.bots.find((entry) => entry.role === 'teller');
   const vault = data.bots.find((entry) => entry.role === 'vault');
+  const nodes = data.bots.filter((entry) => entry.role === 'node');
+  const nodeHold = nodes.reduce((sum, entry) => sum + BigInt(entry.trackedBalanceMinor ?? '0'), 0n);
   renderStats($('payStats'), [
     [
       'Waiting for you',
@@ -4266,10 +4363,12 @@ function renderPayStats(data) {
         BigInt(data.totals.houseNetOutflowHourMinor) >= BigInt(data.settings.houseHourlyMinor),
       'Cash sent out less cash that came in, staff excluded. A request waiting here has not gone anywhere and is not counted.',
     ],
-    [
-      'Teller · vault hold',
-      `${teller ? compactAmount(teller.trackedBalanceMinor) : '—'} · ${vault ? compactAmount(vault.trackedBalanceMinor) : '—'}`,
-    ],
+    nodes.length
+      ? [`Node pool hold (${nodes.length})`, compactAmount(nodeHold.toString()), false, 'Every node together; shares on the Bots tab.']
+      : [
+          'Teller · vault hold',
+          `${teller ? compactAmount(teller.trackedBalanceMinor) : '—'} · ${vault ? compactAmount(vault.trackedBalanceMinor) : '—'}`,
+        ],
   ]);
 }
 

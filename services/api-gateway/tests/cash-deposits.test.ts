@@ -75,6 +75,8 @@ describe('cash payment deposits', () => {
     const database = {
       query: async (sql: string, values?: readonly unknown[]) => {
         statements.push(values ? { sql, values } : { sql });
+        // No node pool provisioned: the teller answers (lib/bot-nodes.ts).
+        if (sql.includes("b.role = 'node'")) return result([]);
         if (sql.includes('FROM bot_accounts')) {
           return result([{ id: botId, username: 'DonutBot', server_host: 'donutsmp.net', role: 'teller', tracked_balance_minor: '0' }]);
         }

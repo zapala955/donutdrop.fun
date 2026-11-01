@@ -10,7 +10,8 @@ import {
   reasonText,
   rulesFrom,
 } from '../lib/anti-drain.js';
-import { findVaultBot, pickBot } from '../lib/bots.js';
+import { choosePayingNode, lockPool, pickReceivingBot, readPool } from '../lib/bot-nodes.js';
+import { findVaultBot } from '../lib/bots.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
@@ -164,6 +165,11 @@ export async function refundWithdrawal(
  * until the vault reconnects and claims it, so a vault that is down delays a withdrawal instead
  * of failing it. The player's balance is already debited by this point; turning that into a
  * refusal would be a second movement of their money that nobody asked for.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * WITH A NODE POOL
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * The pool replaces both pockets: see routeThroughNodePool below and lib/bot-nodes.ts.
  */
 export async function queueWithdrawalJob(
   client: DbClient,
@@ -173,14 +179,14 @@ export async function queueWithdrawalJob(
   const amount = BigInt(withdrawal.amount_minor);
   const vault = await findVaultBot(client, config);
 
-  const payPlayerDirectly = async (availableIn = 0) => {
+  const payPlayerDirectly = async (availableIn = 0, botId = withdrawal.bot_id) => {
     await client.query(
       `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
        VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
        ${RELEASE_HELD_JOB_SQL}`,
       [
         randomUUID(),
-        withdrawal.bot_id,
+        botId,
         withdrawal.id,
         JSON.stringify({
           withdrawalId: withdrawal.id,
@@ -191,6 +197,8 @@ export async function queueWithdrawalJob(
       ],
     );
   };
+
+  if (await routeThroughNodePool(client, config, withdrawal, amount, payPlayerDirectly)) return;
 
   // Single-bot deployment: nothing to route through, so this is the old behaviour unchanged.
   if (!vault) {
@@ -241,6 +249,73 @@ export async function queueWithdrawalJob(
       WHERE id = $1 AND status IN ('queued', 'pending_approval')`,
     [withdrawal.id],
   );
+}
+
+/**
+ * Pays a withdrawal out of the node pool, when there is one. Returns false to leave it to the
+ * teller/vault path: no pool, no node online, or a payout job that already exists.
+ *
+ * The online node holding the most pays the player, and the withdrawal is moved onto it. When
+ * even that node is short, the next-richest node sends it the difference first -- a
+ * `vault_release`, so the rest of the two-hop path (awaiting_vault, the hop delay, the retries)
+ * is the one a vault-funded withdrawal already takes. With nobody to send it, the payout waits in
+ * the payer's funds queue for deposits, as a single-bot deployment's always has.
+ *
+ * A payout an operator held and has now approved already has its job row, which the insert
+ * revives where it stands. Moving the withdrawal to another node would leave that job paying from
+ * one account while the books expected another, so such a payout stays put.
+ */
+async function routeThroughNodePool(
+  client: DbClient,
+  config: AppConfig,
+  withdrawal: { id: string; payee_username: string; amount_minor: string },
+  amount: bigint,
+  payPlayerDirectly: (availableIn?: number, botId?: string) => Promise<void>,
+): Promise<boolean> {
+  if ((await readPool(client, config)).length === 0) return false;
+  const existing = await client.query<{ id: string }>(
+    "SELECT id FROM bot_jobs WHERE kind = 'cash_payout' AND reference_id = $1",
+    [withdrawal.id],
+  );
+  if (existing.rows[0]) return false;
+
+  // Read again under the lock, so two withdrawals cannot both be given the same node's money.
+  await lockPool(client);
+  const plan = choosePayingNode(await readPool(client, config), amount);
+  if (!plan) return false;
+
+  const funded = plan.source !== null && plan.shortfallMinor > 0n;
+  await client.query(
+    `UPDATE cash_withdrawals SET bot_id = $2, funding = $3, updated_at = now() WHERE id = $1`,
+    [withdrawal.id, plan.payer.id, funded ? 'vault' : 'float'],
+  );
+  if (!funded || !plan.source) {
+    await payPlayerDirectly(0, plan.payer.id);
+    return true;
+  }
+
+  await client.query(
+    `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload)
+     VALUES ($1, $2, 'vault_release', $3, $4)
+     ON CONFLICT (kind, reference_id) DO NOTHING`,
+    [
+      randomUUID(),
+      plan.source.id,
+      withdrawal.id,
+      JSON.stringify({
+        withdrawalId: withdrawal.id,
+        payee: plan.payer.username,
+        amountMinor: plan.shortfallMinor.toString(),
+        toBotId: plan.payer.id,
+      }),
+    ],
+  );
+  await client.query(
+    `UPDATE cash_withdrawals SET status = 'awaiting_vault', updated_at = now()
+      WHERE id = $1 AND status IN ('queued', 'pending_approval')`,
+    [withdrawal.id],
+  );
+  return true;
 }
 
 /**
@@ -295,9 +370,11 @@ export async function registerCashWithdrawalRoutes(
 ) {
   const guards = createAuthGuards(db, config);
 
-  /* The teller, always. A withdrawal has to arrive from the account players already associate
-   * with the site, and the vault's name must never appear on a payment a player receives. */
-  const onlineBot = (client: DbClient) => pickBot(client, config, 'teller');
+  /* A public account, always: a node of the pool, or the teller without one. A withdrawal has to
+   * arrive from an account players already associate with the site, and the vault's name must
+   * never appear on a payment a player receives. With a pool this only says somebody can pay;
+   * which node does is decided when the payout is queued, against the pool as it is then. */
+  const onlineBot = (client: DbClient) => pickReceivingBot(client, config);
 
   app.get(
     '/v1/cash-withdrawals/info',

@@ -16,6 +16,7 @@ import { AppError, conflict } from '../lib/errors.js';
 import { publishLiveSoon } from '../lib/live-events.js';
 import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
+import { describePool } from '../lib/bot-nodes.js';
 import { recordBotTransfer } from '../lib/bots.js';
 import {
   PROXY_SUMMARY_COLUMNS,
@@ -92,10 +93,11 @@ const botManualPlaySchema = z
     reason: safeText(3, 256),
   })
   .strict();
-/* Teller or vault. The teller is the account players see; the vault holds the float behind it. */
+/* Teller, vault or node. The teller is the account players see; the vault holds the float behind
+ * it; a node is both at once, one of a pool sharing the float equally (lib/bot-nodes.ts). */
 const botRoleSchema = z
   .object({
-    role: z.enum(['teller', 'vault']),
+    role: z.enum(['teller', 'vault', 'node']),
     reason: safeText(3, 256),
   })
   .strict();
@@ -285,6 +287,8 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         };
       }),
       floatTargetMinor: config.tellerFloatTargetMinor.toString(),
+      // The node pool as the router sees it: empty until a bot is made a node.
+      pool: await describePool(db, config),
     };
   });
 
@@ -321,8 +325,8 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
    *
    * Changing a role changes where money is routed on the very next deposit, so it is an ordinary
    * audited write with a mandatory reason like every other one here. The guard below is the part
-   * worth reading: a platform with no teller has nowhere to send a player, and every deposit
-   * screen and login card would start answering BOT_OFFLINE.
+   * worth reading: a platform with no public account -- no teller and no node -- has nowhere to
+   * send a player, and every deposit screen and login card would start answering BOT_OFFLINE.
    */
   app.patch('/v1/admin/bots/:id/role', { preHandler: guards.requireAdmin }, async (request) => {
     const params = parseWith(idSchema, request.params);
@@ -338,13 +342,13 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
       if (bot.role !== body.role && body.role === 'vault') {
         const remaining = await client.query<{ count: string }>(
           `SELECT count(*)::text AS count FROM bot_accounts
-            WHERE role = 'teller' AND id <> $1`,
+            WHERE role IN ('teller', 'node') AND id <> $1`,
           [params.id],
         );
         if (remaining.rows[0]?.count === '0') {
           conflict(
             'LAST_TELLER',
-            'At least one bot must stay a teller: it is the account players pay and are paid by',
+            'At least one bot must stay a teller or a node: it is the account players pay and are paid by',
           );
         }
       }

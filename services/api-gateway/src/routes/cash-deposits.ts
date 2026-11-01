@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
-import { pickBot } from '../lib/bots.js';
+import { pickReceivingBot } from '../lib/bot-nodes.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
 
@@ -20,11 +20,12 @@ export async function registerCashDepositRoutes(
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     },
     async () => {
-      /* The teller, and only ever the teller. This endpoint's whole output is a username a
-       * player is told to send money to, so it is the one place the vault's name must never be
-       * able to reach. Asking by role rather than by "whichever is online" is what guarantees
-       * that, rather than the ordering of a query. */
-      const bot = await pickBot(db, config, 'teller');
+      /* A public account, and only ever a public one: the emptiest node of the pool, or the
+       * teller without one. This endpoint's whole output is a username a player is told to send
+       * money to, so it is the one place the vault's name must never be able to reach. Asking by
+       * role rather than by "whichever is online" is what guarantees that, rather than the
+       * ordering of a query. */
+      const bot = await pickReceivingBot(db, config);
       if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
 
       return {

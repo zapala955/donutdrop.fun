@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { linkCookieName } from '../lib/auth.js';
-import { pickBot } from '../lib/bots.js';
+import { pickReceivingBot } from '../lib/bot-nodes.js';
 import { randomToken, safeEqualText, sha256 } from '../lib/crypto.js';
 import type { Database } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
@@ -86,12 +86,13 @@ export async function registerPayLoginRoutes(
     return unsigned.value;
   };
 
-  /* The teller, if it is online and matches its configured identity.
+  /* A public account that is online and matches its configured identity: the emptiest node of
+   * the pool, or the teller without one.
    *
    * A login nonce is paid to a name the player is shown, so this is a second place the vault's
    * username must never be able to surface. Asking by role rather than for whichever bot happens
    * to be online is what makes that a property of the code instead of an accident of ordering. */
-  const selectOnlineBot = async () => (await pickBot(db, config, 'teller')) ?? undefined;
+  const selectOnlineBot = async () => (await pickReceivingBot(db, config)) ?? undefined;
 
   /* What the browser needs to know before it can draw a challenge, and nothing else. Public on
    * purpose: the site key is rendered into the widget, and a deployment with Turnstile off answers
