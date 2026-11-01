@@ -43,6 +43,8 @@
   --lx-shade: 0 4px 12px -2px rgba(0, 0, 0, .45);
   --lx-shade-hi: 0 10px 24px -6px rgba(0, 0, 0, .6);
   --lx-focus: #ffd700;
+  /* the ⓘ hint: a 14px pixel disc on a 16px grid with the "i" cut out; used as a mask (.ihint) */
+  --lx-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Cpath fill-rule='evenodd' d='M5 1h6v1h2v1h1v2h1v6h-1v2h-1v1h-2v1H5v-1H3v-1H2v-2H1V5h1V3h1V2h2zM7 3v2h2V3zM7 6v7h2V6z'/%3E%3C/svg%3E");
   /* the padlock on a page that needs you signed in, drawn in --lx-gold */
   --lx-lock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffaa00' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2'/%3E%3Cpath d='M8 10.5V7.5a4 4 0 0 1 8 0v3'/%3E%3C/svg%3E");
 
@@ -483,7 +485,33 @@ body.lx .phead:not(.phead--game) h1 {
   background: none; -webkit-text-fill-color: currentColor; text-shadow: none;
 }
 
-/* ── the ⓘ hint ── */
+/* ── the ⓘ hint ──
+   A pixel glyph on the same 16px grid as the site's sprites, cut as a mask so it takes the text
+   colour and stays on whole pixels. Quiet until it is pointed at: it sits beside headings on every
+   page and must not compete with them. The game pill (.phead__how) keeps its own shape and colours
+   and only takes the glyph. */
+body.lx .ihint::before {
+  content: ""; width: 16px; height: 16px;
+  border: 0; border-radius: 0; background: currentColor;
+  -webkit-mask: var(--lx-info) center / 16px 16px no-repeat;
+  mask: var(--lx-info) center / 16px 16px no-repeat;
+}
+body.lx .ihint:not(.phead__how),
+body.lx .ihint:not(.phead__how):hover,
+body.lx .ihint:not(.phead__how):focus-visible {
+  border: 0; border-radius: 0; background: none;
+}
+body.lx .ihint:not(.phead__how) { width: 16px; height: 16px; color: var(--lx-mute); }
+body.lx .ihint:not(.phead__how):hover,
+body.lx .ihint:not(.phead__how)[aria-expanded="true"] { color: var(--lx-gold); }
+body.lx .ihint:not(.phead__how):focus-visible {
+  color: var(--lx-gold); outline: 2px solid var(--lx-focus); outline-offset: 2px;
+}
+/* A finger: the 16px glyph centred on whole pixels in a 30px target; matte.css's negative margins
+   hand the extra room back so the heading does not move. */
+@media (hover: none) {
+  body.lx .ihint:not(.phead__how) { width: 30px; height: 30px; }
+}
 body.lx .ihint::after {
   border: 0; border-radius: var(--lx-r-s);
   background: var(--lx-4); color: var(--lx-ink);
