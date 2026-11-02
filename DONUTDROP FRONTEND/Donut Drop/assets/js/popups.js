@@ -1,7 +1,7 @@
 /* popups.js — a pop-up with one button, shown rarely, for the thing worth doing next.
  *
- * Where nudge.js is a quiet card in the corner, this is a real dialog in the middle of the page
- * with a backdrop, for the moments that deserve one:
+ * Like nudge.js, this is a quiet card in the bottom corner that never blocks the page — a larger
+ * one than the nudge, with its own art and a single button, for the moments that deserve more:
  *
  *   signed out                  → register now: the signup bonus, opening the login form
  *   signed in                   → this week's quests (weekly-quests.js): the deposit race and the
@@ -16,8 +16,8 @@
  *   - each kind has its own rest: a day or three after it is closed, two weeks after it was used;
  *   - never on a game table, where it could cover a board or a bet button, and never over another
  *     dialog or while the corner card is up;
- *   - the × button, Escape, a click on the backdrop and "Maybe later" all close it, and focus goes
- *     back to where it was;
+ *   - it opens non-modally and never takes focus, so the page stays live and keys keep working; it
+ *     slips away on its own after a short while, or on the × or Escape — nothing has to be closed;
  *   - somebody who arrived on an invite link already has the login form open, so is left alone.
  *
  * What it has shown, and when, is remembered in this browser only. With storage blocked it may show
@@ -39,6 +39,9 @@ const DAY_MS = 24 * HOUR_MS;
 const FIRST_DELAY_SIGNED_OUT_MS = 12_000;
 const FIRST_DELAY_SIGNED_IN_MS = 16_000;
 const RETRY_MS = 8_000;
+/* An ignored card leaves on its own rather than sitting in the corner for the whole visit. A hover
+ * or a focus is read as interest and stops the clock (see show). */
+const AUTO_DISMISS_MS = 18_000;
 
 /* Pages with a live table on them. The same list nudge.js keeps off, for the same reason. */
 const TABLES = new Set([
@@ -48,8 +51,8 @@ const TABLES = new Set([
 
 let openLogin = () => {};
 let dialog = null;
-let opener = null;
 let done = false;
+let autoTimer = 0;
 
 function read(key) {
   try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; }
@@ -249,12 +252,11 @@ function show(popup) {
   // Counted as shown now, so a crash or a reload cannot make it come straight back.
   write(`dw.popup.${popup.id}`, Date.now() + popup.seenFor);
   write(ANY_KEY, Date.now() + MIN_GAP_MS);
-  // The corner card steps back for an hour: one ask at a time.
+  // The nudge card steps back for an hour: one ask in the corner at a time.
   write(NUDGE_KEY, Date.now() + HOUR_MS);
 
-  opener = document.activeElement;
   dialog = document.createElement('dialog');
-  dialog.className = 'popup';
+  dialog.className = 'popup popup--corner';
   dialog.dataset.kind = popup.id.split(':')[0];
   dialog.dataset.id = popup.id;
   dialog.setAttribute('aria-labelledby', 'popupTitle');
@@ -308,33 +310,39 @@ function show(popup) {
     });
   }
   go.textContent = popup.cta;
-  const later = el('button', 'popup__later');
-  later.type = 'button';
-  later.textContent = popup.later;
-  later.addEventListener('click', () => close('seen'));
-  actions.append(go, later);
+  // No "Maybe later": in a card that blocks nothing, it does the same as the × and the Escape key
+  // and just adds a second thing to read. Ignoring the card is now the way to say "later".
+  actions.append(go);
 
   card.append(shut, art, eyebrow, title, line, actions);
   dialog.appendChild(card);
 
-  // Escape is the platform's own cancel; a click on the backdrop lands on the dialog itself.
-  dialog.addEventListener('cancel', (event) => {
-    event.preventDefault();
-    close('seen');
-  });
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) close('seen');
+  // A non-modal dialog raises no cancel event and has no backdrop to click, so Escape is handled
+  // here. Focus is never moved into the card, so this only fires once somebody has tabbed in.
+  dialog.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); close('seen'); }
   });
 
   document.body.appendChild(dialog);
-  dialog.showModal();
+  // show(), not showModal(): the page behind stays live, nothing goes inert, and focus is left
+  // where the player had it — so the card can be read, or ignored, without being closed first.
+  dialog.show();
   // Next frame, so the entrance runs from the hidden state rather than starting at the end.
   requestAnimationFrame(() => requestAnimationFrame(() => dialog?.classList.add('is-in')));
-  go.focus({ preventScroll: true });
+
+  // Leaves on its own if nobody touches it; the first hover or focus is taken as interest and stops
+  // the clock, after which only the player (or walking into a game) closes it.
+  clearTimeout(autoTimer);
+  autoTimer = window.setTimeout(() => close('seen'), AUTO_DISMISS_MS);
+  const keep = () => { clearTimeout(autoTimer); autoTimer = 0; };
+  card.addEventListener('pointerenter', keep, { once: true });
+  card.addEventListener('focusin', keep, { once: true });
 }
 
 function close(how) {
   if (!dialog) return;
+  clearTimeout(autoTimer);
+  autoTimer = 0;
   const leaving = dialog;
   const popup = leaving.__popup;
   dialog = null;
@@ -345,8 +353,4 @@ function close(how) {
     if (leaving.open) leaving.close();
     leaving.remove();
   }, 220);
-  if (opener && typeof opener.focus === 'function' && document.contains(opener)) {
-    opener.focus({ preventScroll: true });
-  }
-  opener = null;
 }
