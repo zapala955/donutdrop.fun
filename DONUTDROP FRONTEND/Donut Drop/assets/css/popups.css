@@ -1,11 +1,15 @@
-/* popups.css — the pop-up dialog with one button (assets/js/popups.js).
+/* popups.css — the offer pop-up (assets/js/popups.js), and the modal base that the daily-code
+ * window (assets/js/daily-code.js) is built on.
  *
  * Hallmark · component: dialog offer · genre: atmospheric · theme: house (obsidian and lava gold)
  * states: default · hover · focus · active · entering · leaving
  *
- * A real <dialog> opened with showModal(), so the page behind it is inert, Escape closes it and
- * focus is trapped inside while it is up. House tokens only; the one value named below is the house
- * gold at low alpha. On a phone it is a sheet from the bottom edge, clear of the tab bar. */
+ * The base .popup is a real <dialog> opened with showModal(): the page behind it is inert, Escape
+ * closes it and focus is trapped inside. daily-code.js still opens its window that way. The offer,
+ * though, now opens non-modally as a corner card — see .popup--corner at the foot of this file —
+ * so the page stays live under it and nobody has to close it to keep playing. House tokens only;
+ * the one value named below is the house gold at low alpha. On a phone the modal base is a sheet
+ * from the bottom edge, clear of the tab bar. */
 
 :root {
   --popup-wash: rgba(255, 170, 0, .2);
@@ -117,4 +121,63 @@
 @media (prefers-reduced-motion: reduce) {
   .popup__card { transform: none; transition: opacity .2s linear; }
   .popup::backdrop { transition: none; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────────────────────
+   THE OFFER AS A CORNER CARD  —  .popup--corner (popups.js)
+
+   Hallmark · component: offer card (corner) · genre: atmospheric · theme: house / luxe
+   states: default · hover · focus · active · entering · leaving
+   pre-emit critique: P5 H4 E4 S5 R5 V4
+
+   popups.js tags the offer .popup--corner and opens it with dialog.show() instead of showModal().
+   That turns the full-screen modal grid into a card parked where the nudge sits — bottom corner,
+   above the phone tab bar, below the header and its menus. No backdrop, nothing inert, focus left
+   where it was: the card can be read or ignored without being closed, which is the whole point.
+   Only the offer takes this variant; the daily-code window keeps the modal base above.
+   ────────────────────────────────────────────────────────────────────────────────────────────── */
+.popup.popup--corner {
+  inset: auto; right: 20px; bottom: 20px;
+  width: min(380px, calc(100vw - 24px)); height: auto;
+  max-width: none; max-height: none;
+  padding: 0; overflow: visible;
+  place-items: stretch;
+  z-index: var(--z-nudge, 90);     /* under the header and its menus, like the nudge */
+}
+.popup.popup--corner[open] { display: block; }
+.popup.popup--corner::backdrop { display: none; background: none; }   /* a non-modal dialog has none; belt and braces */
+
+.popup--corner .popup__card {
+  width: 100%;
+  padding: 20px 20px 18px;
+  justify-items: stretch; text-align: left;
+  border-radius: var(--r-panel);
+  transform: translateY(16px);
+}
+.popup--corner.is-in .popup__card { transform: none; }
+
+/* The eyebrow is a pill, so it must hug its text rather than stretch to the card like the body
+   copy and the button do — otherwise the gold bar reads as a second button. */
+.popup--corner .popup__eyebrow { justify-self: start; }
+
+/* The art is a small tile at the top-left, not a big centred badge. */
+.popup--corner .popup__art { width: 54px; height: 54px; margin: 0 0 12px; }
+.popup--corner .popup__art img { width: 38px; height: 38px; }
+.popup--corner .popup__h { margin-top: 2px; font-size: 1.25rem; }
+.popup--corner .popup__p { max-width: none; margin-top: 6px; font-size: .875rem; }
+.popup--corner .popup__acts { margin-top: 14px; }
+.popup--corner .popup__go { min-height: 46px; font-size: .9375rem; }
+
+/* Sit above the phone tab bar and share the nudge's gutters, exactly as nudge.css does. */
+@media (max-width: 1080px) {
+  .popup.popup--corner { right: 12px; bottom: calc(var(--tabbar-reach, 0px) + 12px); }
+}
+@media (max-width: 480px) {
+  .popup.popup--corner { left: 12px; width: auto; }
+}
+
+/* The corner variant animates via .is-in on .popup__card, so it must opt out of motion too: the
+   rule above would otherwise re-introduce the entrance transform under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .popup--corner .popup__card { transform: none; }
 }

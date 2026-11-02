@@ -705,7 +705,8 @@ body.lx .popup__later:hover { color: var(--lx-ink); background: var(--lx-3); }
 body.lx :is(.popup__x, .nudge__x) { color: var(--lx-mute); }
 body.lx :is(.popup__x, .nudge__x):hover { color: var(--lx-ink); background: var(--lx-3); }
 @media (max-width: 1023px) {
-  body.lx .nudge { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  body.lx .nudge,
+  body.lx .popup--corner { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
 /* the daily code window (daily-code.js), which is built on the pop-up above */
 body.lx .dcode__label { color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none; }
