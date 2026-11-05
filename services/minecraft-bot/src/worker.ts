@@ -228,6 +228,39 @@ export function isHeldOffKick(text: string): boolean {
 }
 
 /**
+ * Whether a kick says Mojang's login service failed this login, rather than the server turning the
+ * account away: DonutSMP could not check the session, so the player was never let in.
+ */
+export function isAuthServiceKick(text: string): boolean {
+  return /authservers_down|not logged into your minecraft account/i.test(text);
+}
+
+/** Whether an error is Mojang's login service saying this client is asking too often. */
+export function isAuthRateLimit(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /status code: 429/i.test(message);
+}
+
+/**
+ * How long to wait after Mojang's login service failed a login, by how many in a row.
+ *
+ * 2026-11-03 to 11-05: about one login in nine failed this way, nearly always on a routine relog,
+ * and each sat out the five minutes meant for a server refusing the account. The next try nearly
+ * always worked, so wymiar lost 19 outages and about 140 minutes in three days to a brief hiccup.
+ * The server never let these logins in, so they leave no session behind to be "already online" for,
+ * and can come back quickly. The wait grows to the same five minutes, so a real Mojang outage is
+ * not knocked on every quarter minute. A 429 is not one of these: it waits the five minutes.
+ */
+const AUTH_SERVICE_GAPS_MS: readonly number[] = [15_000, 30_000, 60_000, 120_000, 300_000];
+const AUTH_SERVICE_JITTER_MS = 5_000;
+
+/** The wait before the next login after `streak` login-service failures in a row (0 for the first). */
+export function authServiceRetryMs(streak: number, random: () => number = Math.random): number {
+  const base = AUTH_SERVICE_GAPS_MS[Math.min(streak, AUTH_SERVICE_GAPS_MS.length - 1)]!;
+  return base + Math.floor(random() * AUTH_SERVICE_JITTER_MS);
+}
+
+/**
  * In a menu that /rtp answers with, the entry for the overworld: by its label, else a grass block.
  * Never the nether or the end, where a random spot is far likelier to kill the bot.
  */
@@ -365,6 +398,12 @@ export class MinecraftWorker {
   private heldOff = false;
   /** Refusals in a row since the bot was last in game; heldOffRetryMs is indexed by it. */
   private heldOffStreak = 0;
+  /** Set when Mojang's login service failed this login; the next attempt waits authServiceRetryMs. */
+  private authServiceFailed = false;
+  /** Set when that service answered 429: asking again soon would not help, so it waits the five minutes. */
+  private authRateLimited = false;
+  /** Login-service failures in a row since the bot was last in game; authServiceRetryMs is indexed by it. */
+  private authServiceStreak = 0;
   /** Connections in a row that ended before the server answered a command; any makes the next wait reconnectGapMs. */
   private failedLogins = 0;
   /** Set when a session spawns or any /bal goes unanswered, cleared by the next answer. No job is claimed while set. */
@@ -662,6 +701,7 @@ export class MinecraftWorker {
       this.heldOffStreak = 0;
       this.awaitingAnswer = true;
       this.unansweredProbes = 0;
+      this.authServiceStreak = 0;
       // Where the server put it, and what it says on arrival: a lobby or a holding area shows here.
       this.log.info(
         { dimension: bot.game?.dimension, gameMode: bot.game?.gameMode, position: bot.entity?.position },
@@ -826,6 +866,7 @@ export class MinecraftWorker {
       this.log.warn({ reason: text }, 'Bot kicked');
       if (isBanKick(text)) this.banned = true;
       else if (isHeldOffKick(text)) this.heldOff = true;
+      else if (isAuthServiceKick(text)) this.authServiceFailed = true;
     });
     /* Mineflayer respawns a dead bot by itself, but asks once and says nothing. A death is logged
      * and the respawn asked for again until the bot is back on its feet: the owner asked for this
@@ -834,7 +875,10 @@ export class MinecraftWorker {
       this.log.warn({ position: bot.entity?.position, dimension: bot.game?.dimension }, 'Bot died; respawning');
       this.respawnUntilAlive(bot, connectionController, 1);
     });
-    bot.on('error', (error) => this.log.error({ err: error }, 'Mineflayer error'));
+    bot.on('error', (error) => {
+      this.log.error({ err: error }, 'Mineflayer error');
+      if (isAuthRateLimit(error)) this.authRateLimited = true;
+    });
     bot.once('end', (reason) => {
       connectionController.abort();
       this.invalidateSnapshotState();
@@ -863,6 +907,12 @@ export class MinecraftWorker {
       if (!spawned || this.awaitingAnswer) this.failedLogins += 1;
       this.awaitingAnswer = false;
       this.teleporting = false;
+      /* Either the server said so in a kick, or the library's own call to Mojang failed: it ends the
+       * connection with this reason only when that call does (minecraft-protocol's encrypt.js). */
+      const authServiceFailed =
+        this.authServiceFailed || (reason === 'encryptionLoginError' && !this.authRateLimited);
+      this.authServiceFailed = false;
+      this.authRateLimited = false;
       if (!this.stopped && this.banned) {
         /* Held open on purpose (no unref): an idle process that exits is restarted by Docker
          * straight away, which is exactly the reconnect loop this is here to stop. */
@@ -884,6 +934,19 @@ export class MinecraftWorker {
           'The server is not letting this account in yet; trying again later',
         );
         this.heldOff = false;
+        const timer = setTimeout(() => {
+          this.timers.delete(timer);
+          this.connect();
+        }, wait);
+        this.timers.add(timer);
+      } else if (!this.stopped && authServiceFailed) {
+        /* Held open and tracked, like the waits around it. */
+        const wait = authServiceRetryMs(this.authServiceStreak);
+        this.authServiceStreak += 1;
+        this.log.warn(
+          { retryInSeconds: Math.round(wait / 1000), failuresInARow: this.authServiceStreak },
+          "Mojang's login service failed this login; trying again soon",
+        );
         const timer = setTimeout(() => {
           this.timers.delete(timer);
           this.connect();
