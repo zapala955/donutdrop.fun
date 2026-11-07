@@ -16,7 +16,7 @@
  * and the flat lanes are only for a machine without WebGL.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
+import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -247,6 +247,7 @@ async function race() {
   try {
     const response = await send(stake);
     seedHash = response.nextServerSeedHash || null;
+    commitmentMoved(response.nextServerSeedHash);
     const result = response.race;
     const winner = laneOf(result.winner);
     const script = raceScript(result.trackSeed, winner, racers().length);

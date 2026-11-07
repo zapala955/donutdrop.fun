@@ -9,7 +9,7 @@
  * /v1/fairness/verify because the HMAC construction lives there — but the hash comparison, which
  * is the part that catches a cheating house, is computed locally and independently.
  */
-import { state, bus, verifyFairness, upgradeHistory } from './store.js';
+import { state, bus, verifyFairness, upgradeHistory, refreshFairness } from './store.js';
 import { $, el, money, pct } from './util.js';
 import { toast } from './ui.js';
 
@@ -23,8 +23,22 @@ export function mountFair(view) {
     bus.addEventListener('change', () => {
       if (root.isConnected) paintCommitment();
     });
+    /* Back from another tab, which may have played and spent the commitment shown here. */
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && root.isConnected) reloadCommitment();
+    });
   }
   paint();
+  reloadCommitment();
+}
+
+/* "Active commitment" is read from the server each time the page is opened, never trusted from
+ * memory: a hash kept since login was what made a reveal look like it did not match (2026-11-07). */
+function reloadCommitment() {
+  if (!state.authenticated) return;
+  refreshFairness().catch(() => {
+    /* Shows the last known one; the bets themselves never depend on it. */
+  });
 }
 
 function paint() {
