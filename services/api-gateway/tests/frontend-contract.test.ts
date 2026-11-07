@@ -52,7 +52,7 @@ describe('frontend/backend contract', () => {
      * refusal and made the player press again. */
     const store = await source('assets/js/store.js');
     assert.match(store, /export async function betOnCommitment\(held, send\)/);
-    assert.match(store, /if \(!COMMITMENT_MOVED\.has\(error\?\.code\)\) throw error;\s*return send\(await fresh\(\), idempotencyKey\(\)\);/);
+    assert.match(store, /if \(!COMMITMENT_MOVED\.has\(error\?\.code\)\) throw error;\s*result = await send\(await fresh\(\), idempotencyKey\(\)\);/);
     assert.doesNotMatch(store, /if \(!state\.fairness\) state\.fairness = await api\.get/);
     assert.equal(store.match(/await betOnCommitment\(state\.fairness\?\.serverSeedHash,/g)?.length, 3);
     for (const [file, route] of [
@@ -68,6 +68,107 @@ describe('frontend/backend contract', () => {
         file,
       );
     }
+  });
+
+  /* 2026-11-07, reported on dice: "the hash you show before the bet doesn't match the seed you reveal
+   * after". Every game kept the next commitment in its own variable, so the shared copy the Fair page
+   * shows still held the hash of the seed just revealed. These run the store's real code. */
+  describe('the commitment the Fair page shows', () => {
+    const A = 'a'.repeat(64);
+    const B = 'b'.repeat(64);
+    const C = 'c'.repeat(64);
+    const D = 'd'.repeat(64);
+
+    /** The store's own commitmentMoved and betOnCommitment, cut out of store.js and run on fakes. */
+    async function storeFunctions() {
+      const store = (await source('assets/js/store.js')).replace(/\r\n/g, '\n');
+      const cut = (head: string) => {
+        const start = store.indexOf(head);
+        assert.notEqual(start, -1, head);
+        return store.slice(start, store.indexOf('\n}\n', start) + 2).replace(/^export /, '');
+      };
+      const emitted: string[] = [];
+      const fetched: string[] = [];
+      const state: { fairness: Record<string, unknown> | null } = { fairness: { serverSeedHash: A, nonce: 0, algorithm: 'HMAC-SHA256-v1' } };
+      let current = C;
+      const api = { get: async (url: string) => { fetched.push(url); return { serverSeedHash: current, nonce: 0 }; } };
+      const refreshFairness = async () => { state.fairness = await api.get('/v1/fairness/current'); emitted.push('fairness'); };
+      const make = new Function(
+        'state', 'api', 'emit', 'refreshFairness', 'idempotencyKey', 'COMMITMENT_MOVED',
+        `${cut('export function commitmentMoved(')}\n${cut('export async function betOnCommitment(')}\nreturn { commitmentMoved, betOnCommitment };`,
+      );
+      const fns = make(
+        state, api, (kind: string) => emitted.push(kind), refreshFairness, () => 'key',
+        new Set(['FAIRNESS_COMMITMENT_CHANGED', 'FAIRNESS_COMMITMENT_REQUIRED']),
+      ) as {
+        commitmentMoved(next?: unknown): void;
+        betOnCommitment(held: string | null, send: (hash: string, key: string) => Promise<unknown>): Promise<unknown>;
+      };
+      return { ...fns, state, emitted, fetched, setCurrent: (hash: string) => { current = hash; } };
+    }
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('moves to the next hash a bet returns, at nonce 0, and tells the page', async () => {
+      const s = await storeFunctions();
+      const sent: string[] = [];
+      await s.betOnCommitment(A, async (hash) => { sent.push(hash); return { nextServerSeedHash: B }; });
+      assert.deepEqual(sent, [A]);
+      assert.equal(s.state.fairness?.serverSeedHash, B);
+      assert.equal(s.state.fairness?.nonce, 0);
+      assert.equal(s.state.fairness?.algorithm, 'HMAC-SHA256-v1');
+      assert.deepEqual(s.emitted, ['fairness']);
+      assert.deepEqual(s.fetched, []);
+    });
+
+    it('takes the next hash of the retry, not of the refused first try', async () => {
+      const s = await storeFunctions();
+      const sent: string[] = [];
+      await s.betOnCommitment(A, async (hash) => {
+        sent.push(hash);
+        if (hash === A) throw Object.assign(new Error('moved'), { code: 'FAIRNESS_COMMITMENT_CHANGED' });
+        return { nextServerSeedHash: D };
+      });
+      assert.deepEqual(sent, [A, C]);
+      assert.equal(s.state.fairness?.serverSeedHash, D);
+    });
+
+    it('fetches the commitment when a bet does not return the next one', async () => {
+      const s = await storeFunctions();
+      s.setCurrent(D);
+      await s.betOnCommitment(A, async () => ({ round: {} }));
+      await settle();
+      assert.deepEqual(s.fetched, ['/v1/fairness/current']);
+      assert.equal(s.state.fairness?.serverSeedHash, D);
+    });
+
+    it('never stores something that is not a hash', async () => {
+      const s = await storeFunctions();
+      s.commitmentMoved('not-a-hash');
+      await settle();
+      assert.equal(s.state.fairness?.serverSeedHash, C);
+      assert.deepEqual(s.fetched, ['/v1/fairness/current']);
+    });
+
+    it('leaves the shared copy alone when a bet fails outright', async () => {
+      const s = await storeFunctions();
+      await assert.rejects(s.betOnCommitment(A, async () => {
+        throw Object.assign(new Error('broke'), { code: 'INSUFFICIENT_BALANCE' });
+      }));
+      assert.equal(s.state.fairness?.serverSeedHash, A);
+      assert.deepEqual(s.emitted, []);
+    });
+
+    it('is told by every game that reads the next hash itself, and the Fair page re-reads it', async () => {
+      for (const file of ['derby', 'fishing', 'plinko', 'slots']) {
+        const game = (await source(`assets/js/${file}.js`)).replace(/\r\n/g, '\n');
+        assert.match(game, /seedHash = response\.nextServerSeedHash \|\| null;\n\s*commitmentMoved\(response\.nextServerSeedHash\);/, file);
+      }
+      const store = await source('assets/js/store.js');
+      assert.match(store, /export async function refreshFairness\(/);
+      const fair = (await source('assets/js/fair.js')).replace(/\r\n/g, '\n');
+      assert.match(fair, /paint\(\);\n\s*reloadCommitment\(\);\n\}/);
+      assert.match(fair, /visibilitychange[\s\S]{0,120}reloadCommitment\(\)/);
+    });
   });
 
   it('wears the pixel lockup in the header: the donut and the name in pixel letters, never blurred', async () => {

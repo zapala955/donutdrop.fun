@@ -547,12 +547,38 @@ export async function betOnCommitment(held, send) {
     state.fairness = await api.get('/v1/fairness/current');
     return state.fairness.serverSeedHash;
   };
+  let result;
   try {
-    return await send(held || (await fresh()), idempotencyKey());
+    result = await send(held || (await fresh()), idempotencyKey());
   } catch (error) {
     if (!COMMITMENT_MOVED.has(error?.code)) throw error;
-    return send(await fresh(), idempotencyKey());
+    result = await send(await fresh(), idempotencyKey());
   }
+  commitmentMoved(result?.nextServerSeedHash);
+  return result;
+}
+
+/**
+ * A bet has spent the commitment: the shared copy -- the one the Fair page and the seed sheet show --
+ * becomes the next one.
+ *
+ * Each game kept the next hash in its own variable and the shared copy was never told. So it went on
+ * showing the hash of the seed a game had just revealed, and a player who copied "Active commitment",
+ * played, and checked the reveal found a seed that did not hash to it (reported 2026-11-07, on dice).
+ * The bets themselves were sound: each one quotes the hash it uses and the server refuses a mismatch.
+ *
+ * Every route makes a fresh seed at nonce 0. A response that does not carry the next hash has it
+ * fetched instead.
+ */
+export function commitmentMoved(nextHash) {
+  if (typeof nextHash === 'string' && /^[a-f0-9]{64}$/.test(nextHash)) {
+    state.fairness = { ...(state.fairness ?? {}), serverSeedHash: nextHash, nonce: 0 };
+    emit('fairness');
+    return;
+  }
+  refreshFairness().catch(() => {
+    /* The next bet re-reads it on a refusal anyway; this copy is only what the page shows. */
+  });
 }
 
 /* Opening a crate, with the same separable settlement as runBalanceUpgrade below.
@@ -1029,7 +1055,7 @@ async function refreshCatalog(notify = true) {
   if (notify) emit('catalog');
 }
 
-async function refreshFairness(notify = true) {
+export async function refreshFairness(notify = true) {
   state.fairness = await api.get('/v1/fairness/current');
   if (notify) emit('fairness');
 }

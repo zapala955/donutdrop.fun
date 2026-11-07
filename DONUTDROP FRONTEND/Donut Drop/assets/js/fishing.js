@@ -24,7 +24,7 @@
  * screen reader reads.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
+import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -349,6 +349,7 @@ async function cast() {
     const sent = Date.now();
     const response = await send(stake);
     seedHash = response.nextServerSeedHash || null;
+    commitmentMoved(response.nextServerSeedHash);
     // The stake leaves the pill now; what the catch pays waits for it.
     showBalance(response.balanceMinor);
     begin(response.cast, response.serverNow, sent, Date.now(), release);

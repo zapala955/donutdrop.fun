@@ -21,7 +21,7 @@
  * With reduced motion every reel lands at once and nothing pulses.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
+import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -283,6 +283,7 @@ function createSlotsGame(game) {
     try {
       const response = await send(stake);
       seedHash = response.nextServerSeedHash || null;
+      commitmentMoved(response.nextServerSeedHash);
       // The stake leaves the pill now; what the round paid waits for the reels.
       const after = before - stake;
       showBalance((after < 0n ? 0n : after).toString());

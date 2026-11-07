@@ -138,11 +138,18 @@ describe('the pop-ups', () => {
     }
     // somebody on an invite link already has the login form open
     assert.match(popups, /pendingReferralCode\(\)/);
-    // a real modal: Escape, the backdrop and the buttons all close it
-    assert.match(popups, /showModal\(\)/);
-    assert.match(popups, /addEventListener\('cancel'/);
-    assert.match(popups, /event\.target === dialog/);
-    // the corner card steps back while one is up
+    /* A corner card since 2026-11-02, not a modal: players had to close it to keep playing. It opens
+     * non-modally, never takes the focus, closes on Escape or the x, and leaves on its own unless a
+     * hover or a focus shows interest. */
+    assert.match(popups, /dialog\.show\(\);/);
+    assert.doesNotMatch(popups, /dialog\.showModal\(\)/);
+    assert.match(popups, /dialog\.className = 'popup popup--corner';/);
+    assert.doesNotMatch(popups, /go\.focus\(/);
+    assert.match(popups, /event\.key === 'Escape'/);
+    assert.match(popups, /autoTimer = window\.setTimeout\(\(\) => close\('seen'\), AUTO_DISMISS_MS\);/);
+    assert.match(popups, /card\.addEventListener\('pointerenter', keep, \{ once: true \}\);/);
+    assert.match(popups, /card\.addEventListener\('focusin', keep, \{ once: true \}\);/);
+    // the nudge card steps back while one is up
     assert.match(popups, /write\(NUDGE_KEY/);
   });
 
@@ -162,6 +169,9 @@ describe('the pop-ups', () => {
     assert.match(css, /prefers-reduced-motion: reduce/);
     assert.match(css, /--z-popup:\s*120/);
     assert.match(css, /@media \(max-width: 560px\)/);
+    // The offer itself is the corner card: under the header, where the nudge sits, reduced motion too.
+    assert.match(css, /\.popup\.popup--corner \{[^}]*z-index: var\(--z-nudge, 90\);/);
+    assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.popup--corner \.popup__card \{ transform: none; \}/);
   });
 });
 

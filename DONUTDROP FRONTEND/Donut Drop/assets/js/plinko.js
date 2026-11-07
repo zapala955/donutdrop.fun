@@ -19,7 +19,7 @@
  * own, set under the boxes where the board says they stand; without WebGL the flat board is back.
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
-import { bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
+import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
 import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -187,6 +187,7 @@ async function pump() {
         const response = await send(next);
         queue.shift();
         seedHash = response.nextServerSeedHash || null;
+        commitmentMoved(response.nextServerSeedHash);
         serverBalance = BigInt(response.balanceMinor);
         launch(response.bet, next.release);
       } catch (error) {
