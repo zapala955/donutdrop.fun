@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-11-08",
+    "macrostructure": "none (app shell: side rail + workspace)",
+    "theme": "custom",
+    "theme_axes": "light paper / grotesk-heavy (Archivo 800-900) / warm gold signal, surface-only",
+    "vibe": "minimal brutalism, Grid-tuned operator console",
+    "nav": "N3 side rail (top strip under 1024px) + N7 brutal slab header",
+    "enrichment": "none - typography only; two gold plates (session gate, net-profit headline)",
+    "brief": "DonutLuxe admin console, complete visual rewrite (admin.css), logic untouched"
+  },
+  {
     "date": "2026-09-20",
     "macrostructure": "none (single-card page)",
     "theme": "project system",

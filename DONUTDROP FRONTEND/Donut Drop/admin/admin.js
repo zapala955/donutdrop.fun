@@ -1054,11 +1054,12 @@ function renderPeople(node, rows, emptyText) {
 /* ═════════════════════════ charts ═════════════════════════
  *
  * Plain SVG, drawn at the container's real width. One y-axis per chart, hairline gridlines, thin
- * marks: columns at most 24px wide with a 4px rounded end at the data and a gap of at least 2px,
- * 2px lines. Every chart answers the pointer -- the column under it, or a crosshair across lines --
- * with a tooltip naming the bucket and each value. Colours: blue first, orange second (validated
- * for colour-blind separation against this panel's surface); net profit runs blue above zero and
- * red below. Text is always in the ink colours, never the series colour. */
+ * marks: columns at most 24px wide with a square end at the data (the console is drawn square since
+ * the 2026-11-08 redesign) and a gap of at least 2px, 2px lines. Every chart answers the pointer --
+ * the column under it, or a crosshair across lines -- with a tooltip naming the bucket and each
+ * value. Colours come from admin.css: ultramarine first, orange second (validated for colour-blind
+ * separation against the paper, the gold plate and the dark paper); net profit runs ultramarine
+ * above zero and red below. Text is always in the ink colours, never the series colour. */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 function svgNode(tag, attributes = {}, parent = null) {
@@ -1193,7 +1194,7 @@ function drawChart(host, spec) {
       if (Math.abs(base - end) < 1.5) end = base + (v > 0 ? -1.5 : 1.5);
       const path = svgNode(
         'path',
-        { d: columnPath(cx(i) - barW / 2, barW, base, end, 4), class: 'chart__col' },
+        { d: columnPath(cx(i) - barW / 2, barW, base, end, 0), class: 'chart__col' },
         marks,
       );
       path.style.fill = spec.diverging ? (v < 0 ? 'var(--viz-neg)' : 'var(--viz-1)') : series.color;
