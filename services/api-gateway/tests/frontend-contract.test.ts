@@ -113,9 +113,9 @@ describe('frontend/backend contract', () => {
       const sent: string[] = [];
       await s.betOnCommitment(A, async (hash) => { sent.push(hash); return { nextServerSeedHash: B }; });
       assert.deepEqual(sent, [A]);
-      assert.equal(s.state.fairness?.serverSeedHash, B);
-      assert.equal(s.state.fairness?.nonce, 0);
-      assert.equal(s.state.fairness?.algorithm, 'HMAC-SHA256-v1');
+      assert.equal(s.state.fairness?.['serverSeedHash'], B);
+      assert.equal(s.state.fairness?.['nonce'], 0);
+      assert.equal(s.state.fairness?.['algorithm'], 'HMAC-SHA256-v1');
       assert.deepEqual(s.emitted, ['fairness']);
       assert.deepEqual(s.fetched, []);
     });
@@ -129,7 +129,7 @@ describe('frontend/backend contract', () => {
         return { nextServerSeedHash: D };
       });
       assert.deepEqual(sent, [A, C]);
-      assert.equal(s.state.fairness?.serverSeedHash, D);
+      assert.equal(s.state.fairness?.['serverSeedHash'], D);
     });
 
     it('fetches the commitment when a bet does not return the next one', async () => {
@@ -138,14 +138,14 @@ describe('frontend/backend contract', () => {
       await s.betOnCommitment(A, async () => ({ round: {} }));
       await settle();
       assert.deepEqual(s.fetched, ['/v1/fairness/current']);
-      assert.equal(s.state.fairness?.serverSeedHash, D);
+      assert.equal(s.state.fairness?.['serverSeedHash'], D);
     });
 
     it('never stores something that is not a hash', async () => {
       const s = await storeFunctions();
       s.commitmentMoved('not-a-hash');
       await settle();
-      assert.equal(s.state.fairness?.serverSeedHash, C);
+      assert.equal(s.state.fairness?.['serverSeedHash'], C);
       assert.deepEqual(s.fetched, ['/v1/fairness/current']);
     });
 
@@ -154,7 +154,7 @@ describe('frontend/backend contract', () => {
       await assert.rejects(s.betOnCommitment(A, async () => {
         throw Object.assign(new Error('broke'), { code: 'INSUFFICIENT_BALANCE' });
       }));
-      assert.equal(s.state.fairness?.serverSeedHash, A);
+      assert.equal(s.state.fairness?.['serverSeedHash'], A);
       assert.deepEqual(s.emitted, []);
     });
 
