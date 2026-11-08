@@ -1,609 +1,883 @@
-/* admin.css — the console, in the platform's obsidian and gold.
-   Deliberately its own stylesheet rather than the site's: this page loads before a session exists
-   and must render correctly with nothing else on the wire. */
+/* Hallmark · macrostructure: none (app shell: rail + workspace) · tone: minimal brutalism · anchor hue: gold 75°
+ * theme: Grid, tuned for a console — light paper · grotesk-heavy (Archivo 800–900) · signal gold, surface-only
+ * nav: N3 side rail (a top strip under 1024px) · header: N7 brutal slab · enrichment: none
+ * pre-emit critique: P5 H4 E4 S5 R5 V4
+ *
+ * admin.css — the operator console, rewritten 2026-11-08 as minimal brutalism.
+ *
+ * What it is made of, and nothing else:
+ *   - Paper and ink. Every surface is the paper; every line, border and label is the ink.
+ *   - One signal: DonutLuxe gold, used only as a FILL (the session gate, the net-profit plate, the
+ *     admin tag, the marker on the chosen section). Gold type on paper never happens; it fails
+ *     contrast.
+ *   - One alarm: red, for things that are wrong right now and for actions that cannot be undone.
+ *   - Square corners, 2–3px ink rules, cells that share their borders instead of cards that float.
+ *     The only shadow is a hard offset under things that sit above the page (dialogs, toasts).
+ *   - Nothing animates. A state changes the instant it changes.
+ *
+ * Deliberately one stylesheet with its own tokens: this page loads before a session exists and must
+ * render with nothing else on the wire (the contract test asks for exactly one admin.css). The fonts
+ * are the site's own, served from /assets, because the CSP allows nothing from another origin.
+ *
+ * Chart colours were checked with the dataviz validator (lightness band, chroma, colour-blind
+ * separation, normal-vision floor, 3:1 against the surface): series 1 ultramarine, series 2 orange,
+ * losses red — against the paper, against the gold plate, and in dark mode against its own paper. */
 
-:root {
-  color-scheme: dark;
-
-  --ob: #0a0a0c; /* the floor */
-  --ob-raised: #121216; /* panels */
-  --ob-high: #17171d; /* rows, inputs */
-  --line: rgba(255, 215, 0, 0.14);
-  --line-hi: rgba(255, 215, 0, 0.34);
-
-  --gold: #ffaa00;
-  --gold-bright: #ffd700;
-  --danger: #e0563f;
-  --ok: #43c464;
-
-  /* #e9eaee on #0a0a0c is ~16:1; --muted is ~7.5:1. Both clear AA comfortably, which matters on a
-     page where a misread status is an operational mistake. */
-  --ink: #e9eaee;
-  --muted: #a2a4ab;
-  --faint: #7e818a;
-
-  --r: 12px;
-  --pad: clamp(16px, 3vw, 28px);
-
-  /* Chart colours. Series identity: blue first, orange second; net profit runs blue above zero
-     and red below. Checked with the dataviz palette validator against --ob-raised (#121216):
-     lightness band, chroma, colour-blind separation (dE 26.8 / 19.2) and 3:1 contrast all pass.
-     Marks only -- text on a chart stays in the ink colours. */
-  --viz-1: #3987e5;
-  --viz-2: #d95926;
-  --viz-neg: #e66767;
-  --viz-grid: rgba(255, 255, 255, 0.06);
-  --viz-axis: rgba(255, 255, 255, 0.2);
-
-  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url(/assets/fonts/archivo-700-900-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url(/assets/fonts/archivo-700-900-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url(/assets/fonts/figtree-400-800-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url(/assets/fonts/figtree-400-800-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-* {
+/* ══════════════════════════ tokens ══════════════════════════ */
+
+:root {
+  /* The light set, named once. The page uses it by default, and the two plates (the session gate
+     and the net-profit headline) use it in dark mode too: a plate is gold either way, and what is
+     printed on gold has to be dark. */
+  --L-paper: oklch(97.8% 0.006 85);
+  --L-paper-2: oklch(93.8% 0.008 85);
+  --L-ink: oklch(17% 0.006 85);
+  --L-ink-2: oklch(40% 0.007 85);
+  --L-muted: oklch(48% 0.007 85);
+  --L-rule: oklch(82% 0.008 85);
+  --L-danger: oklch(50% 0.2 27);
+  --L-on-danger: oklch(97.8% 0.006 85);
+  --L-viz-1: oklch(45% 0.19 264);
+  --L-viz-2: oklch(60% 0.17 50);
+
+  /* The signal. A fill, never a text colour. */
+  --accent: oklch(80% 0.165 75);
+  --on-accent: oklch(17% 0.006 85);
+
+  --paper: var(--L-paper);
+  --paper-2: var(--L-paper-2);
+  --ink: var(--L-ink);
+  --ink-2: var(--L-ink-2); /* ~9:1 on paper */
+  --muted: var(--L-muted); /* ~6.5:1 on paper */
+  --rule: var(--L-rule);
+  --danger: var(--L-danger); /* ~6:1 on paper, as text and as a fill under paper text */
+  --on-danger: var(--L-on-danger);
+  --focus: var(--ink);
+  --scrim: oklch(12% 0.006 85 / 0.62);
+
+  /* Charts. Text on a chart stays in the ink; only marks carry series colour. */
+  --viz-1: var(--L-viz-1);
+  --viz-2: var(--L-viz-2);
+  --viz-neg: var(--danger);
+  --viz-grid: var(--rule);
+  --viz-axis: var(--ink);
+  --chart-text: var(--muted);
+  --chart-strong: var(--ink);
+  --chart-surface: var(--paper);
+  --spark: var(--ink-2);
+
+  --font-display: 'Archivo', 'Arial Black', system-ui, sans-serif;
+  --font-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* 4-point scale. */
+  --s-3xs: 4px;
+  --s-2xs: 8px;
+  --s-xs: 12px;
+  --s-sm: 16px;
+  --s-md: 24px;
+  --s-lg: 32px;
+  --s-xl: 48px;
+  --s-2xl: 64px;
+
+  --bw-1: 1px; /* hairline: rows */
+  --bw-2: 2px; /* every component */
+  --bw-3: 3px; /* structure: header, rail, section heads, dialogs */
+  --shadow-hard: 4px 4px 0 var(--ink);
+  --shadow-hard-lg: 8px 8px 0 var(--ink);
+
+  --top-h: 64px;
+  --rail-w: 232px;
+  --gutter: 16px;
+  --gutter-wide: clamp(16px, 3.2vw, 48px);
+  --card-pad: var(--s-md);
+  --hit: 44px; /* this console is used on a phone, one tap from Discord */
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: oklch(19% 0.007 85);
+    --paper-2: oklch(24% 0.008 85);
+    --ink: oklch(95% 0.005 85);
+    --ink-2: oklch(80% 0.006 85);
+    --muted: oklch(72% 0.006 85);
+    --rule: oklch(36% 0.008 85);
+    --danger: oklch(63% 0.2 27);
+    --on-danger: oklch(17% 0.006 85); /* dark type on the lighter red: ~4.8:1 */
+    --scrim: oklch(6% 0.004 85 / 0.72);
+    --viz-1: oklch(63% 0.19 264);
+    --viz-2: oklch(66% 0.17 52);
+  }
+}
+
+/* The plates: gold in both modes, so everything on them takes the light set. */
+.hero,
+.gate {
+  --paper: var(--L-paper);
+  --paper-2: var(--L-paper-2);
+  --ink: var(--L-ink);
+  --ink-2: var(--L-ink);
+  --muted: var(--L-ink);
+  --rule: var(--L-ink);
+  --danger: var(--L-danger);
+  --on-danger: var(--L-on-danger);
+  --focus: var(--L-ink);
+  --viz-1: var(--L-viz-1);
+  --viz-neg: var(--L-danger);
+  --viz-grid: oklch(17% 0.006 85 / 0.18);
+  --viz-axis: var(--L-ink);
+  --chart-text: var(--L-ink);
+  --chart-strong: var(--L-ink);
+  --chart-surface: var(--accent);
+}
+
+/* ══════════════════════════ base ══════════════════════════ */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
   padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
-  background: var(--ob);
+  background: var(--paper);
   color: var(--ink);
-  font: 16px/1.5 var(--sans);
+  font: 400 1rem/1.5 var(--font-body);
   -webkit-text-size-adjust: 100%;
+  scrollbar-color: var(--ink) var(--paper-2);
 }
 
-/* Keyboard users land here first. Visible only when focused, as it should be. */
-.skip {
-  position: absolute;
-  left: -9999px;
-  padding: 10px 16px;
-  background: var(--gold-bright);
-  color: #111;
-  border-radius: 0 0 var(--r) 0;
-  font-weight: 700;
-}
-.skip:focus {
-  left: 0;
-  top: 0;
-  z-index: 10;
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
-:where(button, input, [tabindex]):focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: 2px;
-}
-
-/* ── header ── */
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 14px var(--pad);
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 170, 0, 0.05), transparent);
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.brand__mark {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: linear-gradient(135deg, var(--gold-bright), var(--gold));
-  box-shadow: 0 0 16px rgba(255, 170, 0, 0.55);
-}
-.brand__text {
-  font-size: 0.95rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.brand__text b {
-  color: var(--gold-bright);
-}
-.who {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.who__name {
-  font-family: var(--mono);
-  font-size: 0.875rem;
-  color: var(--gold-bright);
-}
-
-/* ── buttons ── */
-.btn {
-  /* 44px minimum target: this console gets used on a phone, which is the whole point of it being
-     one click from Discord. */
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid var(--line-hi);
-  background: var(--ob-high);
-  color: var(--gold-bright);
-  font: 700 0.8125rem/1 var(--sans);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    transform 140ms ease;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--gold-bright);
-  background: #1d1d24;
-}
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn--ghost {
-  color: var(--muted);
-  border-color: var(--line);
-  background: transparent;
-}
-.btn--danger {
-  color: #fff;
-  border-color: var(--danger);
-  background: rgba(224, 86, 63, 0.18);
-}
-.btn--danger:hover:not(:disabled) {
-  background: rgba(224, 86, 63, 0.32);
-  border-color: var(--danger);
-}
-
-/* ── the gate (pre-session) ── */
-/* The page toggles `hidden` to swap between its three states, and an author `display` beats the
-   browser's [hidden] { display: none }. Without this the console renders underneath a gate that
-   says it is still verifying the link — which is exactly what it did. */
+/* The page toggles `hidden` to swap its three states, and an author `display` beats the browser's
+   [hidden] { display: none }. Without this the console renders underneath a gate that says it is
+   still verifying the link. */
 [hidden] {
   display: none !important;
 }
 
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  z-index: 50;
+  padding: var(--s-xs) var(--s-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  border: var(--bw-3) solid var(--ink);
+  font: 800 0.875rem/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.skip:focus {
+  left: 0;
+  top: 0;
+}
+
+/* ══════════════════════════ the slab header ══════════════════════════ */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: var(--top-h);
+  background: var(--paper);
+  border-bottom: var(--bw-3) solid var(--ink);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: 0 var(--gutter-wide);
+  min-width: 0;
+}
+.brand__word {
+  font: 900 1.375rem/1 var(--font-display);
+  font-stretch: 82%;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.brand__tag {
+  padding: var(--s-3xs) var(--s-2xs);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 800 0.6875rem/1 var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.who {
+  display: flex;
+  align-items: stretch;
+}
+.who__name {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s-md);
+  border-left: var(--bw-3) solid var(--ink);
+  font: 500 0.8125rem/1 var(--font-mono);
+  white-space: nowrap;
+}
+.who .btn {
+  min-height: var(--top-h);
+  border-width: 0 0 0 var(--bw-3);
+  padding: 0 var(--s-md);
+}
+
+/* ══════════════════════════ buttons ══════════════════════════ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2xs);
+  min-height: var(--hit);
+  padding: 0 var(--s-sm);
+  border: var(--bw-2) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 0.8125rem/1 var(--font-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+.btn:active:not(:disabled) {
+  transform: translate(1px, 1px);
+}
+.btn:disabled {
+  border-style: dashed;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.btn[aria-busy='true'] {
+  cursor: progress;
+  border-style: dashed;
+}
+.btn--ghost {
+  border-color: var(--rule);
+  color: var(--ink-2);
+}
+.btn--ghost:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.btn--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.btn--danger:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--danger);
+  color: var(--on-danger);
+  box-shadow: inset 0 0 0 var(--bw-2) var(--ink);
+}
+.btn--danger:disabled {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+/* ══════════════════════════ the gate (pre-session): the gold plate ══════════════════════════ */
+
 .gate {
-  display: grid;
-  place-items: center;
-  min-height: 70vh;
-  padding: var(--pad);
+  display: flex;
+  align-items: flex-end;
+  min-height: calc(100dvh - var(--top-h));
+  padding: var(--s-xl) var(--gutter-wide);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .gate__card {
-  width: min(520px, 100%);
-  padding: clamp(24px, 5vw, 40px);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgba(255, 170, 0, 0.07), transparent 62%), var(--ob-raised);
-  text-align: center;
+  width: min(56rem, 100%);
 }
 .gate__title {
-  margin: 0 0 10px;
-  font-size: clamp(1.25rem, 4vw, 1.6rem);
-  color: var(--gold-bright);
+  margin: 0 0 var(--s-sm);
+  font: 900 clamp(2.75rem, 1.4rem + 6.2vw, 7rem)/0.88 var(--font-display);
+  letter-spacing: -0.05em;
+  text-transform: lowercase;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .gate__body {
   margin: 0;
-  color: var(--muted);
+  max-width: 48ch;
+  font: 500 1.125rem/1.45 var(--font-body);
 }
 .gate__hint {
-  margin: 16px 0 0;
-  color: var(--faint);
-  font-size: 0.875rem;
+  margin: var(--s-md) 0 0;
+  padding-top: var(--s-sm);
+  border-top: var(--bw-3) solid currentColor;
+  max-width: 48ch;
+  font-size: 0.9375rem;
 }
 .gate__hint code {
-  font-family: var(--mono);
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--ob-high);
-  color: var(--gold-bright);
+  padding: 0 var(--s-3xs);
+  background: var(--on-accent);
+  color: var(--accent);
 }
-.gate[data-state='error'] .gate__title {
+.gate[data-state='error'] {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.gate[data-state='error'] .gate__hint code {
+  background: var(--on-danger);
   color: var(--danger);
 }
 
-/* ── tabs ── */
+/* ══════════════════════════ the shell: rail + workspace ══════════════════════════ */
+
+/* Every panel and the rail share one grid row: only one panel is ever visible, so the rail sits
+   beside whichever it is, sticky for as long as that panel is. */
+.console {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  align-items: start;
+  min-height: calc(100dvh - var(--top-h));
+}
 .tabs {
+  grid-area: 1 / 1;
+  position: sticky;
+  top: var(--top-h);
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 12px var(--pad) 0;
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  height: calc(100dvh - var(--top-h));
+  overflow-y: auto;
+  border-right: var(--bw-3) solid var(--ink);
+  background: var(--paper);
   scrollbar-width: thin;
 }
 .tab {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--r) var(--r) 0 0;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 var(--s-md);
+  border: 0;
+  border-bottom: var(--bw-1) solid var(--rule);
+  border-radius: 0;
   background: transparent;
-  color: var(--muted);
-  font: 600 0.875rem/1 var(--sans);
+  color: var(--ink-2);
+  font: 700 0.8125rem/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
 }
 .tab:hover {
+  background: var(--paper-2);
   color: var(--ink);
 }
+.tab:active {
+  background: var(--rule);
+}
 .tab[aria-selected='true'] {
-  background: var(--ob-raised);
-  border-color: var(--line);
-  color: var(--gold-bright);
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 6px 0 0 var(--accent);
+}
+/* Inside the rail an outside ring is clipped by its scroll edge, so the ring sits inside the tab. */
+.tab:focus-visible {
+  outline-offset: -6px;
+}
+.tab[aria-selected='true']:focus-visible {
+  outline-color: var(--accent);
 }
 
-/* ── panels ── */
 .panel {
-  padding: var(--pad);
+  grid-area: 1 / 2;
+  min-width: 0;
+  padding: var(--s-lg) var(--gutter-wide) var(--s-2xl);
+  container-type: inline-size;
 }
+
+/* ══════════════════════════ section heads ══════════════════════════ */
+
 .panel__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-sm) var(--s-md);
+  margin-bottom: var(--s-lg);
+  padding-bottom: var(--s-sm);
+  border-bottom: var(--bw-3) solid var(--ink);
+}
+.panel__head > :first-child {
+  min-width: 0;
 }
 .panel__head h2 {
   margin: 0;
-  font-size: 1.125rem;
-  letter-spacing: 0.04em;
+  font: 800 clamp(2rem, 1.25rem + 2.6vw, 3.25rem)/0.92 var(--font-display);
+  letter-spacing: -0.04em;
+  text-transform: lowercase;
+  overflow-wrap: anywhere;
+}
+.panel__head > div > .hint {
+  display: block;
+  margin-top: var(--s-2xs);
+  max-width: 62ch;
 }
 
-/* ── stat tiles ── */
-.stats {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+/* A sub-section is topped by an ink rule, and its content butts against it. */
+.panel__head--sub {
+  align-items: baseline;
+  margin: var(--s-xl) 0 var(--s-sm);
+  padding: var(--s-xs) 0 0;
+  border-bottom: 0;
+  border-top: var(--bw-2) solid var(--ink);
 }
-.stat {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-raised);
-}
-.stat__label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.6875rem;
-  letter-spacing: 0.14em;
+.panel__head--sub h3 {
+  margin: 0;
+  font: 800 0.875rem/1.2 var(--font-display);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--faint);
 }
-.stat__value {
-  font-family: var(--mono);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--gold-bright);
+.panel__head--sub .hint {
+  max-width: 62ch;
+}
+
+.hint {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.hint code {
+  padding: 0 var(--s-3xs);
+  border: var(--bw-1) solid var(--rule);
+  background: var(--paper-2);
+  overflow-wrap: anywhere;
+}
+p.hint {
+  max-width: 72ch;
+  margin: var(--s-sm) 0;
+}
+
+.rowacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2xs);
+}
+
+/* ══════════════════════════ cells: stats, kpis, facts ══════════════════════════
+   One ruled object, not a row of boxes: every cell draws all four borders and slides 2px into its
+   neighbours, so shared edges are one rule. The container gives the overlap back on its right and
+   bottom. A partial last row simply ends; there is no empty box to fill. */
+
+.stats,
+.kpis,
+.sheet__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  padding: 0 var(--bw-2) var(--bw-2) 0;
+}
+.stat,
+.kpi,
+.fact {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2xs);
+  min-width: 0;
+  margin: 0 calc(-1 * var(--bw-2)) calc(-1 * var(--bw-2)) 0;
+  padding: var(--s-sm);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--paper);
+}
+.stat__label,
+.kpi__label,
+.fact__k {
+  font: 700 0.6875rem/1.2 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stat__value,
+.kpi__value {
+  font: 800 1.625rem/1.05 var(--font-display);
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 /* A count that should normally be zero is not decoration when it is not. */
 .stat[data-alarm='1'] {
-  border-color: rgba(224, 86, 63, 0.5);
+  background: var(--danger);
+  color: var(--on-danger);
+  z-index: 1;
 }
-.stat[data-alarm='1'] .stat__value {
+.stat[data-alarm='1'] .stat__label {
+  color: var(--on-danger);
+}
+
+.kpi {
+  padding-bottom: 40px;
+}
+.kpi__value {
+  font-size: 1.5rem;
+}
+.kpi__foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3xs) var(--s-2xs);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.kpi__spark {
+  position: absolute;
+  left: var(--s-sm);
+  right: var(--s-sm);
+  bottom: 10px;
+  width: calc(100% - 2 * var(--s-sm));
+  height: 22px;
+  fill: none;
+  stroke: var(--spark);
+  stroke-width: 2;
+  stroke-linejoin: miter;
+  pointer-events: none;
+}
+
+.fact {
+  gap: var(--s-3xs);
+  padding: var(--s-xs) var(--s-sm);
+}
+.fact__v {
+  font: 500 0.9375rem/1.3 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Change against the previous period. The arrow and the sign carry the direction; the fill only
+   says whether that direction is good news for this figure. */
+.delta {
+  display: inline-block;
+  padding: 0 var(--s-3xs);
+  border: var(--bw-1) solid currentColor;
+  font: 700 0.75rem/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.delta[data-tone='good'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+.delta[data-tone='bad'] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+/* ══════════════════════════ alerts ══════════════════════════ */
+
+.alertbar {
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--s-md);
+  padding: var(--s-sm) var(--s-md);
+  border: var(--bw-3) solid var(--ink);
+  border-radius: 0;
+  background: var(--danger);
+  color: var(--on-danger);
+  font: 800 0.875rem/1.35 var(--font-display);
+  letter-spacing: 0.03em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.alertbar:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.alertbar:active {
+  transform: translate(1px, 1px);
+}
+
+/* A bot the server refused a payment for lack of funds. First on the overview: players are waiting
+   on it, and the fix is one in-game payment. */
+.shortbots {
+  display: grid;
+  gap: var(--s-2xs);
+  margin-bottom: var(--s-md);
+}
+.shortbot {
+  padding: var(--s-sm) var(--s-md);
+  border: var(--bw-3) solid var(--danger);
+  background: var(--paper);
+  line-height: 1.5;
+}
+.shortbot b {
+  font: 800 1rem/1.3 var(--font-display);
   color: var(--danger);
 }
-.attention {
-  margin-top: 12px;
+.shortbot p {
+  margin: var(--s-3xs) 0 0;
+  max-width: 72ch;
+  font-size: 0.875rem;
+  color: var(--ink-2);
 }
 
 /* The payout console's control strip: state first, rules second, the buttons that act last. */
 .payctl {
   display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-raised);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-xs);
+  margin-bottom: var(--s-md);
+  padding: var(--s-md);
+  border: var(--bw-3) solid var(--ink);
 }
 .payctl__state {
   margin: 0;
-  font-weight: 700;
-  color: var(--ok);
+  font: 800 1rem/1.35 var(--font-display);
 }
 .payctl__state[data-hold='1'] {
-  color: var(--danger);
+  justify-self: start;
+  padding: var(--s-2xs) var(--s-xs);
+  background: var(--danger);
+  color: var(--on-danger);
 }
 .payctl__rules {
   margin: 0;
+  max-width: 72ch;
   font-size: 0.8125rem;
-}
-.grid [data-alarm='1'] {
-  color: var(--danger);
-  font-weight: 700;
+  color: var(--ink-2);
 }
 
-/* A bot the server refused a payment for lack of funds. First thing on the overview, because
-   players are waiting on it and the fix is one in-game payment. */
-.shortbots {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.shortbots[hidden] {
-  display: none;
-}
-.shortbot {
-  padding: 12px 14px;
-  border: 1px solid rgba(224, 86, 63, 0.5);
-  border-radius: var(--r);
-  background: rgba(224, 86, 63, 0.08);
-  color: var(--ink);
-  line-height: 1.5;
-}
-.shortbot b {
-  color: var(--danger);
-}
-.shortbot p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 0.875rem;
-}
+/* ══════════════════════════ the dashboard ══════════════════════════ */
 
-/* ── the dashboard ──
-   One period chosen at the top drives everything under it: the headline, the tiles, the charts
-   and the tables. Cards share the panel surface so the gold stays for what is being read. */
-.alertbar {
-  display: block;
-  width: 100%;
-  margin-bottom: 14px;
-  padding: 12px 16px;
-  border: 1px solid rgba(224, 86, 63, 0.5);
-  border-radius: var(--r);
-  background: rgba(224, 86, 63, 0.08);
-  color: #ffd9d1;
-  font: 700 0.875rem/1.4 var(--sans);
-  text-align: left;
-  cursor: pointer;
-}
-.alertbar[hidden] {
-  display: none;
-}
-.alertbar:focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: 2px;
-}
 .dash {
   display: grid;
-  gap: 14px;
-  transition: opacity 160ms ease;
+  gap: var(--s-lg);
 }
 .dash[aria-busy='true'] {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 .dash__bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
-}
-/* The staff switch is a switch, not a fourth period: a box that fills when it is on, and a
-   little air between it and the period chips. */
-.chip--toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 6px;
-}
-.chip--toggle::before {
-  content: '';
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-.chip--toggle[aria-pressed='true']::before {
-  background: currentColor;
-  box-shadow: inset 0 0 0 2px var(--ob);
+  gap: var(--s-2xs) var(--s-sm);
 }
 .dash__window {
   margin: 0 0 0 auto;
-  font-size: 0.8125rem;
-  color: var(--faint);
+  font: 500 0.8125rem/1.4 var(--font-mono);
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* The headline: net profit, how it was made, and its own chart — the console's one gold plate.
+   `.card.hero`, because the element is a card too and the card's paper must not win. */
+.card.hero {
+  display: grid;
+  grid-template-columns: minmax(17rem, 1fr) minmax(0, 1.65fr);
+  align-items: end;
+  gap: var(--s-md) var(--s-xl);
+  padding: var(--s-lg);
+  border: var(--bw-3) solid var(--L-ink);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.hero__text {
+  min-width: 0;
+}
+.hero__label {
+  display: block;
+  font: 800 0.75rem/1 var(--font-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* Sized to the panel, not the window, and never broken: "$140.6m" split over two lines reads as two
+   numbers. */
+.hero__value {
+  display: block;
+  margin: var(--s-2xs) 0 var(--s-xs);
+  font: 900 clamp(2.5rem, 1.25rem + 4.2cqi, 4.75rem)/0.9 var(--font-display);
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hero__value[data-sign='down'] {
+  color: var(--L-danger);
+}
+.hero__delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 0 var(--s-md);
+  font-size: 0.8125rem;
+}
+.bridge {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border-top: var(--bw-2) solid var(--L-ink);
+}
+.bridge__item {
+  min-width: 0;
+  padding: var(--s-2xs) 0;
+  border-bottom: var(--bw-1) solid var(--L-ink);
+}
+.bridge__item:nth-child(odd) {
+  padding-right: var(--s-sm);
+}
+.bridge__item:last-child {
+  grid-column: 1 / -1;
+  border-bottom: 0;
+  font-size: 1.05em;
+}
+.bridge dt {
+  font: 700 0.6875rem/1.2 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bridge dd {
+  margin: 0;
+  font: 800 1rem/1.2 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.bridge__item:last-child dd {
+  font-size: 1.25rem;
+}
+
 .dash__grid {
   display: grid;
-  gap: 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0 var(--bw-2) var(--bw-2) 0;
 }
 .dash__grid--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.dash__grid > .card {
+  margin: 0 calc(-1 * var(--bw-2)) calc(-1 * var(--bw-2)) 0;
+}
+
 .card {
   min-width: 0;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-raised);
+  padding: var(--card-pad);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--paper);
 }
 .card__head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 14px;
+  gap: var(--s-3xs) var(--s-sm);
 }
 .card__title {
-  margin: 0 0 10px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  margin: 0 0 var(--s-xs);
+  font: 800 0.8125rem/1.2 var(--font-display);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
 }
 .card__sub {
-  margin: -4px 0 12px;
+  margin: calc(-1 * var(--s-2xs)) 0 var(--s-sm);
+  max-width: 72ch;
   font-size: 0.8125rem;
-  color: var(--faint);
+  color: var(--ink-2);
 }
-.card .tablewrap {
-  border-color: rgba(255, 255, 255, 0.06);
-  background: transparent;
-}
-
-/* The headline: net profit, how it was made, and its own chart. */
-.hero {
-  display: grid;
-  grid-template-columns: minmax(250px, 0.8fr) minmax(0, 2fr);
-  gap: 18px 28px;
-  align-items: center;
-  border-color: var(--line-hi);
-  background:
-    radial-gradient(120% 140% at 0% 0%, rgba(255, 215, 0, 0.07), transparent 55%), var(--ob-raised);
-}
-.hero__label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.hero__value {
-  display: block;
-  margin: 2px 0 4px;
-  font-family: var(--mono);
-  font-size: clamp(2rem, 4.4vw, 2.75rem);
-  font-weight: 800;
-  line-height: 1.1;
-  color: var(--gold-bright);
-  font-variant-numeric: tabular-nums;
-}
-.hero__value[data-sign='down'] {
-  color: var(--danger);
-}
-.hero__delta {
-  margin: 0 0 14px;
-  font-size: 0.8125rem;
-  color: var(--faint);
-}
-.bridge {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 16px;
-  margin: 0;
-}
-.bridge__item {
-  min-width: 0;
-}
-.bridge dt {
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.bridge dd {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Change against the previous period. The arrow and sign carry the direction; the colour only
-   says whether that direction is good news for this figure. */
-.delta {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font: 700 0.75rem/1.5 var(--mono);
-  font-variant-numeric: tabular-nums;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
-}
-.delta[data-tone='good'] {
-  background: rgba(67, 196, 100, 0.12);
-  color: var(--ok);
-}
-.delta[data-tone='bad'] {
-  background: rgba(224, 86, 63, 0.12);
-  color: #ff8a73;
-}
-
-.kpis {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
-.kpi {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 14px 16px 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-raised);
-  overflow: hidden;
-}
-.kpi__label {
-  font-size: 0.6875rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.kpi__value {
-  margin: 4px 0 6px;
-  font-family: var(--mono);
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: var(--gold-bright);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.kpi__foot {
-  position: relative;
-  z-index: 1;
-  font-size: 0.75rem;
-  color: var(--faint);
-}
-.kpi__spark {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 6px;
-  width: 100%;
-  height: 24px;
-  fill: none;
-  stroke: rgba(255, 170, 0, 0.55);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  pointer-events: none;
+/* A table inside a card runs to the card's edges under one rule. */
+.card > .tablewrap {
+  margin: var(--s-xs) calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
+  border-width: var(--bw-2) 0 0;
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
-  margin: 0 0 10px;
+  gap: var(--s-3xs) var(--s-sm);
+  margin: 0 0 var(--s-xs);
   padding: 0;
   list-style: none;
   font-size: 0.8125rem;
-  color: var(--muted);
+  color: var(--ink-2);
 }
 .legend li {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s-2xs);
 }
 .sw {
   display: inline-block;
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
+  width: 12px;
+  height: 12px;
 }
 .sw--1 {
   background: var(--viz-1);
@@ -612,7 +886,8 @@ body {
   background: var(--viz-2);
 }
 
-/* ── charts ── */
+/* ══════════════════════════ charts ══════════════════════════ */
+
 .chart {
   position: relative;
   min-width: 0;
@@ -632,38 +907,35 @@ body {
 }
 .chart__zero {
   stroke: var(--viz-axis);
-  stroke-width: 1;
+  stroke-width: 2;
   shape-rendering: crispEdges;
 }
 .chart__tick {
-  font: 11px var(--sans);
-  fill: var(--faint);
+  font: 500 11px var(--font-body);
+  fill: var(--chart-text);
   font-variant-numeric: tabular-nums;
 }
 .chart__end {
-  font: 600 11px var(--sans);
-  fill: var(--muted);
-}
-.chart__col {
-  transition: opacity 120ms ease;
+  font: 800 11px var(--font-display);
+  fill: var(--chart-strong);
 }
 .chart__col.is-dim {
-  opacity: 0.35;
+  opacity: 0.3;
 }
 .chart__line {
   fill: none;
   stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
 }
-/* A 2px ring in the surface colour keeps a hovered point readable where it sits on a line. */
+/* A ring in the surface colour keeps a hovered point readable where it sits on a line. */
 .chart__dot {
-  stroke: var(--ob-raised);
+  stroke: var(--chart-surface);
   stroke-width: 2;
   pointer-events: none;
 }
 .chart__cross {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: var(--chart-strong);
   stroke-width: 1;
   stroke-dasharray: 3 3;
   pointer-events: none;
@@ -675,244 +947,280 @@ body {
 }
 .tip {
   position: absolute;
-  top: -6px;
-  z-index: 2;
+  top: -8px;
+  z-index: 5;
   display: grid;
-  gap: 3px;
-  min-width: 150px;
-  padding: 8px 10px;
-  border: 1px solid var(--line-hi);
-  border-radius: 8px;
-  background: var(--ob-high);
-  box-shadow: 0 14px 34px -18px #000;
+  gap: 4px;
+  min-width: 160px;
+  padding: var(--s-2xs) var(--s-xs);
+  background: var(--ink);
+  color: var(--paper);
   font-size: 0.75rem;
-  color: var(--muted);
   pointer-events: none;
   transform: translateY(-100%);
 }
-.tip[hidden] {
-  display: none;
-}
 .tip b {
-  color: var(--ink);
-  font-weight: 700;
+  font: 800 0.75rem/1.3 var(--font-display);
+  letter-spacing: 0.02em;
 }
 .tip__row {
   display: grid;
   grid-template-columns: 10px 1fr auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--s-2xs);
 }
 .tip__row i {
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  outline: 1px solid var(--paper);
 }
 .tip__row strong {
-  font-family: var(--mono);
-  color: var(--ink);
+  font: 600 0.75rem/1.3 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .chart__data {
-  margin-top: 6px;
+  margin-top: var(--s-2xs);
   font-size: 0.75rem;
-  color: var(--faint);
 }
 .chart__data summary {
   width: max-content;
+  font: 700 0.6875rem/1.6 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
   cursor: pointer;
-}
-.chart__data summary:focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: 2px;
 }
 .chart__data .tablewrap {
   max-height: 260px;
-  margin-top: 8px;
+  margin-top: var(--s-2xs);
   overflow-y: auto;
 }
 
-/* Rewards and buybacks: one thin bar per programme, its amount beside it. */
+/* Rewards and buybacks: one bar per programme, its amount beside it. */
 .hbars {
   display: grid;
-  gap: 10px;
+  gap: var(--s-xs);
 }
 .hbar {
   display: grid;
   grid-template-columns: minmax(96px, 9.5rem) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: var(--s-xs);
   font-size: 0.8125rem;
 }
 .hbar__label {
-  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--ink-2);
 }
 .hbar__track {
-  height: 10px;
+  height: 12px;
+  background: var(--paper-2);
 }
 .hbar__fill {
   display: block;
   height: 100%;
-  border-radius: 0 4px 4px 0;
-  background: var(--viz-2);
+  background: var(--ink);
 }
 .hbar__value {
-  font-family: var(--mono);
-  color: var(--ink);
+  font: 600 0.8125rem/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* The games table's share column: a bar against the busiest game, the share of turnover beside it. */
+/* The games table's share column: a bar against the busiest game, the share beside it. The cell
+   stays a table cell -- as a flex box it dropped out of the row and its rules sat 9px off the
+   rest -- and the bar and the figure are laid inline inside it. */
 .grid td.sharecell {
-  min-width: 140px;
-}
-.sharecell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  min-width: 170px;
+  white-space: nowrap;
 }
 .sharebar {
-  flex: 1 1 auto;
+  display: inline-block;
+  width: calc(100% - 4.5em);
   min-width: 60px;
-  height: 8px;
+  height: 10px;
+  vertical-align: middle;
+  background: var(--paper-2);
 }
 .sharebar span {
   display: block;
   height: 100%;
-  border-radius: 0 4px 4px 0;
-  background: var(--viz-1);
+  background: var(--ink);
 }
 .sharecell__pct {
-  min-width: 3.5em;
+  display: inline-block;
+  width: 4em;
+  vertical-align: middle;
   text-align: right;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-.grid--compact th,
-.grid--compact td {
-  padding: 9px 12px;
-}
-.grid tr.rowlink {
-  cursor: pointer;
-}
-.grid tr.rowlink:focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: -2px;
+  font: 500 0.75rem/1 var(--font-mono);
+  color: var(--ink-2);
 }
 
-@media (max-width: 1180px) {
-  .dash__grid--three {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 900px) {
-  .dash__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 560px) {
-  .dash__window {
-    margin-left: 0;
-    flex-basis: 100%;
-  }
-  .kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .kpi {
-    padding: 12px 12px 30px;
-  }
-  .kpi__value {
-    font-size: 1.125rem;
-  }
-  .card {
-    padding: 14px;
-  }
-  .hbar {
-    grid-template-columns: minmax(80px, 7rem) minmax(0, 1fr) auto;
-  }
-}
-
-/* ── tables ──
+/* ══════════════════════════ tables ══════════════════════════
    Only the table scrolls sideways, never the page. */
+
 .tablewrap {
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-raised);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--paper);
+  scrollbar-width: thin;
 }
 .grid {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
 }
 .grid th,
 .grid td {
-  padding: 12px 14px;
+  padding: var(--s-xs) var(--s-sm);
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
 }
 .grid th {
   position: sticky;
   top: 0;
-  background: var(--ob-high);
-  font-size: 0.6875rem;
-  letter-spacing: 0.12em;
+  z-index: 1;
+  background: var(--paper);
+  border-bottom: var(--bw-2) solid var(--ink);
+  font: 700 0.6875rem/1.2 var(--font-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--ink-2);
+}
+.grid td {
+  border-bottom: var(--bw-1) solid var(--rule);
 }
 .grid tbody tr:last-child td {
-  border-bottom: none;
+  border-bottom: 0;
 }
-.grid tbody tr:hover {
-  background: rgba(255, 215, 0, 0.035);
+.grid tbody tr:hover td {
+  background: var(--paper-2);
 }
 .grid td.mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+  font: 500 0.8125rem/1.4 var(--font-mono);
 }
 .grid .empty {
-  padding: 28px;
+  padding: var(--s-lg) var(--s-md);
   text-align: center;
-  color: var(--faint);
   white-space: normal;
-}
-
-/* Status never relies on colour alone — the word is always there too. */
-.pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border: 1px solid var(--line);
+  font: 700 0.75rem/1.4 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--muted);
 }
-.pill[data-tone='ok'] {
-  border-color: rgba(67, 196, 100, 0.45);
-  color: var(--ok);
+.grid tbody tr:hover td.empty {
+  background: transparent;
 }
-.pill[data-tone='warn'] {
-  border-color: var(--line-hi);
-  color: var(--gold-bright);
+.grid--compact th,
+.grid--compact td {
+  padding: var(--s-2xs) var(--s-xs);
 }
-.pill[data-tone='bad'] {
-  border-color: rgba(224, 86, 63, 0.5);
+.grid tr.rowlink {
+  cursor: pointer;
+}
+.grid tr.rowlink:hover td {
+  background: var(--ink);
+  color: var(--paper);
+}
+.grid tr.rowlink:hover td[data-sign] {
+  color: var(--paper);
+}
+.grid tr.rowlink:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+.grid td[data-sign='up'] {
+  font-weight: 700;
+}
+.grid td[data-sign='down'] {
   color: var(--danger);
+  font-weight: 700;
+}
+.grid [data-alarm='1'] {
+  color: var(--danger);
+  font-weight: 700;
+}
+/* A reason is a sentence, and the grid otherwise forces every cell onto one line. */
+.grid td.wrap {
+  min-width: 18ch;
+  max-width: 48ch;
+  white-space: normal;
+  color: var(--ink-2);
+}
+/* A cell built from separate lines (the payout queue's player risk: balances, then results) keeps
+   each line whole; broken at every column edge they read as five fragments. Sentences still wrap. */
+.grid td.wrap > div:not(.faint) {
+  white-space: nowrap;
+}
+/* What an error code means, under the code itself. */
+.grid td .faint {
+  margin-top: 4px;
+  min-width: 28ch;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.faint {
+  color: var(--muted);
+}
+/* A bot's proxy, under its in-use pill: an address, so it is set like one. */
+.grid td .faint.route {
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+.grid td.rowacts {
+  display: table-cell;
+}
+.grid td.rowacts > * {
+  margin: var(--s-3xs) var(--s-2xs) var(--s-3xs) 0;
+}
+/* A group's first row carries its name, so the table stays readable once scrolled. */
+.grid tr.groupsep td {
+  padding: var(--s-sm) var(--s-sm) var(--s-2xs);
+  border-bottom: var(--bw-2) solid var(--ink);
+  background: var(--paper-2);
+  font: 800 0.6875rem/1 var(--font-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
 }
 
-/* ── search ── */
+/* Status never rests on colour alone: the word is always there too. */
+.pill {
+  display: inline-block;
+  padding: var(--s-3xs) var(--s-2xs);
+  border: var(--bw-2) solid var(--rule);
+  font: 700 0.6875rem/1.3 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.pill[data-tone='ok'] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.pill[data-tone='warn'] {
+  border-color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.pill[data-tone='bad'] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+/* ══════════════════════════ search, chips, filter bars ══════════════════════════ */
+
 .search {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  align-items: stretch;
+  gap: 0;
 }
 .search__label {
   position: absolute;
@@ -924,36 +1232,55 @@ body {
 }
 .search__input,
 .confirm__input {
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--ob-high);
+  min-height: var(--hit);
+  padding: 0 var(--s-xs);
+  border: var(--bw-2) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
   color: var(--ink);
-  font: 400 0.9375rem/1 var(--sans);
+  font: 400 0.9375rem/1.2 var(--font-body);
 }
-.search__input::placeholder {
-  color: var(--faint);
+.search__input::placeholder,
+.confirm__input::placeholder {
+  color: var(--muted);
 }
-.search__input:focus,
-.confirm__input:focus {
-  border-color: var(--gold-bright);
-  outline: none;
+.search__input:hover,
+.confirm__input:hover {
+  background: var(--paper-2);
+}
+.search__input:focus-visible,
+.confirm__input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  background: var(--paper);
+}
+/* Wrong only once the operator has touched it: an empty required field is not an error on open. */
+.search__input:user-invalid,
+.confirm__input:user-invalid {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.search__input:disabled,
+.confirm__input:disabled {
+  border-style: dashed;
+  background: var(--paper-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+/* The input and its button are one object: they share the rule between them. */
+.search .btn {
+  margin-left: calc(-1 * var(--bw-2));
 }
 
-/* ── the settings filter bar ──
-   Fifty-nine runtime controls is past the point where a flat table can be read. Two filters that
-   compose -- a group and a substring -- plus a live count, so an operator can always tell the
-   difference between "no setting matches" and "the table failed to load". */
 .settingbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
-  margin: 14px 0 12px;
+  gap: var(--s-xs) var(--s-sm);
+  margin: var(--s-sm) 0;
 }
 .settingbar .search {
-  flex: 1 1 220px;
+  flex: 1 1 240px;
   min-width: 0;
 }
 .settingbar .search__input {
@@ -962,157 +1289,195 @@ body {
 .settingbar__count {
   flex: 0 0 auto;
   margin: 0;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-/* Wraps onto as many rows as it needs. A chip row that clips its own overflow hides the very
-   filter somebody is looking for, and there is no affordance saying anything was hidden. */
+
+/* Wraps onto as many rows as it needs: a chip row that clips its own overflow hides the very
+   filter somebody is looking for. */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--s-2xs);
 }
 .chip {
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font: 700 0.75rem/1 var(--sans);
-  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  padding: 0 var(--s-sm);
+  border: var(--bw-2) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 0.75rem/1 var(--font-display);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    color 140ms ease,
-    background 140ms ease;
 }
 .chip:hover {
-  border-color: var(--line-hi);
-  color: var(--ink);
+  background: var(--paper-2);
 }
-/* Kept, not removed: this console is operated by keyboard as often as by pointer, and the chips
-   are the only way to reach most of the table. */
-.chip:focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: 2px;
+.chip:active {
+  transform: translate(1px, 1px);
+}
+.chip:disabled {
+  border-style: dashed;
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .chip[aria-pressed='true'] {
-  border-color: var(--gold-bright);
-  background: rgba(255, 215, 0, 0.1);
-  color: var(--gold-bright);
+  background: var(--ink);
+  color: var(--paper);
 }
 .chip__n {
-  margin-left: 6px;
-  opacity: 0.65;
+  margin-left: var(--s-2xs);
+  font-family: var(--font-mono);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-
-/* A group's first row carries its name, so the table stays readable once it is scrolled far
-   enough that the filter bar is off screen. */
-.grid tr.groupsep td {
-  padding: 14px 14px 6px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 215, 0, 0.03);
-  font: 700 0.6875rem/1 var(--sans);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gold);
+/* The staff switch is a switch, not another period: a square that fills when it is on. */
+.chip--toggle {
+  gap: var(--s-2xs);
+  margin-left: var(--s-2xs);
 }
-
-/* ── confirm dialog ── */
-.confirm {
-  width: min(460px, calc(100% - 32px));
-  padding: 0;
-  border: 1px solid var(--line-hi);
-  border-radius: var(--r);
-  background: var(--ob-raised);
+.chip--toggle::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: var(--bw-2) solid currentColor;
+}
+.chip--toggle[aria-pressed='true'] {
+  background: var(--paper);
   color: var(--ink);
 }
-.confirm::backdrop {
-  background: rgba(6, 7, 10, 0.8);
-  backdrop-filter: blur(3px);
+.chip--toggle[aria-pressed='true']::before {
+  background: var(--accent);
+  border-color: var(--ink);
 }
-.confirm__form {
+
+/* ══════════════════════════ dialogs ══════════════════════════ */
+
+.confirm,
+.editor,
+.sheet {
+  padding: 0;
+  border: var(--bw-3) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-hard-lg);
+}
+.confirm::backdrop,
+.editor::backdrop,
+.sheet::backdrop {
+  background: var(--scrim);
+}
+.confirm {
+  width: min(480px, calc(100% - 32px));
+}
+.confirm__form,
+.editor__form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 24px;
+  gap: var(--s-xs);
+  padding: var(--s-md);
 }
 .confirm__title {
   margin: 0;
-  font-size: 1.125rem;
-  color: var(--gold-bright);
+  padding-bottom: var(--s-xs);
+  border-bottom: var(--bw-3) solid var(--ink);
+  font: 800 1.625rem/1.05 var(--font-display);
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
 }
 .confirm__body {
   margin: 0;
-  color: var(--muted);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 .confirm__label {
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
+  margin-top: var(--s-2xs);
+  font: 700 0.6875rem/1.2 var(--font-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--faint);
-}
-.confirm__input {
-  border-radius: var(--r);
+  color: var(--ink-2);
 }
 .confirm__actions {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  margin-top: 4px;
+  gap: var(--s-2xs);
+  margin-top: var(--s-xs);
+  padding-top: var(--s-sm);
+  border-top: var(--bw-2) solid var(--ink);
+}
+
+/* The amount field, shown only for actions that move money. The echo under it is the real safety
+   feature: it prints the exact figure the shorthand expanded to. */
+.confirm__money {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2xs);
+}
+.confirm__echo {
+  min-height: 1.4em;
+  font: 600 0.875rem/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.confirm__echo[data-tone='ok'] {
+  color: var(--ink);
+}
+.confirm__echo[data-tone='bad'] {
+  color: var(--danger);
 }
 
 /* Shared structured editor for the larger management forms. */
 .editor {
   width: min(780px, calc(100% - 32px));
-  max-height: min(90vh, 960px);
-  padding: 0;
-  border: 1px solid var(--line-hi);
-  border-radius: var(--r);
-  background: var(--ob-raised);
-  color: var(--ink);
-}
-.editor::backdrop {
-  background: rgba(6, 7, 10, 0.84);
-  backdrop-filter: blur(3px);
+  max-height: min(90dvh, 960px);
 }
 .editor__form {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 24px;
+  gap: var(--s-md);
 }
 .editor__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--s-sm);
+  padding-bottom: var(--s-xs);
+  border-bottom: var(--bw-3) solid var(--ink);
+}
+.editor__head .confirm__title {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 .editor__head .confirm__body {
-  margin-top: 6px;
+  margin-top: var(--s-2xs);
 }
 .editor__fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--s-sm);
 }
 .editor__field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--s-2xs);
   min-width: 0;
+}
+.editor__field .confirm__label {
+  margin-top: 0;
 }
 .editor__field--wide {
   grid-column: 1 / -1;
 }
 .editor__field textarea.confirm__input {
-  min-height: 100px;
-  padding-block: 12px;
+  min-height: 110px;
+  padding-block: var(--s-xs);
   resize: vertical;
-  line-height: 1.45;
-  font-family: var(--mono);
+  font: 400 0.8125rem/1.5 var(--font-mono);
 }
 .editor__field select.confirm__input {
   appearance: auto;
@@ -1120,81 +1485,14 @@ body {
 .editor__check {
   width: 24px;
   height: 24px;
-  accent-color: var(--gold);
-}
-
-/* ── the amount field ──
-   Shown only for the actions that move money. The echo under it is the real safety feature: it
-   prints the exact figure the shorthand expanded to, so the operator confirms against the number
-   rather than against their own arithmetic. */
-.confirm__money {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.confirm__echo {
-  min-height: 1.25em;
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--faint);
-}
-.confirm__echo[data-tone='ok'] {
-  color: var(--gold-bright);
-}
-.confirm__echo[data-tone='bad'] {
-  color: var(--danger);
-}
-
-/* ── several buttons in one table cell ── */
-.rowacts {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* A reason is a sentence, and the grid otherwise forces every cell onto one line. */
-.grid td.wrap {
-  white-space: normal;
-  min-width: 18ch;
-  color: var(--muted);
-}
-/* What an error code means, under the code itself. */
-.grid td .faint {
-  margin-top: 3px;
-  min-width: 28ch;
-  font-size: 0.75rem;
-  color: var(--faint);
-}
-/* A bot's proxy, under its in-use pill: an address, so it is set like one. */
-.grid td .faint.route {
-  min-width: 0;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-.grid td[data-sign='up'] {
-  color: var(--ok);
-}
-.grid td[data-sign='down'] {
-  color: var(--danger);
-}
-
-.panel__head--sub {
-  margin-top: 28px;
-}
-.panel__head--sub h3 {
   margin: 0;
-  font-size: 0.9375rem;
-  letter-spacing: 0.03em;
-  color: var(--gold);
-}
-.hint {
-  font-size: 0.8125rem;
-  color: var(--faint);
+  accent-color: var(--ink);
 }
 
-/* A section folded under its heading (Operator payouts, in the Bots tab): the heading is the
-   switch, its arrow says which way it is, and the count beside it says what is inside. */
+/* ══════════════════════════ folds ══════════════════════════
+   A section folded under its heading (Operator payouts, in Bots): the heading is the switch, the
+   square before it says which way it is, and the count beside it says what is inside. */
+
 .fold > summary {
   list-style: none;
   cursor: pointer;
@@ -1202,61 +1500,58 @@ body {
 .fold > summary::-webkit-details-marker {
   display: none;
 }
+.fold__head h3 {
+  display: inline-flex;
+  align-items: center;
+}
 .fold__head h3::before {
-  content: '▸';
-  display: inline-block;
-  margin-right: 8px;
-  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
+  content: '+';
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--s-2xs);
+  border: var(--bw-2) solid currentColor;
+  font: 700 15px/1 var(--font-mono);
 }
 .fold[open] > .fold__head h3::before {
-  transform: rotate(90deg);
+  content: '−';
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 .fold__head:hover h3 {
-  color: var(--gold-bright);
-}
-.fold__head:focus-visible {
-  outline: 2px solid var(--gold-bright);
-  outline-offset: 4px;
-  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 .fold__count {
-  margin-left: 4px;
-  font-weight: 400;
-  color: var(--muted);
+  margin-left: var(--s-2xs);
+  font: 500 0.8125rem/1 var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
 }
 .fold__count[data-attention] {
   color: var(--danger);
-}
-@media (prefers-reduced-motion: reduce) {
-  .fold__head h3::before {
-    transition: none;
-  }
+  font-weight: 700;
 }
 
-/* ── the player sheet ──
-   Wider than the confirm dialog because it carries two tables, and capped in height so the
-   ledger scrolls inside it rather than pushing the actions off the bottom of the screen — the
-   levers are the reason the sheet is open and must never be the part you have to scroll for. */
+/* ══════════════════════════ the player sheet ══════════════════════════
+   Capped in height so the ledger scrolls inside it rather than pushing the levers off screen: the
+   levers are the reason the sheet is open. */
+
 .sheet {
-  width: min(880px, calc(100% - 32px));
-  max-height: min(88vh, 900px);
-  padding: 0;
-  border: 1px solid var(--line-hi);
-  border-radius: var(--r);
-  background: var(--ob-raised);
-  color: var(--ink);
+  width: min(900px, calc(100% - 32px));
+  max-height: min(88dvh, 900px);
   overflow: hidden;
-}
-.sheet::backdrop {
-  background: rgba(6, 7, 10, 0.8);
-  backdrop-filter: blur(3px);
 }
 .sheet__inner {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 24px;
-  max-height: min(88vh, 900px);
+  gap: var(--s-md);
+  max-height: min(88dvh, 900px);
+  padding: var(--s-md);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1264,167 +1559,264 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--s-sm);
+  padding-bottom: var(--s-sm);
+  border-bottom: var(--bw-3) solid var(--ink);
 }
 .sheet__name {
   margin: 0;
-  font-size: 1.25rem;
-  color: var(--gold-bright);
+  font: 800 clamp(1.625rem, 1.2rem + 1.6vw, 2.25rem)/1 var(--font-display);
+  letter-spacing: -0.03em;
   overflow-wrap: anywhere;
 }
 .sheet__id {
-  margin: 4px 0 0;
+  margin: var(--s-3xs) 0 0;
   font-size: 0.75rem;
-  color: var(--faint);
+  color: var(--muted);
   overflow-wrap: anywhere;
 }
-
 .sheet__facts {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(min(168px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
 }
-.fact {
+/* The levers. Wrapped rather than scrolled: an action that has slid out of sight is an action
+   nobody knows they have. */
+.sheet__actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--ob-high);
+  flex-wrap: wrap;
+  gap: var(--s-2xs);
+  padding: var(--s-sm);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--paper-2);
 }
-.fact__k {
-  font-size: 0.6875rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.fact__v {
-  font-family: var(--mono);
-  font-size: 0.9375rem;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-/* A statement, not a control. Sits inside the lever panel because it answers the question the
-   levers around it raise — "can I change this one?" — and the honest answer is "not from here". */
 .sheet__note {
   flex: 1 1 100%;
   margin: 0;
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--muted);
+  color: var(--ink-2);
 }
-
-/* The levers. Wrapped rather than scrolled: an action that has slid out of sight is an action
-   nobody knows they have. */
-.sheet__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: rgba(255, 215, 0, 0.03);
-}
-
 .sheet__block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--s-2xs);
   min-width: 0;
 }
 .sheet__h {
   margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
+  padding-top: var(--s-2xs);
+  border-top: var(--bw-2) solid var(--ink);
+  font: 800 0.75rem/1.2 var(--font-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--faint);
+}
+
+/* ══════════════════════════ toasts ══════════════════════════ */
+
+.toasts {
+  position: fixed;
+  right: var(--s-sm);
+  bottom: calc(var(--s-sm) + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2xs);
+  max-width: min(380px, calc(100vw - 32px));
+}
+.toast {
+  padding: var(--s-xs) var(--s-sm);
+  border: var(--bw-2) solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow-hard);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.toast[data-tone='bad'] {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+/* ══════════════════════════ narrower workspaces ══════════════════════════
+   Measured against the panel, not the window: the rail takes 232px of a desktop. */
+
+@container (max-width: 1080px) {
+  .dash__grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container (max-width: 860px) {
+  .dash__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .card.hero {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+@container (max-width: 560px) {
+  .stats,
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat,
+  .kpi {
+    padding: var(--s-xs);
+  }
+  .kpi {
+    padding-bottom: 36px;
+  }
+  .kpi__spark {
+    left: var(--s-xs);
+    right: var(--s-xs);
+    width: calc(100% - 2 * var(--s-xs));
+  }
+  .stat__value,
+  .kpi__value {
+    font-size: 1.25rem;
+  }
+  .card.hero {
+    padding: var(--s-md);
+  }
+  .card {
+    --card-pad: var(--s-sm);
+  }
+  .dash__window {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  /* The four periods fit one row on a phone. */
+  .chip {
+    padding: 0 var(--s-xs);
+  }
+  .chip--toggle {
+    margin-left: 0;
+  }
+  .hbar {
+    grid-template-columns: minmax(80px, 7rem) minmax(0, 1fr) auto;
+  }
+  .panel__head .search {
+    width: 100%;
+  }
+  .panel__head .search__input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  /* The payout switches go full width on a phone, and the longest ("Pull queued payouts back to
+     review") is allowed two balanced lines rather than running off the screen at 320px: the one
+     place a button label may wrap. */
+  .payctl {
+    padding: var(--s-sm);
+  }
+  .payctl .rowacts .btn {
+    flex: 1 1 100%;
+    padding-block: var(--s-2xs);
+    white-space: normal;
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+}
+
+/* ══════════════════════════ under 1024px: the rail becomes a strip ══════════════════════════ */
+
+@media (max-width: 1023.98px) {
+  .top {
+    position: static;
+  }
+  .console {
+    display: block;
+  }
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-direction: row;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: var(--bw-3) solid var(--ink);
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    width: auto;
+    padding: 0 var(--s-sm);
+    border-bottom: 0;
+    border-right: var(--bw-1) solid var(--rule);
+  }
+  .tab[aria-selected='true'] {
+    box-shadow: inset 0 -6px 0 var(--accent);
+  }
+  .panel {
+    padding: var(--s-md) var(--gutter) var(--s-xl);
+  }
+}
+
+@media (max-width: 680px) {
+  .editor__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editor__field--wide {
+    grid-column: auto;
+  }
+  .confirm__form,
+  .editor__form,
+  .sheet__inner {
+    padding: var(--s-sm);
+  }
 }
 
 @media (max-width: 560px) {
-  .sheet__inner {
-    padding: 16px;
+  .top {
+    flex-wrap: wrap;
+  }
+  .brand {
+    min-height: 56px;
+    padding: 0 var(--gutter);
+  }
+  .who {
+    flex: 1 1 100%;
+    border-top: var(--bw-3) solid var(--ink);
+  }
+  .who__name {
+    flex: 1 1 auto;
+    padding: 0 var(--gutter);
+    border-left: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .who .btn {
+    min-height: var(--hit);
   }
   .sheet__head {
     flex-direction: column;
   }
   /* Full-width levers on a phone: a wrapped row of half-width buttons is where a mis-tap sends
      money to the wrong place. */
-  .sheet__actions .btn {
+  .sheet__actions .btn,
+  .confirm__actions .btn {
     flex: 1 1 100%;
   }
-}
-
-/* ── toasts ── */
-.toasts {
-  position: fixed;
-  right: 16px;
-  z-index: 20;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: min(360px, calc(100vw - 32px));
-}
-.toast {
-  padding: 12px 16px;
-  border: 1px solid var(--line-hi);
-  border-radius: var(--r);
-  background: var(--ob-high);
-  font-size: 0.875rem;
-  box-shadow: 0 18px 44px -24px #000;
-  animation: rise 180ms ease-out;
-}
-.toast[data-tone='bad'] {
-  border-color: rgba(224, 86, 63, 0.55);
-  color: #ffd9d1;
-}
-.toast[data-tone='ok'] {
-  border-color: rgba(67, 196, 100, 0.45);
-  color: #d4f5dd;
-}
-
-@media (max-width: 680px) {
-  .editor__fields {
-    grid-template-columns: 1fr;
-  }
-  .editor__field--wide {
-    grid-column: auto;
-  }
-  .search {
-    width: 100%;
-  }
-  .search__input {
-    min-width: 0;
-    flex: 1;
+  .gate {
+    padding: var(--s-lg) var(--gutter);
   }
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
+/* Nothing here animates; this only catches anything a browser would. */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-@media (max-width: 640px) {
-  .panel__head {
-    align-items: stretch;
-  }
-  .search {
-    width: 100%;
-  }
-  .search__input {
-    flex: 1;
-    min-width: 0;
+/* Windows high contrast: keep the borders that carry the structure. */
+@media (forced-colors: active) {
+  .tab[aria-selected='true'],
+  .chip[aria-pressed='true'] {
+    outline: 3px solid CanvasText;
+    outline-offset: -3px;
   }
 }

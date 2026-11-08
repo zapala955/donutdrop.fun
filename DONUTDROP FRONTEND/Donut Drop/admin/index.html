@@ -12,7 +12,10 @@
     <!-- The ?v= is a second belt beside the no-store header nginx sends for these two files: it
      changes the URL, so no layer that already holds a copy can answer for it. Bump it whenever
      this console's behaviour changes in a way a stale copy would hide. -->
-    <link rel="stylesheet" href="admin.css?v=7" />
+    <!-- The site's own copies of Archivo and Figtree: the CSP allows no other origin. -->
+    <link rel="preload" href="/assets/fonts/archivo-700-900-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/figtree-400-800-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="admin.css?v=8" />
   </head>
   <body>
     <!--
@@ -30,8 +33,8 @@
 
     <header class="top">
       <div class="brand">
-        <span class="brand__mark" aria-hidden="true"></span>
-        <span class="brand__text">DonutLuxe <b>Admin</b></span>
+        <span class="brand__word">DonutLuxe</span>
+        <span class="brand__tag">Admin</span>
       </div>
       <div class="who" id="who" hidden>
         <span class="who__name" id="whoName"></span>
@@ -611,6 +614,6 @@
 
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-    <script type="module" src="admin.js?v=14"></script>
+    <script type="module" src="admin.js?v=15"></script>
   </body>
 </html>
