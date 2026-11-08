@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-11-09",
+    "macrostructure": "none (app shell: floating glass source list + workspace)",
+    "theme": "custom",
+    "theme_axes": "dark+light (follows device) / system-sans (SF Pro, Figtree fallback) / warm gold, single-hue wallpaper",
+    "vibe": "macOS vibrancy, warm gold, quiet glass",
+    "nav": "N3 side rail as a floating glass source list with a gliding selection (capsule strip under 1024px) + macOS unified toolbar",
+    "enrichment": "none - wallpaper (two gold-family glows + grain) is the only decoration; inline SVG icon set",
+    "brief": "DonutLuxe admin console, glassmorphism + macOS redesign with motion (admin.css rewrite, admin.js motion hooks only)"
+  },
+  {
     "date": "2026-11-08",
     "macrostructure": "none (app shell: side rail + workspace)",
     "theme": "custom",
@@ -18,18 +28,18 @@
   },
   {
     "date": "2026-09-20",
-    "macrostructure": "none (app shell \u2014 the 21 macros are page shapes)",
+    "macrostructure": "none (app shell — the 21 macros are page shapes)",
     "theme": "custom",
     "theme_axes": "dark paper / grotesk-display / chromatic-pink",
     "vibe": "high-voltage arcade, money still gold",
-    "enrichment": "none \u2014 the canvas is the artifact",
-    "brief": "Donut Drop \u00b7 slither arena redesign (DonutSMP neon)"
+    "enrichment": "none — the canvas is the artifact",
+    "brief": "Donut Drop · slither arena redesign (DonutSMP neon)"
   },
   {
     "date": "2026-09-19",
     "macrostructure": "none (component)",
     "theme": "project system",
     "enrichment": "none",
-    "brief": "Donut Drop \u00b7 sign-in modal"
+    "brief": "Donut Drop · sign-in modal"
   }
 ]

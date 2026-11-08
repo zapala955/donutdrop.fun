@@ -1154,9 +1154,12 @@ function drawChart(host, spec) {
   const valueText = (s, i) =>
     s.exact ? compactAmount(s.exact[i]) : countText(s.values[i]);
 
+  /* A chart's first drawing grows in (admin.css, .is-entering); the redraws a resize makes do not,
+   * or every window resize would replay it. */
+  const entering = !host.querySelector('.chart__svg');
   host.replaceChildren();
   const root = svgNode('svg', {
-    class: 'chart__svg',
+    class: entering ? 'chart__svg is-entering' : 'chart__svg',
     width,
     height,
     viewBox: `0 0 ${width} ${height}`,
@@ -1194,10 +1197,11 @@ function drawChart(host, spec) {
       if (Math.abs(base - end) < 1.5) end = base + (v > 0 ? -1.5 : 1.5);
       const path = svgNode(
         'path',
-        { d: columnPath(cx(i) - barW / 2, barW, base, end, 0), class: 'chart__col' },
+        { d: columnPath(cx(i) - barW / 2, barW, base, end, 4), class: v < 0 ? 'chart__col chart__col--neg' : 'chart__col' },
         marks,
       );
       path.style.fill = spec.diverging ? (v < 0 ? 'var(--viz-neg)' : 'var(--viz-1)') : series.color;
+      path.style.setProperty('--i', String(i));
       columns[i] = path;
     });
   } else {
@@ -1206,7 +1210,7 @@ function drawChart(host, spec) {
       if (n === 1) {
         svgNode('circle', { cx: cx(0), cy: y(series.values[0]), r: 4, class: 'chart__dot', fill: series.color }, marks);
       } else {
-        const line = svgNode('polyline', { points: points.join(' '), class: 'chart__line' }, marks);
+        const line = svgNode('polyline', { points: points.join(' '), class: 'chart__line', pathLength: 1 }, marks);
         line.style.stroke = series.color;
       }
     }
@@ -4618,10 +4622,26 @@ const LOADERS = {
   system: loadSystem,
 };
 
+/* The rail's selection: one glass pill, placed under the chosen section and moved there rather
+ * than redrawn, so changing section reads as one motion. Only its transform is transitioned
+ * (admin.css, .tabs__glider); it is aria-hidden decoration, and the tab's own aria-selected is
+ * still the state. The first placement does not animate. */
+function moveGlider() {
+  const glider = document.querySelector('.tabs__glider');
+  const chosen = document.querySelector('.tab[aria-selected="true"]');
+  if (!glider || !chosen) return;
+  glider.style.setProperty('--glide-x', `${chosen.offsetLeft}px`);
+  glider.style.setProperty('--glide-y', `${chosen.offsetTop}px`);
+  glider.style.setProperty('--glide-w', `${chosen.offsetWidth}px`);
+  glider.style.setProperty('--glide-h', `${chosen.offsetHeight}px`);
+  if (!glider.dataset.ready) requestAnimationFrame(() => (glider.dataset.ready = '1'));
+}
+
 async function show(name) {
   for (const tab of document.querySelectorAll('.tab')) {
     tab.setAttribute('aria-selected', String(tab.dataset.panel === name));
   }
+  moveGlider();
   for (const panel of document.querySelectorAll('.panel')) {
     panel.hidden = panel.dataset.panel !== name;
   }
@@ -4707,6 +4727,11 @@ async function start() {
   for (const tab of document.querySelectorAll('.tab')) {
     tab.addEventListener('click', () => void show(tab.dataset.panel));
   }
+  const glider = document.createElement('span');
+  glider.className = 'tabs__glider';
+  glider.setAttribute('aria-hidden', 'true');
+  document.querySelector('.tabs').prepend(glider);
+  window.addEventListener('resize', moveGlider);
   for (const button of document.querySelectorAll('[data-refresh]')) {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }
