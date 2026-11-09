@@ -871,7 +871,7 @@ async function openWithdrawModal() {
       <label class="auth__label" for="wdAmount">Amount</label>
       <div class="auth__field" id="wdField">
         <span class="auth__prefix">$</span>
-        <input id="wdAmount" class="auth__input" type="text" inputmode="decimal"
+        <input id="wdAmount" class="auth__input" type="text" inputmode="text" autocapitalize="off" autocorrect="off"
                autocomplete="off" spellcheck="false" placeholder="1m">
         <button class="auth__max" type="button" id="wdMax">Max</button>
       </div>

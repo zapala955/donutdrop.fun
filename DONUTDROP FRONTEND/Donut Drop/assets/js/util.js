@@ -60,6 +60,30 @@ export function parseAmount(input) {
   return Math.trunc(scaled);
 }
 
+/* ─────────── ½, 2× and Max ───────────
+ * The buttons beside every game's stake field. Max is the whole balance, capped at the most the game
+ * takes right now (`ceiling`: its largest stake, or what its payout limit allows at the current
+ * settings; 0 or missing while the game has not answered, when the balance alone is used). The
+ * server checks every stake again, so this only fills the field. Figures are minor units, as
+ * bigints or strings of digits. */
+const whole = (value) => {
+  try {
+    if (typeof value === 'bigint') return value;
+    return BigInt(typeof value === 'number' ? Math.trunc(value) : String(value ?? '') || '0');
+  } catch {
+    return 0n;
+  }
+};
+
+export function adjustStake(adj, current, balance, ceiling) {
+  const now = whole(current);
+  if (adj === 'half') return now / 2n;
+  if (adj === 'double') return now * 2n;
+  const have = whole(balance);
+  const most = whole(ceiling);
+  return most > 0n && most < have ? most : have > 0n ? have : 0n;
+}
+
 /* The inverse: the shortest string that parseAmount turns back into this exact number, so a field
  * can be re-rendered as "1.5m" without the value drifting on the round trip.
  *

@@ -18,7 +18,7 @@
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './store.js';
-import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { SCENES_ON, onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes } from './view3d.js';
@@ -572,9 +572,10 @@ function build() {
         <label class="bj__stakelabel" for="bjStake">Stake</label>
         <div class="bj__stake">
           <span aria-hidden="true">$</span>
-          <input id="bjStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="bjStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="bj__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="bj__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="bj__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <button class="btn btn--go bj__deal" id="bjDeal" type="submit">Deal</button>
         <p class="bj__hint" id="bjHint" aria-live="polite"></p>
@@ -591,7 +592,7 @@ function build() {
   input.addEventListener('input', () => { stakeText = input.value; paintControls(); });
   root.querySelectorAll('.bj__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    const next = button.dataset.adj === 'half' ? current / 2n : current * 2n;
+    const next = adjustStake(button.dataset.adj, current, state.balanceMinor, config?.maxStakeMinor);
     stakeText = formatAmountInput(Number(next));
     input.value = stakeText;
     paintControls();

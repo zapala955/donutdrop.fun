@@ -16,7 +16,7 @@
  */
 import { state, bus, refreshBalance, refreshActivity, holdLiveFigures } from './store.js';
 import { onNavigate } from './routing.js';
-import { $, el, money, parseAmount, formatAmountInput, reduceMotion } from './util.js';
+import { $, adjustStake, el, money, parseAmount, formatAmountInput, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { api, clientSeed } from './api.js';
@@ -483,13 +483,17 @@ function renderCreate() {
   input.value = stakeText;
   input.autocomplete = 'off';
   input.spellcheck = false;
-  input.inputMode = 'decimal';
+  // The full keyboard, so a phone can type "10m" (parseAmount reads it).
+  input.inputMode = 'text';
+  input.autocapitalize = 'off';
   const half = el('button', 'mduel__adj', '½');
   const dbl = el('button', 'mduel__adj', '2×');
-  half.type = dbl.type = 'button';
+  const most = el('button', 'mduel__adj', 'Max');
+  half.type = dbl.type = most.type = 'button';
   half.setAttribute('aria-label', 'Halve the stake');
   dbl.setAttribute('aria-label', 'Double the stake');
-  field.append(Object.assign(el('span'), { textContent: '$' }), input, half, dbl);
+  most.setAttribute('aria-label', 'Bet the most you can');
+  field.append(Object.assign(el('span'), { textContent: '$' }), input, half, dbl, most);
   form.append(field);
 
   form.append(Object.assign(el('span', 'mduel__label'), { textContent: 'TNT in the field' }));
@@ -556,12 +560,13 @@ function renderCreate() {
   });
   const scale = (mul) => () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(mul === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(mul, current, state.balanceMinor, board.maxStakeMinor)));
     input.value = stakeText;
     paint();
   };
   half.addEventListener('click', scale('half'));
   dbl.addEventListener('click', scale('double'));
+  most.addEventListener('click', scale('max'));
   choices.addEventListener('click', (event) => {
     const button = event.target.closest('.mduel__choice');
     if (!button) return;

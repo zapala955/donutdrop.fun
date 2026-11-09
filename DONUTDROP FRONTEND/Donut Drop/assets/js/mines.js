@@ -16,7 +16,7 @@
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
-import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
@@ -538,9 +538,10 @@ function build() {
         <label class="mines__label" for="minesStake">Stake</label>
         <div class="mines__field">
           <span aria-hidden="true">$</span>
-          <input id="minesStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="minesStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="mines__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="mines__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="mines__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <span class="mines__label" id="minesCountLabel">TNT in the field</span>
         <div class="mines__stepper" role="group" aria-labelledby="minesCountLabel">
@@ -570,7 +571,7 @@ function build() {
   stake.addEventListener('input', () => { stakeText = stake.value; paint(); });
   root.querySelectorAll('.mines__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, config?.maxStakeMinor)));
     stake.value = stakeText;
     paint();
   }));

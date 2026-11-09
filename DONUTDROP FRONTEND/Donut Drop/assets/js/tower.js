@@ -20,7 +20,7 @@
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
@@ -581,9 +581,10 @@ function build() {
         <label class="tower__label" for="towerStake">Stake</label>
         <div class="tower__field">
           <span aria-hidden="true">$</span>
-          <input id="towerStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="towerStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="tower__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="tower__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="tower__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <span class="tower__label" id="towerModeLabel">Difficulty</span>
         <div class="tower__modes" role="radiogroup" aria-labelledby="towerModeLabel">
@@ -608,7 +609,7 @@ function build() {
   stake.addEventListener('input', () => { stakeText = stake.value; paint(); });
   root.querySelectorAll('.tower__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, config?.maxStakeMinor)));
     stake.value = stakeText;
     paint();
   }));

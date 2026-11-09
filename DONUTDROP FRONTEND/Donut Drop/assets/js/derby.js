@@ -17,7 +17,7 @@
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
@@ -525,9 +525,10 @@ function build() {
         <label class="derby__label" for="derbyStake">Stake</label>
         <div class="derby__field">
           <span aria-hidden="true">$</span>
-          <input id="derbyStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="derbyStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="derby__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="derby__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="derby__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <span class="derby__label" id="derbyPickLabel">Back a racer</span>
         <div class="derby__picks" role="radiogroup" aria-labelledby="derbyPickLabel"></div>
@@ -558,7 +559,7 @@ function build() {
   stake.addEventListener('input', () => { stakeText = stake.value; paint(); });
   root.querySelectorAll('.derby__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, maxStake())));
     stake.value = stakeText;
     paint();
   }));

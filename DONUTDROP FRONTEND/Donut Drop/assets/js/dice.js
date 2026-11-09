@@ -19,7 +19,7 @@
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
@@ -64,6 +64,14 @@ function stakeMinor() {
 
 function payoutMinor(stake) {
   return (stake * BigInt(multiplierBps(chanceOf(direction, target)))) / 10_000n;
+}
+
+/** The largest roll right now: the table's maximum, or what the payout limit allows at this line. */
+function largestRoll() {
+  if (!config) return 0n;
+  const max = BigInt(config.maxStakeMinor);
+  const ceiling = (BigInt(config.maxPayoutMinor) * 10_000n) / BigInt(multiplierBps(chanceOf(direction, target)));
+  return ceiling < max ? ceiling : max;
 }
 
 function rollProblem() {
@@ -501,9 +509,10 @@ function build() {
         <label class="dice__label" for="diceStake">Stake</label>
         <div class="dice__field">
           <span aria-hidden="true">$</span>
-          <input id="diceStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="diceStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="dice__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="dice__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="dice__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <label class="dice__label" for="diceProfit">Profit on win</label>
         <div class="dice__field dice__field--read">
@@ -527,7 +536,7 @@ function build() {
   stake.addEventListener('input', () => { stakeText = stake.value; paintControls(); });
   root.querySelectorAll('.dice__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, largestRoll())));
     stake.value = stakeText;
     paintControls();
   }));

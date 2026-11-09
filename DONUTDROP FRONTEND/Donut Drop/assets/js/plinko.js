@@ -27,7 +27,7 @@
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
@@ -818,9 +818,10 @@ function build() {
         <label class="plinko__label" for="plinkoStake">Stake per ball</label>
         <div class="plinko__field">
           <span aria-hidden="true">$</span>
-          <input id="plinkoStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="plinkoStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="plinko__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="plinko__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="plinko__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <span class="plinko__label" id="plinkoRiskLabel">Risk</span>
         <div class="plinko__risks" role="group" aria-labelledby="plinkoRiskLabel">
@@ -853,7 +854,7 @@ function build() {
   stake.addEventListener('input', () => { stakeText = stake.value; paintControls(); });
   root.querySelectorAll('.plinko__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, boardMaxStake())));
     stake.value = stakeText;
     paintControls();
   }));

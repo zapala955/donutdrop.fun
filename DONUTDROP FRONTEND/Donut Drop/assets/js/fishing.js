@@ -25,7 +25,7 @@
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
@@ -878,9 +878,10 @@ function build() {
         <label class="fishing__label" for="fishingStake">Stake</label>
         <div class="fishing__field">
           <span aria-hidden="true">$</span>
-          <input id="fishingStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="fishingStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="fishing__adj" data-adj="half" aria-label="Halve the stake">½</button>
           <button type="button" class="fishing__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="fishing__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <span class="fishing__label" id="fishingSinkerLabel">Sinker</span>
         <div class="fishing__sinkers" role="radiogroup" aria-labelledby="fishingSinkerLabel">
@@ -927,7 +928,7 @@ function build() {
   autoInput.addEventListener('input', () => { autoText = autoInput.value; paint(); });
   root.querySelectorAll('.fishing__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, maxStake())));
     stake.value = stakeText;
     paint();
   }));

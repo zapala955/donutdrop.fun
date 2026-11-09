@@ -19,7 +19,7 @@
 import { API_BASE_URL, api, idempotencyKey } from './api.js';
 import { linkPlayer } from './player-link.js';
 import { bus, refreshBalance, state } from './store.js';
-import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
@@ -758,9 +758,10 @@ function build() {
         <label class="crash__label" for="crashStake">Bet</label>
         <div class="crash__field">
           <span aria-hidden="true">$</span>
-          <input id="crashStake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+          <input id="crashStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
           <button type="button" class="crash__adj" data-adj="half" aria-label="Halve the bet">½</button>
           <button type="button" class="crash__adj" data-adj="double" aria-label="Double the bet">2×</button>
+          <button type="button" class="crash__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
         <div class="crash__picks" role="group" aria-label="Quick bets">
           ${QUICK_STAKES.map((amount) => `<button type="button" class="crash__pick" data-stake="${amount}">${money(amount)}</button>`).join('')}
@@ -801,7 +802,7 @@ function build() {
   auto.addEventListener('input', () => { autoText = auto.value; paintControls(); });
   root.querySelectorAll('.crash__adj').forEach((button) => button.addEventListener('click', () => {
     const current = stakeMinor() ?? 0n;
-    stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, snap?.config?.maxStakeMinor)));
     stake.value = stakeText;
     paintControls();
   }));

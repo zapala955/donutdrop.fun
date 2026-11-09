@@ -960,7 +960,9 @@ function tipForm(userId, username) {
   field.id = `tipAmount-${++tipFieldSeq}`;
   label.htmlFor = field.id;
   field.type = 'text';
-  field.inputMode = 'decimal';
+  // The full keyboard, so a phone can type "10m" (parseAmount reads it).
+  field.inputMode = 'text';
+  field.autocapitalize = 'off';
   field.autocomplete = 'off';
   field.spellcheck = false;
 

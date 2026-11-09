@@ -22,7 +22,7 @@
  */
 import { api, clientSeed, idempotencyKey } from './api.js';
 import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
@@ -858,9 +858,10 @@ function createSlotsGame(game) {
           <label class="slots__label" for="${P}Stake">Stake</label>
           <div class="slots__field">
             <span aria-hidden="true">$</span>
-            <input id="${P}Stake" inputmode="decimal" autocomplete="off" spellcheck="false" />
+            <input id="${P}Stake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
             <button type="button" class="slots__adj" data-adj="half" aria-label="Halve the stake">½</button>
             <button type="button" class="slots__adj" data-adj="double" aria-label="Double the stake">2×</button>
+            <button type="button" class="slots__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
           </div>
           <button class="btn slots__go" id="${P}Go" type="submit" data-tone="go">
             <span id="${P}GoLabel">Loading…</span>
@@ -886,7 +887,7 @@ function createSlotsGame(game) {
     stake.addEventListener('input', () => { stakeText = stake.value; paint(); });
     root.querySelectorAll('.slots__adj').forEach((button) => button.addEventListener('click', () => {
       const current = stakeMinor() ?? 0n;
-      stakeText = formatAmountInput(Number(button.dataset.adj === 'half' ? current / 2n : current * 2n));
+      stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, maxStake())));
       stake.value = stakeText;
       paint();
     }));

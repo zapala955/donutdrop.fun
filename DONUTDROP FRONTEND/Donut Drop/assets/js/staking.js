@@ -133,7 +133,9 @@ function stakeForm() {
   const input = el('input', 'pool__input');
   input.placeholder = 'Amount, e.g. 100m';
   input.autocomplete = 'off';
-  input.inputMode = 'decimal';
+  // The full keyboard, so a phone can type "10m" (parseAmount reads it).
+  input.inputMode = 'text';
+  input.autocapitalize = 'off';
   const max = text('button', 'pool__chip', 'Max');
   max.type = 'button';
   max.addEventListener('click', () => {
