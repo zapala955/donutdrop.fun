@@ -191,8 +191,12 @@ function paint() {
   empty.hidden = board.quests.length > 0;
   $('.qb__emptytitle', root).textContent = 'No quests right now';
   $('.qb__emptyline', root).textContent = 'New quests are on the way. Check back soon.';
+  // The wager requirement is the signup bonus's (lib/wager-requirements.ts); at 0 there is none to mention.
+  const wagered = board.wagerMultiplier > 0
+    ? ` A reward is free money: it is wagered ${board.wagerMultiplier}× before it can be withdrawn.`
+    : '';
   note.textContent = board.quests.length
-    ? `Deposits count net of withdrawals, and only within the period. A reward is free money: it is wagered ${board.wagerMultiplier}× before it can be withdrawn.`
+    ? `Deposits count net of withdrawals, and only within the period.${wagered}`
     : '';
   note.hidden = !board.quests.length;
   paintClock();
