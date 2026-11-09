@@ -14,6 +14,9 @@
  * The track and its slider stay as they are under it, the one way the line is set; a browser
  * without WebGL, or a player who switches to 2D (view3d.js), has the track alone.
  *
+ * No line of text says how a roll went: the die, its colour, the strip and the balance do (the
+ * operator's call, 2026-11-09); a screen reader hears it once from the status line (say).
+ *
  * Motion: the die sliding to where the roll landed while its number runs up to the roll, a small
  * pop as it lands, the side it landed on flashing once, and the newest roll sliding into the strip.
  * Sound: a tick for every point the line moves, a rattle as the roll goes out, and a landing that
@@ -433,12 +436,6 @@ function paintMarker() {
   marker.dataset.tone = last.win ? 'won' : 'lost';
   $('b', marker).textContent = hundredths(last.roll);
   marker.setAttribute('aria-label', `Last roll ${hundredths(last.roll)}, ${last.win ? 'a win' : 'a loss'}`);
-
-  const now = $('#diceNow', root);
-  const profit = BigInt(last.payoutMinor) - BigInt(last.stakeMinor);
-  now.dataset.tone = last.win ? 'won' : 'lost';
-  now.textContent = last.win ? `+${money(Number(profit))}` : `−${money(Number(last.stakeMinor))}`;
-  $('#diceNext', root).textContent = `Rolled ${hundredths(last.roll)} · ${last.direction} ${hundredths(last.target)} · ${times(last.multiplierBps)}`;
 }
 
 function paintRecent() {
@@ -515,10 +512,6 @@ function build() {
   root.innerHTML = `
     <section class="dice__stage" aria-label="The roll">
       <div class="dice__top">
-        <div class="dice__readout">
-          <b id="diceNow" data-tone="">No rolls yet</b>
-          <span id="diceNext">Set the line, pick a side, roll.</span>
-        </div>
         <ol class="dice__recent" id="diceRecent" aria-label="Your last rolls, newest first"></ol>
       </div>
 
