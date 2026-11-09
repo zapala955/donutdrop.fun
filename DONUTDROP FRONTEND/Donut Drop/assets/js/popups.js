@@ -4,7 +4,6 @@
  * one than the nudge, with its own art and a single button, for the moments that deserve more:
  *
  *   signed out                  → register now: the signup bonus, opening the login form
- *   signed in, reward unclaimed → feedback and the 3D survey (feedback.js), opening its window
  *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
  *   signed in, Discord unlinked → the Discord page, where the link code is
  *   signed in                   → invite & earn
@@ -26,7 +25,6 @@ import { IMG, SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
 import { pendingReferralCode } from './referrals.js';
-import { openFeedback, readFeedbackStatus } from './feedback.js';
 
 const ANY_KEY = 'dw.popup.any';
 const NUDGE_KEY = 'dw.nudge.next';
@@ -113,25 +111,6 @@ async function pick() {
       seenFor: DAY_MS,
       usedFor: 3 * DAY_MS,
     };
-  }
-
-  // Feedback and the 3D survey, while this account's first note would still be paid.
-  if (due('feedback')) {
-    const status = await readFeedbackStatus();
-    if (status?.enabled && status.eligible) {
-      return {
-        id: 'feedback',
-        eyebrow: 'Feedback',
-        title: ['Tell us what you think, get ', money(Number(status.rewardMinor)), ''],
-        line: 'Two questions: do you like the 3D games, and what should we add or fix? Paid once per account.',
-        cta: 'Give feedback',
-        action: openFeedback,
-        art: 'enchanted_book.png',
-        later: 'Not now',
-        seenFor: 2 * DAY_MS,
-        usedFor: 30 * DAY_MS,
-      };
-    }
   }
 
   // A game that is still new, once for each game; it stops being offered when it stops being new.

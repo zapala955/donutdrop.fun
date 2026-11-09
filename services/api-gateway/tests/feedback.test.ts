@@ -94,36 +94,23 @@ describe('feedback: migration 085', () => {
   });
 });
 
-describe('feedback: the routes, the window, the pop-up and the admin tab', () => {
-  it('reads signed in, writes behind CSRF and a rate limit, and shows staff only to an admin', async () => {
+describe('feedback: off the site, the staff reading kept', () => {
+  it('has no player route left: nothing can be sent or paid, and only an admin reads what was', async () => {
     const route = await read('../src/routes/feedback.ts');
-    assert.match(route, /app\.get\('\/v1\/feedback', \{ preHandler: guards\.authenticate \}/);
-    assert.match(route, /preHandler: guards\.requireCsrf, config: \{ rateLimit: \{ max: 5, timeWindow: '10 minutes' \} \}/);
+    assert.doesNotMatch(route, /app\.(get|post)\('\/v1\/feedback'/);
+    assert.doesNotMatch(route, /submitFeedback/);
     assert.match(route, /'\/v1\/admin\/feedback', \{ preHandler: requireAdminRead \}/);
     assert.match(route, /request\.authUser\?\.role !== 'admin'/);
-    assert.match(route, /likes3d: z\.boolean\(\)/);
     assert.match(await read('../src/app.ts'), /await registerFeedbackRoutes\(app, db, config\);/);
   });
 
-  it('asks both questions in one window, opened from the account menu', async () => {
-    const page = await front('assets/js/feedback.js');
-    assert.match(page, /Do you like the 3D games\?/);
-    assert.match(page, /What should we add or fix\?/);
-    assert.match(page, /api\.post\('\/v1\/feedback', \{\s*likes3d: choice\.value === 'yes',\s*message: text\.value\.trim\(\),/);
-    // The reward is the server's figure, never written into the copy.
-    assert.match(page, /money\(Number\(status\.rewardMinor\)\)/);
-    assert.doesNotMatch(page, /\$1M|1_000_000|1000000/);
+  it('has no window, menu row or pop-up on the site', async () => {
     const html = await front('index.html');
-    assert.match(html, /id="feedbackBtn" type="button" role="menuitem" data-closes-menu hidden/);
-    assert.match(html, /href="assets\/css\/feedback\.css"/);
-    assert.match(await front('assets/js/app.js'), /initFeedback\(\);/);
-  });
-
-  it('is promoted by a pop-up while the first note would still be paid', async () => {
+    assert.doesNotMatch(html, /feedbackBtn|feedback\.(css|js)/);
+    assert.doesNotMatch(await front('assets/js/app.js'), /initFeedback|feedback\.js/);
     const popups = await front('assets/js/popups.js');
-    assert.match(popups, /id: 'feedback'/);
-    assert.match(popups, /if \(status\?\.enabled && status\.eligible\)/);
-    assert.match(popups, /action: openFeedback/);
+    assert.doesNotMatch(popups, /id: 'feedback'|openFeedback|readFeedbackStatus/);
+    // The pop-up's action hook stays for whatever uses it next.
     assert.match(popups, /if \(popup\.action\) void popup\.action\(\);\s*else openLogin\(\);/);
   });
 
