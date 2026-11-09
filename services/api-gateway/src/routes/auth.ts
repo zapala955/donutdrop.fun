@@ -355,6 +355,10 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
          * challenge, and failing it over an optional field would be an extraordinary way to lose
          * somebody's money and their signup at once.
          */
+        /* Whether this new account joined on a live invite: bound to an inviter and not voided at
+         * once for sharing the inviter's network. Such an account gets the invite signup bonus
+         * instead of the ordinary one (below). */
+        let invited = false;
         if (!existing.rows[0] && config.referralsEnabled && challenge.referral_code) {
           /* A test twin's code (minted before 2026-10-24) binds the creator behind it, never the
            * play-money twin. */
@@ -383,6 +387,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
               if (bound.rowCount && standing.sharedNetwork) {
                 await voidSameNetworkReferral(client, config, row.id, referrerId, 'invite');
               }
+              invited = Boolean(bound.rowCount) && !standing.sharedNetwork;
             }
           }
         }
@@ -390,7 +395,17 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
          * moment this codebase knows for certain that an account is new. Referenced by the account's
          * own id, so the ledger's unique (kind, reference_id) index is what makes a second one
          * impossible. Playable at once; withdrawable once its requirement has been wagered. */
-        if (!existing.rows[0] && config.signupBonusMinor > 0n) {
+        if (!existing.rows[0] && invited && config.referralSignupBonusMinor > 0n) {
+          /* Joined on a live invite: the invite signup bonus instead of the ordinary one, at once,
+           * with its own wager multiplier. The same kind and reference as the ordinary bonus, so the
+           * ledger's unique index still allows one signup bonus per account, of either size. */
+          await creditWallet(client, row.id, config.referralSignupBonusMinor, 'signup_bonus', row.id);
+          await addWagerRequirement(
+            client,
+            row.id,
+            requirementFor(config.referralSignupBonusMinor, config.referralSignupBonusWagerMultiplier),
+          );
+        } else if (!existing.rows[0] && config.signupBonusMinor > 0n) {
           await creditWallet(client, row.id, config.signupBonusMinor, 'signup_bonus', row.id);
           await addWagerRequirement(
             client,

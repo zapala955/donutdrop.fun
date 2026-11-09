@@ -323,10 +323,17 @@ function appendDeal(card, terms, ledeText) {
    * this file, because the last invite figure that was hardcoded went stale and the site
    * advertised a bonus it had stopped paying. */
   const list = el('dl', 'refer__terms');
+  /* What the friend gets for joining on the link: the invite signup bonus, in place of the
+   * ordinary one, at signup (GET /v1/promotions referralSignupBonus). */
+  const invite = state.promotions?.referralSignupBonus;
+  const friend = invite
+    ? [['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`]]
+    : [];
   for (const [label, value] of [
     ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],
     ['Unlocks at', `${money(Number(terms.bonusWagerMinor))} wagered`],
     ['Revenue share', `${sharePercent}% of wagers for life`],
+    ...friend,
   ]) {
     const key = el('dt', 'refer__termk');
     key.textContent = label;

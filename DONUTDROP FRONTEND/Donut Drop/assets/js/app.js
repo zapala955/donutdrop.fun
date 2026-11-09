@@ -204,13 +204,18 @@ function mountHome(view) {
     leadExplore.classList.toggle('pban__more', signedOut);
     $('#pbanLeadEyebrow', lead).textContent = signedOut ? 'New players' : 'DonutLuxe Originals';
     const heading = $('#pbanLeadH', lead);
-    if (signedOut && bonus > 0) amountLine(heading, 'Get ', bonus, ' free');
+    // Arrived on a referral link: the invite signup bonus, which they get instead of the ordinary one.
+    const invite = signedOut && pendingReferralCode() ? state.promotions?.referralSignupBonus : null;
+    if (invite) amountLine(heading, 'Get a ', Number(invite.amountMinor), ' signup bonus');
+    else if (signedOut && bonus > 0) amountLine(heading, 'Get ', bonus, ' free');
     else heading.textContent = signedOut ? 'Log in to play' : `Explore ${cards.length} games`;
-    $('#pbanLeadP', lead).textContent = signedOut
-      ? bonus > 0
-        ? 'Added the moment your account is created. Log in with your Minecraft name.'
-        : 'Log in with your Minecraft name, deposit in game and play.'
-      : 'Crash, Mines, Coinflip, Plinko, Blackjack and more.';
+    $('#pbanLeadP', lead).textContent = invite
+      ? 'Join with your invite code: it is added the moment your account is created.'
+      : signedOut
+        ? bonus > 0
+          ? 'Added the moment your account is created. Log in with your Minecraft name.'
+          : 'Log in with your Minecraft name, deposit in game and play.'
+        : 'Crash, Mines, Coinflip, Plinko, Blackjack and more.';
     $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : 'ender_chest.png'}`;
   };
 
@@ -425,7 +430,7 @@ function openLoginModal() {
       <p class="auth__lede">Log in with your Minecraft username, then verify your account by
         paying the bot an exact amount in game. The payment lands in your balance.</p>
       <div class="auth__bonus" id="linkBonus" hidden>
-        <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> free for new players</p>
+        <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> <span id="linkBonusWhat">free for new players</span></p>
         <p class="auth__bonusfine" id="linkBonusFine"></p>
       </div>
       <hr class="auth__rule">
@@ -480,18 +485,34 @@ function openLoginModal() {
      * bonus is switched off: a figure this screen cannot confirm is not one it should promise. The
      * wager lock is deliberately not repeated here (operator's call, 2026-09-24); the withdraw
      * screen states it, with the amount still owed, whenever it applies. */
+    /* With an invite code in the field (a referral link fills it), the offer is the invite signup
+     * bonus, which a player joining on a code gets instead of the ordinary one, at signup.
+     * Repainted as the code is typed or cleared. */
     const paintBonus = () => {
       const box = $('#linkBonus', body);
       if (!box?.isConnected) return;
+      const invite = state.promotions?.referralSignupBonus;
+      const code = $('#linkRef', body)?.value.trim() ?? '';
+      if (invite && code && REFERRAL_CODE.test(code.toUpperCase())) {
+        box.hidden = false;
+        box.dataset.kind = 'invite';
+        $('#linkBonusAmt', box).textContent = money(Number(invite.amountMinor));
+        $('#linkBonusWhat', box).textContent = 'signup bonus with this invite code';
+        $('#linkBonusFine', box).textContent =
+          'Added when your account is created. Play with it straight away'
+          + (invite.wagerMultiplier > 0 ? `; wager it ${invite.wagerMultiplier}× before withdrawing.` : '.');
+        return;
+      }
       const offer = state.promotions?.signupBonus;
       const amount = Number(offer?.amountMinor ?? 0);
       box.hidden = !(amount > 0);
+      delete box.dataset.kind;
       if (box.hidden) return;
       $('#linkBonusAmt', box).textContent = money(amount);
+      $('#linkBonusWhat', box).textContent = 'free for new players';
       $('#linkBonusFine', box).textContent =
         'Added when your account is created. Play with it straight away.';
     };
-    paintBonus();
     if (!state.promotions) void refreshPromotions(false).then(paintBonus);
 
     /* An invite link fills the field and opens the disclosure it lives in.
@@ -506,6 +527,8 @@ function openLoginModal() {
       const disclosure = referral.closest('details');
       if (disclosure) disclosure.open = true;
     }
+    paintBonus();
+    referral.addEventListener('input', paintBonus);
 
     const typedName = () => input.value.trim();
     const referralCode = () => referral.value.trim().toUpperCase();

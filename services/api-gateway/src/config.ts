@@ -851,6 +851,11 @@ const environmentSchema = z
      * milestone bonus each have their own multiplier rather than the signup bonus's: the operator
      * prices them differently. Both are live settings. */
     QUEST_REWARD_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(3),
+    /* A player who joins on an invite code gets a bigger signup bonus instead of the ordinary one,
+     * credited when the account is created, with its own wager multiplier. 0 turns it off, and a
+     * referred player then gets the ordinary bonus like anybody else. Live settings. */
+    REFERRAL_SIGNUP_BONUS_MINOR: nonNegativeBigintString.default('10000000'),
+    REFERRAL_SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(10),
     REFERRAL_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     /* Discord OAuth. The client secret is file-backed like every other credential, and the
      * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect
@@ -1719,6 +1724,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     signupBonusWagerMultiplier: env.SIGNUP_BONUS_WAGER_MULTIPLIER,
     depositWagerMultiplier: env.DEPOSIT_WAGER_MULTIPLIER,
     questRewardWagerMultiplier: env.QUEST_REWARD_WAGER_MULTIPLIER,
+    referralSignupBonusMinor: BigInt(env.REFERRAL_SIGNUP_BONUS_MINOR),
+    referralSignupBonusWagerMultiplier: env.REFERRAL_SIGNUP_BONUS_WAGER_MULTIPLIER,
     referralBonusWagerMultiplier: env.REFERRAL_BONUS_WAGER_MULTIPLIER,
     discordClientId: env.DISCORD_CLIENT_ID,
     discordClientSecret: env.DISCORD_CLIENT_SECRET,

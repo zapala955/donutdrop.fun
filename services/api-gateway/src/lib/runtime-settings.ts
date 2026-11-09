@@ -250,6 +250,20 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: 100n,
   },
+  referralSignupBonusMinor: {
+    kind: 'bigint',
+    group: 'rewards',
+    label: 'Signup bonus for a player joining on an invite code, instead of the ordinary one (0 turns it off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  referralSignupBonusWagerMultiplier: {
+    kind: 'integer',
+    group: 'rewards',
+    label: 'Invite signup bonus wager before withdrawing (x bonus)',
+    min: 0n,
+    max: 100n,
+  },
   depositWagerMultiplier: {
     kind: 'integer',
     group: 'limits',

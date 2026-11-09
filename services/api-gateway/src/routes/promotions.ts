@@ -38,6 +38,19 @@ export async function registerPromotionRoutes(app: FastifyInstance, config: AppC
           revshareWagerBps: Number((revshareMinor(config, 1_000_000n) * 10_000n) / 1_000_000n),
         }
       : null,
+    /* What a player joining on an invite code gets instead of the signup bonus, at signup: the
+     * amount and the wager it carries. What a referral link's visitor is shown. */
+    referralSignupBonus:
+      config.referralsEnabled && config.referralSignupBonusMinor > 0n
+        ? {
+            amountMinor: config.referralSignupBonusMinor.toString(),
+            wagerMultiplier: config.referralSignupBonusWagerMultiplier,
+            wagerMinor: requirementFor(
+              config.referralSignupBonusMinor,
+              config.referralSignupBonusWagerMultiplier,
+            ).toString(),
+          }
+        : null,
     depositWagerMultiplier: config.depositWagerMultiplier,
   }));
 }

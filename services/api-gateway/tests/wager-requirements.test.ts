@@ -211,6 +211,8 @@ describe('the public promotions', () => {
         signupBonus: { amountMinor: '2000000', wagerMultiplier: 1, wagerMinor: '2000000' },
         // The lifetime share too: signed out, the invite page shows the whole deal (2026-10-25).
         referral: { bonusMinor: '20000000', bonusWagerMinor: '50000000', revshareWagerBps: 50 },
+        // What a referral link's visitor is offered instead of the signup bonus.
+        referralSignupBonus: { amountMinor: '10000000', wagerMultiplier: 10, wagerMinor: '100000000' },
         depositWagerMultiplier: 1,
       });
     } finally {
