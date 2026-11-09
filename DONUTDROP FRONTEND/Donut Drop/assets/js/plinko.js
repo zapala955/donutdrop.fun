@@ -13,13 +13,12 @@
  * Motion: the ball's fall, a peg lighting as it is struck, a slot dipping as a ball lands. With
  * reduced motion a ball lands the moment it is answered, and nothing moves.
  *
- * The flat board (2D) is drawn here, on a canvas, in the look of a casino floor: white pegs that
- * ring when they are struck, a gold ball that hops from peg to peg as a thrown ball would (sideways
- * at an even pace, up and down under gravity) and squashes a little on each one, slots coloured
+ * The flat board (2D) is drawn here, on a canvas, plain as a casino's: flat white pegs that flash
+ * when they are struck, a flat gold ball that hops from peg to peg as a thrown ball would (sideways
+ * at an even pace, up and down under gravity), slots coloured
  * from yellow at the centre to red at the edges, a column of the last results by the board, and a
- * card over a slot with what it would pay and how likely it is. A win of 2x and up throws sparks
- * off its slot. The board has its own sounds: a tap per peg, rising as the ball falls, and a
- * landing that grows with the multiplier.
+ * card over a slot with what it would pay and how likely it is. No glow anywhere. The board has its
+ * own sounds: a tap per peg, rising as the ball falls, and a landing that grows with the multiplier.
  *
  * The board is drawn in WebGL (plinko3d.js), its own chunk, at the graphics the player picked or the
  * machine can manage: ender pearls through end rods into shulker boxes, in the End. This page still
@@ -52,8 +51,7 @@ const FOOT = 0.9; // the last row to the slots
 const PEG_R = 0.1;
 const BALL_R = 0.26;
 /* The flat board's motion. */
-const FLASH_MS = 420; // a struck peg's ring
-const SQUASH_MS = 90; // the ball flattening on a peg
+const FLASH_MS = 300; // a struck peg's flash
 const INTRO_MS = 240; // each row of pegs fading in when the board changes shape
 const HOP = 0.3; // how high the ball hops off a peg, in peg gaps
 const HISTORY = 5; // results in the column by the flat board
@@ -81,9 +79,7 @@ let boardRows = 0;
 let slotsDense = false; // measured when the board's size changes, never while painting
 let board3d = null; // the End, once it is up
 let boardTried = null;
-let sparks = []; // the flat board's win sparks: { x, y, vx, vy, born, life, size, lit }
 let introAt = 0; // when the flat board last changed shape
-let sprite = null; // the ball, drawn once per size: { radius, canvas }
 let tipSlot = null; // the slot whose card is open
 let lastLand = 0;
 
@@ -344,9 +340,8 @@ function frame(now) {
     if (elapsed >= ball.times[ball.times.length - 1]) land(ball);
   }
   for (const [peg, at] of flashes) if (now - at > FLASH_MS) flashes.delete(peg);
-  sparks = sparks.filter((spark) => now - spark.born < spark.life);
   draw(now);
-  if (balls.length || flashes.size || sparks.length || now - introAt < INTRO_MS + boardRows * 16) run();
+  if (balls.length || flashes.size || now - introAt < INTRO_MS + boardRows * 16) run();
 }
 
 function land(ball) {
@@ -371,7 +366,7 @@ function land(ball) {
   if (!raf) draw(performance.now());
 }
 
-/** The flat board's landing: a sound that grows with the multiplier, and sparks off a win. */
+/** The flat board's landing: a sound that grows with the multiplier. */
 function landFlat(bet, x) {
   const now = performance.now();
   // A burst of balls landing together is one sound, not a pile of them; a win always speaks.
@@ -380,24 +375,6 @@ function landFlat(bet, x) {
     const cue = x >= 100 ? 'jackpot' : x >= 10 ? 'plinkoBig' : x >= 2 ? 'plinkoWin' : x >= 1 ? 'plinkoEven' : 'plinkoLow';
     playSound(cue, { rate: x < 2 ? 0.92 + heat(bet.slot, bet.rows) * 0.25 : 1 });
   }
-  if (x < 2 || reduceMotion() || bet.rows !== boardRows) return;
-  const count = x >= 100 ? 40 : x >= 10 ? 24 : 12;
-  const depth = TOP + (bet.rows - 1) * ROW + FOOT;
-  for (let k = 0; k < count; k += 1) {
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
-    const speed = 2.2 + Math.random() * (x >= 10 ? 4.2 : 2.6);
-    sparks.push({
-      x: bet.slot + 1 + (Math.random() - 0.5) * 0.6,
-      y: depth - 0.05,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      born: now,
-      life: 520 + Math.random() * 380,
-      size: 0.035 + Math.random() * 0.045,
-      lit: Math.random() < 0.35,
-    });
-  }
-  run();
 }
 
 /** The column of results by the flat board slides down one place for the newest. */
@@ -574,62 +551,8 @@ function readPalette() {
   palette = {
     peg: token('--plinko-peg', '#d9dbe0'),
     pegLit: token('--plinko-peg-lit', '#ffffff'),
-    ring: token('--plinko-ring', '#f0c35a'),
-    ballHi: token('--plinko-ball-hi', '#fff6c8'),
     ball: token('--plinko-ball', '#ffd700'),
-    ballLo: token('--plinko-ball-lo', '#a35f00'),
-    glow: token('--plinko-glow', 'rgba(255, 196, 64, .5)'),
-    spark: token('--plinko-spark', '#f0c35a'),
-    sparkLit: token('--plinko-spark-lit', '#ffffff'),
   };
-  sprite = null;
-}
-
-/** A struck peg's glow: light at the peg fading to nothing, drawn once per peg size. */
-function haloSprite(pegR) {
-  if (sprite?.halo?.pegR === pegR) return sprite.halo.canvas;
-  const size = Math.ceil(pegR * 9);
-  const art = document.createElement('canvas');
-  art.width = size;
-  art.height = size;
-  const g = art.getContext('2d');
-  const c = size / 2;
-  const light = g.createRadialGradient(c, c, 0, c, c, c);
-  light.addColorStop(0, palette.pegLit);
-  light.addColorStop(0.18, palette.ring);
-  light.addColorStop(0.42, palette.glow);
-  light.addColorStop(1, 'rgba(255, 190, 60, 0)');
-  g.fillStyle = light;
-  g.fillRect(0, 0, size, size);
-  sprite = { ...(sprite || {}), halo: { pegR, canvas: art } };
-  return art;
-}
-
-/** The ball, glow and all, drawn once for its size and stamped for every ball after. */
-function ballSprite(radius) {
-  if (sprite?.radius === radius && sprite.canvas) return sprite.canvas;
-  const pad = Math.ceil(radius * 0.9);
-  const size = Math.ceil(radius * 2) + pad * 2;
-  const art = document.createElement('canvas');
-  art.width = size;
-  art.height = size;
-  const g = art.getContext('2d');
-  const c = size / 2;
-  const halo = g.createRadialGradient(c, c, radius * 0.6, c, c, radius + pad);
-  halo.addColorStop(0, palette.glow);
-  halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  g.fillStyle = halo;
-  g.fillRect(0, 0, size, size);
-  const body = g.createRadialGradient(c - radius * 0.35, c - radius * 0.4, radius * 0.08, c, c, radius);
-  body.addColorStop(0, palette.ballHi);
-  body.addColorStop(0.42, palette.ball);
-  body.addColorStop(1, palette.ballLo);
-  g.beginPath();
-  g.arc(c, c, radius, 0, Math.PI * 2);
-  g.fillStyle = body;
-  g.fill();
-  sprite = { ...(sprite || {}), radius, canvas: art };
-  return art;
 }
 
 function resize() {
@@ -686,51 +609,26 @@ function draw(now) {
       const y = (TOP + r * ROW) * unit;
       const struck = flashes.get(`${r}:${j}`);
       const t = struck === undefined ? 1 : Math.min(1, (now - struck) / FLASH_MS);
-      if (t < 1) {
-        // A struck peg lights up: a bright pulse that swells a little as it fades.
-        const out = 1 - (1 - t) * (1 - t);
-        const halo = haloSprite(pegR);
-        const reach = (halo.width / 2) * (0.75 + 0.45 * out);
-        ctx.globalAlpha = (1 - t) * (1 - t);
-        ctx.drawImage(halo, x - reach, y - reach, reach * 2, reach * 2);
-      }
+      // A struck peg goes white and a size up for a moment, then settles back. Nothing around it.
       ctx.globalAlpha = fade;
-      ctx.fillStyle = t < 0.4 ? palette.pegLit : palette.peg;
+      ctx.fillStyle = t < 1 ? palette.pegLit : palette.peg;
       ctx.beginPath();
-      ctx.arc(x, y, t < 0.4 ? pegR * 1.15 : pegR, 0, Math.PI * 2);
+      ctx.arc(x, y, pegR * (1 + 0.3 * (1 - t)), 0, Math.PI * 2);
       ctx.fill();
     }
   }
   ctx.globalAlpha = 1;
 
-  // Sparks off a win: thrown up from the slot, falling back under gravity, fading as they go.
-  for (const spark of sparks) {
-    const s = (now - spark.born) / 1000;
-    const life = (now - spark.born) / spark.life;
-    if (life >= 1) continue;
-    const x = (spark.x + spark.vx * s) * unit;
-    const y = (spark.y + spark.vy * s + 4.5 * s * s) * unit;
-    ctx.globalAlpha = 1 - life * life;
-    ctx.fillStyle = spark.lit ? palette.sparkLit : palette.spark;
-    ctx.beginPath();
-    ctx.arc(x, y, spark.size * unit, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  const radius = Math.round(BALL_R * unit * 10) / 10;
-  const art = ballSprite(radius);
-  const half = art.width / 2;
+  // The ball: one flat colour, no shading, no glow.
+  const radius = BALL_R * unit;
+  ctx.fillStyle = palette.ball;
   for (const ball of balls) {
     const elapsed = now - ball.start;
     const at = flatPosition(ball, elapsed);
-    // Flattened for a moment on each peg it meets, rounding out again as it leaves.
-    const since = ball.hit >= 1 ? elapsed - ball.times[ball.hit] : Infinity;
-    const squash = since < SQUASH_MS ? 0.09 * (1 - since / SQUASH_MS) : 0;
-    const w = half * (1 + squash);
-    const h = half * (1 - squash);
     ctx.globalAlpha = Math.min(1, elapsed / 90);
-    ctx.drawImage(art, at.x * unit - w, at.y * unit - h + (half - h) * 0.6, w * 2, h * 2);
+    ctx.beginPath();
+    ctx.arc(at.x * unit, at.y * unit, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 }

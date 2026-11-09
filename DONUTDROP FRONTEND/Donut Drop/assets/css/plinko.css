@@ -10,10 +10,11 @@
  *           5.2:1 on --lx-3.
  * signature: the payouts are the board's floor -- a row of slots running from yellow at the centre
  *            to red at the edges, so how much a slot pays is readable before a number is.
- * motion: the ball's fall (a thrown ball's hop from peg to peg, a squash on each), a peg's ring as it
- *         is struck, a slot dipping and flashing as a ball lands, sparks off a win, the column of
- *         results sliding down for the newest, the slots arriving from the centre out when the board
- *         changes shape. Reduced motion: the ball lands the moment it is answered, the slot only
+ * motion: the ball's fall (a thrown ball's hop from peg to peg), a peg flashing
+ *         white as it is struck, a slot dipping and flashing as a ball lands, the column of results
+ *         sliding down for the newest, the slots arriving from the centre out when the board changes
+ *         shape. Flat throughout: no glow on the ball, the pegs or the stage.
+ *         Reduced motion: the ball lands the moment it is answered, the slot only
  *         lights, nothing slides.
  * scope: the panel is the same in 2D and 3D; the flat board's look (the "flat" rules below) is only
  *        for 2D -- the End (plinko3d.js) keeps its own.
@@ -21,18 +22,10 @@
 
 .plinko {
   /* The board's palette, lifted so no rule below writes a colour inline. The flat board's canvas
-   * reads the first nine through getComputedStyle (hex and rgba only: a canvas takes those
-   * everywhere). */
+   * reads the first three through getComputedStyle (hex only: a canvas takes it everywhere). */
   --plinko-peg: #d9dbe0;
   --plinko-peg-lit: #ffffff;
-  --plinko-ring: var(--lx-gold-hi, #f0c35a);
-  --plinko-ball-hi: #fff6c8;
   --plinko-ball: var(--gold-bright);
-  --plinko-ball-lo: var(--gold-deep);
-  --plinko-glow: rgba(255, 190, 60, .42);
-  --plinko-spark: var(--lx-gold-hi, #f0c35a);
-  --plinko-spark-lit: #ffffff;
-  --plinko-shadow: rgba(0, 0, 0, .55);
   /* The flat board's slots: yellow at the centre, orange, red at the edges (oklab between them),
    * a darker lip under each, and their numbers in a dark brown that holds 5.5:1 on the reddest. */
   --plinko-b-lo: oklch(0.87 0.165 95);
@@ -41,7 +34,6 @@
   --plinko-b-ink: oklch(0.2 0.035 55);
   --plinko-b-shade: oklch(0.18 0.03 40);
   --plinko-flash: #ffffff;
-  --plinko-stage-glow: oklch(0.32 0.05 75 / 0.32);
   --plinko-card-shade: 0 14px 30px -10px rgba(0, 0, 0, .7);
   --plinko-go-lip: var(--lx-gold-lo, #b97c22);
   --plinko-go-sheen: rgba(255, 255, 255, .38);
@@ -441,9 +433,7 @@ body.lx #plinkoGo[aria-busy="true"]::after { opacity: 1; animation: plinko-sheen
   position: relative;
   align-content: start;
   padding: 24px 20px 22px;
-  background:
-    radial-gradient(90% 55% at 50% 0%, var(--plinko-stage-glow), transparent 70%),
-    var(--lx-0);
+  background: var(--lx-0);
 }
 .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__board {
   position: relative;
