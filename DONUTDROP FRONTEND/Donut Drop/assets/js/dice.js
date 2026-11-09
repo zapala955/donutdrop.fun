@@ -14,8 +14,10 @@
  * The track and its slider stay as they are under it, the one way the line is set; a browser
  * without WebGL, or a player who switches to 2D (view3d.js), has the track alone.
  *
- * Motion is one thing: the marker sliding to where the roll landed. With reduced motion it is
- * simply there.
+ * Motion: the die sliding to where the roll landed while its number runs up to the roll, a small
+ * pop as it lands, the side it landed on flashing once, and the newest roll sliding into the strip.
+ * Sound: a tick for every point the line moves, a rattle as the roll goes out, and a landing that
+ * says win or miss before the eye has found the die. With reduced motion the die is simply there.
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
@@ -31,6 +33,7 @@ const EDGE_BPS = 1_000;
 const MIN_CHANCE = 100; // 1.00%
 const MAX_CHANCE = 8_900; // 89.00%
 const RECENT = 8;
+const SLIDE_MS = 520; // the die's run to the roll
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
@@ -44,6 +47,8 @@ let recent = []; // newest first
 let last = null; // the last roll this page showed
 let range3d = null; // the 3D range, once it is up
 let rangeTried = null;
+let tickPoint = null; // the whole point the line last ticked at
+let tickAt = 0;
 
 /* ─────────── the maths, mirrored from lib/dice.ts ─────────── */
 
@@ -128,7 +133,7 @@ async function roll() {
   if (busy || rollProblem()) return;
   busy = true;
   paintControls();
-  playSound('click');
+  playSound('diceRoll');
   /* Held from the click: the server's balance event can outrun its own answer, and the pill must
    * not move before the marker lands. */
   const release = holdLiveFigures();
@@ -147,8 +152,6 @@ async function roll() {
     release();
     recent = [bet, ...recent.filter((row) => row.id !== bet.id)].slice(0, RECENT);
     const profit = BigInt(bet.payoutMinor) - BigInt(bet.stakeMinor);
-    const x = bet.multiplierBps / 10_000;
-    playSound(bet.win ? (x >= 10 ? 'reward' : 'win') : 'lose');
     say(bet.win
       ? `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)}. A win: ${money(Number(bet.payoutMinor))}, ${money(Number(profit))} profit.`
       : `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)} needed. Lost ${money(Number(bet.stakeMinor))}.`);
@@ -172,30 +175,86 @@ async function roll() {
  * this, or the marker would land up to half a thumb away from the number it shows. */
 function trackX(value) {
   const track = $('.dice__track', root);
-  if (!track) return 0;
+  const rail = $('.dice__rail', root);
+  if (!track || !rail) return 0;
   const thumb = parseFloat(getComputedStyle(track).getPropertyValue('--dice-thumb')) || 32;
-  return thumb / 2 + (value / SPAN) * (track.clientWidth - thumb);
+  // The track sits inside the tray's padding; the die is placed from the rail's left edge.
+  const inset = track.getBoundingClientRect().left - rail.getBoundingClientRect().left;
+  return inset + thumb / 2 + (value / SPAN) * (track.clientWidth - thumb);
+}
+
+/** The landing's sound: a miss, a win, or a run of notes from 10x up. */
+function landSound(bet) {
+  playSound(bet.win ? (bet.multiplierBps >= 100_000 ? 'diceBig' : 'diceWin') : 'diceLose');
+}
+
+/** The side of the line the roll landed on flashes once. */
+function flashSide(bet) {
+  if (reduceMotion()) return;
+  const zone = $(bet.roll < bet.target ? '.dice__zone--lo' : '.dice__zone--hi', root);
+  zone?.animate?.([{ filter: 'brightness(1.55)' }, { filter: 'brightness(1)' }], { duration: 560, easing: 'ease-out' });
+}
+
+/** A tick for each whole point the line moves, pitched by where it is; never faster than a drum roll. */
+function tickLine() {
+  const point = Math.round(target / 100);
+  const now = performance.now();
+  if (point === tickPoint || now - tickAt < 30) return;
+  tickPoint = point;
+  tickAt = now;
+  playSound('diceTick', { rate: 0.75 + (target / SPAN) * 0.7 });
 }
 
 /** Slides the marker to the roll, and resolves when it is there: in 3D, when the arrow is in the wall. */
-function land(bet) {
+async function land(bet) {
+  const before = last;
   last = bet;
   if (range3d) {
     $('#diceMarker', root).hidden = false;
     paintMarker();
-    return range3d.shoot(bet.roll, bet.win, bet.multiplierBps);
+    await range3d.shoot(bet.roll, bet.win, bet.multiplierBps);
+    landSound(bet);
+    return;
   }
   const marker = $('#diceMarker', root);
-  const from = marker.hidden ? trackX(bet.roll) : Number(marker.dataset.x || 0);
+  const number = $('b', marker);
+  const fresh = marker.hidden || !before;
+  const from = fresh ? trackX(bet.roll) : Number(marker.dataset.x || 0);
+  const fromRoll = fresh ? bet.roll : before.roll;
   const to = trackX(bet.roll);
   marker.hidden = false;
-  paintMarker();
+  if (reduceMotion() || !marker.animate) {
+    paintMarker();
+    landSound(bet);
+  }
   if (reduceMotion() || !marker.animate) return Promise.resolve();
-  const animation = marker.animate(
+  /* On its way the die is neutral, and its number runs from the last roll to this one on the same
+   * curve as the slide, so the two arrive together. The win or the miss is painted on landing. */
+  marker.dataset.tone = 'rolling';
+  marker.dataset.x = String(to);
+  marker.style.transform = `translateX(${to}px)`;
+  const slide = marker.animate(
     [{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }],
-    { duration: 420, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+    { duration: fresh ? 0 : SLIDE_MS, easing: 'cubic-bezier(.16, 1, .3, 1)' },
   );
-  return animation.finished.then(() => undefined, () => undefined);
+  const started = performance.now();
+  const run = (now) => {
+    if (last !== bet) return;
+    const t = Math.min(1, (now - started) / SLIDE_MS);
+    const eased = 1 - (1 - t) ** 4;
+    number.textContent = hundredths(Math.round(fromRoll + (bet.roll - fromRoll) * eased));
+    if (t < 1) requestAnimationFrame(run);
+  };
+  if (!fresh) requestAnimationFrame(run);
+  await slide.finished.catch(() => undefined);
+  if (last !== bet) return;
+  paintMarker();
+  landSound(bet);
+  flashSide(bet);
+  $('.dice__die', marker).animate(
+    [{ transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: 0.35 }, { transform: 'scale(1)' }],
+    { duration: 280, easing: 'cubic-bezier(.2, .8, .3, 1)' },
+  );
 }
 
 /* ─────────── the animation test bench (devmenu.js) ───────────
@@ -208,7 +267,7 @@ export async function playTestRoll({ won, u }) {
   if (!root || busy) return;
   busy = true;
   paintControls();
-  playSound('click');
+  playSound('diceRoll');
   try {
     // Under wins below the line, over wins at or above it; a miss is the other stretch.
     const [from, size] = won === (direction === 'under') ? [0, target] : [target, SPAN - target];
@@ -219,7 +278,6 @@ export async function playTestRoll({ won, u }) {
       id: 'test', roll, direction, target, win: won, multiplierBps: bps,
       stakeMinor: stake.toString(), payoutMinor: (won ? payoutMinor(stake) : 0n).toString(),
     });
-    playSound(won ? (bps / 10_000 >= 10 ? 'reward' : 'win') : 'lose');
   } finally {
     busy = false;
     paint();
@@ -346,6 +404,7 @@ function paintLine(skip = null) {
   const bps = multiplierBps(chance);
   const track = $('.dice__track', root);
   track.dataset.side = direction;
+  root.dataset.side = direction;
   range3d?.setLine(target, direction);
   track.style.setProperty('--line-ratio', String(target / SPAN));
 
@@ -421,6 +480,7 @@ function paintControls() {
 
   const profit = $('#diceProfit', root);
   profit.value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
+  $('#diceProfitX', root).textContent = times(multiplierBps(chanceOf(direction, target)));
 
   for (const node of root.querySelectorAll('.dice__panel input, .dice__panel .dice__adj, .dice__stage input, .dice__swap')) {
     node.disabled = busy;
@@ -457,7 +517,7 @@ function build() {
       <div class="dice__top">
         <div class="dice__readout">
           <b id="diceNow" data-tone="">No rolls yet</b>
-          <span id="diceNext">Draw a line, pick a side, roll.</span>
+          <span id="diceNext">Set the line, pick a side, roll.</span>
         </div>
         <ol class="dice__recent" id="diceRecent" aria-label="Your last rolls, newest first"></ol>
       </div>
@@ -466,12 +526,14 @@ function build() {
 
       <div class="dice__board">
         <div class="dice__rail">
-          <div class="dice__marker" id="diceMarker" role="img" hidden><b>50.00</b></div>
-          <div class="dice__track" data-side="under">
-            <span class="dice__zone dice__zone--lo" aria-hidden="true"></span>
-            <span class="dice__zone dice__zone--hi" aria-hidden="true"></span>
-            <input class="dice__range" id="diceLine" type="range" min="1" max="9999" step="1" value="5000"
-                   aria-label="The line the roll is measured against" />
+          <div class="dice__marker" id="diceMarker" role="img" hidden><span class="dice__die"><b>50.00</b></span></div>
+          <div class="dice__tray">
+            <div class="dice__track" data-side="under">
+              <span class="dice__zone dice__zone--lo" aria-hidden="true"></span>
+              <span class="dice__zone dice__zone--hi" aria-hidden="true"></span>
+              <input class="dice__range" id="diceLine" type="range" min="1" max="9999" step="1" value="5000"
+                     aria-label="The line the roll is measured against" />
+            </div>
           </div>
         </div>
         <div class="dice__scale" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
@@ -514,11 +576,11 @@ function build() {
           <button type="button" class="dice__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="dice__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <label class="dice__label" for="diceProfit">Profit on win</label>
+        <label class="dice__label dice__label--row" for="diceProfit"><span>Profit on win</span><span class="dice__profitx" id="diceProfitX"></span></label>
         <div class="dice__field dice__field--read">
           <output id="diceProfit" for="diceStake diceLine">—</output>
         </div>
-        <button class="btn dice__go" id="diceGo" type="submit">
+        <button class="btn dice__go" id="diceGo" type="submit" data-sfx="none">
           <span id="diceGoLabel">Loading…</span>
         </button>
         <p class="dice__hint" id="diceHint" aria-live="polite"></p>
@@ -544,12 +606,13 @@ function build() {
   /* The slider. Native, so a pointer, a finger and the keyboard all work; the arrows are taken
    * over only to move a whole point at a time, which is what a person means by "a bit higher". */
   const range = $('#diceLine', root);
-  range.addEventListener('input', () => setLine(Number(range.value)));
+  range.addEventListener('input', () => { setLine(Number(range.value)); tickLine(); });
   range.addEventListener('keydown', (event) => {
     const move = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
     if (!move || busy) return;
     event.preventDefault();
     setLine(target + move * (event.shiftKey ? 1 : 100));
+    tickLine();
   });
 
   /* The three fields: each moves the other two live, and settles to its own exact value when the

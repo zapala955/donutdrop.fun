@@ -34,7 +34,8 @@ describe('dice in 3D', () => {
     assert.match(range, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
     for (const use of ['tier.particles', 'tier.composer', 'tier.antialias', 'tier.samples', 'frameMs(tier)', 'minFpsFor(tier)']) assert.ok(range.includes(use), use);
     assert.match(page, /await import\('\.\/dice3d\.js'\)/);
-    assert.match(page, /return range3d\.shoot\(bet\.roll, bet\.win, bet\.multiplierBps\);/);
+    // Awaited, so the landing's sound plays as the arrow goes in.
+    assert.match(page, /await range3d\.shoot\(bet\.roll, bet\.win, bet\.multiplierBps\);\s*landSound\(bet\);/);
     assert.match(page, /range3d\?\.setLine\(target, direction\);/);
     // The slider stays where it is: the scene is a row above the board, hidden in 2D.
     assert.match(page, /<div class="dice__scene"><\/div>\n\n\s*<div class="dice__board">/);

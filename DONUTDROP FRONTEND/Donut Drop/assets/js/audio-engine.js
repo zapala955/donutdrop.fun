@@ -380,6 +380,41 @@ const CUES = {
     tone(ctx, { freq: 130.81, type: 'sine', duration: 0.6, gain: 0.2, sweepTo: 196 });
     noise(ctx, { start: 0.1, duration: 0.4, gain: 0.06, frequency: 5600, q: 0.6 });
   },
+
+  /* ── Dice ──
+   * The line ticks as it is dragged, the roll rattles out, and the landing says win or miss.
+   */
+  /** The line moving one point: a dry, tiny click. Pitched by the caller with where the line is. */
+  diceTick(ctx) {
+    tone(ctx, { freq: 1700, type: 'triangle', duration: 0.014, gain: 0.035 });
+    noise(ctx, { duration: 0.012, gain: 0.018, frequency: 4200, q: 2 });
+  },
+  /** The roll going out: three quick knocks, a die shaken in a cup. */
+  diceRoll(ctx) {
+    [0, 0.05, 0.11].forEach((start, index) => {
+      noise(ctx, { start, duration: 0.032, gain: 0.08 - index * 0.018, frequency: 2600 - index * 320, q: 1.6 });
+      tone(ctx, { freq: 540 + index * 110, type: 'triangle', start, duration: 0.035, gain: 0.06 });
+    });
+  },
+  /** A win: two bright notes going up, with a glint. */
+  diceWin(ctx) {
+    tone(ctx, { freq: 880, type: 'triangle', duration: 0.12, gain: 0.14 });
+    tone(ctx, { freq: 1318.5, type: 'triangle', start: 0.065, duration: 0.24, gain: 0.13 });
+    noise(ctx, { start: 0.065, duration: 0.12, gain: 0.03, frequency: 6400, q: 0.8 });
+  },
+  /** 10x and up: a run of four notes over a low swell. */
+  diceBig(ctx) {
+    [659.25, 880, 1108.73, 1318.5].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.36, gain: 0.15 });
+    });
+    tone(ctx, { freq: 164.81, type: 'sine', duration: 0.5, gain: 0.16, sweepTo: 246.94 });
+    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 5800, q: 0.6 });
+  },
+  /** A miss: a soft, low knock, never a buzzer. */
+  diceLose(ctx) {
+    tone(ctx, { freq: 250, type: 'triangle', duration: 0.13, gain: 0.11, sweepTo: 175 });
+    noise(ctx, { duration: 0.05, gain: 0.03, frequency: 900, q: 1 });
+  },
 };
 
 /**
