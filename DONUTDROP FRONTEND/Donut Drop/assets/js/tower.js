@@ -15,9 +15,8 @@
  * ladder as he clears them. The flat tower stays underneath for the keyboard and a screen reader,
  * for a browser without WebGL, and for a player who switches to 2D (view3d.js).
  *
- * Motion, on the flat tower: a gold frame round the floor being climbed that slides up a floor at
- * a time; a tile flipping over to show its gem or its TNT; the next floor waking as the frame
- * arrives; the TNT shaking the tower, and the rest of it turning over floor by floor once a climb
+ * Motion, on the flat tower: a tile flipping over to show its gem or its TNT; the next floor
+ * waking; the TNT shaking the tower, and the rest of it turning over floor by floor once a climb
  * ends; a win card popping up over the tower, its amount counting up. Every step has its sound
  * (audio-engine.js, the tower cues): a gem rings higher the higher the floor. With reduced motion
  * every one of them is an instant change of state, and nothing shakes. No line of text says how a
@@ -397,7 +396,7 @@ const FLIP = [
 ];
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-/** A climb starting: the floors wake from the bottom up, and the frame arrives on floor 1. */
+/** A climb starting: the floors wake from the bottom up. */
 function wake() {
   playSound('towerStart');
   if (tower3d || reduceMotion()) return;
@@ -513,8 +512,6 @@ function paintBoard() {
   const current = inPlay() ? game.floor : -1;
   board.dataset.state = inPlay() ? 'play' : over() ? 'over' : 'idle';
   board.dataset.mode = name;
-  // The gold frame sits on the floor being climbed and slides there (tower.css).
-  if (inPlay()) board.style.setProperty('--at', String(current));
   let rebuilt = false;
 
   for (let floor = 0; floor < FLOORS; floor += 1) {
@@ -644,7 +641,6 @@ function build() {
       <div class="tower__pit">
       <div class="tower__board" id="towerBoard" role="group" aria-label="Nine floors, climbed from the bottom. Use the left and right arrow keys to choose a tile on your floor and Enter to turn it">
         ${floors}
-        <div class="tower__cursor" aria-hidden="true"></div>
       </div>
       <div class="tower__banner" id="towerBanner" hidden><b></b><span></span></div>
       </div>

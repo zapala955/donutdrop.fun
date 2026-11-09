@@ -4,13 +4,13 @@
  * states: tiles -- hidden (default, carries its floor's price), hover (lifts on its lip), :focus-visible,
  *         :active (pressed into its lip), aria-disabled / disabled (not your floor, or a pick out),
  *         aria-busy (waiting on the server: it breathes), gem (success), boom (error), and the
- *         end-of-climb reveal (tnt, dim-gem); floors -- ahead, now (the gold frame), done, lost;
+ *         end-of-climb reveal (tnt, dim-gem); floors -- ahead, now (lit, gold prices), done, lost;
  *         the difficulty switch -- a gold pill sliding under the choice, locked during a climb;
  *         the one button -- default, hover, :focus-visible, :active (pressed into its lip), disabled,
  *         busy (a sheen runs across it), and its tones: go, cash, idle.
- * signature: the price is on the tile, and a gold frame climbs the tower with the player; when a
- *            climb ends the rest of the tower turns over floor by floor, every TNT shown.
- * motion: the frame sliding up a floor (420ms); a tile flipping over to its gem or TNT (dice-style
+ * signature: the price is on the tile, and the floor being climbed is the lit one, its prices in
+ *            gold; when a climb ends the rest of the tower turns over floor by floor, every TNT shown.
+ * motion: a tile flipping over to its gem or TNT (dice-style
  *         340ms, tower.js); the next floor waking; the tower shaking on TNT; the reveal running up
  *         the tower; the win card popping and counting up; the difficulty pill sliding. Flat
  *         throughout, no glow. Reduced motion: all of it is an instant change of state.
@@ -79,25 +79,6 @@
   gap: var(--tower-gap);
   border-radius: var(--lx-r);
 }
-
-/* The frame round the floor being climbed. It sits behind the tiles, a floor's height plus a margin,
-   and tower.js moves it by setting --at; the move itself is a transform. */
-.tower__cursor {
-  position: absolute;
-  z-index: 0;
-  left: -6px;
-  right: -6px;
-  bottom: -6px;
-  height: calc(var(--tower-tile-h) + 16px);
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 2px var(--tower-frame);
-  background: var(--lx-gold-wash);
-  opacity: 0;
-  transform: translateY(calc(var(--at, 0) * -1 * (var(--tower-tile-h) + var(--tower-gap))));
-  transition: transform 420ms var(--tower-ease), opacity 200ms var(--tower-ease);
-  pointer-events: none;
-}
-.tower__board[data-state="play"] .tower__cursor { opacity: 1; }
 
 .ttile {
   position: relative;
@@ -408,7 +389,6 @@ body.lx #towerGo[aria-busy="true"]::after { opacity: 1; animation: tower-sheen 9
 
 @media (prefers-reduced-motion: reduce) {
   .ttile,
-  .tower__cursor,
   .tower__modes::before,
   .tower__mode,
   .tower__random,

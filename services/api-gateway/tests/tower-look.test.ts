@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-/* Tower's casino-floor look (2026-11-09): a gold frame that climbs with the player, tiles that flip
+/* Tower's casino-floor look (2026-11-09): tiles that flip
  * over to their gem or TNT, the rest of the tower turning over when a climb ends, a win card that
  * counts up, a sliding difficulty pill, and the tower's own sounds. Flat: no glow, no loss banner. */
 
@@ -11,12 +11,11 @@ const frontend = path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/
 const read = async (file: string) => (await readFile(path.join(frontend, file), 'utf8')).replace(/\r\n/g, '\n');
 
 describe('the tower table', () => {
-  it('frames the floor being climbed and slides the frame up as the player climbs', async () => {
+  it('marks the floor being climbed by its tiles alone, with no frame round it (the operator’s call)', async () => {
     const [page, css] = await Promise.all([read('assets/js/tower.js'), read('assets/css/tower.css')]);
-    assert.match(page, /<div class="tower__cursor" aria-hidden="true"><\/div>/);
-    assert.match(page, /if \(inPlay\(\)\) board\.style\.setProperty\('--at', String\(current\)\);/);
-    assert.match(css, /transform: translateY\(calc\(var\(--at, 0\) \* -1 \* \(var\(--tower-tile-h\) \+ var\(--tower-gap\)\)\)\);/);
-    assert.match(css, /\.tower__board\[data-state="play"\] \.tower__cursor \{ opacity: 1; \}/);
+    assert.doesNotMatch(page, /tower__cursor|'--at'/);
+    assert.doesNotMatch(css, /tower__cursor|var\(--at/);
+    assert.match(css, /body\.lx \.tower \.tfloor\[data-state="now"\] \.ttile\[data-kind="hidden"\] \{ background: var\(--lx-4\); \}/);
   });
 
   it('turns tiles over, reveals the rest of the tower when a climb ends, and pops a win card only on a win', async () => {
@@ -45,7 +44,7 @@ describe('the tower table', () => {
     assert.match(page, /\$\('\.tower__modes', root\)\.style\.setProperty\('--mode-i', String\(MODE_NAMES\.indexOf\(name\)\)\);/);
     assert.match(css, /transform: translateX\(calc\(var\(--mode-i, 0\) \* 100%\)\);/);
     assert.doesNotMatch(css, /blur\(|drop-shadow|text-shadow/);
-    assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.tower__cursor,[\s\S]*\.ttile\[data-kind="boom"\]::after,/);
+    assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.tower__modes::before,[\s\S]*\.ttile\[data-kind="boom"\]::after,/);
     for (const motion of ['function wake()', 'function gem(', 'async function boom(']) {
       const body = page.slice(page.indexOf(motion), page.indexOf('\n}\n', page.indexOf(motion)));
       assert.match(body, /reduceMotion\(\)\) return;/, motion);
