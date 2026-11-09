@@ -15,8 +15,13 @@
  * ladder as he clears them. The flat tower stays underneath for the keyboard and a screen reader,
  * for a browser without WebGL, and for a player who switches to 2D (view3d.js).
  *
- * Motion is two things: a gem settling into its tile, and the TNT going off. With reduced motion
- * both become an instant change of state, and nothing shakes.
+ * Motion, on the flat tower: a gold frame round the floor being climbed that slides up a floor at
+ * a time; a tile flipping over to show its gem or its TNT; the next floor waking as the frame
+ * arrives; the TNT shaking the tower, and the rest of it turning over floor by floor once a climb
+ * ends; a win card popping up over the tower, its amount counting up. Every step has its sound
+ * (audio-engine.js, the tower cues): a gem rings higher the higher the floor. With reduced motion
+ * every one of them is an instant change of state, and nothing shakes. No line of text says how a
+ * climb went; a screen reader hears it from the status line (say).
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
@@ -146,7 +151,7 @@ async function start() {
     ));
     game = response.game;
     focusTile = 0;
-    playSound('click');
+    wake();
     say(`Climb started on ${MODES[mode].label}. Pick a tile on floor 1.`);
     await refreshSeed();
   } catch (error) {
@@ -171,13 +176,19 @@ async function pick(tile) {
   const floor = game.floor;
   busy = true;
   pressed = tile;
+  playSound('towerTap');
   paint();
   try {
     const response = await api.post(`/v1/tower/games/${game.id}/pick`, { tile, floor });
     game = response.game;
     if (tower3d) await tower3d.open(floor, tile, game.outcome === 'trap');
+    else {
+      // The tile shows what it was before its motion runs: the flip turns over the new face.
+      pressed = null;
+      paintBoard();
+    }
     if (game.outcome === 'trap') {
-      if (!tower3d) boom(floor, tile);
+      if (!tower3d) await boom(floor, tile);
       say(`TNT on floor ${floor + 1}. You lost ${money(Number(game.stakeMinor))}.`);
     } else {
       if (!tower3d) gem(floor, tile);
@@ -222,10 +233,24 @@ async function cashOut() {
 
 function finished() {
   if (game?.outcome !== 'cashout') return;
-  playSound('win');
+  playSound('towerCash');
   tower3d?.celebrate(game.multiplierBps);
   const top = game.picks.length === FLOORS ? ' from the top' : '';
   say(`Cashed out${top} at ${times(game.multiplierBps)} for ${money(Number(game.payoutMinor))}.`);
+  if (tower3d) return;
+  paintBoard();
+  if (reduceMotion()) return;
+  const banner = $('#towerBanner', root);
+  banner.animate(
+    [
+      { opacity: 0, transform: 'translate(-50%, -50%) scale(.82)' },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.04)', offset: 0.6 },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    ],
+    { duration: 380, easing: EASE },
+  );
+  countUp($('span', banner), Number(game.payoutMinor), 650);
+  revealRest(game.picks.length, 160);
 }
 
 function randomPick() {
@@ -363,28 +388,82 @@ function tileNode(floor, tile) {
   return floorNode(floor)?.querySelector(`.ttile[data-tile="${tile}"]`);
 }
 
-function gem(floor, tile) {
-  playSound('tick');
-  if (reduceMotion()) return;
-  tileNode(floor, tile)?.animate(
-    [{ transform: 'scale(.94)' }, { transform: 'scale(1.04)', offset: 0.55 }, { transform: 'scale(1)' }],
-    { duration: 240, easing: 'cubic-bezier(.16, 1, .3, 1)' },
-  );
+const EASE = 'cubic-bezier(.16, 1, .3, 1)';
+/* A tile turning over towards the player, top edge first, and settling. */
+const FLIP = [
+  { transform: 'perspective(520px) rotateX(-90deg)' },
+  { transform: 'perspective(520px) rotateX(14deg)', offset: 0.68 },
+  { transform: 'perspective(520px) rotateX(0deg)' },
+];
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/** A climb starting: the floors wake from the bottom up, and the frame arrives on floor 1. */
+function wake() {
+  playSound('towerStart');
+  if (tower3d || reduceMotion()) return;
+  for (let floor = 0; floor < FLOORS; floor += 1) {
+    floorNode(floor)?.animate(
+      [{ opacity: 0.35, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 280, delay: floor * 32, easing: EASE, fill: 'backwards' },
+    );
+  }
 }
 
-function boom(floor, tile) {
-  playSound('slam');
-  try { navigator.vibrate?.(60); } catch { /* not every browser lets a page vibrate */ }
+/** A gem: the tile turns over, it rings (higher the higher the floor), and the next floor wakes. */
+function gem(floor, tile) {
+  playSound('towerGem', { rate: 1 + floor * 0.07 });
   if (reduceMotion()) return;
-  tileNode(floor, tile)?.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.12)', offset: 0.3 }, { transform: 'scale(1)' }],
-    { duration: 320, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+  tileNode(floor, tile)?.animate(FLIP, { duration: 340, easing: EASE });
+  if (!inPlay()) return;
+  setTimeout(() => playSound('towerClimb', { rate: 1 + floor * 0.05 }), 150);
+  floorNode(game.floor)?.querySelectorAll('.ttile').forEach((node, index) => {
+    node.animate(
+      [{ opacity: 0.4, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 300, delay: 140 + index * 45, easing: EASE, fill: 'backwards' },
+    );
+  });
+}
+
+/** TNT: the tile turns over, the tower shakes, and the rest of it is shown floor by floor. */
+async function boom(floor, tile) {
+  playSound('towerBoom');
+  try { navigator.vibrate?.(80); } catch { /* not every browser lets a page vibrate */ }
+  if (reduceMotion()) return;
+  tileNode(floor, tile)?.animate(FLIP, { duration: 300, easing: EASE });
+  $('.tower__pit', root)?.animate(
+    [{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(7px)' },
+      { transform: 'translateX(-4px)' }, { transform: 'translateX(2px)' }, { transform: 'translateX(0)' }],
+    { duration: 420, delay: 90, easing: EASE },
   );
-  floorNode(floor)?.animate(
-    [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' },
-      { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
-    { duration: 340, easing: 'cubic-bezier(.16, 1, .3, 1)' },
-  );
+  await wait(320);
+  revealRest(floor, 0);
+}
+
+/** Once a climb ends, every floor from `from` up turns over, a floor at a time. */
+function revealRest(from, delay) {
+  for (let floor = from; floor < FLOORS; floor += 1) {
+    const at = delay + (floor - from) * 60;
+    setTimeout(() => playSound('towerReveal', { rate: 1 + (floor - from) * 0.06 }), at);
+    floorNode(floor)?.querySelectorAll('.ttile').forEach((node, index) => {
+      if (node.dataset.kind === 'boom') return;
+      node.animate(
+        [{ opacity: 0, transform: 'perspective(520px) rotateX(-70deg)' }, { opacity: 1, transform: 'none' }],
+        { duration: 300, delay: at + index * 22, easing: EASE, fill: 'backwards' },
+      );
+    });
+  }
+}
+
+/** The win card's amount, counted up from nothing. */
+function countUp(node, value, ms) {
+  const started = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / ms);
+    node.textContent = money(Math.round(value * (1 - (1 - t) ** 3)));
+    if (t < 1 && node.isConnected) requestAnimationFrame(step);
+  };
+  node.textContent = money(0);
+  requestAnimationFrame(step);
 }
 
 /* One polite, whole sentence per event. */
@@ -400,7 +479,6 @@ function say(text) {
 function paint() {
   if (!root) return;
   paintBoard();
-  paintReadout();
   paintControls();
   paintGraphics();
   syncTower();
@@ -408,7 +486,7 @@ function paint() {
 
 /** Each floor's tiles, rebuilt only when the mode changes how many a floor has. */
 function ensureTiles(floorEl, count) {
-  if (floorEl.childElementCount === count) return;
+  if (floorEl.childElementCount === count) return false;
   floorEl.style.setProperty('--tiles', String(count));
   floorEl.replaceChildren(...Array.from({ length: count }, (_, tile) => {
     const button = document.createElement('button');
@@ -416,6 +494,8 @@ function ensureTiles(floorEl, count) {
     button.className = 'ttile';
     button.dataset.tile = String(tile);
     button.dataset.kind = 'hidden';
+    // Its sound is the pick's own (towerTap), not every button's click.
+    button.dataset.sfx = 'none';
     button.tabIndex = -1;
     const label = document.createElement('span');
     label.className = 'ttile__x';
@@ -423,6 +503,7 @@ function ensureTiles(floorEl, count) {
     button.append(label);
     return button;
   }));
+  return true;
 }
 
 function paintBoard() {
@@ -432,10 +513,13 @@ function paintBoard() {
   const current = inPlay() ? game.floor : -1;
   board.dataset.state = inPlay() ? 'play' : over() ? 'over' : 'idle';
   board.dataset.mode = name;
+  // The gold frame sits on the floor being climbed and slides there (tower.css).
+  if (inPlay()) board.style.setProperty('--at', String(current));
+  let rebuilt = false;
 
   for (let floor = 0; floor < FLOORS; floor += 1) {
     const floorEl = floorNode(floor);
-    ensureTiles(floorEl, tiles);
+    if (ensureTiles(floorEl, tiles)) rebuilt = true;
     const picked = game?.picks?.[floor];
     const cleared = game ? floor < game.picks.length : false;
     const lostHere = over() && game.outcome === 'trap' && floor === game.picks.length;
@@ -473,35 +557,26 @@ function paintBoard() {
     }
   }
 
+  /* A new difficulty with a new number of tiles: the floors come in from the bottom up. */
+  if (rebuilt && !reduceMotion() && board.dataset.built) {
+    for (let floor = 0; floor < FLOORS; floor += 1) {
+      floorNode(floor)?.animate(
+        [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 260, delay: floor * 26, easing: EASE, fill: 'backwards' },
+      );
+    }
+  }
+  board.dataset.built = '1';
+
+  /* A win only: the multiplier and what it paid. A loss says itself in the red tile. */
   const banner = $('#towerBanner', root);
-  if (over()) {
-    const won = game.outcome === 'cashout';
-    const profit = BigInt(game.payoutMinor || '0') - BigInt(game.stakeMinor);
+  if (over() && game.outcome === 'cashout') {
     banner.hidden = false;
-    banner.dataset.tone = won ? 'won' : 'lost';
-    $('b', banner).textContent = won ? times(game.multiplierBps) : 'TNT';
-    $('span', banner).textContent = won
-      ? `${profit >= 0n ? '+' : '−'}${money(Number(profit >= 0n ? profit : -profit))}`
-      : `−${money(Number(game.stakeMinor))}`;
+    banner.dataset.tone = 'won';
+    $('b', banner).textContent = times(game.multiplierBps);
+    $('span', banner).textContent = money(Number(game.payoutMinor || '0'));
   } else {
     banner.hidden = true;
-  }
-}
-
-function paintReadout() {
-  const now = $('#towerNow', root);
-  const next = $('#towerNext', root);
-  const name = boardMode();
-  const { tiles, traps } = MODES[name];
-  const safePct = `${Math.round(((tiles - traps) / tiles) * 100)}% safe`;
-  if (inPlay()) {
-    now.textContent = game.floor
-      ? `${times(game.multiplierBps)} · ${money(Number(game.cashoutMinor))}`
-      : `Floor 1 of ${FLOORS} · pick a tile`;
-    next.textContent = game.nextMultiplierBps ? `Floor ${game.floor + 1} pays ${times(game.nextMultiplierBps)} · ${safePct}` : '';
-  } else {
-    now.textContent = `${MODES[name].label} · ${tiles - traps} of ${tiles} safe`;
-    next.textContent = `Top floor pays ${times(multiplierBps(name, FLOORS))}`;
   }
 }
 
@@ -540,6 +615,8 @@ function paintControls() {
     node.disabled = locked;
   }
   const name = boardMode();
+  // The gold pill under the chosen difficulty slides to it (tower.css).
+  $('.tower__modes', root).style.setProperty('--mode-i', String(MODE_NAMES.indexOf(name)));
   root.querySelectorAll('.tower__mode').forEach((button) => {
     const chosen = button.dataset.mode === name;
     button.setAttribute('aria-checked', String(chosen));
@@ -564,13 +641,10 @@ function build() {
   ).join('');
   root.innerHTML = `
     <section class="tower__stage" aria-label="The tower">
-      <div class="tower__readout">
-        <b id="towerNow">—</b>
-        <span id="towerNext"></span>
-      </div>
       <div class="tower__pit">
       <div class="tower__board" id="towerBoard" role="group" aria-label="Nine floors, climbed from the bottom. Use the left and right arrow keys to choose a tile on your floor and Enter to turn it">
         ${floors}
+        <div class="tower__cursor" aria-hidden="true"></div>
       </div>
       <div class="tower__banner" id="towerBanner" hidden><b></b><span></span></div>
       </div>

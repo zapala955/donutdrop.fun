@@ -415,6 +415,49 @@ const CUES = {
     tone(ctx, { freq: 250, type: 'triangle', duration: 0.13, gain: 0.11, sweepTo: 175 });
     noise(ctx, { duration: 0.05, gain: 0.03, frequency: 900, q: 1 });
   },
+
+  /* ── Tower ──
+   * A tap as a tile is chosen, a gem that rings higher the higher the floor, a lift as the next
+   * floor wakes, a short blast for TNT, the rest of the tower ticking over, and the cash-out.
+   */
+  /** A tile chosen: a soft, wooden press. */
+  towerTap(ctx) {
+    tone(ctx, { freq: 620, type: 'triangle', duration: 0.045, gain: 0.07, sweepTo: 480 });
+    noise(ctx, { duration: 0.02, gain: 0.025, frequency: 2600, q: 1.4 });
+  },
+  /** A climb starting: two notes going up. */
+  towerStart(ctx) {
+    tone(ctx, { freq: 523.25, type: 'triangle', duration: 0.1, gain: 0.11 });
+    tone(ctx, { freq: 783.99, type: 'triangle', start: 0.07, duration: 0.16, gain: 0.1 });
+  },
+  /** A gem: a glassy ring with a glint. Pitched by the caller, a step up for every floor. */
+  towerGem(ctx) {
+    tone(ctx, { freq: 1046.5, type: 'sine', duration: 0.22, gain: 0.12 });
+    tone(ctx, { freq: 1568, type: 'triangle', start: 0.035, duration: 0.18, gain: 0.07 });
+    noise(ctx, { start: 0.02, duration: 0.08, gain: 0.025, frequency: 7000, q: 0.9 });
+  },
+  /** The next floor waking: a short rise. */
+  towerClimb(ctx) {
+    tone(ctx, { freq: 330, type: 'sine', duration: 0.14, gain: 0.05, sweepTo: 660 });
+  },
+  /** TNT: a hard crack and a short low boom, not the long roar of the mine. */
+  towerBoom(ctx) {
+    noise(ctx, { duration: 0.08, gain: 0.28, frequency: 1700, q: 0.6 });
+    noise(ctx, { duration: 0.45, gain: 0.24, frequency: 190, q: 0.4 });
+    tone(ctx, { freq: 90, type: 'sine', duration: 0.4, gain: 0.24, sweepTo: 38 });
+  },
+  /** The rest of the tower turning over: a tiny tick per floor, pitched up by the caller. */
+  towerReveal(ctx) {
+    tone(ctx, { freq: 760, type: 'sine', duration: 0.035, gain: 0.03 });
+  },
+  /** Cashed out: a quick run of four notes and a shimmer. */
+  towerCash(ctx) {
+    [783.99, 987.77, 1174.66, 1567.98].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
+    });
+    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
+    tone(ctx, { freq: 196, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 262 });
+  },
 };
 
 /**
