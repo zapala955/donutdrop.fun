@@ -3,18 +3,19 @@
  * Three tiers, chosen once before the renderer is made (some things, antialiasing among them, can
  * only be decided then):
  *
- *   low     a phone, a laptop's integrated graphics, a software renderer: the screen's resolution
+ *   low     a laptop's old integrated graphics, a software renderer: the screen's resolution
  *           at most 1 (less on a dense phone screen), no antialiasing, no glow, no post-processing,
  *           a third of the particles, fewer creatures, a shorter view into the fog, and a steady
  *           thirty frames a second -- the whole scene stepped thirty times, not only drawn.
  *   medium  most laptops: the screen's resolution up to 2, light multisampling (2x), glow at half
  *           resolution, most of the effects, sixty frames a second at most (a fast screen gets no
  *           more, and the machine keeps its breath).
- *   high    a real graphics card: resolution up to 2, 4x multisampling, full glow, everything, as
- *           many frames as the screen shows.
+ *   high    a real graphics card, and every phone or tablet: resolution up to 2 (1.5 on a phone),
+ *           4x multisampling, full glow, everything, as many frames as the screen shows.
  *
  * The guess comes from the GPU's own name where the browser gives it (WEBGL_debug_renderer_info),
- * the device's memory and cores, and whether it is a phone. A player can overrule it from the game's
+ * the device's memory and cores, and whether it is a phone. A phone starts on high whatever its GPU
+ * (only a software renderer is held to low). A player can overrule the guess from the game's
  * panel ("Graphics: Auto / Low / High"), which is kept with the other display settings. While
  * playing, a machine that cannot keep up steps down on its own (see `createGovernor`).
  */
@@ -50,11 +51,13 @@ export function guessTier(gl) {
   const memory = Number(navigator.deviceMemory) || 8;
   const cores = Number(navigator.hardwareConcurrency) || 4;
   const mobile = isMobile();
-  // Software rendering, and the weakest integrated and mobile GPUs still about.
+  // Software rendering.
   if (/SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic/i.test(gpu)) return 'low';
+  // Phones and tablets start on high, whatever the GPU: the governor steps a slow one down as it plays.
+  if (mobile) return 'high';
+  // The weakest integrated GPUs still about, and a computer short of memory or cores.
   if (/Mali-(4|T[0-9]|G[357]\d)|Adreno.*\b[2-5]\d\d\b|PowerVR|Intel.*HD Graphics( [2-5]\d\d)?\b|Intel\(R\) (HD|UHD) Graphics(?! [67]\d\d)/i.test(gpu)) return 'low';
   if (memory <= 2 || cores <= 2) return 'low';
-  if (mobile) return memory >= 6 && /Apple|Adreno.*\b[7-9]\d\d\b|Mali-G7[1-9]\d?|Immortalis/i.test(gpu) ? 'medium' : 'low';
   if (/Intel|Iris|UHD|Radeon\(TM\) Graphics|Vega [3-8]\b/i.test(gpu) || memory <= 4) return 'medium';
   return 'high';
 }

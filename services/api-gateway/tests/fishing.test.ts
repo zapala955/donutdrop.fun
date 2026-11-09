@@ -376,6 +376,20 @@ describe('fishing: the page and the dive', () => {
     assert.equal(q.guessTier(gl('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)')), 'low');
     assert.equal(q.guessTier(gl('Mali-G52 MC2')), 'low');
     assert.equal(q.guessTier(gl('ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0)')), 'low');
+    // A phone or tablet starts on high whatever its GPU; only a software renderer is held to low.
+    const real = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    for (const userAgent of [
+      'Mozilla/5.0 (Linux; Android 12; SM-A135F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    ]) {
+      Object.defineProperty(globalThis, 'navigator', { value: { userAgent, deviceMemory: 2, hardwareConcurrency: 8, maxTouchPoints: 5 }, configurable: true });
+      try {
+        for (const gpu of ['Mali-G52 MC2', 'Adreno (TM) 610', 'PowerVR Rogue GE8320', 'Apple GPU']) assert.equal(q.guessTier(gl(gpu)), 'high', `${gpu} on ${userAgent}`);
+        assert.equal(q.guessTier(gl('SwiftShader driver')), 'low');
+      } finally {
+        if (real) Object.defineProperty(globalThis, 'navigator', real);
+      }
+    }
     // The player's choice wins over the guess.
     const prefs = globalThis as { DonutPrefs?: unknown };
     prefs.DonutPrefs = { get: () => ({ gfx: 'low' }) };
