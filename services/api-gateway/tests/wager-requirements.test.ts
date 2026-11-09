@@ -125,8 +125,9 @@ describe('the wager requirement', () => {
   it('locks every kind of free money, not only the signup bonus', async () => {
     /* The streak, quest rewards, Lava Rain shares and admin giveaways were credited with no
      * requirement at all, so an alt could collect them and withdraw having never placed a bet. Each
-     * credit must be followed, before the next statement that could commit, by its lock at the
-     * signup bonus's multiplier. */
+     * credit must be followed, before the next statement that could commit, by its lock: at the
+     * signup bonus's multiplier, but a quest reward at the quests' own and the referral milestone at
+     * the referral bonus's. */
     const [engagement, social, admin, daily, discord, crowns] = await Promise.all([
       read('services/api-gateway/src/routes/engagement.ts'),
       read('services/api-gateway/src/routes/social.ts'),
@@ -136,14 +137,21 @@ describe('the wager requirement', () => {
       read('services/api-gateway/src/lib/crowns.ts'),
     ]);
     // `credit` is the line that pays: the ledger kind as the credit writes it.
-    const lockedAfter = (source: string, credit: string, amount: string, file: string) => {
+    const lockedAfter = (source: string, credit: string, amount: string, file: string, multiplier = 'signupBonusWagerMultiplier', reach = 900) => {
       const at = source.indexOf(credit);
       assert.ok(at > 0, `${file} no longer pays with ${credit}`);
-      const lock = `requirementFor(${amount}, config.signupBonusWagerMultiplier)`;
-      const after = source.slice(at, at + 900);
+      const lock = `requirementFor(${amount}, config.${multiplier})`;
+      const after = source.slice(at, at + reach);
       assert.ok(after.includes(lock), `${credit} in ${file} is credited without a wager lock`);
     };
-    lockedAfter(engagement, "'quest_reward',", 'reward', 'engagement.ts');
+    lockedAfter(engagement, "'quest_reward',", 'reward', 'engagement.ts', 'questRewardWagerMultiplier');
+    const [board, referrals] = await Promise.all([
+      read('services/api-gateway/src/lib/quest-board.ts'),
+      read('services/api-gateway/src/lib/referrals.ts'),
+    ]);
+    // The claim's row goes in between, in the same transaction: a second claim rolls the credit back.
+    lockedAfter(board, "'quest_reward', claimId)", 'reward', 'quest-board.ts', 'questRewardWagerMultiplier', 1400);
+    lockedAfter(referrals, "'referral_bonus', refereeId)", 'bonus', 'referrals.ts', 'referralBonusWagerMultiplier');
     lockedAfter(engagement, "'streak_reward',", 'reward', 'engagement.ts');
     lockedAfter(social, "'rain_claim',\n", 'each', 'social.ts');
     lockedAfter(admin, "$4, 'admin_adjustment', $5)", 'delta', 'admin.ts');
@@ -152,6 +160,15 @@ describe('the wager requirement', () => {
     assert.match(discord, /creditWallet\(client, userId, amount, kind, rewardId\);\s+await addWagerRequirement\(/);
     // A giveaway locks unless the operator says it is a refund; a debit never adds anything.
     assert.match(admin, /delta > 0n && body\.wagerLock !== false/);
+  });
+
+  it('prices each kind of free money by its own live setting, defaulting to 5x, 3x and 1x as asked', async () => {
+    const settings = await read('services/api-gateway/src/lib/runtime-settings.ts');
+    for (const key of ['signupBonusWagerMultiplier', 'questRewardWagerMultiplier', 'referralBonusWagerMultiplier', 'depositWagerMultiplier']) {
+      assert.match(settings, new RegExp(`  ${key}: \\{\\n    kind: 'integer',`), key);
+    }
+    assert.equal(config.questRewardWagerMultiplier, 3);
+    assert.equal(config.referralBonusWagerMultiplier, 1);
   });
 
   it('gives the admin panel a giveaway and a refund, never one ambiguous credit', async () => {

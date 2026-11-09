@@ -847,6 +847,11 @@ const environmentSchema = z
     SIGNUP_BONUS_MINOR: nonNegativeBigintString.default('2000000'),
     SIGNUP_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     DEPOSIT_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
+    /* Quest rewards (the quest board, and the daily and weekly quests before it) and the referral
+     * milestone bonus each have their own multiplier rather than the signup bonus's: the operator
+     * prices them differently. Both are live settings. */
+    QUEST_REWARD_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(3),
+    REFERRAL_BONUS_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(1),
     /* Discord OAuth. The client secret is file-backed like every other credential, and the
      * redirect URI is pinned here rather than taken from the request: an attacker-chosen redirect
      * is how an authorization code leaves for somebody else's server. */
@@ -1713,6 +1718,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     signupBonusMinor: BigInt(env.SIGNUP_BONUS_MINOR),
     signupBonusWagerMultiplier: env.SIGNUP_BONUS_WAGER_MULTIPLIER,
     depositWagerMultiplier: env.DEPOSIT_WAGER_MULTIPLIER,
+    questRewardWagerMultiplier: env.QUEST_REWARD_WAGER_MULTIPLIER,
+    referralBonusWagerMultiplier: env.REFERRAL_BONUS_WAGER_MULTIPLIER,
     discordClientId: env.DISCORD_CLIENT_ID,
     discordClientSecret: env.DISCORD_CLIENT_SECRET,
     discordRedirectUri: env.DISCORD_REDIRECT_URI,

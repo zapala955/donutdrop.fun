@@ -25,8 +25,8 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * A CLAIM PAYS ONCE. Its row is unique on (quest, player, period), inserted in the same transaction
  * that credits the wallet; a second claim, a double click or a retried request, finds the row and is
  * refused. Progress is read again inside that transaction, against the database's own clock. The
- * reward is free money, so it carries the wager requirement every kind of free money does
- * (signupBonusWagerMultiplier, lib/wager-requirements.ts).
+ * reward is free money, so it carries a wager requirement: the quest rewards' own multiplier
+ * (questRewardWagerMultiplier, lib/wager-requirements.ts).
  */
 
 export const QUEST_KINDS = ['deposit', 'wager'] as const;
@@ -117,7 +117,7 @@ export async function readQuestBoard(db: Database, config: AppConfig, userId: st
   return {
     periodStart: start.toISOString(),
     periodEnd: end.toISOString(),
-    wagerMultiplier: config.signupBonusWagerMultiplier,
+    wagerMultiplier: config.questRewardWagerMultiplier,
     quests: quests.rows.map((row) => {
       const target = BigInt(row.target_minor);
       const done = progress ? progress[row.kind] : null;
@@ -178,7 +178,7 @@ export async function claimBoardQuest(
     );
     if (inserted.rowCount !== 1) conflict('QUEST_ALREADY_CLAIMED', 'That quest is already claimed for this period');
     // Free money: wagered like the signup bonus before it can leave.
-    await addWagerRequirement(client, userId, requirementFor(reward, config.signupBonusWagerMultiplier));
+    await addWagerRequirement(client, userId, requirementFor(reward, config.questRewardWagerMultiplier));
     return { rewardMinor: reward.toString(), balanceAfterMinor: balanceAfter };
   });
   liveEvents.publish('balance', [userId]);

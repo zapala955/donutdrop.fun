@@ -8,15 +8,19 @@
  * wagers, every settled wager counts it down, and money only leaves (cash withdrawal, tip, item
  * withdrawal) once it reaches zero.
  *
- * FREE MONEY IS FREE MONEY, WHATEVER IT IS CALLED. The signup bonus's multiplier
- * (signupBonusWagerMultiplier) is the one every credit the player did not stake for carries: the
- * signup bonus, a daily code, a Discord join or tag reward, a crown bounty, the daily streak, a
- * quest reward, a Lava Rain share, and a balance an administrator gives away. Any one of them left
- * out is money an alt can collect and withdraw untouched: the streak paid with no wager at all,
- * and a giveaway credited from the admin panel could be withdrawn the same minute. What stays out
- * is money the player already wagered for at the house's price -- rakeback, race and jackpot wins,
- * a referral share -- and money that was theirs to begin with (an operator refund says so with
- * wagerLock).
+ * FREE MONEY IS FREE MONEY, WHATEVER IT IS CALLED. Every credit the player did not stake for
+ * carries a requirement. Three multipliers, each a live setting, price them:
+ *   signupBonusWagerMultiplier    the signup bonus, and with it a daily code, a Discord join or tag
+ *                                 reward, a crown bounty, the daily streak, a Lava Rain share and a
+ *                                 balance an administrator gives away;
+ *   questRewardWagerMultiplier    a quest reward (the quest board, the daily and weekly quests);
+ *   referralBonusWagerMultiplier  the referral milestone bonus paid to an inviter.
+ * Any one of them left out is money an alt can collect and withdraw untouched: the streak paid
+ * with no wager at all, and a giveaway credited from the admin panel could be withdrawn the same
+ * minute. What stays out is money the player already wagered for at the house's price --
+ * rakeback, race and jackpot wins, the referral revenue share -- and money that was theirs to
+ * begin with (an operator refund says so with wagerLock). A deposit carries its own,
+ * depositWagerMultiplier.
  *
  * ONE FIGURE, NOT A LEDGER OF LOCKS. The only question anybody asks is "may this player move money
  * out yet", and one row answers it in one read. The cost is that it cannot say which deposit is

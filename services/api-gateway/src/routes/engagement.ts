@@ -142,7 +142,7 @@ export async function registerEngagementRoutes(
         await addWagerRequirement(
           client,
           userId,
-          requirementFor(reward, config.signupBonusWagerMultiplier),
+          requirementFor(reward, config.questRewardWagerMultiplier),
         );
         await client.query(
           `UPDATE quest_progress

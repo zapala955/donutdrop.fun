@@ -58,7 +58,7 @@ describe('quest board: what counts and what pays', () => {
     assert.match(lib, /creditWallet\(client, userId, reward, 'quest_reward', claimId\)/);
     assert.match(lib, /ON CONFLICT \(quest_id, user_id, period_start\) DO NOTHING/);
     assert.match(lib, /if \(inserted\.rowCount !== 1\) conflict\('QUEST_ALREADY_CLAIMED'/);
-    assert.match(lib, /addWagerRequirement\(client, userId, requirementFor\(reward, config\.signupBonusWagerMultiplier\)\)/);
+    assert.match(lib, /addWagerRequirement\(client, userId, requirementFor\(reward, config\.questRewardWagerMultiplier\)\)/);
   });
 
   it('has a public, rate-limited board, a CSRF-guarded claim, and audited admin writes', async () => {
@@ -114,7 +114,7 @@ describe('quest board: claims against PostgreSQL', { skip: !databaseUrl }, () =>
     const runtimeUrl = new URL(databaseUrl);
     runtimeUrl.username = 'donut_ci_quest_login';
     runtimeUrl.password = 'ci-only-quest-password-71d0c2aa';
-    const config = { databaseUrl: runtimeUrl.toString(), databaseSsl: false, signupBonusWagerMultiplier: 3 } as unknown as AppConfig;
+    const config = { databaseUrl: runtimeUrl.toString(), databaseSsl: false, questRewardWagerMultiplier: 3 } as unknown as AppConfig;
     const db = new Database(config);
     const user = randomUUID();
     const tag = user.slice(0, 8);

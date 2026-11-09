@@ -9,6 +9,7 @@ import { conflict } from './errors.js';
 import { recordNetwork, referralStanding, voidSameNetworkReferral } from './referral-network.js';
 import { countedWagerMinor } from './rewards.js';
 import { creditWallet } from './wallet.js';
+import { addWagerRequirement, requirementFor } from './wager-requirements.js';
 
 /**
  * The referral programme: a lifetime revenue share, and a one-off milestone bonus.
@@ -303,6 +304,8 @@ export async function tryUnlockMilestone(
   );
 
   await creditWallet(client, referral.referrer_id, bonus, 'referral_bonus', refereeId);
+  // Wagered before it can leave, at the referral bonus's own multiplier (lib/wager-requirements.ts).
+  await addWagerRequirement(client, referral.referrer_id, requirementFor(bonus, config.referralBonusWagerMultiplier));
   await client.query(
     `UPDATE referrals
         SET bonus_unlocked_at = now(), bonus_paid_minor = $2, updated_at = now()

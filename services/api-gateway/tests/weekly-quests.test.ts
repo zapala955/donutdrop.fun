@@ -127,7 +127,7 @@ describe('weekly quests: what counts', () => {
     assert.match(source, /WHERE id = \$1 AND settled_at IS NULL AND settles_at <= now\(\)/);
     assert.match(source, /creditWallet\(client, winner\.userId, winner\.amount, 'weekly_quest_reward', payoutId\)/);
     // Free money is free money: the same requirement as every other kind (lib/wager-requirements.ts).
-    assert.match(source, /requirementFor\(winner\.amount, config\.signupBonusWagerMultiplier\)/);
+    assert.match(source, /requirementFor\(winner\.amount, config\.questRewardWagerMultiplier\)/);
     // An open round still settles after the quests are switched off: it was promised.
     const sweep = source.slice(source.indexOf('export async function runWeeklyQuestSweep'));
     assert.match(sweep, /if \(config\.weeklyQuestsEnabled\) \{\s*for \(const quest of WEEKLY_QUESTS\)/);

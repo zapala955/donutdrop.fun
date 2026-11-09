@@ -232,7 +232,21 @@ export const runtimeSettingDefinitions = {
   signupBonusWagerMultiplier: {
     kind: 'integer',
     group: 'rewards',
-    label: 'Free money wager before withdrawing (x amount: bonus, codes, rewards, rain, giveaways)',
+    label: 'Signup bonus wager before withdrawing (x bonus; also codes, rain, streak, Discord, bounties, giveaways)',
+    min: 0n,
+    max: 100n,
+  },
+  questRewardWagerMultiplier: {
+    kind: 'integer',
+    group: 'rewards',
+    label: 'Quest reward wager before withdrawing (x reward)',
+    min: 0n,
+    max: 100n,
+  },
+  referralBonusWagerMultiplier: {
+    kind: 'integer',
+    group: 'rewards',
+    label: 'Referral bonus wager before withdrawing (x bonus)',
     min: 0n,
     max: 100n,
   },

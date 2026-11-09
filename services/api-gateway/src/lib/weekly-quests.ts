@@ -34,7 +34,7 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  *
  * The sweeper opens the week's rounds and settles each one once its grace period after the week
  * has passed, paying the prizes through the ledger ('weekly_quest_reward', referenced by the payout
- * row) with the wager requirement every kind of free money carries (signupBonusWagerMultiplier,
+ * row) with the quest rewards' wager requirement (questRewardWagerMultiplier,
  * lib/wager-requirements.ts). A round that was open
  * keeps settling even after the quests are switched off: it was promised.
  */
@@ -321,7 +321,7 @@ export async function settleRound(db: Database, config: AppConfig, roundId: stri
       await addWagerRequirement(
         client,
         winner.userId,
-        requirementFor(winner.amount, config.signupBonusWagerMultiplier),
+        requirementFor(winner.amount, config.questRewardWagerMultiplier),
       );
       paid.push({ roundId: round.id, quest: round.quest, userId: winner.userId, amountMinor: winner.amount });
     }
@@ -438,7 +438,7 @@ export async function readWeeklyQuests(
   if (!config.weeklyQuestsEnabled) {
     return {
       enabled: false, startsAt: null, endsAt: null, settlesAt: null,
-      depositRace: null, recruit: null, wagerMultiplier: config.signupBonusWagerMultiplier,
+      depositRace: null, recruit: null, wagerMultiplier: config.questRewardWagerMultiplier,
     };
   }
   const clock = await db.query<{ now: Date }>(DATABASE_NOW);
@@ -519,6 +519,6 @@ export async function readWeeklyQuests(
         : null,
       lastFinishers: lastRecruit.map((row) => ({ player: row.player, amountMinor: row.amount_minor })),
     },
-    wagerMultiplier: config.signupBonusWagerMultiplier,
+    wagerMultiplier: config.questRewardWagerMultiplier,
   };
 }
