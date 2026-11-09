@@ -27,7 +27,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { createMachine3d } from './slots3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { SCENES_ON, onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d as wantsScenes } from './view3d.js';
 
 /* What each machine's page says and shows. `art` is the item sprite (assets/img/items) for each
  * symbol the server names, real sprites drawn pixel-sharp; `prefix` keeps the two pages' element ids
@@ -76,6 +76,10 @@ const absolute = (src) => new URL(src, document.baseURI).href;
 const TIERS = [[200, 'Epic win!'], [50, 'Mega win!'], [15, 'Big win!']];
 
 /** One machine's page: its own state, its own element ids, its own 3D room. Returns the mount. */
+/** Slots keeps its 3D machine while the rest of the site is flat (view3d.js, SCENES_ON); with the
+ * choice back on, it follows the choice again. */
+const wants3d = () => !SCENES_ON || wantsScenes();
+
 function createSlotsGame(game) {
   const P = game.prefix;
   const icon = (id) => `assets/img/items/${game.art[id] || 'stone'}.png`;
@@ -152,7 +156,7 @@ function createSlotsGame(game) {
   async function startMachine() {
     if (!wants3d()) return;
     machineTried = true;
-    sceneLoading(root, $('.slots__window', root));
+    sceneLoading(root, $('.slots__window', root), wants3d());
     try {
       const built = await createMachine3d($('.slots__window', root), {
         strips: config.strips,
@@ -218,7 +222,10 @@ function createSlotsGame(game) {
   }
 
   function paintView() {
-    if (root) paintViewSwitch(root, $(`#${P}View`, root), { disabled: spinning });
+    if (!root) return;
+    if (SCENES_ON) paintViewSwitch(root, $(`#${P}View`, root), { disabled: spinning });
+    // No choice to paint: the machine is 3D, and its graphics setting stays (view3d.css).
+    else if (root.dataset.scene !== '3d') root.dataset.scene = '3d';
   }
 
   function setMode(mode) {
@@ -939,7 +946,7 @@ function createSlotsGame(game) {
       });
     }
     // A machine still to be built comes up behind the loading screen, not after the flat reels.
-    if (!machineTried) sceneLoading(root, $('.slots__window', root));
+    if (!machineTried) sceneLoading(root, $('.slots__window', root), wants3d());
     void load();
   }
 }

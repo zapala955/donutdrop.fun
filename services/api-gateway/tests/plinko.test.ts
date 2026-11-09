@@ -3,6 +3,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 import {
   PLINKO_HOUSE_EDGE_BPS,
@@ -205,5 +206,59 @@ describe('plinko in 3D', () => {
     assert.doesNotMatch(page, /void node\.offsetWidth/);
     const paintSlots = page.slice(page.indexOf('function paintSlots()'), page.indexOf('function paintReadout()'));
     assert.doesNotMatch(paintSlots, /clientWidth/);
+  });
+});
+
+describe('plinko on the flat board: the ball falls by physics', () => {
+  type Fall = { arcs: { t: number; dt: number }[]; hits: { t: number; peg: string; row: number }[]; duration: number; rough: number };
+  const load = async () => (await import(pathToFileURL(path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/js/plinko-fall.js')).href)) as {
+    simulateFall: (path: number[], rows: number, random?: () => number) => Fall;
+    fallAt: (fall: Fall, ms: number) => { x: number; y: number };
+    pegAt: (rows: number, r: number, j: number) => { x: number; y: number };
+    floorOf: (rows: number) => number;
+    TOP: number; ROW: number; FOOT: number; PEG_R: number; BALL_R: number;
+  };
+
+  it('lands every ball in the slot the server drew, one peg a row, through no peg, in a real ball\'s time', async () => {
+    const fall = await load();
+    let seed = 7;
+    const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (const rows of [8, 12, 16]) {
+      for (let k = 0; k < 150; k += 1) {
+        const path: number[] = Array.from({ length: rows }, () => (random() < 0.5 ? 0 : 1));
+        const slot = path.reduce((sum, step) => sum + step, 0);
+        const f = fall.simulateFall(path, rows, random);
+        assert.ok(f.rough <= 1, 'every arc but a rare tight one clears every peg outright');
+        // One strike a row, on the peg the path leads to, in order.
+        let rights = 0;
+        assert.deepEqual(f.hits.map((hit) => hit.peg), path.map((step, r) => { const peg = `${r}:${1 + rights}`; rights += step; return peg; }));
+        for (let i = 1; i < f.hits.length; i += 1) assert.ok(f.hits[i]!.t > f.hits[i - 1]!.t);
+        // Into its slot at the foot of the board.
+        const end = fall.fallAt(f, f.duration);
+        assert.ok(Math.abs(end.x - (slot + 1)) < 0.2, `slot ${slot}: ended at ${end.x}`);
+        assert.ok(Math.abs(end.y - fall.floorOf(rows)) < 1e-6);
+        // Never through a peg: centre to centre, never closer than touching.
+        for (let ms = 0; ms <= f.duration; ms += 5) {
+          const at = fall.fallAt(f, ms);
+          for (let r = 0; r < rows; r += 1) {
+            for (let j = 0; j < r + 3; j += 1) {
+              const peg = fall.pegAt(rows, r, j);
+              assert.ok(Math.hypot(at.x - peg.x, at.y - peg.y) > fall.PEG_R + fall.BALL_R - 0.02, `${rows} rows, ${ms} ms: into peg ${r}:${j}`);
+            }
+          }
+        }
+        // About a quarter of a second a row: slower than it was, and never a crawl.
+        assert.ok(f.duration > rows * 230 && f.duration < rows * 320 + 600, `${rows} rows took ${f.duration} ms`);
+      }
+    }
+  });
+
+  it('shares the board\'s shape with the page that draws it', async () => {
+    const [fall, page] = [await load(), await read('DONUTDROP FRONTEND/Donut Drop/assets/js/plinko.js')];
+    for (const [name, value] of [['TOP', fall.TOP], ['ROW', fall.ROW], ['FOOT', fall.FOOT], ['PEG_R', fall.PEG_R], ['BALL_R', fall.BALL_R]] as const) {
+      assert.ok(page.includes(`const ${name} = ${value};`), name);
+    }
+    assert.match(page, /ball\.fall = simulateFall\(bet\.path, n\);/);
+    assert.match(page, /if \(elapsed >= ball\.fall\.duration\) land\(ball\);/);
   });
 });

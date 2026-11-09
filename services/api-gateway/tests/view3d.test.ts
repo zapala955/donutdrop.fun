@@ -28,7 +28,7 @@ const ALWAYS = [
 describe('the 2D/3D switch', () => {
   it('is one choice for the whole site, kept with the display settings; nothing stored means 3D', async () => {
     const view = await front('assets/js/view3d.js');
-    assert.match(view, /export const wants3d = \(\) => globalThis\.DonutPrefs\?\.get\?\.\(\)\.view !== '2d';/);
+    assert.match(view, /export const wants3d = \(\) => SCENES_ON && globalThis\.DonutPrefs\?\.get\?\.\(\)\.view !== '2d';/);
     assert.match(view, /globalThis\.DonutPrefs\?\.update\?\.\(\{ view: on \? undefined : '2d' \}\);/);
     assert.match(view, /role="group" aria-label="View"/);
     assert.match(view, /if \(root && root\.dataset\.scene !== scene\) root\.dataset\.scene = scene;/);
@@ -57,11 +57,35 @@ describe('the 2D/3D switch', () => {
   it('slots and blackjack follow the same choice', async () => {
     const slots = await front('assets/js/slots.js');
     assert.match(slots, /async function startMachine\(\) \{\s*if \(!wants3d\(\)\) return;/);
+    assert.match(slots, /const wants3d = \(\) => !SCENES_ON \|\| wantsScenes\(\);/);
     assert.match(slots, /if \(!on && machine\) \{\s*machine\.dispose\(\);\s*machine = null;\s*machineTried = false;\s*root\.dataset\.render = '2d';/);
     assert.ok(slots.includes('onViewSwitch($(`#${P}View`, root), setView);'));
     const blackjack = await front('assets/js/blackjack.js');
-    assert.match(blackjack, /import \{ onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes \} from '\.\/view3d\.js';/);
+    assert.match(blackjack, /import \{ SCENES_ON, onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes \} from '\.\/view3d\.js';/);
     assert.match(blackjack, /onViewChange\(function follow\(\) \{\n\s*if \(busy\) \{\n\s*setTimeout\(follow, 600\);/);
+  });
+
+  it('is off across the site: every game flat and no choice shown, but Slots, Mob Derby and Ice Fishing keep their scenes', async () => {
+    const [view, css, slots, blackjack, coinflip, settings, derby, ice] = await Promise.all([
+      front('assets/js/view3d.js'), front('assets/css/view3d.css'), front('assets/js/slots.js'), front('assets/js/blackjack.js'),
+      front('assets/js/coinflip.js'), front('assets/js/settings.js'), front('assets/js/derby.js'), front('assets/js/icefishing.js'),
+    ]);
+    assert.match(view, /export const SCENES_ON = false;/);
+    // No switch on any game's panel, none in the top bar (gone from the first paint), none in settings.
+    assert.match(view, /export function viewSwitch\(id\) \{\n  if \(!SCENES_ON\) return '';/);
+    assert.match(view, /if \(!SCENES_ON\) \{\n    button\.remove\(\);\n    return;\n  \}/);
+    assert.match(css, /#view3dBtn \{ display: none; \}/);
+    assert.match(settings, /\.\.\.\(SCENES_ON \? \[games3d\.line\] : \[\]\)/);
+    assert.match(blackjack, /group\.hidden = no3d \|\| !SCENES_ON;/);
+    assert.match(coinflip, /switchRow\.hidden = !group;\n  if \(group\) group\.hidden = no3dCoin;/);
+    // Slots keeps its machine, and its graphics setting; Mob Derby and Ice Fishing never asked.
+    assert.match(slots, /else if \(root\.dataset\.scene !== '3d'\) root\.dataset\.scene = '3d';/);
+    assert.ok(derby.includes('sceneLoading(root, host, true);') && !derby.includes('wants3d'));
+    assert.ok(ice.includes('sceneLoading(root, host, true);') && !ice.includes('wants3d'));
+    // The scenes themselves are all still there.
+    for (const file of ['mines3d', 'plinko3d', 'roulette3d', 'crash3d', 'chicken3d', 'fishing3d', 'tower3d', 'dice3d', 'coin3d', 'blackjack3d']) {
+      assert.ok((await front(`assets/js/${file}.js`)).length > 1000, file);
+    }
   });
 
   it('is in the top bar on every page and on the settings page, and announces every change', async () => {
@@ -121,9 +145,9 @@ describe('the 2D/3D switch', () => {
 
   it('slots, blackjack and coinflip show it too', async () => {
     const slots = await front('assets/js/slots.js');
-    assert.ok(slots.includes(`machineTried = true;\n    sceneLoading(root, $('.slots__window', root));`));
+    assert.ok(slots.includes(`machineTried = true;\n    sceneLoading(root, $('.slots__window', root), wants3d());`));
     assert.ok(slots.includes(`} finally {\n      sceneLoaded(root);\n    }`));
-    assert.ok(slots.includes(`if (!machineTried) sceneLoading(root, $('.slots__window', root));\n    void load();`));
+    assert.ok(slots.includes(`if (!machineTried) sceneLoading(root, $('.slots__window', root), wants3d());\n    void load();`));
     assert.ok(slots.includes('else if (!config) sceneLoaded(root);'));
     const blackjack = await front('assets/js/blackjack.js');
     assert.ok(blackjack.includes(`const host = $('.bj__table', root);\n  sceneLoading(host, host);\n  starting3d = (async () => {`));

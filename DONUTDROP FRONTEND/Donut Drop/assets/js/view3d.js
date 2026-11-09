@@ -20,9 +20,17 @@
  * scene ("3d"), and a loading screen covers the place the scene will be drawn (`sceneLoading`).
  * Whatever ends the wait -- the scene, no WebGL, an error, the switch to 2D -- takes it down
  * (`sceneLoaded`).
+ *
+ * 3D IS OFF (2026-11-09). The site went flat, as a casino's games are: every game shows its 2D board,
+ * and the choice is gone from the top bar, the settings page and every game's panel. The scenes are
+ * all still here, untouched; `SCENES_ON = true` brings the choice and the scenes back. Slots, Mob
+ * Derby and Ice Fishing are the exceptions: they keep their scenes, with no choice to make (they
+ * never ask `wants3d`).
  */
 
-export const wants3d = () => globalThis.DonutPrefs?.get?.().view !== '2d';
+export const SCENES_ON = false;
+
+export const wants3d = () => SCENES_ON && globalThis.DonutPrefs?.get?.().view !== '2d';
 
 const EVENT = 'donut:view3d';
 
@@ -37,8 +45,9 @@ export function onViewChange(fn) {
   globalThis.addEventListener?.(EVENT, (event) => fn(Boolean(event.detail)));
 }
 
-/** The switch: a row like the graphics one, "View" and two buttons. */
+/** The switch: a row like the graphics one, "View" and two buttons. Nothing while 3D is off. */
 export function viewSwitch(id) {
+  if (!SCENES_ON) return '';
   return `
     <div class="view3d" id="${id}" role="group" aria-label="View">
       <span class="view3d__label" aria-hidden="true">View</span>
@@ -65,6 +74,10 @@ export function paintViewSwitch(root, group, { disabled = false } = {}) {
 /** The top bar's switch: one button, 3D or 2D written on it, gold while the games are in 3D. */
 export function mountViewToggle(button) {
   if (!button) return;
+  if (!SCENES_ON) {
+    button.remove();
+    return;
+  }
   const text = button.querySelector('.view3dbtn__txt');
   const paint = () => {
     const on = wants3d();

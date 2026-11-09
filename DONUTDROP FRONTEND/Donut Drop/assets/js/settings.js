@@ -13,7 +13,7 @@
  */
 import { isMuted, setMuted, getVolume, setVolume, playSound } from './audio-engine.js';
 import { el } from './util.js';
-import { onViewChange, setWants3d, wants3d } from './view3d.js';
+import { SCENES_ON, onViewChange, setWants3d, wants3d } from './view3d.js';
 
 const prefs = () => globalThis.DonutPrefs;
 /* What a fresh custom theme starts from: amethyst fading into gold, a pair that shows the
@@ -109,7 +109,8 @@ function appearance(save) {
     onChange: (on) => setWants3d(on),
   });
   onViewChange((on) => { games3d.input.checked = on; });
-  sec.append(themeField(save), motion.line, games3d.line);
+  // With 3D off across the site (view3d.js) there is nothing to switch.
+  sec.append(themeField(save), motion.line, ...(SCENES_ON ? [games3d.line] : []));
   return sec;
 }
 

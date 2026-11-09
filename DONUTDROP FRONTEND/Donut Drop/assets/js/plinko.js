@@ -14,8 +14,8 @@
  * reduced motion a ball lands the moment it is answered, and nothing moves.
  *
  * The flat board (2D) is drawn here, on a canvas, plain as a casino's: flat white pegs that flash
- * when they are struck, a flat gold ball that hops from peg to peg as a thrown ball would (sideways
- * at an even pace, up and down under gravity), slots coloured
+ * when they are struck, a flat gold ball that falls by physics (plinko-fall.js: gravity, a bounce
+ * off each peg that loses energy, true arcs between) along the path the server drew, slots coloured
  * from yellow at the centre to red at the edges, a column of the last results by the board, and a
  * card over a slot with what it would pay and how likely it is. No glow anywhere. The board has its
  * own sounds: a tap per peg, rising as the ball falls, and a landing that grows with the multiplier.
@@ -31,6 +31,7 @@ import { $, formatAmountInput, money, parseAmount, reduceMotion } from './util.j
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
+import { fallAt, simulateFall } from './plinko-fall.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const RISKS = [
@@ -53,7 +54,6 @@ const BALL_R = 0.26;
 /* The flat board's motion. */
 const FLASH_MS = 300; // a struck peg's flash
 const INTRO_MS = 240; // each row of pegs fading in when the board changes shape
-const HOP = 0.3; // how high the ball hops off a peg, in peg gaps
 const HISTORY = 5; // results in the column by the flat board
 
 let root = null;
@@ -256,24 +256,16 @@ function course(path, n) {
   return points;
 }
 
-/**
- * The same course on the flat board, where the ball meets each peg on its shoulder rather than
- * dead on top: on the side it is about to fall to, a little over twenty degrees round.
- */
-function flatCourse(points, path) {
-  return points.map((point, i) => {
-    if (!point.peg) return point;
-    const angle = (0.38 + Math.random() * 0.14) * (path[i - 1] ? 1 : -1);
-    const reach = PEG_R + BALL_R;
-    return { x: point.x + reach * Math.sin(angle), y: point.y + reach * (1 - Math.cos(angle)) };
-  });
-}
-
 function launch(bet, release) {
   const n = bet.rows;
   const points = course(bet.path, n);
-  const ball = { bet, release, landed: false, points, flat: flatCourse(points, bet.path), hop: HOP * (0.85 + Math.random() * 0.3), start: performance.now(), hit: 0 };
-  /* One time per point: the start, the top peg, each row after it, the slot. */
+  const ball = { bet, release, landed: false, points, start: performance.now(), hit: 0 };
+  // The flat board's ball falls by physics (plinko-fall.js) along the path the server drew.
+  if (!board3d) {
+    ball.fall = simulateFall(bet.path, n);
+    ball.cursor = { i: 0 };
+  }
+  /* The End's timing: one time per point -- the start, the top peg, each row after it, the slot. */
   const hop = Math.min(170, Math.max(115, 2000 / n));
   ball.times = [0, 300];
   for (let r = 2; r <= n; r += 1) ball.times.push(ball.times[r - 1] + hop);
@@ -302,21 +294,6 @@ function positionOf(ball, elapsed) {
   };
 }
 
-/**
- * Where the flat board draws a ball: the drop onto the top peg falls under gravity; every hop after
- * it travels sideways at an even pace and up and down on a parabola, as a thrown ball does.
- */
-function flatPosition(ball, elapsed) {
-  const { flat, times } = ball;
-  let i = 1;
-  while (i < times.length - 1 && elapsed > times[i]) i += 1;
-  const a = flat[i - 1];
-  const b = flat[i];
-  const t = Math.min(1, Math.max(0, (elapsed - times[i - 1]) / (times[i] - times[i - 1])));
-  if (i === 1) return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t * t };
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - ball.hop * 4 * t * (1 - t) };
-}
-
 function run() {
   if (!raf) raf = requestAnimationFrame(frame);
 }
@@ -325,6 +302,20 @@ function frame(now) {
   raf = 0;
   for (const ball of balls) {
     const elapsed = now - ball.start;
+    if (ball.fall) {
+      // The flat board: every peg the falling ball strikes flashes and taps, higher as it falls.
+      const { hits } = ball.fall;
+      while (ball.hit < hits.length && elapsed >= hits[ball.hit].t) {
+        flashes.set(hits[ball.hit].peg, now);
+        ball.hit += 1;
+        if (now - lastTick > 45) {
+          lastTick = now;
+          playSound('pegtap', { rate: 0.9 + (0.55 * ball.hit) / ball.bet.rows + (Math.random() - 0.5) * 0.06 });
+        }
+      }
+      if (elapsed >= ball.fall.duration) land(ball);
+      continue;
+    }
     // Every peg this ball has reached lights, and the newest one ticks.
     while (ball.hit + 1 < ball.points.length - 1 && elapsed >= ball.times[ball.hit + 1]) {
       ball.hit += 1;
@@ -332,9 +323,7 @@ function frame(now) {
       board3d?.strike(ball.points[ball.hit].peg);
       if (now - lastTick > 45) {
         lastTick = now;
-        // The flat board's tap climbs as the ball falls; the End keeps its click.
-        if (board3d) playSound('reeltick');
-        else playSound('pegtap', { rate: 0.9 + (0.55 * ball.hit) / ball.bet.rows + (Math.random() - 0.5) * 0.06 });
+        playSound('reeltick');
       }
     }
     if (elapsed >= ball.times[ball.times.length - 1]) land(ball);
@@ -624,7 +613,8 @@ function draw(now) {
   ctx.fillStyle = palette.ball;
   for (const ball of balls) {
     const elapsed = now - ball.start;
-    const at = flatPosition(ball, elapsed);
+    if (!ball.fall) continue;
+    const at = fallAt(ball.fall, elapsed, ball.cursor);
     ctx.globalAlpha = Math.min(1, elapsed / 90);
     ctx.beginPath();
     ctx.arc(at.x * unit, at.y * unit, radius, 0, Math.PI * 2);

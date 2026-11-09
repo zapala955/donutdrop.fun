@@ -21,7 +21,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './
 import { $, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes } from './view3d.js';
+import { SCENES_ON, onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes } from './view3d.js';
 
 const DEAL_MS = 340; // shoe to seat
 const DEAL_GAP_MS = 170; // between cards on the deal
@@ -472,7 +472,8 @@ const wants3d = () => wantsScenes() && globalThis.DonutPrefs?.get?.().bjView !==
 function paintView() {
   const group = root && $('#bjView', root);
   if (!group) return;
-  group.hidden = no3d;
+  // Hidden with 3D off across the site (view3d.js), as without WebGL.
+  group.hidden = no3d || !SCENES_ON;
   const on = Boolean(table3d) || (Boolean(starting3d) && wants3d());
   for (const button of group.querySelectorAll('button')) {
     button.setAttribute('aria-pressed', String((button.dataset.mode === '3d') === on));

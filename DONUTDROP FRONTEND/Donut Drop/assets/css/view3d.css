@@ -47,6 +47,12 @@
 [data-no3d] [class$="__gfx"],
 [data-no3d] .view3d { display: none; }
 
+/* 3D is off across the site (view3d.js, SCENES_ON): the top bar's switch is taken out as the page
+ * boots, and hidden from the first paint so it never shows for a moment. Delete this rule with it. */
+#view3dBtn { display: none; }
+/* Nor is there any graphics to set, but on the games that still draw a scene. */
+[class$="__gfx"]:not(.derby__gfx, .icefish__gfx) { display: none; }
+
 /* The top bar's switch (#view3dBtn): the frame's icon button, with 3D or 2D written in it. Gold
  * while the games are in 3D, as a pressed icon button is. */
 .view3dbtn__txt { font: 900 .8125rem/1 var(--lx-ui, inherit); letter-spacing: .02em; }

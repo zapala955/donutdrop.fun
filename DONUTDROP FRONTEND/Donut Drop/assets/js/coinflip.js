@@ -510,7 +510,9 @@ function showFlip(game, { replay = false, counted = false } = {}) {
   const switchRow = el('div', 'cfstage__view');
   switchRow.innerHTML = viewSwitch('cfView');
   const group = switchRow.firstElementChild;
-  group.hidden = no3dCoin;
+  // With 3D off across the site (view3d.js) there is no switch, and no row for it.
+  switchRow.hidden = !group;
+  if (group) group.hidden = no3dCoin;
   paintViewSwitch(null, group);
   onViewSwitch(group, (on) => {
     setWants3d(on);
