@@ -164,6 +164,24 @@ describe('the pop-ups', () => {
     assert.match(popups, /state\.promotions\?\.referral\?\.bonusMinor/);
   });
 
+  it('point a player who has run out of money at the Discord shop, once in six hours', async () => {
+    const popups = await front('assets/js/popups.js');
+    assert.match(popups, /const SHOP_URL = 'https:\/\/discord\.gg\/qEyuAew5m';/);
+    // Out of money is less than the smallest stake any game takes.
+    assert.match(popups, /const BROKE_BELOW = 100_000;/);
+    // Asked on every change of the store: the first balance arrives with 'ready', not 'balance'.
+    assert.match(popups, /bus\.addEventListener\('change', \(\) => \{[^}]*\n    watchBalance\(\);\n  \}\);/);
+    // Signed in, never a media test twin, and checked against the wallet itself before it shows.
+    assert.match(popups, /if \(!state\.authenticated \|\| state\.user\?\.testMode\?\.active\) return;/);
+    assert.match(popups, /if \(!\(Number\(await refreshBalance\(\)\) < BROKE_BELOW\)\) return;/);
+    assert.match(popups, /id: 'broke',[\s\S]{0,400}seenFor: 6 \* HOUR_MS,\s*usedFor: DAY_MS,/);
+    // Off the site in a new tab, so the router leaves it alone and the game stays open.
+    assert.match(popups, /go\.target = '_blank';\s*go\.rel = 'noopener noreferrer';/);
+    // It stays when the player walks onto a table, and never covers a window they are using.
+    assert.match(popups, /dialog\.dataset\.kind !== 'broke'\) close\('seen'\);/);
+    assert.match(popups, /document\.querySelector\('dialog\[open\]:not\(\.popup--corner\)'\)/);
+  });
+
   it('have a stylesheet that honours reduced motion and sits above the header', async () => {
     const css = await front('assets/css/popups.css');
     assert.match(css, /prefers-reduced-motion: reduce/);

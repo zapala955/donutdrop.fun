@@ -7,6 +7,7 @@
  *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
  *   signed in, Discord unlinked → the Discord page, where the link code is
  *   signed in                   → invite & earn
+ *   signed in, balance run out  → buy more for cheap in the Discord shop (see watchBalance)
  *
  * It is not allowed to be a nuisance, because a pop-up that is is a reason to leave:
  *   - one per page load, and never within twenty minutes of the last one on any page;
@@ -17,10 +18,15 @@
  *     slips away on its own after a short while, or on the × or Escape — nothing has to be closed;
  *   - somebody who arrived on an invite link already has the login form open, so is left alone.
  *
+ * The one exception is running out of money. That card answers the balance rather than the page
+ * load, so it comes when it is true -- a second or so after the round that emptied the account, on
+ * the table where it happened, since there is no bet left there for it to cover -- and then rests
+ * six hours (a day once it has been used). Never for a media test twin, whose money is play money.
+ *
  * What it has shown, and when, is remembered in this browser only. With storage blocked it may show
  * again on the next visit, which is the harmless way for that to fail. Every figure is the server's. */
 import { api } from './api.js';
-import { bus, state } from './store.js';
+import { bus, refreshBalance, state } from './store.js';
 import { IMG, SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
@@ -37,6 +43,12 @@ const RETRY_MS = 8_000;
 /* An ignored card leaves on its own rather than sitting in the corner for the whole visit. A hover
  * or a focus is read as interest and stops the clock (see show). */
 const AUTO_DISMISS_MS = 18_000;
+/* Where a player who has run out can buy more, cheap. */
+const SHOP_URL = 'https://discord.gg/qEyuAew5m';
+/* Out of money: less than the smallest stake any game takes ($100K, every game's default minimum). */
+const BROKE_BELOW = 100_000;
+/* Long enough after the round that emptied the account for its result to be read first. */
+const BROKE_DELAY_MS = 1_500;
 
 /* Pages with a live table on them. The same list nudge.js keeps off, for the same reason. */
 const TABLES = new Set([
@@ -48,6 +60,7 @@ let openLogin = () => {};
 let dialog = null;
 let done = false;
 let autoTimer = 0;
+let brokeTimer = 0;
 
 function read(key) {
   try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; }
@@ -61,14 +74,61 @@ export function initPopups(options = {}) {
   openLogin = options.openLogin ?? openLogin;
   const delay = state.authenticated ? FIRST_DELAY_SIGNED_IN_MS : FIRST_DELAY_SIGNED_OUT_MS;
   window.setTimeout(() => void tryShow(), delay);
-  // Signing in answers the register pop-up.
+  // Signing in answers the register pop-up; a balance that has run out asks for the shop.
+  /* Every change, not only 'balance': the first figure arrives with 'ready', and a crate, an upgrade
+   * or a deposit each announce their own. watchBalance is a timer and a comparison until the balance
+   * really is under the smallest stake. */
   bus.addEventListener('change', () => {
     if (dialog?.dataset.kind === 'register' && state.authenticated) close('used');
+    watchBalance();
   });
   onNavigate(() => {
-    // Walking into a game takes it away; it is not worth a click on a bet button.
-    if (dialog && atTable()) close('seen');
+    // Walking into a game takes it away; it is not worth a click on a bet button. The shop stays:
+    // somebody who has run out has no bet to click.
+    if (dialog && atTable() && dialog.dataset.kind !== 'broke') close('seen');
   });
+}
+
+/**
+ * Offers the Discord shop once the balance is under the smallest stake. Asked on every balance
+ * change, and decided a moment later, so a round's result is seen before the card and a balance that
+ * is topped straight back up never shows it. Another corner card steps aside for it; a window the
+ * player is using (a deposit, a withdrawal) is waited out.
+ */
+function watchBalance() {
+  // Already asked: the answer reads the balance as it is then, so another change needs no new timer.
+  if (brokeTimer) return;
+  brokeTimer = window.setTimeout(async () => {
+    brokeTimer = 0;
+    if (!state.authenticated || state.user?.testMode?.active) return;
+    if (!(Number(state.balance) < BROKE_BELOW)) return;
+    if (dialog?.dataset.kind === 'broke' || Date.now() < read('dw.popup.broke')) return;
+    /* Read from the wallet itself before saying so: the store starts at 0 until the first answer
+     * lands, and a pill held still for a round in the air can be behind. */
+    try {
+      if (!(Number(await refreshBalance()) < BROKE_BELOW)) return;
+    } catch {
+      return;
+    }
+    if (document.hidden || document.querySelector('dialog[open]:not(.popup--corner)')) {
+      brokeTimer = window.setTimeout(() => { brokeTimer = 0; watchBalance(); }, RETRY_MS);
+      return;
+    }
+    if (dialog) close('seen');
+    // One card a page load: the page-load offer, if it has not come yet, does not follow this one.
+    done = true;
+    show({
+      id: 'broke',
+      eyebrow: 'Discord shop',
+      title: ['No money left?'],
+      line: 'Come buy some for cheap in our Discord. We have the best prices.',
+      cta: 'Buy on Discord',
+      url: SHOP_URL,
+      art: 'emerald.png',
+      seenFor: 6 * HOUR_MS,
+      usedFor: DAY_MS,
+    });
+  }, BROKE_DELAY_MS);
 }
 
 async function tryShow() {
@@ -215,7 +275,14 @@ function show(popup) {
 
   const actions = el('div', 'popup__acts');
   let go;
-  if (popup.href) {
+  if (popup.url) {
+    // Off the site, in a new tab: the router leaves a link with a target alone.
+    go = el('a', 'btn btn--go popup__go');
+    go.href = popup.url;
+    go.target = '_blank';
+    go.rel = 'noopener noreferrer';
+    go.addEventListener('click', () => close('used'));
+  } else if (popup.href) {
     go = el('a', 'btn btn--go popup__go');
     go.href = popup.href;                 // the router's link handler takes it from here
     go.addEventListener('click', () => close('used'));
