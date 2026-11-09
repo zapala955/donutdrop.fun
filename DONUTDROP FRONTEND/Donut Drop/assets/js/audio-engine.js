@@ -340,6 +340,46 @@ const CUES = {
     });
     tone(ctx, { freq: 65, type: 'sine', start: 0.1, duration: 1.2, gain: 0.3 });
   },
+
+  /* ── Plinko's flat board ──
+   * A peg tap that fires a dozen times a ball, so it is the quietest thing here, and a landing in
+   * four sizes, so the ear knows how a ball did before the eye finds its slot.
+   */
+  /** A ball leaving the hand: a short rising pop. */
+  plinkoDrop(ctx) {
+    tone(ctx, { freq: 420, type: 'triangle', duration: 0.07, gain: 0.13, sweepTo: 760 });
+    noise(ctx, { duration: 0.03, gain: 0.03, frequency: 3000, q: 1.2 });
+  },
+  /** A ball on a peg: a small glassy tap. Pitched by the caller, higher as the ball falls. */
+  pegtap(ctx) {
+    tone(ctx, { freq: 1180, type: 'sine', duration: 0.05, gain: 0.07 });
+    tone(ctx, { freq: 2360, type: 'triangle', duration: 0.022, gain: 0.022 });
+  },
+  /** Into a slot that pays back less than the ball cost: a soft, low knock. */
+  plinkoLow(ctx) {
+    tone(ctx, { freq: 300, type: 'triangle', duration: 0.12, gain: 0.12, sweepTo: 220 });
+    noise(ctx, { duration: 0.05, gain: 0.035, frequency: 1300, q: 1 });
+  },
+  /** About even (1x to 2x): two quick notes going up. */
+  plinkoEven(ctx) {
+    tone(ctx, { freq: 659.25, type: 'triangle', duration: 0.12, gain: 0.13 });
+    tone(ctx, { freq: 987.77, type: 'triangle', start: 0.05, duration: 0.16, gain: 0.11 });
+  },
+  /** A real win (2x and up): three bright notes with a glint on top. */
+  plinkoWin(ctx) {
+    [783.99, 987.77, 1318.5].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.05, duration: 0.24, gain: 0.16 });
+    });
+    noise(ctx, { start: 0.09, duration: 0.18, gain: 0.05, frequency: 6200, q: 0.8 });
+  },
+  /** 10x and up: a longer run of notes over a low swell. 100x and up is the jackpot. */
+  plinkoBig(ctx) {
+    [523.25, 783.99, 1046.5, 1318.5, 1567.98].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.06, duration: 0.42, gain: 0.17 });
+    });
+    tone(ctx, { freq: 130.81, type: 'sine', duration: 0.6, gain: 0.2, sweepTo: 196 });
+    noise(ctx, { start: 0.1, duration: 0.4, gain: 0.06, frequency: 5600, q: 0.6 });
+  },
 };
 
 /**

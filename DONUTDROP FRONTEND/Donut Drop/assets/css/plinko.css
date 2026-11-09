@@ -1,23 +1,51 @@
-/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
- * Hallmark · component: plinko board · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R4 V4
+ * Hallmark · component: plinko board · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: site tokens (luxe ladder), slot ramp lifted into tokens below
  * states: the drop button -- default, hover, :focus-visible, :active, disabled, busy (a ball on its
- *         way to the server), and the result it produces: a slot lit (success) or the hint (error);
- *         the risk switch and the rows stepper -- default, hover, focus, pressed, locked while balls fall.
- * signature: the payouts are the board's floor -- a row of slots running from gold at the centre to
- *            crimson at the edges, so how much a slot pays is readable before a number is.
- * motion: the ball's fall, a peg lighting as it is struck, a slot dipping as a ball lands.
- *         Reduced motion: the ball lands the moment it is answered and the slot only lights.
+ *         way to the server: a sheen runs across it), and the result it produces: a slot lit (success)
+ *         or the hint (error); the risk switch -- default, hover, focus, pressed (a gold pill slides
+ *         under it), locked while balls fall; the rows slider -- default, hover, focus, dragging,
+ *         locked; a slot on the flat board -- default, pointed at (its card open), struck.
+ * contrast: slot numbers 5.5:1 or better on every step of the slot ramp; the card's quiet words
+ *           5.2:1 on --lx-3.
+ * signature: the payouts are the board's floor -- a row of slots running from yellow at the centre
+ *            to red at the edges, so how much a slot pays is readable before a number is.
+ * motion: the ball's fall (a thrown ball's hop from peg to peg, a squash on each), a peg's ring as it
+ *         is struck, a slot dipping and flashing as a ball lands, sparks off a win, the column of
+ *         results sliding down for the newest, the slots arriving from the centre out when the board
+ *         changes shape. Reduced motion: the ball lands the moment it is answered, the slot only
+ *         lights, nothing slides.
+ * scope: the panel is the same in 2D and 3D; the flat board's look (the "flat" rules below) is only
+ *        for 2D -- the End (plinko3d.js) keeps its own.
  */
 
 .plinko {
-  /* The board's palette, lifted so no rule below writes a colour inline. The canvas reads the
-   * first six through getComputedStyle. */
-  --plinko-peg: rgba(236, 237, 240, .62);
-  --plinko-peg-lit: var(--gold-bright);
+  /* The board's palette, lifted so no rule below writes a colour inline. The flat board's canvas
+   * reads the first nine through getComputedStyle (hex and rgba only: a canvas takes those
+   * everywhere). */
+  --plinko-peg: #d9dbe0;
+  --plinko-peg-lit: #ffffff;
+  --plinko-ring: var(--lx-gold-hi, #f0c35a);
   --plinko-ball-hi: #fff6c8;
   --plinko-ball: var(--gold-bright);
   --plinko-ball-lo: var(--gold-deep);
+  --plinko-glow: rgba(255, 190, 60, .42);
+  --plinko-spark: var(--lx-gold-hi, #f0c35a);
+  --plinko-spark-lit: #ffffff;
   --plinko-shadow: rgba(0, 0, 0, .55);
+  /* The flat board's slots: yellow at the centre, orange, red at the edges (oklab between them),
+   * a darker lip under each, and their numbers in a dark brown that holds 5.5:1 on the reddest. */
+  --plinko-b-lo: oklch(0.87 0.165 95);
+  --plinko-b-mid: oklch(0.765 0.17 58);
+  --plinko-b-hi: oklch(0.67 0.205 27);
+  --plinko-b-ink: oklch(0.2 0.035 55);
+  --plinko-b-shade: oklch(0.18 0.03 40);
+  --plinko-flash: #ffffff;
+  --plinko-stage-glow: oklch(0.32 0.05 75 / 0.32);
+  --plinko-card-shade: 0 14px 30px -10px rgba(0, 0, 0, .7);
+  --plinko-go-lip: var(--lx-gold-lo, #b97c22);
+  --plinko-go-sheen: rgba(255, 255, 255, .38);
+  --plinko-ease-out: cubic-bezier(.16, 1, .3, 1);
   /* A slot's colour is its distance from the centre: gold in the middle, crimson at the edges. */
   --plinko-cold: var(--gold-bright);
   --plinko-hot: var(--crimson);
@@ -203,7 +231,6 @@
 .plinko__field input:focus { outline: none; }
 
 .plinko__adj,
-.plinko__step,
 .plinko__risk {
   border: 1px solid var(--line);
   background: var(--panel2);
@@ -223,34 +250,12 @@
   background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
 }
 
-.plinko__stepper {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 46px;
-  align-items: center;
-  height: 46px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--line2);
-  background: var(--panel);
-  overflow: hidden;
-}
-.plinko__step { height: 100%; border: 0; border-radius: 0; font-size: 1.25rem; }
-.plinko__stepper output {
-  text-align: center;
-  font-family: var(--pixel);
-  font-size: 1.25rem;
-  font-weight: 900;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
 .plinko__adj:hover:not(:disabled),
-.plinko__step:hover:not(:disabled),
 .plinko__risk:hover:not(:disabled) { color: var(--text); background: var(--panel3); }
 .plinko__risk[aria-pressed="true"]:hover:not(:disabled) { color: var(--gold-bright); }
 .plinko__adj:active:not(:disabled),
 .plinko__risk:active:not(:disabled) { transform: translateY(1px); }
 .plinko__adj:focus-visible,
-.plinko__step:focus-visible,
 .plinko__risk:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 .plinko__form :disabled { cursor: not-allowed; opacity: .5; }
 
@@ -292,6 +297,284 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* ─────────── the panel, in the casino's manner (2D and 3D) ───────────
+ * Past luxe-games.css and dopamine.css, which dress every game's panel alike: Plinko's risk switch is
+ * one dark well with a gold pill that slides under the choice, its rows are a slider, and its button
+ * has a lip it presses into. */
+body.lx .plinko .plinko__labelrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+body.lx .plinko .plinko__labelrow .plinko__label { margin: 0; }
+.plinko__rowsval {
+  color: var(--lx-ink);
+  font: 700 .875rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+body.lx .plinko .plinko__risks {
+  position: relative;
+  isolation: isolate;
+  gap: 0;
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+}
+body.lx .plinko .plinko__risks::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 3);
+  border-radius: 4px;
+  background: var(--dd-ramp, var(--lx-gold));
+  transform: translateX(calc(var(--risk-i, 1) * 100%));
+  transition: transform 260ms var(--plinko-ease-out);
+}
+body.lx .plinko .plinko__risk,
+body.lx .plinko .plinko__risk[aria-pressed="true"] {
+  height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  font: 700 .8125rem/1 var(--lx-ui);
+  transition: color 140ms var(--plinko-ease-out), transform 120ms var(--plinko-ease-out);
+}
+body.lx .plinko .plinko__risk { color: var(--lx-mute); }
+body.lx .plinko .plinko__risk:hover:not(:disabled) { background: transparent; color: var(--lx-ink); }
+body.lx .plinko .plinko__risk[aria-pressed="true"],
+body.lx .plinko .plinko__risk[aria-pressed="true"]:hover:not(:disabled) { color: var(--lx-on-gold); }
+body.lx .plinko .plinko__risk:active:not(:disabled) { transform: scale(.96); }
+body.lx .plinko .plinko__risk:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 1px; }
+
+.plinko__range {
+  --fill: 50%;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.plinko__range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--lx-gold) var(--fill), var(--lx-4) var(--fill));
+}
+.plinko__range::-moz-range-track { height: 6px; border-radius: 3px; background: var(--lx-4); }
+.plinko__range::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--lx-gold); }
+.plinko__range::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 3px solid var(--lx-0);
+  border-radius: 50%;
+  background: var(--lx-gold-hi);
+  box-shadow: 0 0 0 1px var(--lx-gold);
+  transition: transform 120ms var(--plinko-ease-out);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.plinko__range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--lx-0);
+  border-radius: 50%;
+  background: var(--lx-gold-hi);
+  box-shadow: 0 0 0 1px var(--lx-gold);
+  transition: transform 120ms var(--plinko-ease-out);
+}
+.plinko__range:hover:not(:disabled)::-webkit-slider-thumb { transform: scale(1.12); }
+.plinko__range:hover:not(:disabled)::-moz-range-thumb { transform: scale(1.12); }
+.plinko__range:active:not(:disabled)::-webkit-slider-thumb { transform: scale(1.22); }
+.plinko__range:active:not(:disabled)::-moz-range-thumb { transform: scale(1.22); }
+.plinko__range:focus { outline: none; }
+.plinko__range:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 4px; border-radius: 4px; }
+
+body.lx #plinkoGo {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--plinko-go-lip);
+  filter: none;
+  transition: background-color 140ms var(--plinko-ease-out), transform 120ms var(--plinko-ease-out);
+}
+body.lx #plinkoGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--plinko-go-lip); }
+body.lx #plinkoGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--plinko-go-lip); }
+body.lx #plinkoGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #plinkoGo:disabled { cursor: not-allowed; opacity: .5; filter: none; }
+/* Busy: a ball on its way to the server. A sheen runs across the button until it is answered. */
+body.lx #plinkoGo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, var(--plinko-go-sheen) 50%, transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+body.lx #plinkoGo[aria-busy="true"]::after { opacity: 1; animation: plinko-sheen 900ms linear infinite; }
+@keyframes plinko-sheen { to { transform: translateX(100%); } }
+
+/* ─────────── the flat board (2D only) ───────────
+ * Every rule here starts .plinko:not([data-render="3d"], [data-render="loading"]): the flat board is
+ * showing, whether the player chose 2D or there is no WebGL. The End and its loading screen keep the
+ * rules above and below. */
+.plinko__tip { display: none; }
+
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__stage {
+  position: relative;
+  align-content: start;
+  padding: 24px 20px 22px;
+  background:
+    radial-gradient(90% 55% at 50% 0%, var(--plinko-stage-glow), transparent 70%),
+    var(--lx-0);
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__board {
+  position: relative;
+  /* As wide as the stage allows, and never so tall that its slots fall below the window. */
+  width: min(100%, 780px, calc((100vh - 220px) * var(--gaps) / var(--depth)));
+  width: min(100%, 780px, calc((100svh - 220px) * var(--gaps) / var(--depth)));
+  min-width: min(100%, 300px);
+  margin: 0 auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* The last results: a column by the board, newest on top, sliding down one place for the next. */
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__readout {
+  --pitch: 36px;
+  position: absolute;
+  z-index: 2;
+  top: 24px;
+  right: 20px;
+  display: block;
+  width: 56px;
+  min-height: 0;
+  /* Five results and the lip under the last one. */
+  height: calc(var(--pitch) * 5 - 2px);
+  margin: 0;
+  overflow: hidden;
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__readout b { display: none; }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent {
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  overflow: visible;
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) :is(.plinko__slot, .plinko__chip) {
+  --plinko-bucket: color-mix(in oklab, var(--plinko-b-hi) calc(clamp(0, var(--heat) * 2 - 1, 1) * 100%), color-mix(in oklab, var(--plinko-b-mid) calc(clamp(0, var(--heat) * 2, 1) * 100%), var(--plinko-b-lo)));
+  --plinko-lip: color-mix(in oklab, var(--plinko-bucket) 50%, var(--plinko-b-shade));
+  background: var(--plinko-bucket);
+  color: var(--plinko-b-ink);
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__chip {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  padding: 0 4px;
+  border-radius: 6px;
+  box-shadow: 0 3px 0 var(--plinko-lip);
+  font: 800 .75rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 1;
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__chip:nth-child(n + 6) { display: none; }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent.is-shift { animation: plinko-shift 280ms var(--plinko-ease-out); }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent.is-shift > :first-child { animation: plinko-chip-in 280ms var(--plinko-ease-out); }
+@keyframes plinko-shift { from { transform: translateY(calc(-1 * var(--pitch))); } }
+@keyframes plinko-chip-in { from { opacity: 0; transform: scale(.8); } }
+
+/* The slots: buckets with a lip, lit from the centre outwards when the board takes a new shape. */
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slots { gap: 4px; margin-top: 4px; }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot {
+  position: relative;
+  height: 34px;
+  border-radius: 6px;
+  box-shadow: 0 4px 0 var(--plinko-lip);
+  font: 800 clamp(.5625rem, calc(100cqi / var(--slots, 13) * .3), .8125rem)/1 var(--lx-ui);
+  letter-spacing: -.01em;
+  cursor: pointer;
+  overflow: visible;
+  animation: plinko-slot-in 340ms var(--plinko-ease-out) var(--d, 0ms) both;
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slots[data-dense] .plinko__slot { height: 40px; font-size: .5625rem; }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--plinko-flash);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--plinko-ease-out);
+}
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot:hover::after,
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot.is-pointed::after { opacity: .18; }
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot.is-hit::after { animation: plinko-flash 520ms var(--plinko-ease-out); }
+@keyframes plinko-slot-in { from { opacity: 0; translate: 0 8px; } }
+@keyframes plinko-flash { from { opacity: .65; } to { opacity: 0; } }
+
+/* A slot's card: what it would pay on this stake and how likely it is, over the slot. */
+.plinko:not([data-render="3d"], [data-render="loading"]) .plinko__tip:not([hidden]) {
+  position: absolute;
+  z-index: 5;
+  left: var(--tip-x, 50%);
+  bottom: var(--tip-y, 60px);
+  display: grid;
+  gap: 6px;
+  min-width: 176px;
+  padding: 10px 12px 11px;
+  border-radius: 8px;
+  background: var(--lx-3);
+  box-shadow: var(--plinko-card-shade), inset 0 0 0 1px var(--lx-4);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: plinko-tip-in 160ms var(--plinko-ease-out);
+}
+.plinko__tip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: calc(50% + var(--tip-arrow, 0px));
+  width: 10px;
+  height: 10px;
+  background: var(--lx-3);
+  box-shadow: 1px 1px 0 var(--lx-4);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.plinko__tipmult { color: var(--lx-ink); font: 800 1rem/1.1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.plinko__tiprow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--lx-mute);
+  font: 500 .75rem/1.2 var(--lx-ui);
+  white-space: nowrap;
+}
+.plinko__tiprow b { color: var(--lx-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.plinko__tiprow b[data-tone="won"] { color: var(--lx-gold-hi); }
+.plinko__tiprow b[data-tone="lost"] { color: var(--lx-loss-text); }
+@keyframes plinko-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(4px); } }
 
 /* ─────────── the End (plinko3d.js) ─────────── */
 .plinko__view { position: relative; }
@@ -349,6 +632,15 @@
   .plinko { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
 }
 @media (max-width: 560px) {
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__stage { padding: 14px 10px 14px; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__readout { --pitch: 29px; top: 12px; right: 10px; width: 46px; height: calc(var(--pitch) * 4 - 2px); }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent { gap: 5px; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__chip { height: 24px; border-radius: 5px; font-size: .6875rem; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__chip:nth-child(n + 5) { display: none; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slots { gap: 2px; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot { height: 28px; border-radius: 4px; box-shadow: 0 3px 0 var(--plinko-lip); }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slots[data-dense] .plinko__slot { height: 36px; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__tip:not([hidden]) { min-width: 156px; }
   .plinko { gap: 12px; }
   .plinko__stage { gap: 10px; padding: 10px; border-radius: 16px; }
   .plinko__board { padding: 6px 4px 8px; border-radius: 14px; }
@@ -363,6 +655,16 @@
 
 @media (prefers-reduced-motion: reduce) {
   .plinko__field,
-  .plinko .plinko__go { transition: none; }
+  .plinko .plinko__go,
+  body.lx #plinkoGo,
+  body.lx .plinko .plinko__risks::before,
+  body.lx .plinko .plinko__risk,
+  .plinko__range::-webkit-slider-thumb { transition: none; }
   .plinko__slot.is-hit { animation-duration: 150ms; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot,
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent.is-shift,
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__recent.is-shift > :first-child,
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__tip:not([hidden]) { animation: none; }
+  .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__slot.is-hit::after { animation-duration: 150ms; }
+  body.lx #plinkoGo[aria-busy="true"]::after { animation-duration: 2s; }
 }

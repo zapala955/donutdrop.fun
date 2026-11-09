@@ -13,6 +13,14 @@
  * Motion: the ball's fall, a peg lighting as it is struck, a slot dipping as a ball lands. With
  * reduced motion a ball lands the moment it is answered, and nothing moves.
  *
+ * The flat board (2D) is drawn here, on a canvas, in the look of a casino floor: white pegs that
+ * ring when they are struck, a gold ball that hops from peg to peg as a thrown ball would (sideways
+ * at an even pace, up and down under gravity) and squashes a little on each one, slots coloured
+ * from yellow at the centre to red at the edges, a column of the last results by the board, and a
+ * card over a slot with what it would pay and how likely it is. A win of 2x and up throws sparks
+ * off its slot. The board has its own sounds: a tap per peg, rising as the ball falls, and a
+ * landing that grows with the multiplier.
+ *
  * The board is drawn in WebGL (plinko3d.js), its own chunk, at the graphics the player picked or the
  * machine can manage: ender pearls through end rods into shulker boxes, in the End. This page still
  * moves every ball; the 3D board only draws them where it is told. The row of slots stays this page's
@@ -43,6 +51,12 @@ const ROW = 0.9; // the drop from one row to the next
 const FOOT = 0.9; // the last row to the slots
 const PEG_R = 0.1;
 const BALL_R = 0.26;
+/* The flat board's motion. */
+const FLASH_MS = 420; // a struck peg's ring
+const SQUASH_MS = 90; // the ball flattening on a peg
+const INTRO_MS = 240; // each row of pegs fading in when the board changes shape
+const HOP = 0.3; // how high the ball hops off a peg, in peg gaps
+const HISTORY = 5; // results in the column by the flat board
 
 let root = null;
 let canvas = null;
@@ -67,6 +81,11 @@ let boardRows = 0;
 let slotsDense = false; // measured when the board's size changes, never while painting
 let board3d = null; // the End, once it is up
 let boardTried = null;
+let sparks = []; // the flat board's win sparks: { x, y, vx, vy, born, life, size, lit }
+let introAt = 0; // when the flat board last changed shape
+let sprite = null; // the ball, drawn once per size: { radius, canvas }
+let tipSlot = null; // the slot whose card is open
+let lastLand = 0;
 
 /* ─────────── numbers ─────────── */
 
@@ -170,7 +189,6 @@ function drop() {
   /* Held from the click, not from the answer: a poll landing between the two would print this
    * ball's stake and payout before the ball exists. */
   queue.push({ key: idempotencyKey(), stakeMinor: stakeMinor(), rows, risk, release: holdLiveFigures() });
-  playSound('click');
   paint();
   void pump();
 }
@@ -242,9 +260,23 @@ function course(path, n) {
   return points;
 }
 
+/**
+ * The same course on the flat board, where the ball meets each peg on its shoulder rather than
+ * dead on top: on the side it is about to fall to, a little over twenty degrees round.
+ */
+function flatCourse(points, path) {
+  return points.map((point, i) => {
+    if (!point.peg) return point;
+    const angle = (0.38 + Math.random() * 0.14) * (path[i - 1] ? 1 : -1);
+    const reach = PEG_R + BALL_R;
+    return { x: point.x + reach * Math.sin(angle), y: point.y + reach * (1 - Math.cos(angle)) };
+  });
+}
+
 function launch(bet, release) {
   const n = bet.rows;
-  const ball = { bet, release, landed: false, points: course(bet.path, n), start: performance.now(), hit: 0 };
+  const points = course(bet.path, n);
+  const ball = { bet, release, landed: false, points, flat: flatCourse(points, bet.path), hop: HOP * (0.85 + Math.random() * 0.3), start: performance.now(), hit: 0 };
   /* One time per point: the start, the top peg, each row after it, the slot. */
   const hop = Math.min(170, Math.max(115, 2000 / n));
   ball.times = [0, 300];
@@ -274,6 +306,21 @@ function positionOf(ball, elapsed) {
   };
 }
 
+/**
+ * Where the flat board draws a ball: the drop onto the top peg falls under gravity; every hop after
+ * it travels sideways at an even pace and up and down on a parabola, as a thrown ball does.
+ */
+function flatPosition(ball, elapsed) {
+  const { flat, times } = ball;
+  let i = 1;
+  while (i < times.length - 1 && elapsed > times[i]) i += 1;
+  const a = flat[i - 1];
+  const b = flat[i];
+  const t = Math.min(1, Math.max(0, (elapsed - times[i - 1]) / (times[i] - times[i - 1])));
+  if (i === 1) return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t * t };
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - ball.hop * 4 * t * (1 - t) };
+}
+
 function run() {
   if (!raf) raf = requestAnimationFrame(frame);
 }
@@ -289,14 +336,17 @@ function frame(now) {
       board3d?.strike(ball.points[ball.hit].peg);
       if (now - lastTick > 45) {
         lastTick = now;
-        playSound('reeltick');
+        // The flat board's tap climbs as the ball falls; the End keeps its click.
+        if (board3d) playSound('reeltick');
+        else playSound('pegtap', { rate: 0.9 + (0.55 * ball.hit) / ball.bet.rows + (Math.random() - 0.5) * 0.06 });
       }
     }
     if (elapsed >= ball.times[ball.times.length - 1]) land(ball);
   }
-  for (const [peg, at] of flashes) if (now - at > 320) flashes.delete(peg);
+  for (const [peg, at] of flashes) if (now - at > FLASH_MS) flashes.delete(peg);
+  sparks = sparks.filter((spark) => now - spark.born < spark.life);
   draw(now);
-  if (balls.length || flashes.size) run();
+  if (balls.length || flashes.size || sparks.length || now - introAt < INTRO_MS + boardRows * 16) run();
 }
 
 function land(ball) {
@@ -311,12 +361,51 @@ function land(ball) {
   bump(bet.slot);
   board3d?.land(bet.slot, bet.multiplierBps);
   const x = bet.multiplierBps / 10_000;
-  playSound(x >= 10 ? 'reward' : x >= 1 ? 'win' : 'coin');
+  if (board3d) playSound(x >= 10 ? 'reward' : x >= 1 ? 'win' : 'coin');
+  else landFlat(bet, x);
   queueSay(bet);
   settleIfDone();
   paintReadout();
+  shiftHistory();
   paintControls();
   if (!raf) draw(performance.now());
+}
+
+/** The flat board's landing: a sound that grows with the multiplier, and sparks off a win. */
+function landFlat(bet, x) {
+  const now = performance.now();
+  // A burst of balls landing together is one sound, not a pile of them; a win always speaks.
+  if (x >= 2 || now - lastLand > 60) {
+    lastLand = now;
+    const cue = x >= 100 ? 'jackpot' : x >= 10 ? 'plinkoBig' : x >= 2 ? 'plinkoWin' : x >= 1 ? 'plinkoEven' : 'plinkoLow';
+    playSound(cue, { rate: x < 2 ? 0.92 + heat(bet.slot, bet.rows) * 0.25 : 1 });
+  }
+  if (x < 2 || reduceMotion() || bet.rows !== boardRows) return;
+  const count = x >= 100 ? 40 : x >= 10 ? 24 : 12;
+  const depth = TOP + (bet.rows - 1) * ROW + FOOT;
+  for (let k = 0; k < count; k += 1) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+    const speed = 2.2 + Math.random() * (x >= 10 ? 4.2 : 2.6);
+    sparks.push({
+      x: bet.slot + 1 + (Math.random() - 0.5) * 0.6,
+      y: depth - 0.05,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      born: now,
+      life: 520 + Math.random() * 380,
+      size: 0.035 + Math.random() * 0.045,
+      lit: Math.random() < 0.35,
+    });
+  }
+  run();
+}
+
+/** The column of results by the flat board slides down one place for the newest. */
+function shiftHistory() {
+  const list = root && $('#plinkoRecent', root);
+  if (!list || reduceMotion()) return;
+  list.classList.remove('is-shift');
+  requestAnimationFrame(() => list.classList.add('is-shift'));
 }
 
 /** The pill: the server's balance less every payout still in the air. */
@@ -483,18 +572,74 @@ function readPalette() {
   const style = getComputedStyle(root);
   const token = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
   palette = {
-    peg: token('--plinko-peg', '#9da1aa'),
-    pegLit: token('--plinko-peg-lit', '#ffd700'),
+    peg: token('--plinko-peg', '#d9dbe0'),
+    pegLit: token('--plinko-peg-lit', '#ffffff'),
+    ring: token('--plinko-ring', '#f0c35a'),
     ballHi: token('--plinko-ball-hi', '#fff6c8'),
     ball: token('--plinko-ball', '#ffd700'),
     ballLo: token('--plinko-ball-lo', '#a35f00'),
-    shadow: token('--plinko-shadow', 'rgba(0, 0, 0, .55)'),
+    glow: token('--plinko-glow', 'rgba(255, 196, 64, .5)'),
+    spark: token('--plinko-spark', '#f0c35a'),
+    sparkLit: token('--plinko-spark-lit', '#ffffff'),
   };
+  sprite = null;
+}
+
+/** A struck peg's glow: light at the peg fading to nothing, drawn once per peg size. */
+function haloSprite(pegR) {
+  if (sprite?.halo?.pegR === pegR) return sprite.halo.canvas;
+  const size = Math.ceil(pegR * 9);
+  const art = document.createElement('canvas');
+  art.width = size;
+  art.height = size;
+  const g = art.getContext('2d');
+  const c = size / 2;
+  const light = g.createRadialGradient(c, c, 0, c, c, c);
+  light.addColorStop(0, palette.pegLit);
+  light.addColorStop(0.18, palette.ring);
+  light.addColorStop(0.42, palette.glow);
+  light.addColorStop(1, 'rgba(255, 190, 60, 0)');
+  g.fillStyle = light;
+  g.fillRect(0, 0, size, size);
+  sprite = { ...(sprite || {}), halo: { pegR, canvas: art } };
+  return art;
+}
+
+/** The ball, glow and all, drawn once for its size and stamped for every ball after. */
+function ballSprite(radius) {
+  if (sprite?.radius === radius && sprite.canvas) return sprite.canvas;
+  const pad = Math.ceil(radius * 0.9);
+  const size = Math.ceil(radius * 2) + pad * 2;
+  const art = document.createElement('canvas');
+  art.width = size;
+  art.height = size;
+  const g = art.getContext('2d');
+  const c = size / 2;
+  const halo = g.createRadialGradient(c, c, radius * 0.6, c, c, radius + pad);
+  halo.addColorStop(0, palette.glow);
+  halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, size, size);
+  const body = g.createRadialGradient(c - radius * 0.35, c - radius * 0.4, radius * 0.08, c, c, radius);
+  body.addColorStop(0, palette.ballHi);
+  body.addColorStop(0.42, palette.ball);
+  body.addColorStop(1, palette.ballLo);
+  g.beginPath();
+  g.arc(c, c, radius, 0, Math.PI * 2);
+  g.fillStyle = body;
+  g.fill();
+  sprite = { ...(sprite || {}), radius, canvas: art };
+  return art;
 }
 
 function resize() {
   if (!canvas) return;
   const n = rows;
+  if (boardRows !== n) {
+    // A new shape: its rows of pegs fade in from the top (flat board only).
+    introAt = reduceMotion() ? 0 : performance.now();
+    run();
+  }
   boardRows = n;
   const wrap = canvas.closest('.plinko__board');
   wrap.style.setProperty('--gaps', String(n + 2));
@@ -526,47 +671,68 @@ function draw(now) {
   const n = boardRows;
   const unit = canvas.width / (n + 2);
   const mid = (n + 2) / 2;
+  // Pegs drawn small and crisp, whatever the board's size: under a peg gap's tenth, at most 5.5 CSS px.
+  const dpr = canvas.width / Math.max(1, canvas.clientWidth);
+  const pegR = Math.min(5.5 * dpr, Math.max(1.5 * dpr, 0.078 * unit));
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   for (let r = 0; r < n; r += 1) {
+    // Each row fades in a beat after the one above it when the board changes shape.
+    const shown = introAt ? Math.min(1, Math.max(0, (now - introAt - r * 16) / INTRO_MS)) : 1;
+    if (shown <= 0) continue;
+    const fade = 1 - (1 - shown) * (1 - shown);
     for (let j = 0; j < r + 3; j += 1) {
       const x = (mid + j - (r + 2) / 2) * unit;
       const y = (TOP + r * ROW) * unit;
       const struck = flashes.get(`${r}:${j}`);
-      const glow = struck === undefined ? 0 : Math.max(0, 1 - (now - struck) / 320);
-      if (glow > 0) {
-        ctx.beginPath();
-        ctx.arc(x, y, PEG_R * unit * (1 + 2.2 * glow), 0, Math.PI * 2);
-        ctx.globalAlpha = 0.35 * glow;
-        ctx.fillStyle = palette.pegLit;
-        ctx.fill();
-        ctx.globalAlpha = 1;
+      const t = struck === undefined ? 1 : Math.min(1, (now - struck) / FLASH_MS);
+      if (t < 1) {
+        // A struck peg lights up: a bright pulse that swells a little as it fades.
+        const out = 1 - (1 - t) * (1 - t);
+        const halo = haloSprite(pegR);
+        const reach = (halo.width / 2) * (0.75 + 0.45 * out);
+        ctx.globalAlpha = (1 - t) * (1 - t);
+        ctx.drawImage(halo, x - reach, y - reach, reach * 2, reach * 2);
       }
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = t < 0.4 ? palette.pegLit : palette.peg;
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(1.5, PEG_R * unit), 0, Math.PI * 2);
-      ctx.fillStyle = glow > 0 ? palette.pegLit : palette.peg;
+      ctx.arc(x, y, t < 0.4 ? pegR * 1.15 : pegR, 0, Math.PI * 2);
       ctx.fill();
     }
   }
+  ctx.globalAlpha = 1;
 
-  const radius = BALL_R * unit;
-  for (const ball of balls) {
-    const at = positionOf(ball, now - ball.start);
-    const x = at.x * unit;
-    const y = at.y * unit;
+  // Sparks off a win: thrown up from the slot, falling back under gravity, fading as they go.
+  for (const spark of sparks) {
+    const s = (now - spark.born) / 1000;
+    const life = (now - spark.born) / spark.life;
+    if (life >= 1) continue;
+    const x = (spark.x + spark.vx * s) * unit;
+    const y = (spark.y + spark.vy * s + 4.5 * s * s) * unit;
+    ctx.globalAlpha = 1 - life * life;
+    ctx.fillStyle = spark.lit ? palette.sparkLit : palette.spark;
     ctx.beginPath();
-    ctx.arc(x, y + radius * 0.25, radius, 0, Math.PI * 2);
-    ctx.fillStyle = palette.shadow;
-    ctx.fill();
-    const body = ctx.createRadialGradient(x - radius * 0.35, y - radius * 0.4, radius * 0.1, x, y, radius);
-    body.addColorStop(0, palette.ballHi);
-    body.addColorStop(0.45, palette.ball);
-    body.addColorStop(1, palette.ballLo);
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = body;
+    ctx.arc(x, y, spark.size * unit, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
+
+  const radius = Math.round(BALL_R * unit * 10) / 10;
+  const art = ballSprite(radius);
+  const half = art.width / 2;
+  for (const ball of balls) {
+    const elapsed = now - ball.start;
+    const at = flatPosition(ball, elapsed);
+    // Flattened for a moment on each peg it meets, rounding out again as it leaves.
+    const since = ball.hit >= 1 ? elapsed - ball.times[ball.hit] : Infinity;
+    const squash = since < SQUASH_MS ? 0.09 * (1 - since / SQUASH_MS) : 0;
+    const w = half * (1 + squash);
+    const h = half * (1 - squash);
+    ctx.globalAlpha = Math.min(1, elapsed / 90);
+    ctx.drawImage(art, at.x * unit - w, at.y * unit - h + (half - h) * 0.6, w * 2, h * 2);
+  }
+  ctx.globalAlpha = 1;
 }
 
 /* ─────────── painting ─────────── */
@@ -586,6 +752,7 @@ function paint() {
 function buildSlots() {
   const holder = $('#plinkoSlots', root);
   if (!holder) return;
+  closeTip();
   holder.style.setProperty('--slots', String(rows + 1));
   holder.replaceChildren();
   for (let slot = 0; slot <= rows; slot += 1) {
@@ -594,6 +761,8 @@ function buildSlots() {
     node.dataset.slot = String(slot);
     node.setAttribute('role', 'listitem');
     node.style.setProperty('--heat', heat(slot, rows).toFixed(3));
+    // The flat board's slots arrive from the centre outwards (plinko.css).
+    node.style.setProperty('--d', `${Math.round(Math.abs(slot - rows / 2) * 22)}ms`);
     holder.appendChild(node);
   }
 }
@@ -606,8 +775,72 @@ function paintSlots() {
     const bps = slots?.[slot];
     const text = bps ? short(bps, slotsDense) : '—';
     if (node.textContent !== text) node.textContent = text;
-    node.setAttribute('aria-label', bps ? `${times(bps)}` : 'unavailable');
+    node.setAttribute('aria-label', bps ? `${times(bps)}, ${percent(chance(rows, slot))} chance` : 'unavailable');
   });
+  paintTip();
+}
+
+/** How likely a ball is to land in `slot` of an `n`-row board: C(n, slot) / 2^n. */
+function chance(n, slot) {
+  let ways = 1;
+  for (let i = 1; i <= slot; i += 1) ways = (ways * (n - slot + i)) / i;
+  return ways / 2 ** n;
+}
+function percent(p) {
+  const value = p * 100;
+  const text = value >= 10 ? value.toFixed(1) : value >= 0.1 ? value.toFixed(2) : value.toPrecision(2);
+  return `${text}%`;
+}
+
+/* ─────────── the slot card (flat board) ─────────── */
+
+/** The card's words: what this slot pays on the stake in the field, and how often it is hit. */
+function paintTip() {
+  const tip = root && $('#plinkoTip', root);
+  if (!tip) return;
+  const bps = tipSlot === null ? undefined : table()?.[tipSlot];
+  if (!bps) {
+    tip.hidden = true;
+    return;
+  }
+  const stake = stakeMinor() ?? 0n;
+  const profit = (stake * BigInt(bps)) / 10_000n - stake;
+  const won = profit >= 0n;
+  const profitText = `${won ? '+' : '−'}${money(Number(won ? profit : -profit))}`;
+  $('#plinkoTipMult', tip).textContent = times(bps);
+  const profitNode = $('#plinkoTipProfit', tip);
+  profitNode.textContent = profitText;
+  profitNode.dataset.tone = won ? 'won' : 'lost';
+  $('#plinkoTipChance', tip).textContent = percent(chance(rows, tipSlot));
+  tip.hidden = false;
+}
+
+/** Opens the card over `slot`, kept inside the board's edges, its arrow still on the slot. */
+function openTip(slot) {
+  const node = root?.querySelector(`.plinko__slot[data-slot="${slot}"]`);
+  const tip = root && $('#plinkoTip', root);
+  if (!node || !tip) return;
+  tipSlot = slot;
+  paintTip();
+  if (tip.hidden) return;
+  const board = tip.offsetParent || tip.parentElement;
+  const box = board.getBoundingClientRect();
+  const cell = node.getBoundingClientRect();
+  const centre = cell.left + cell.width / 2 - box.left;
+  const half = tip.offsetWidth / 2;
+  const left = Math.min(box.width - half - 4, Math.max(half + 4, centre));
+  tip.style.setProperty('--tip-x', `${left.toFixed(1)}px`);
+  tip.style.setProperty('--tip-arrow', `${(centre - left).toFixed(1)}px`);
+  tip.style.setProperty('--tip-y', `${(box.bottom - cell.top + 10).toFixed(1)}px`);
+  root.querySelectorAll('.plinko__slot.is-pointed').forEach((other) => other.classList.remove('is-pointed'));
+  node.classList.add('is-pointed');
+}
+
+function closeTip() {
+  tipSlot = null;
+  root?.querySelectorAll('.plinko__slot.is-pointed').forEach((node) => node.classList.remove('is-pointed'));
+  const tip = root && $('#plinkoTip', root);
+  if (tip) tip.hidden = true;
 }
 
 function paintReadout() {
@@ -623,6 +856,7 @@ function paintReadout() {
     last.dataset.tone = '';
   }
   const list = $('#plinkoRecent', root);
+  list.style.setProperty('--shown', String(HISTORY));
   const chips = recent.map((one) => {
     const chip = document.createElement('li');
     chip.className = 'plinko__chip';
@@ -649,13 +883,22 @@ function paintControls() {
 
   // The board's shape and its payouts stay put while balls are on it.
   const locked = busy();
-  root.querySelectorAll('.plinko__risk, .plinko__step').forEach((node) => { node.disabled = locked; });
   root.querySelectorAll('.plinko__risk').forEach((node) => {
+    node.disabled = locked;
     node.setAttribute('aria-pressed', String(node.dataset.risk === risk));
   });
+  // The risk switch's gold pill slides under the one that is chosen.
+  $('.plinko__risks', root).style.setProperty('--risk-i', String(Math.max(0, RISKS.findIndex(([value]) => value === risk))));
   $('#plinkoRows', root).textContent = String(rows);
-  $('#plinkoRowsDown', root).disabled = locked || rows <= (config?.minRows ?? 8);
-  $('#plinkoRowsUp', root).disabled = locked || rows >= (config?.maxRows ?? 16);
+  const range = $('#plinkoRowsRange', root);
+  const min = config?.minRows ?? 8;
+  const max = config?.maxRows ?? 16;
+  if (range.min !== String(min)) range.min = String(min);
+  if (range.max !== String(max)) range.max = String(max);
+  if (range.value !== String(rows)) range.value = String(rows);
+  range.disabled = locked;
+  range.style.setProperty('--fill', `${(((rows - min) / Math.max(1, max - min)) * 100).toFixed(2)}%`);
+  paintTip();
   paintGraphics();
   const falling = $('#plinkoFalling', root);
   const inAir = balls.length + queue.length;
@@ -674,6 +917,11 @@ function build() {
       <div class="plinko__board">
         <div class="plinko__view"><canvas id="plinkoCanvas" aria-hidden="true"></canvas></div>
         <div class="plinko__slots" id="plinkoSlots" role="list" aria-label="What each slot pays, left to right"></div>
+        <div class="plinko__tip" id="plinkoTip" role="tooltip" hidden>
+          <b class="plinko__tipmult" id="plinkoTipMult"></b>
+          <span class="plinko__tiprow"><span>Profit on win</span><b id="plinkoTipProfit"></b></span>
+          <span class="plinko__tiprow"><span>Chance</span><b id="plinkoTipChance"></b></span>
+        </div>
       </div>
     </section>
 
@@ -690,13 +938,12 @@ function build() {
         <div class="plinko__risks" role="group" aria-labelledby="plinkoRiskLabel">
           ${RISKS.map(([value, name]) => `<button type="button" class="plinko__risk" data-risk="${value}" aria-pressed="false">${name}</button>`).join('')}
         </div>
-        <span class="plinko__label" id="plinkoRowsLabel">Rows</span>
-        <div class="plinko__stepper" role="group" aria-labelledby="plinkoRowsLabel">
-          <button type="button" class="plinko__step" id="plinkoRowsDown" data-step="-1" aria-label="One row fewer">−</button>
-          <output id="plinkoRows" aria-live="off">12</output>
-          <button type="button" class="plinko__step" id="plinkoRowsUp" data-step="1" aria-label="One row more">+</button>
+        <div class="plinko__labelrow">
+          <label class="plinko__label" for="plinkoRowsRange">Rows</label>
+          <output class="plinko__rowsval" id="plinkoRows" for="plinkoRowsRange" aria-live="off">12</output>
         </div>
-        <button class="btn plinko__go" id="plinkoGo" type="submit">
+        <input class="plinko__range" id="plinkoRowsRange" type="range" min="8" max="16" step="1" value="12" />
+        <button class="btn plinko__go" id="plinkoGo" type="submit" data-sfx="plinkoDrop">
           <span id="plinkoGoLabel">Loading…</span>
         </button>
         <p class="plinko__hint" id="plinkoHint" aria-live="polite"></p>
@@ -727,11 +974,37 @@ function build() {
     risk = button.dataset.risk;
     paint();
   }));
-  root.querySelectorAll('.plinko__step').forEach((button) => button.addEventListener('click', () => {
-    if (busy()) return;
-    rows = Math.min(config?.maxRows ?? 16, Math.max(config?.minRows ?? 8, rows + Number(button.dataset.step)));
+  $('#plinkoRowsRange', root).addEventListener('input', (event) => {
+    const next = Math.min(config?.maxRows ?? 16, Math.max(config?.minRows ?? 8, Number(event.target.value) || rows));
+    if (busy() || next === rows) {
+      event.target.value = String(rows);
+      return;
+    }
+    rows = next;
+    playSound('tick', { rate: 0.75 + (rows - 8) * 0.06 });
     paint();
-  }));
+  });
+  // The slot card: a pointer over a slot opens it; a tap opens it and a tap anywhere else shuts it.
+  const slotsRow = $('#plinkoSlots', root);
+  const slotAt = (event) => {
+    const node = event.target.closest?.('.plinko__slot');
+    return node ? Number(node.dataset.slot) : null;
+  };
+  slotsRow.addEventListener('pointerover', (event) => {
+    if (event.pointerType !== 'mouse') return;
+    const slot = slotAt(event);
+    if (slot !== null && slot !== tipSlot) openTip(slot);
+  });
+  slotsRow.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') closeTip(); });
+  slotsRow.addEventListener('click', (event) => {
+    const slot = slotAt(event);
+    if (slot === null) return;
+    if (slot === tipSlot && event.pointerType !== 'mouse') closeTip();
+    else openTip(slot);
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (tipSlot !== null && !event.target.closest?.('#plinkoSlots')) closeTip();
+  });
   $('#plinkoGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#plinkoView', root), setView);
   // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
