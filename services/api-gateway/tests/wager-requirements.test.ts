@@ -201,3 +201,59 @@ describe('the public promotions', () => {
     }
   });
 });
+
+/* Against a real database when CI provides one: the operator's own example. A signup bonus, then a
+ * deposit: the bonus's requirement must still be there, the deposit's added to it, and nothing may
+ * leave until both are wagered. */
+const requirementDatabaseUrl = process.env['TEST_DATABASE_URL'];
+
+describe('the wager requirement against PostgreSQL', { skip: !requirementDatabaseUrl }, () => {
+  it('keeps the bonus requirement through a deposit, adds the deposit, and holds every withdrawal until both are wagered', async () => {
+    if (!requirementDatabaseUrl) return;
+    const { randomUUID } = await import('node:crypto');
+    const pg = (await import('pg')).default;
+    const { addDepositRequirement, addWagerRequirement, wagerRequirementRemaining } = await import('../src/lib/wager-requirements.js');
+    const pool = new pg.Pool({ connectionString: requirementDatabaseUrl, max: 1 });
+    const user = randomUUID();
+    const tag = user.slice(0, 8);
+    const atMultipliers = (bonus: number, deposit: number) =>
+      ({ ...config, signupBonusWagerMultiplier: bonus, depositWagerMultiplier: deposit }) as typeof config;
+    try {
+      await pool.query(
+        `INSERT INTO users (id, minecraft_identity, minecraft_username, normalized_username, role, status, terms_accepted_at)
+         VALUES ($1, $2, $3, $4, 'player', 'active', now())`,
+        [user, `mc:wager${tag}`, `Wager${tag}`, `wager${tag}`],
+      );
+      await pool.query('INSERT INTO user_wallets (user_id, balance_minor) VALUES ($1, 100000000)', [user]);
+      const blocked = () => assert.rejects(assertWagerRequirementMet(pool, user, 'withdrawing'), { code: 'WAGER_REQUIREMENT' });
+
+      // A $1M bonus at 3x: $3M owed. A $50M deposit at 0x leaves it exactly where it was.
+      let rules = atMultipliers(3, 0);
+      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier));
+      assert.equal(await wagerRequirementRemaining(pool, user), 3_000_000n);
+      await addDepositRequirement(pool, rules, user, 50_000_000n);
+      assert.equal(await wagerRequirementRemaining(pool, user), 3_000_000n, 'a deposit never clears the bonus requirement');
+      await blocked();
+
+      // At 1x a deposit adds its own amount on top; it never replaces what was owed.
+      rules = atMultipliers(3, 1);
+      await addDepositRequirement(pool, rules, user, 10_000_000n);
+      assert.equal(await wagerRequirementRemaining(pool, user), 13_000_000n);
+
+      // Wagers count it down, whatever money they were made with, and never below zero.
+      await reduceWagerRequirement(pool, user, 12_000_000n);
+      assert.equal(await wagerRequirementRemaining(pool, user), 1_000_000n);
+      await blocked();
+      await reduceWagerRequirement(pool, user, 5_000_000n);
+      assert.equal(await wagerRequirementRemaining(pool, user), 0n);
+      await assert.doesNotReject(assertWagerRequirementMet(pool, user, 'withdrawing'));
+
+      // At 0x the bonus owes nothing at all: that is the setting, not the code.
+      rules = atMultipliers(0, 0);
+      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier));
+      assert.equal(await wagerRequirementRemaining(pool, user), 0n);
+    } finally {
+      await pool.end();
+    }
+  });
+});
