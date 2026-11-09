@@ -57,6 +57,8 @@ interface ReferralState {
   paid: bigint;
   discordVerified: boolean;
   bonusUnlocked: boolean;
+  /** What is left of an invite signup bonus's wagering, which the milestone does not count. */
+  bonusLeft: bigint;
   /** Reference ids the earnings table has already seen, which is what makes a replay a no-op. */
   seenEarnings: Set<string>;
 }
@@ -82,6 +84,7 @@ class ReferralClient implements DbClient {
       paid: 0n,
       discordVerified: false,
       bonusUnlocked: false,
+      bonusLeft: 0n,
       seenEarnings: new Set(),
       ...state,
     };
@@ -110,6 +113,7 @@ class ReferralClient implements DbClient {
           referrer_id: REFERRER,
           wagered_minor: this.state.wagered.toString(),
           bonus_unlocked_at: this.state.bonusUnlocked ? new Date() : null,
+          signup_bonus_wager_left_minor: this.state.bonusLeft.toString(),
         },
       ] as unknown as R[]);
     }
@@ -126,6 +130,7 @@ class ReferralClient implements DbClient {
     if (text.includes('UPDATE referrals') && text.includes('wagered_minor = $2')) {
       this.state.wagered = BigInt(String(values[1]));
       this.state.claimable += BigInt(String(values[2]));
+      this.state.bonusLeft = BigInt(String(values[3]));
       return result([], 1);
     }
     if (text.includes('UPDATE referrals') && text.includes('revshare_paid_minor =')) {
@@ -264,6 +269,41 @@ describe('referral milestone bonus', () => {
     assert.equal(bonus.length, 1);
     assert.equal(bonus[0]?.amount, settings.referralBonusMinor);
     assert.equal(bonus[0]?.userId, REFERRER);
+  });
+
+  it('does not count the wagering that clears an invite signup bonus (2026-11-09)', async () => {
+    const settings = config();
+    const gate = settings.referralBonusWagerMinor;
+    // Joined on an invite: $10M at 10x, so the first $100M wagered is the bonus's.
+    const client = new ReferralClient({ bonusLeft: 100_000_000n });
+
+    // Inside the bonus's wagering: nothing toward the milestone, though the share still accrues.
+    await accrueReferralWager(client, settings, REFEREE, 60_000_000n, 'case', 'round-1');
+    assert.equal(client.state.wagered, 0n);
+    assert.equal(client.state.bonusLeft, 40_000_000n);
+    assert.equal(client.state.claimable, revshareMinor(settings, 60_000_000n));
+
+    // A wager across the end of it counts only the part past it.
+    await accrueReferralWager(client, settings, REFEREE, 50_000_000n, 'case', 'round-2');
+    assert.equal(client.state.bonusLeft, 0n);
+    assert.equal(client.state.wagered, 10_000_000n);
+
+    // From there it is the full threshold, wagered after the bonus: $210M in all, not $100M.
+    await accrueReferralWager(client, settings, REFEREE, gate - 11_000_000n, 'case', 'round-3');
+    assert.equal(client.state.bonusUnlocked, false);
+    await accrueReferralWager(client, settings, REFEREE, 1_000_000n, 'case', 'round-4');
+    assert.equal(client.state.wagered, gate);
+    assert.equal(client.state.bonusUnlocked, true);
+    assert.equal(client.credits.filter((entry) => entry.kind === 'referral_bonus').length, 1);
+  });
+
+  it('pays nothing on a bonus that is only wagered off', async () => {
+    const settings = config();
+    const client = new ReferralClient({ bonusLeft: settings.referralBonusWagerMinor });
+    await accrueReferralWager(client, settings, REFEREE, settings.referralBonusWagerMinor, 'case', 'round-1');
+    assert.equal(client.state.wagered, 0n);
+    assert.equal(client.state.bonusUnlocked, false);
+    assert.equal(client.credits.some((entry) => entry.kind === 'referral_bonus'), false);
   });
 
   it('does not consult Discord at all', async () => {

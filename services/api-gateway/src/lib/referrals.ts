@@ -52,6 +52,8 @@ interface ReferralRow {
   bonus_unlocked_at: Date | null;
   network_reviewed_at?: Date | null;
   revshare_bps?: number;
+  /** What is left of the invite signup bonus's own wagering, which the milestone does not count. */
+  signup_bonus_wager_left_minor?: string;
 }
 
 interface ClaimableReferralRow {
@@ -91,7 +93,7 @@ export async function accrueReferralWager(
    * same running total, both decide the threshold was not crossed, and the milestone would never
    * fire. The lock also serializes the two writes to wagered_minor. */
   const existing = await client.query<ReferralRow>(
-    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at,
+    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at, r.signup_bonus_wager_left_minor,
             coalesce((
               SELECT a.granted_revshare_bps FROM creator_applications a
                WHERE a.user_id = r.referrer_id AND a.status = 'approved'
@@ -110,8 +112,15 @@ export async function accrueReferralWager(
    * its face value: a PvP stake earns the rake alone, and counted in full it let a referee and the
    * referrer's own second account flip the gate open for 3% of it. See countedWagerMinor. So
    * `wagered_minor` is the counted wager from here on, which is also what the progress bar shows. */
-  const wageredAfter =
-    BigInt(referral.wagered_minor) + countedWagerMinor(config, wagerMinor, marginMinor);
+  const counted = countedWagerMinor(config, wagerMinor, marginMinor);
+  /* The invite signup bonus's own wagering does not count toward the milestone (the operator's
+   * rule, 2026-11-09; migration 089). A player who joined on an invite was given $10M to wager 10x
+   * before it can leave (routes/auth.ts), and at a 10% edge that $10M is expected to turn over about
+   * $100M before it is gone: counted, it reached the milestone on the house's money alone. So each
+   * wager goes first to what is left of the bonus's wagering, and only the rest to the milestone. */
+  const bonusLeft = BigInt(referral.signup_bonus_wager_left_minor ?? '0');
+  const toBonus = counted < bonusLeft ? counted : bonusLeft;
+  const wageredAfter = BigInt(referral.wagered_minor) + counted - toBonus;
 
   if (commission > 0n) {
     /* The earnings row goes in FIRST, so its unique (kind, reference_id) index stops a replayed
@@ -132,9 +141,10 @@ export async function accrueReferralWager(
     `UPDATE referrals
         SET wagered_minor = $2,
             revshare_claimable_minor = revshare_claimable_minor + $3,
+            signup_bonus_wager_left_minor = $4,
             updated_at = now()
       WHERE referee_id = $1`,
-    [refereeId, wageredAfter.toString(), commission.toString()],
+    [refereeId, wageredAfter.toString(), commission.toString(), (bonusLeft - toBonus).toString()],
   );
 
   if (!referral.bonus_unlocked_at && wageredAfter >= config.referralBonusWagerMinor) {

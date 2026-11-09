@@ -399,11 +399,14 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           /* Joined on a live invite: the invite signup bonus instead of the ordinary one, at once,
            * with its own wager multiplier. The same kind and reference as the ordinary bonus, so the
            * ledger's unique index still allows one signup bonus per account, of either size. */
+          const bonusWager = requirementFor(config.referralSignupBonusMinor, config.referralSignupBonusWagerMultiplier);
           await creditWallet(client, row.id, config.referralSignupBonusMinor, 'signup_bonus', row.id);
-          await addWagerRequirement(
-            client,
-            row.id,
-            requirementFor(config.referralSignupBonusMinor, config.referralSignupBonusWagerMultiplier),
+          await addWagerRequirement(client, row.id, bonusWager);
+          /* And that wagering is the bonus's, not the inviter's: it does not count toward the
+           * inviter's milestone (lib/referrals.ts, accrueReferralWager). */
+          await client.query(
+            'UPDATE referrals SET signup_bonus_wager_left_minor = $2 WHERE referee_id = $1',
+            [row.id, bonusWager.toString()],
           );
         } else if (!existing.rows[0] && config.signupBonusMinor > 0n) {
           await creditWallet(client, row.id, config.signupBonusMinor, 'signup_bonus', row.id);

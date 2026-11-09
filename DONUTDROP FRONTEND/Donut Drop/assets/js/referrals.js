@@ -275,6 +275,12 @@ function offerCard(data) {
  * or an assistant lifts from this page carries the offer whole. Every figure is still the
  * server's: `terms` is GET /v1/promotions' referral block.
  */
+/** ", after the $100M that clears their own signup bonus": the invite bonus's wagering does not count. */
+function notCounted() {
+  const invite = state.promotions?.referralSignupBonus;
+  return invite ? `, after the ${money(Number(invite.wagerMinor))} that clears their own signup bonus` : '';
+}
+
 function publicOffer(terms) {
   const wrap = el('div', 'refer');
   const card = el('div', 'refer__card');
@@ -284,7 +290,7 @@ function publicOffer(terms) {
     card,
     terms,
     `Earn ${bonus} for every player you refer to DonutLuxe. Once they have wagered`
-    + ` ${money(Number(terms.bonusWagerMinor))}, the bonus lands in your wallet — and ${sharePercent}%`
+    + ` ${money(Number(terms.bonusWagerMinor))}${notCounted()}, the bonus lands in your wallet — and ${sharePercent}%`
     + ' of everything they wager keeps building for you, for life.',
   );
   card.appendChild(el('hr', 'refer__rule'));
@@ -326,8 +332,12 @@ function appendDeal(card, terms, ledeText) {
   /* What the friend gets for joining on the link: the invite signup bonus, in place of the
    * ordinary one, at signup (GET /v1/promotions referralSignupBonus). */
   const invite = state.promotions?.referralSignupBonus;
+  /* Wagering that clears that bonus is not counted toward yours (lib/referrals.ts). */
   const friend = invite
-    ? [['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`]]
+    ? [
+      ['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`],
+      ['Not counted', `The ${money(Number(invite.wagerMinor))} that clears their bonus`],
+    ]
     : [];
   for (const [label, value] of [
     ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],
@@ -575,10 +585,15 @@ function inviteRow(invite, milestone) {
   fill.style.transform = `scaleX(${ratio})`;
   track.appendChild(fill);
 
+  /* Until the invitee has wagered off their own signup bonus, none of it counts toward this
+   * bonus (GET /v1/referrals bonusWagerLeftMinor), so the bar says what is left of that instead. */
+  const clearing = !invite.bonusUnlocked && Number(invite.bonusWagerLeftMinor ?? 0) > 0;
   const fraction = el('span', 'refer__frac');
   fraction.textContent = invite.bonusUnlocked
     ? 'Bonus paid'
-    : `${money(Number(invite.wageredMinor))} / ${money(milestone)}`;
+    : clearing
+      ? `Clearing their bonus: ${money(Number(invite.bonusWagerLeftMinor))} left`
+      : `${money(Number(invite.wageredMinor))} / ${money(milestone)}`;
   bar.append(track, fraction);
 
   row.append(who, pays, bar);

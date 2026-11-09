@@ -218,7 +218,8 @@ export const runtimeSettingDefinitions = {
   referralBonusWagerMinor: {
     kind: 'bigint',
     group: 'rewards',
-    label: 'Referral wager to unlock',
+    // The invite signup bonus's own wagering is not counted toward it (lib/referrals.ts).
+    label: 'Referral wager to unlock (not counting the invite bonus\'s wagering)',
     min: 0n,
     max: BIGINT_MAX,
   },
