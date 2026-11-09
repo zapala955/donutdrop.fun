@@ -31,7 +31,15 @@ const KIND = {
     // A die.
     icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle class="qb__dot" cx="9" cy="9" r="1.3"/><circle class="qb__dot" cx="15" cy="15" r="1.3"/><circle class="qb__dot" cx="12" cy="12" r="1.3"/></svg>',
   },
+  multiplier: {
+    verb: 'Best',
+    // A rising line with a point at its peak.
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M5 16l4.5-4.5 3 3L19 7"/><path d="M15 7h4v4"/></svg>',
+  },
 };
+
+/** A multiplier quest's figures are hundredths of a multiplier (2500 is 25x): "25×", "12.4×". */
+const times = (hundredths) => `${Number(hundredths) / 100}×`;
 
 let root = null;
 let board = null;
@@ -128,8 +136,13 @@ function questCard(quest) {
   fill.style.setProperty('--p', ratio.toFixed(4));
   bar.append(fill);
   const count = node('p', 'qb__count');
+  const multiplier = quest.kind === 'multiplier';
+  const figure = multiplier ? times : cash;
   if (signedIn) {
-    count.append(node('span', '', `${kind.verb} `), node('b', '', cash(done)), node('span', '', ` of ${cash(target)}`));
+    count.append(node('span', '', `${kind.verb} `), node('b', '', figure(done)), node('span', '', ` of ${figure(target)}`));
+    if (multiplier && quest.minStakeMinor) count.append(node('span', '', ` · bets of ${cash(quest.minStakeMinor)}+`));
+  } else if (multiplier) {
+    count.append(node('span', '', `Hit ${times(target)} on a bet of ${cash(quest.minStakeMinor)} or more within the period`));
   } else {
     count.append(node('span', '', `${kind.verb === 'Deposited' ? 'Deposit' : 'Wager'} ${cash(target)} within the period`));
   }

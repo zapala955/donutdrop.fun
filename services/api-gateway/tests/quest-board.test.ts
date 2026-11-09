@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import pg from 'pg';
 import type { AppConfig } from '../src/config.js';
 import { Database } from '../src/lib/db.js';
-import { PERIOD_DAYS, claimBoardQuest, periodOf, readQuestBoard } from '../src/lib/quest-board.js';
+import { PERIOD_DAYS, bestMultiplierFor, claimBoardQuest, periodOf, readQuestBoard } from '../src/lib/quest-board.js';
 import { wagerRequirementRemaining } from '../src/lib/wager-requirements.js';
 
 const repo = path.resolve(import.meta.dirname, '../../..');
@@ -197,6 +197,87 @@ describe('quest board: claims against PostgreSQL', { skip: !databaseUrl }, () =>
       // A quest switched off cannot be claimed.
       await owner.query('UPDATE board_quests SET enabled = false WHERE id = $1', [wager]);
       await assert.rejects(claimBoardQuest(db, config, user, wager), { code: 'QUEST_NOT_FOUND' });
+    } finally {
+      await db.close();
+      await owner.end();
+    }
+  });
+});
+
+describe('quest board: multiplier quests (migration 088)', () => {
+  it('adds the kind and the operator\'s first three quests, and nothing destructive', async () => {
+    const sql = await read('packages/db/migrations/088_quest_multiplier.sql');
+    assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|DELETE FROM|TRUNCATE/i);
+    assert.match(sql, /CHECK \(kind IN \('deposit', 'wager', 'multiplier'\)\)/);
+    assert.match(sql, /CHECK \(\(kind = 'multiplier'\) = \(min_stake_minor IS NOT NULL\)\)/);
+    assert.match(sql, /'Wager \$100M', 'Play any game\.', 'wager', 100000000, 5000000, 1, true, NULL/);
+    assert.match(sql, /'Deposit \$50M', 'Deposit in game\.', 'deposit', 50000000, 5000000, 2, true, NULL/);
+    assert.match(sql, /'multiplier', 2500, 20000000, 3, true, 1000000/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v88\(\) RETURNS boolean/);
+  });
+
+  it('shows the multiplier and the least bet on the page, and edits them in the console', async () => {
+    const [page, admin] = await Promise.all([front('assets/js/quests.js'), front('admin/admin.js')]);
+    assert.match(page, /const times = \(hundredths\) => `\$\{Number\(hundredths\) \/ 100\}×`;/);
+    assert.match(page, /Hit \$\{times\(target\)\} on a bet of \$\{cash\(quest\.minStakeMinor\)\} or more/);
+    assert.match(admin, /options: \['deposit', 'wager', 'multiplier'\]/);
+    assert.match(admin, /String\(Math\.round\(Number\(String\(values\.targetMinor\)\.replace\(\/x\|×\/gi, ''\)\.trim\(\)\) \* 100\)\)/);
+  });
+});
+
+describe('quest board: a multiplier quest against PostgreSQL', { skip: !databaseUrl }, () => {
+  it('counts the best multiplier on a bet of at least the minimum, in the period, and pays it once', async () => {
+    if (!databaseUrl) return;
+    const owner = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+    const config = { databaseUrl, databaseSsl: false, questRewardWagerMultiplier: 3 } as unknown as AppConfig;
+    const db = new Database(config);
+    const user = randomUUID();
+    const tag = user.slice(0, 8);
+    try {
+      await owner.query(
+        `INSERT INTO users (id, minecraft_identity, minecraft_username, normalized_username, role, status, terms_accepted_at)
+         VALUES ($1, $2, $3, $4, 'player', 'active', now())`,
+        [user, `mc:mult${tag}`, `Mult${tag}`, `mult${tag}`],
+      );
+      await owner.query('INSERT INTO user_wallets (user_id, balance_minor) VALUES ($1, 0)', [user]);
+      const bet = async (stake: number, payout: number) => {
+        const seed = randomUUID();
+        await owner.query(
+          `INSERT INTO fairness_seeds (id, user_id, server_seed_ciphertext, server_seed_hash, used_at) VALUES ($1, $2, 'x', $3, now())`,
+          [seed, user, 'a'.repeat(64)],
+        );
+        await owner.query(
+          `INSERT INTO dice_bets (id, user_id, idempotency_key, request_hash, stake_minor, direction, target, chance, roll,
+                                 multiplier_bps, win, payout_minor, fairness_seed_id, server_seed_hash, server_seed_reveal, client_seed, nonce)
+           VALUES ($1, $2, $3, $4, $5, 'under', 100, 100, 5, 900000, $6, $7, $8, $9, $9, 'c', 0)`,
+          [randomUUID(), user, randomUUID(), 'b'.repeat(64), stake, payout > 0, payout, seed, 'a'.repeat(64)],
+        );
+      };
+      const quest = randomUUID();
+      await owner.query(
+        `INSERT INTO board_quests (id, name, kind, target_minor, reward_minor, min_stake_minor) VALUES ($1, 'Hit 25x', 'multiplier', 2500, 20000000, 1000000)`,
+        [quest],
+      );
+      const { start, end } = periodOf(new Date((await owner.query<{ now: Date }>('SELECT now() AS now')).rows[0]!.now));
+
+      // 100x on a bet under the minimum does not count; 10x on $1M does, but is short.
+      await bet(500_000, 50_000_000);
+      await bet(1_000_000, 10_000_000);
+      assert.equal(await bestMultiplierFor(owner, user, start, end, 1_000_000n), 1000n);
+      let mine = (await readQuestBoard(db, config, user)).quests.find((q) => q.id === quest)!;
+      assert.equal(mine.progressMinor, '1000');
+      assert.equal(mine.minStakeMinor, '1000000');
+      assert.equal(mine.claimable, false);
+      await assert.rejects(claimBoardQuest(db, config, user, quest), { code: 'QUEST_INCOMPLETE' });
+
+      // 25.5x on $2M: done, paid once, at the quests' wager requirement.
+      await bet(2_000_000, 51_000_000);
+      assert.equal(await bestMultiplierFor(owner, user, start, end, 1_000_000n), 2550n);
+      mine = (await readQuestBoard(db, config, user)).quests.find((q) => q.id === quest)!;
+      assert.equal(mine.claimable, true);
+      assert.equal((await claimBoardQuest(db, config, user, quest)).rewardMinor, '20000000');
+      await assert.rejects(claimBoardQuest(db, config, user, quest), { code: 'QUEST_ALREADY_CLAIMED' });
+      assert.equal(await wagerRequirementRemaining(owner, user), 60_000_000n);
     } finally {
       await db.close();
       await owner.end();

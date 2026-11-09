@@ -36,10 +36,19 @@ const fields = {
   rewardMinor: amount,
   sortOrder: z.number().int().min(-10_000).max(10_000),
   enabled: z.boolean(),
+  /* A multiplier quest's least stake for a bet to count; null for the others. Its target is the
+   * multiplier in hundredths (2500 is 25x). */
+  minStakeMinor: amount.nullable(),
 };
 // The console asks every write for a reason, kept in the audit log with it.
 const reason = safeText(3, 256);
-const createSchema = z.object({ ...fields, reason }).strict();
+const createSchema = z
+  .object({ ...fields, minStakeMinor: fields.minStakeMinor.optional(), reason })
+  .strict()
+  .refine((body) => body.kind !== 'multiplier' || Boolean(body.minStakeMinor), {
+    message: 'A multiplier quest needs a minimum stake',
+    path: ['minStakeMinor'],
+  });
 const updateSchema = z
   .object({
     name: fields.name.optional(),
@@ -49,6 +58,7 @@ const updateSchema = z
     rewardMinor: fields.rewardMinor.optional(),
     sortOrder: fields.sortOrder.optional(),
     enabled: fields.enabled.optional(),
+    minStakeMinor: fields.minStakeMinor.optional(),
     reason,
   })
   .strict();
@@ -61,6 +71,7 @@ interface AdminQuestRow {
   target_minor: string;
   reward_minor: string;
   sort_order: number;
+  min_stake_minor: string | null;
   enabled: boolean;
   created_at: Date;
   updated_at: Date;
@@ -117,7 +128,7 @@ export async function registerQuestBoardRoutes(app: FastifyInstance, db: Databas
     const { start, end } = periodOf(new Date(clock.rows.at(0)!.now));
     const result = await db.query<AdminQuestRow>(
       `SELECT q.id, q.name, q.description, q.kind, q.target_minor, q.reward_minor, q.sort_order,
-              q.enabled, q.created_at, q.updated_at,
+              q.min_stake_minor, q.enabled, q.created_at, q.updated_at,
               count(c.user_id) FILTER (WHERE c.period_start = $1)::integer AS claims_period,
               coalesce(sum(c.reward_minor) FILTER (WHERE c.period_start = $1), 0)::text AS paid_period_minor,
               count(c.user_id)::integer AS claims_total,
@@ -136,9 +147,12 @@ export async function registerQuestBoardRoutes(app: FastifyInstance, db: Databas
     await db.transaction(async (client) => {
       await client.query(
         `INSERT INTO board_quests
-           (id, name, description, kind, target_minor, reward_minor, sort_order, enabled, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [id, body.name, body.description, body.kind, body.targetMinor, body.rewardMinor, body.sortOrder, body.enabled, actor],
+           (id, name, description, kind, target_minor, reward_minor, sort_order, enabled, created_by, min_stake_minor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          id, body.name, body.description, body.kind, body.targetMinor, body.rewardMinor, body.sortOrder, body.enabled, actor,
+          body.kind === 'multiplier' ? body.minStakeMinor : null,
+        ],
       );
       await appendAudit(client, config, {
         actorUserId: actor,
@@ -162,7 +176,9 @@ export async function registerQuestBoardRoutes(app: FastifyInstance, db: Databas
            kind = coalesce($4, kind), target_minor = coalesce($5::bigint, target_minor),
            reward_minor = coalesce($6::bigint, reward_minor),
            sort_order = coalesce($7::integer, sort_order),
-           enabled = coalesce($8::boolean, enabled), updated_at = now()
+           enabled = coalesce($8::boolean, enabled),
+           min_stake_minor = CASE WHEN coalesce($4, kind) = 'multiplier' THEN coalesce($9::bigint, min_stake_minor) END,
+           updated_at = now()
          WHERE id = $1 RETURNING id`,
         [
           id,
@@ -173,6 +189,7 @@ export async function registerQuestBoardRoutes(app: FastifyInstance, db: Databas
           body.rewardMinor ?? null,
           body.sortOrder ?? null,
           body.enabled ?? null,
+          body.minStakeMinor ?? null,
         ],
       );
       if (!updated.rows[0]) throw new AppError(404, 'QUEST_NOT_FOUND', 'Quest was not found');

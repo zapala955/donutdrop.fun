@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
 import { DEPOSIT_KINDS, WITHDRAWAL_KINDS } from './admin-stats.js';
+import { allRoundsSql } from './player-rounds.js';
 import type { Database, DbClient } from './db.js';
 import { AppError, conflict } from './errors.js';
 import { liveEvents } from './live-events.js';
@@ -21,6 +22,8 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  *            withdrawals, plus any withdrawal refunded), never below zero. Putting the same money
  *            in and taking it out again moves nothing.
  *   wager    the period's wagers, every game's, as the wager log holds them.
+ *   multiplier  the best multiplier hit on one bet of at least the quest's minimum stake, in any
+ *            game; the target is in hundredths (2500 is 25x).
  *
  * A CLAIM PAYS ONCE. Its row is unique on (quest, player, period), inserted in the same transaction
  * that credits the wallet; a second claim, a double click or a retried request, finds the row and is
@@ -29,7 +32,7 @@ import { addWagerRequirement, requirementFor } from './wager-requirements.js';
  * (questRewardWagerMultiplier, lib/wager-requirements.ts).
  */
 
-export const QUEST_KINDS = ['deposit', 'wager'] as const;
+export const QUEST_KINDS = ['deposit', 'wager', 'multiplier'] as const;
 export type QuestKind = (typeof QUEST_KINDS)[number];
 
 export const PERIOD_DAYS = 3;
@@ -44,13 +47,45 @@ export function periodOf(at: Date): { start: Date; end: Date } {
 
 const MONEY_KINDS = [...DEPOSIT_KINDS, ...WITHDRAWAL_KINDS];
 
-/** One player's progress on each kind over [start, end), in minor units. */
+/* Fishing, Ice Fishing and Mob Derby are not in the history's round list (lib/player-rounds.ts);
+ * a multiplier quest counts them too. Settled rounds only, with what they staked and paid. */
+const EXTRA_ROUNDS = `
+  SELECT created_at AS at, stake_minor AS wager, payout_minor AS payout FROM fishing_casts
+   WHERE user_id = $1 AND status IN ('landed', 'snapped')
+  UNION ALL
+  SELECT created_at, stake_minor, coalesce(payout_minor, 0) FROM ice_fishing_games
+   WHERE user_id = $1 AND status = 'settled'
+  UNION ALL
+  SELECT created_at, stake_minor, payout_minor FROM derby_races WHERE user_id = $1`;
+
+/**
+ * The best multiplier one player hit on a single bet of at least `minStake` over [start, end), in
+ * hundredths (2500 is 25x), rounded down; 0 when there is none. Every game's settled rounds: the
+ * history's list (lib/player-rounds.ts) and the three above. A round counts by when it was placed.
+ */
+export async function bestMultiplierFor(
+  client: Pick<DbClient, 'query'>,
+  userId: string,
+  start: Date,
+  end: Date,
+  minStake: bigint,
+): Promise<bigint> {
+  const result = await client.query<{ best: string | null }>(
+    `SELECT max(floor(r.payout::numeric * 100 / r.wager))::text AS best
+       FROM ((${allRoundsSql()}) UNION ALL (SELECT 'x', 'x', e.at, e.wager, e.payout, '' FROM (${EXTRA_ROUNDS}) e)) r
+      WHERE r.at >= $2 AND r.at < $3 AND r.wager >= $4 AND r.wager > 0`,
+    [userId, start, end, minStake.toString()],
+  );
+  return BigInt(result.rows[0]?.best ?? '0');
+}
+
+/** One player's progress on deposits and wagers over [start, end), in minor units. */
 export async function progressFor(
   client: Pick<DbClient, 'query'>,
   userId: string,
   start: Date,
   end: Date,
-): Promise<Record<QuestKind, bigint>> {
+): Promise<Record<'deposit' | 'wager', bigint>> {
   const result = await client.query<{ deposit: string; wager: string }>(
     `SELECT
        greatest(0, coalesce((SELECT sum(t.amount_minor) FROM wallet_transactions t
@@ -72,6 +107,20 @@ interface QuestRow {
   target_minor: string;
   reward_minor: string;
   sort_order: number;
+  min_stake_minor: string | null;
+}
+
+/** Where one player stands on one quest: money for deposit and wager, hundredths of a multiplier. */
+async function questProgress(
+  client: Pick<DbClient, 'query'>,
+  row: QuestRow,
+  userId: string,
+  start: Date,
+  end: Date,
+  money: Record<'deposit' | 'wager', bigint> | null,
+): Promise<bigint> {
+  if (row.kind === 'multiplier') return bestMultiplierFor(client, userId, start, end, BigInt(row.min_stake_minor ?? '1'));
+  return (money ?? (await progressFor(client, userId, start, end)))[row.kind];
 }
 
 export interface BoardQuest {
@@ -79,8 +128,11 @@ export interface BoardQuest {
   readonly name: string;
   readonly description: string;
   readonly kind: QuestKind;
+  /** Money for deposit and wager; for multiplier, hundredths of the multiplier (2500 is 25x). */
   readonly targetMinor: string;
   readonly rewardMinor: string;
+  /** Multiplier quests: the least a bet must stake to count. */
+  readonly minStakeMinor: string | null;
   /** Signed in only: where the player stands this period, capped at the target. */
   readonly progressMinor: string | null;
   readonly claimed: boolean;
@@ -101,13 +153,14 @@ export async function readQuestBoard(db: Database, config: AppConfig, userId: st
   const clock = await db.query<{ now: Date }>(DATABASE_NOW);
   const { start, end } = periodOf(new Date(clock.rows.at(0)!.now));
   const quests = await db.query<QuestRow>(
-    `SELECT id, name, description, kind, target_minor, reward_minor, sort_order
+    `SELECT id, name, description, kind, target_minor, reward_minor, sort_order, min_stake_minor
        FROM board_quests WHERE enabled ORDER BY sort_order, created_at, id`,
   );
-  let progress: Record<QuestKind, bigint> | null = null;
+  const progress = new Map<string, bigint>();
   let claimed = new Set<string>();
   if (userId && quests.rows.length) {
-    progress = await progressFor(db, userId, start, end);
+    const money = quests.rows.some((row) => row.kind !== 'multiplier') ? await progressFor(db, userId, start, end) : null;
+    for (const row of quests.rows) progress.set(row.id, await questProgress(db, row, userId, start, end, money));
     const claims = await db.query<{ quest_id: string }>(
       'SELECT quest_id FROM board_quest_claims WHERE user_id = $1 AND period_start = $2',
       [userId, start],
@@ -120,7 +173,7 @@ export async function readQuestBoard(db: Database, config: AppConfig, userId: st
     wagerMultiplier: config.questRewardWagerMultiplier,
     quests: quests.rows.map((row) => {
       const target = BigInt(row.target_minor);
-      const done = progress ? progress[row.kind] : null;
+      const done = progress.get(row.id) ?? null;
       const isClaimed = claimed.has(row.id);
       return {
         id: row.id,
@@ -129,6 +182,7 @@ export async function readQuestBoard(db: Database, config: AppConfig, userId: st
         kind: row.kind,
         targetMinor: row.target_minor,
         rewardMinor: row.reward_minor,
+        minStakeMinor: row.min_stake_minor,
         progressMinor: done === null ? null : (done > target ? target : done).toString(),
         claimed: isClaimed,
         claimable: done !== null && !isClaimed && done >= target,
@@ -151,7 +205,7 @@ export async function claimBoardQuest(
 ): Promise<Claimed> {
   const claimed = await db.transaction(async (client) => {
     const quest = await client.query<QuestRow>(
-      `SELECT id, name, description, kind, target_minor, reward_minor, sort_order
+      `SELECT id, name, description, kind, target_minor, reward_minor, sort_order, min_stake_minor
          FROM board_quests WHERE id = $1 AND enabled FOR SHARE`,
       [questId],
     );
@@ -159,7 +213,7 @@ export async function claimBoardQuest(
     if (!row) throw new AppError(404, 'QUEST_NOT_FOUND', 'That quest is not on the board');
     const clock = await client.query<{ now: Date }>(DATABASE_NOW);
     const { start, end } = periodOf(new Date(clock.rows.at(0)!.now));
-    const done = (await progressFor(client, userId, start, end))[row.kind];
+    const done = await questProgress(client, row, userId, start, end, null);
     if (done < BigInt(row.target_minor)) {
       throw new AppError(409, 'QUEST_INCOMPLETE', 'That quest is not finished yet');
     }

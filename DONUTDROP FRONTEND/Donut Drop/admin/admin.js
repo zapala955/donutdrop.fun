@@ -3352,8 +3352,8 @@ async function loadPrograms() {
       tr.append(
         cell(quest.sort_order, { mono: true }),
         cell(quest.name),
-        cell(quest.kind === 'deposit' ? 'Deposit (net)' : 'Wager'),
-        cell(amountText(quest.target_minor), { mono: true }),
+        cell(quest.kind === 'deposit' ? 'Deposit (net)' : quest.kind === 'multiplier' ? `Multiplier (bets of ${amountText(quest.min_stake_minor ?? 0)}+)` : 'Wager'),
+        cell(quest.kind === 'multiplier' ? `${Number(quest.target_minor) / 100}×` : amountText(quest.target_minor), { mono: true }),
         cell(amountText(quest.reward_minor), { mono: true }),
         cell(quest.claims_period, { mono: true }),
         cell(amountText(quest.paid_period_minor), { mono: true }),
@@ -3571,10 +3571,20 @@ async function editBoardQuest(quest = null) {
         name: 'kind',
         label: 'Counts',
         type: 'select',
-        options: ['deposit', 'wager'],
+        options: ['deposit', 'wager', 'multiplier'],
         value: quest?.kind ?? 'deposit',
       },
-      { name: 'targetMinor', label: 'Target (e.g. 10m)', value: quest ? amountText(quest.target_minor) : '' },
+      {
+        name: 'targetMinor',
+        label: 'Target (e.g. 10m; for a multiplier quest the multiplier, e.g. 25)',
+        value: quest ? (quest.kind === 'multiplier' ? String(Number(quest.target_minor) / 100) : amountText(quest.target_minor)) : '',
+      },
+      {
+        name: 'minStakeMinor',
+        label: 'Multiplier quests only: least bet that counts (e.g. 1m)',
+        value: quest?.min_stake_minor ? amountText(quest.min_stake_minor) : '',
+        required: false,
+      },
       { name: 'rewardMinor', label: 'Reward (e.g. 1m)', value: quest ? amountText(quest.reward_minor) : '' },
       { name: 'sortOrder', label: 'Sort order', type: 'number', value: quest?.sort_order ?? 0 },
       { name: 'enabled', label: 'On (shown and claimable)', type: 'checkbox', value: quest?.enabled ?? true },
@@ -3596,7 +3606,13 @@ async function editBoardQuest(quest = null) {
       name: values.name,
       description: values.description ?? '',
       kind: values.kind,
-      targetMinor: parseAmount(values.targetMinor)?.toString() ?? values.targetMinor,
+      // A multiplier quest's target is the multiplier in hundredths: 25 (or 25x) is 2500.
+      targetMinor: values.kind === 'multiplier'
+        ? String(Math.round(Number(String(values.targetMinor).replace(/x|×/gi, '').trim()) * 100))
+        : (parseAmount(values.targetMinor)?.toString() ?? values.targetMinor),
+      ...(values.kind === 'multiplier'
+        ? { minStakeMinor: parseAmount(values.minStakeMinor)?.toString() ?? values.minStakeMinor }
+        : {}),
       rewardMinor: parseAmount(values.rewardMinor)?.toString() ?? values.rewardMinor,
       sortOrder: Number(values.sortOrder),
       enabled: values.enabled,
