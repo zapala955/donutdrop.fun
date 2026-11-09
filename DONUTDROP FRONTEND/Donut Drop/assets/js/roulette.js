@@ -3,7 +3,15 @@
  * The wheel is drawn in WebGL (roulette3d.js), its own chunk, at the graphics the player picked or
  * the machine can manage: a fire charge on a wheel in a Nether fortress, blazes watching. This page
  * still says which pocket and how long; the 3D wheel only runs the ball there. Without WebGL the flat
- * wheel turns as it always has. */
+ * wheel turns as it always has.
+ *
+ * The flat table (2026-11-09): a real layout -- 0 down the left, the numbers in three rows of
+ * twelve, the dozens and the even-money bets under them; on a phone the vertical table, 0 across
+ * the top and the numbers three to a row. Your chips sit on the spots as chips. A countdown bar
+ * says how long betting has left. The wheel's hub takes the colour of the pocket it landed on, a
+ * win pops a card over the wheel that counts up, and nothing toasts: the chip on the board is the
+ * confirmation, the hub and the card are the result. Its own sounds: a chip clacking down, the
+ * ball rattling round and dropping, and a win. */
 import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
 import { onNavigate } from './routing.js';
@@ -45,6 +53,8 @@ const CHIPS = Object.freeze([
   [1_000_000_000n, '$1B'],
 ]);
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
+/* The pop of the hub, a chip and the win card: quick out, a little past, settled. */
+const POP_EASE = 'cubic-bezier(.16, 1, .3, 1)';
 const OUTSIDE = Object.freeze([
   ['low', '1–18'],
   ['even', 'Even'],
@@ -212,15 +222,15 @@ function build() {
   root.innerHTML = `
     <section class="roulette__stage" aria-label="Shared roulette wheel">
       <div class="roulette__roundline">
-        <span class="roulette__live"><i></i> SHARED TABLE</span>
-        <strong class="roulette__clock mono" id="rouletteClock">—</strong>
+        <span class="roulette__live"><i></i> Shared table</span>
+        <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
       </div>
       <div class="roulette__wheelwrap">
         <span class="roulette__pointer" aria-hidden="true"></span>
         <div class="roulette__wheel" id="rouletteWheel" aria-hidden="true"></div>
-        <div class="roulette__hub"><b id="rouletteResult">—</b></div>
+        <div class="roulette__hub" id="rouletteHub" data-color=""><b id="rouletteResult">—</b></div>
+        <div class="roulette__win" id="rouletteWin" hidden><span>You won</span><b>$0</b></div>
       </div>
-      <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
       ${viewSwitch('rouletteView')}
       <label class="roulette__gfx" for="rouletteGfx">
         <span>Graphics</span>
@@ -229,23 +239,24 @@ function build() {
     </section>
 
     <section class="roulette__board">
-      <div class="roulette__guide">
-        <span><b>1</b> Pick a chip</span>
-        <i aria-hidden="true">→</i>
-        <span><b>2</b> Click a bet</span>
+      <div class="roulette__status">
         <strong id="roulettePhase" role="status" aria-live="polite">Connecting to the table…</strong>
+        <span class="roulette__clock mono" id="rouletteClock">—</span>
+        <span class="roulette__timer" aria-hidden="true"><i id="rouletteTimerBar"></i></span>
       </div>
-      <div class="roulette__numbers" id="rouletteNumbers"></div>
-      <div class="roulette__outside" id="rouletteOutside"></div>
+      <div class="roulette__felt">
+        <div class="roulette__numbers" id="rouletteNumbers"></div>
+        <div class="roulette__outside" id="rouletteOutside"></div>
+      </div>
       <div class="roulette__slip">
         <div class="roulette__choice">
-          <span>ACTIVE CHIP</span><strong id="rouletteChipValue">$1M</strong>
+          <span>Chip</span><strong id="rouletteChipValue">$1M</strong>
           <i class="mono" id="rouletteChoice">Red · 1.85× return</i>
         </div>
         <div class="roulette__chips" id="rouletteChips" aria-label="Choose a chip"></div>
-        <p class="roulette__limits mono" id="rouletteLimits">Loading table limits…</p>
       </div>
-      <div class="roulette__mine">
+      <p class="roulette__limits mono" id="rouletteLimits">Loading table limits…</p>
+      <div class="roulette__yours">
         <div class="roulette__subhead"><strong>Your chips this round</strong><span id="rouletteMineTotal">$0</span></div>
         <div class="roulette__bets" id="rouletteBets"><span class="roulette__empty">No chips placed yet.</span></div>
       </div>
@@ -270,6 +281,18 @@ function build() {
     button.type = 'button';
     button.className = `roulette__number roulette__number--${color(value)}`;
     button.dataset.selection = `straight:${value}`;
+    button.dataset.sfx = 'none';
+    /* Where it sits on the table. Desktop: 0 down the left, then twelve columns of three with the
+     * multiples of three along the top. Phone: 0 across the top, then rows of three. (roulette.css) */
+    if (value === 0) {
+      button.dataset.zero = '1';
+    } else {
+      const column = Math.ceil(value / 3);
+      button.style.setProperty('--dc', String(column + 1));
+      button.style.setProperty('--dr', String(3 - ((value - 1) % 3)));
+      button.style.setProperty('--mc', String(((value - 1) % 3) + 1));
+      button.style.setProperty('--mr', String(column + 1));
+    }
     /* The label is an element rather than a text node so it can be a flex child that shrinks
        beside the stake chip. A bare text node cannot be given min-width, which is what made the
        first version stack the chip on top of the label instead of under it. */
@@ -280,17 +303,33 @@ function build() {
     numbers.append(button);
   }
   const outside = $('#rouletteOutside', root);
-  for (const [selection, label] of OUTSIDE) {
+  OUTSIDE.forEach(([selection, label], index) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.selection = selection;
+    button.dataset.sfx = 'none';
+    button.className = selection.startsWith('dozen:') ? 'roulette__spot roulette__spot--dozen' : 'roulette__spot';
+    /* Desktop: the dozens a row under the numbers, four columns each, the even-money bets a row
+     * under them, two each. Phone: the dozens three across, the even-money bets three across. */
+    if (selection.startsWith('dozen:')) {
+      const dozen = Number(selection.slice(6));
+      button.style.setProperty('--dc', `${2 + (dozen - 1) * 4} / span 4`);
+      button.style.setProperty('--dr', '4');
+      button.style.setProperty('--mc', String(dozen));
+      button.style.setProperty('--mr', '14');
+    } else {
+      button.style.setProperty('--dc', `${2 + index * 2} / span 2`);
+      button.style.setProperty('--dr', '5');
+      button.style.setProperty('--mc', String((index % 3) + 1));
+      button.style.setProperty('--mr', String(15 + Math.floor(index / 3)));
+    }
     const face = document.createElement('span');
     face.className = 'roulette__face';
     face.textContent = label;
     button.append(face);
     if (selection === 'red' || selection === 'black') button.dataset.color = selection;
     outside.append(button);
-  }
+  });
   const chips = $('#rouletteChips', root);
   for (const [value, label] of CHIPS) {
     const button = document.createElement('button');
@@ -315,7 +354,7 @@ function buildWheel() {
   const stops = ORDER.map((number, index) => {
     const start = (index * step).toFixed(5);
     const end = ((index + 1) * step).toFixed(5);
-    const shade = number === 0 ? '#169b62' : RED.has(number) ? '#b52428' : '#17181d';
+    const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#1c1c22';
     return `${shade} ${start}deg ${end}deg`;
   });
   wheel.style.background = `conic-gradient(from -${step / 2}deg, ${stops.join(',')})`;
@@ -511,7 +550,7 @@ function paintPhase() {
   }
   phase.textContent = placing
     ? `Placing ${money(Number(amountMinor))}…`
-    : `Betting open · click a spot to place ${money(Number(amountMinor))}`;
+    : 'Place your bets';
 }
 
 function paintClock() {
@@ -523,15 +562,22 @@ function paintClock() {
   const clock = $('#rouletteClock', root);
   if (clock) {
     const text = stale
-      ? 'RECONNECTING'
+      ? 'Reconnecting'
       : !snapshot?.round && snapshot?.config?.paused
-        ? 'PAUSED'
+        ? 'Paused'
         : spinning
-          ? 'SPINNING'
+          ? 'No more bets'
           : remaining > 0
             ? `${(remaining / 1000).toFixed(1)}s`
-            : 'SETTLING';
+            : 'Settling';
     if (clock.textContent !== text) clock.textContent = text;
+  }
+  /* The countdown bar: the betting window draining while it is open, empty otherwise. */
+  const bar = $('#rouletteTimerBar', root);
+  if (bar) {
+    const windowMs = Number(snapshot?.config?.roundSeconds || 0) * 1000;
+    const left = !stale && !spinning && windowMs > 0 ? Math.min(1, remaining / windowMs) : 0;
+    bar.style.transform = `scaleX(${left.toFixed(4)})`;
   }
   const phase = stale
     ? 'reconnecting'
@@ -612,6 +658,7 @@ function paint() {
   const visibleResult = visibleHistory()[0]?.result;
   if (visibleResult != null && !$('#rouletteWheel', root).classList.contains('is-spinning')) {
     $('#rouletteResult', root).textContent = String(visibleResult);
+    $('#rouletteHub', root).dataset.color = color(Number(visibleResult));
   }
   paintPools();
   paintBets();
@@ -795,12 +842,16 @@ async function place(selection) {
     }
     chipsRoundId = roundId;
     showBalance((before - placedAmount).toString());
+    // The chip on the spot is the confirmation, and the clack; no toast over the table.
+    playSound('rouChip', { rate: placedAmount >= 100_000_000n ? 0.85 : 1 });
     await refresh();
-    toast({
-      kind: 'win',
-      title: 'Bet placed',
-      body: `${money(Number(placedAmount))} on ${labelFor(placedSelection)}`,
-    });
+    const spot = root.querySelector(`[data-selection="${placedSelection}"] .roulette__mine`);
+    if (spot && !reduceMotion()) {
+      spot.animate(
+        [{ transform: 'translateY(-10px) scale(1.25)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+        { duration: 260, easing: POP_EASE },
+      );
+    }
   } catch (error) {
     toast({
       kind: 'lose',
@@ -900,6 +951,17 @@ function spinTo(result, bets, opensAt) {
       pendingResultId = null;
       const face = $('#rouletteResult', root);
       if (face) face.textContent = String(result);
+      const hub = $('#rouletteHub', root);
+      if (hub) {
+        hub.dataset.color = color(Number(result));
+        if (animationMs > 0 && !reduceMotion()) {
+          hub.animate(
+            [{ transform: 'scale(.85)' }, { transform: 'scale(1.08)', offset: 0.6 }, { transform: 'scale(1)' }],
+            { duration: 320, easing: POP_EASE },
+          );
+        }
+      }
+      if (animationMs > 0 && !root.closest('.view')?.hidden) playSound('rouLand');
       paintHistory();
       announceResult(result, bets);
     } finally {
@@ -922,26 +984,48 @@ function spinTo(result, bets, opensAt) {
   wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
   wheel.classList.add('is-spinning');
   $('#rouletteResult', root).textContent = '•';
+  $('#rouletteHub', root).dataset.color = '';
+  $('#rouletteWin', root).hidden = true;
+  if (!root.closest('.view')?.hidden) playSound('rouSpin');
   requestAnimationFrame(() => {
     wheel.style.transform = `rotate(${wheelRotation}deg)`;
   });
   window.setTimeout(finish, animationMs + 40);
 }
 
+/* A win pops a card over the wheel, its amount counting up; a loss says itself in the hub. */
 function announceResult(result, bets) {
   if (!bets.length) return;
   const staked = bets.reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
   const paid = bets.reduce((sum, bet) => sum + BigInt(bet.payoutMinor || '0'), 0n);
-  if (paid > 0n) wheel3d?.cheer(paid >= staked * 5n);
-  toast({
-    kind: paid > 0n ? 'win' : 'lose',
-    title: paid > 0n ? `${result} hit — you won` : `${result} hit`,
-    body:
-      paid > 0n
-        ? `${money(Number(paid))} returned on ${money(Number(staked))} staked`
-        : `${money(Number(staked))} lost this round`,
-  });
+  if (paid <= 0n) return;
+  wheel3d?.cheer(paid >= staked * 5n);
+  if (!root.closest('.view')?.hidden) playSound(paid >= staked * 10n ? 'jackpot' : 'rouWin');
+  const card = $('#rouletteWin', root);
+  if (!card) return;
+  card.hidden = false;
+  const figure = $('b', card);
+  const value = Number(paid);
+  if (reduceMotion()) {
+    figure.textContent = money(value);
+  } else {
+    card.animate(
+      [{ opacity: 0, transform: 'translate(-50%, -50%) scale(.82)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1.04)', offset: 0.6 }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }],
+      { duration: 380, easing: POP_EASE },
+    );
+    const started = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / 650);
+      figure.textContent = money(Math.round(value * (1 - (1 - t) ** 3)));
+      if (t < 1 && figure.isConnected) requestAnimationFrame(step);
+    };
+    figure.textContent = money(0);
+    requestAnimationFrame(step);
+  }
+  window.clearTimeout(winTimer);
+  winTimer = window.setTimeout(() => { card.hidden = true; }, 5_000);
 }
+let winTimer = 0;
 
 function color(number) {
   if (number === 0) return 'green';

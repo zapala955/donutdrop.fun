@@ -1,257 +1,285 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: roulette table · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; the felt's three colours and the chip colours lifted into tokens below
+ * layout (2026-11-09): the wheel on the dark at the left, the board on the panel at the right. The
+ *         board is a real table: 0 down the left, the numbers in three rows of twelve (multiples of
+ *         three along the top), the dozens under them, the even-money bets under those. On a phone,
+ *         the vertical table: 0 across the top, the numbers three to a row, the dozens and the
+ *         even-money bets three across; the chips scroll sideways in one row.
+ * states: a spot -- default, hover, :focus-visible, :active, covered by you (a gold ring and your
+ *         chip on it), locked (the wheel is spinning or the round is closing: dimmed); a chip --
+ *         default, hover, chosen (lifted, ringed), disabled (will not fit the limit); the status
+ *         bar -- betting (the countdown draining), spinning, settling, reconnecting; the hub --
+ *         the pocket's own colour once it lands; the win card.
+ * motion: the wheel turning to the pocket (roulette.js), the hub popping as it lands, your chip
+ *         dropping onto its spot, the countdown bar, the win card popping and counting up. Flat,
+ *         no glow. Reduced motion: the wheel and the result are simply there.
+ */
+
 .roulette {
+  --rou-red: #c7343c;
+  --rou-black: #1c1c22;
+  --rou-green: #1f9d5c;
+  --rou-ink: #ffffff;
+  --rou-lip: rgba(0, 0, 0, .5);
+  --rou-win: oklch(0.77 0.17 152);
+  --rou-ease: cubic-bezier(.16, 1, .3, 1);
+  --rou-wheel: 340px;
+  --rou-row: 46px;
+
   display: grid;
-  grid-template-columns: minmax(300px, 0.86fr) minmax(520px, 1.35fr);
-  gap: 18px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  align-items: stretch;
+  min-width: 0;
+}
+body.lx .roulette {
+  gap: 0;
+  border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+}
+
+/* ─────────── the wheel ─────────── */
+body.lx .roulette .roulette__stage {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   align-items: start;
+  justify-items: center;
+  gap: var(--lx-s4);
+  padding: var(--lx-s5) var(--lx-s5) var(--lx-s6);
+  border: 0;
+  border-radius: var(--lx-r) 0 0 0;
+  background: var(--lx-0);
+  box-shadow: none;
 }
-
-.roulette__stage,
-.roulette__board {
-  border: 1px solid rgba(255, 190, 0, 0.18);
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(24, 23, 18, 0.97), rgba(12, 12, 14, 0.98));
-  box-shadow:
-    0 18px 60px rgba(0, 0, 0, 0.28),
-    inset 0 1px rgba(255, 255, 255, 0.025);
-}
-
-.roulette__stage {
-  padding: 18px;
-}
-.roulette__board {
-  padding: 16px;
-}
-
-.roulette__guide {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 38px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border: 1px solid #303037;
-  border-radius: 9px;
-  background: #151519;
-  color: #aaaab2;
-  font-size: 11px;
-  font-weight: 700;
-}
-.roulette__guide span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.roulette__guide span b {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  border-radius: 50%;
-  background: #ffd400;
-  color: #111;
-  font-size: 10px;
-}
-.roulette__guide i {
-  color: #5f5f67;
-  font-style: normal;
-}
-.roulette__guide strong {
-  margin-left: auto;
-  color: #54d995;
-  font-size: 10px;
-  text-align: right;
-}
-.roulette[data-phase='spinning'] .roulette__guide strong,
-.roulette[data-phase='settling'] .roulette__guide strong {
-  color: #ff9b56;
-}
-
-.roulette__roundline,
-.roulette__subhead {
+.roulette__roundline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--lx-s3);
+  width: 100%;
+  min-width: 0;
 }
-
 .roulette__live {
-  color: #b7b7bd;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--lx-mute);
+  font: 700 .75rem/1 var(--lx-ui);
 }
+.roulette__live i { width: 7px; height: 7px; border-radius: 50%; background: var(--rou-win); }
+.roulette[data-connection='stale'] .roulette__live i { background: var(--lx-loss); }
 
-.roulette__live i {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
+/* The last results, newest first, in their pockets' colours. Right-aligned by its margin, so when
+   room runs out it is the oldest that is cut, never the newest. */
+.roulette__history {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+}
+.roulette__past {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #32d886;
-  box-shadow: 0 0 12px #32d886;
+  background: var(--rou-black);
+  color: var(--rou-ink);
+  font: 800 .75rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
 }
-
-.roulette__clock {
-  color: #ffd400;
-  font-size: 20px;
-}
-.roulette.is-locked .roulette__clock {
-  color: #ff7b43;
-}
+.roulette__past--red { background: var(--rou-red); }
+.roulette__past--green { background: var(--rou-green); }
+.roulette__past:nth-child(n + 6) { opacity: .6; }
+.roulette__past:nth-child(n + 9) { display: none; }
 
 .roulette__wheelwrap {
   position: relative;
-  width: min(390px, 86vw);
-  aspect-ratio: 1;
-  margin: 22px auto 16px;
+  align-self: center;
   display: grid;
   place-items: center;
+  width: min(var(--rou-wheel), 100%);
+  aspect-ratio: 1;
 }
-
 .roulette__wheel {
   position: absolute;
   inset: 0;
-  border: 12px solid #29271f;
+  border: 10px solid var(--lx-1);
   border-radius: 50%;
-  box-shadow:
-    0 0 0 2px #80630a,
-    0 0 0 8px #111114,
-    0 24px 60px rgba(0, 0, 0, 0.45),
-    inset 0 0 40px #000;
+  box-shadow: inset 0 0 0 1px var(--lx-3), 0 0 0 1px var(--lx-3);
   will-change: transform;
 }
-
+/* The cone in the middle the pockets run down to. */
 .roulette__wheel::after {
   content: '';
   position: absolute;
-  inset: 22%;
+  inset: 21%;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 30%, #373226, #121214 58%, #050506);
-  border: 2px solid #9d790c;
-  box-shadow:
-    0 0 0 6px #111114,
-    inset 0 0 28px #000;
+  background: var(--lx-1);
+  box-shadow: 0 0 0 4px var(--lx-2);
 }
-
 .roulette__wheel > span {
-  --pocket-angle: 0deg;
   position: absolute;
   z-index: 1;
   top: 50%;
   left: 50%;
-  width: 24px;
+  width: 22px;
   height: 50%;
-  margin: -50% 0 0 -12px;
-  padding-top: 8px;
+  margin: -50% 0 0 -11px;
+  padding-top: 6px;
   box-sizing: border-box;
   transform-origin: 50% 100%;
   transform: rotate(var(--pocket-angle));
-  color: #fff;
-  font:
-    700 10px/1 'JetBrains Mono',
-    monospace;
+  color: var(--rou-ink);
+  font: 800 10px/1 var(--lx-ui);
   text-align: center;
-  text-shadow: 0 1px 2px #000;
 }
-
+/* The ball's mark: fixed at the top, white so it reads on every pocket. */
 .roulette__pointer {
   position: absolute;
   z-index: 5;
-  top: -7px;
+  top: -9px;
   width: 0;
   height: 0;
-  border-left: 13px solid transparent;
-  border-right: 13px solid transparent;
-  border-top: 30px solid #ffd400;
-  filter: drop-shadow(0 3px 5px #000);
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 18px solid var(--rou-ink);
 }
-
+/* The result, in the colour of the pocket it landed in. */
 .roulette__hub {
   position: relative;
   z-index: 3;
+  display: grid;
+  place-content: center;
   width: 34%;
   aspect-ratio: 1;
   border-radius: 50%;
-  display: grid;
-  place-content: center;
+  background: var(--lx-2);
+  box-shadow: 0 0 0 4px var(--lx-1);
   text-align: center;
-  background: radial-gradient(circle at 42% 30%, #29261d, #0b0b0d 70%);
-  border: 1px solid #8b6b0c;
-  box-shadow:
-    inset 0 0 22px #000,
-    0 5px 18px rgba(0, 0, 0, 0.55);
+  transition: background-color 200ms var(--rou-ease);
 }
+.roulette__hub[data-color='red'] { background: var(--rou-red); }
+.roulette__hub[data-color='black'] { background: var(--rou-black); }
+.roulette__hub[data-color='green'] { background: var(--rou-green); }
+.roulette__hub b { color: var(--rou-ink); font: 800 2.25rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
 
-.roulette__hub b {
-  color: #ffd400;
-  font:
-    800 38px/1.05 'Archivo',
-    sans-serif;
-}
-
-.roulette__history {
-  display: flex;
-  justify-content: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-.roulette__past {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+/* A win: a card over the wheel, the amount counting up (roulette.js). */
+.roulette__win {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 50%;
   display: grid;
-  place-items: center;
-  color: #fff;
-  font:
-    700 11px/1 'JetBrains Mono',
-    monospace;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  justify-items: center;
+  gap: 4px;
+  min-width: 170px;
+  padding: var(--lx-s4) var(--lx-s6);
+  border-radius: 12px;
+  background: var(--lx-2);
+  box-shadow: inset 0 0 0 2px var(--rou-win), 0 6px 0 var(--rou-lip);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
 }
-.roulette__past--red {
-  background: #a92227;
-}
-.roulette__past--black {
-  background: #222329;
-}
-.roulette__past--green {
-  background: #117d50;
-}
+.roulette__win[hidden] { display: none; }
+.roulette__win span { color: var(--lx-mute); font: 700 .75rem/1 var(--lx-ui); }
+.roulette__win b { color: var(--rou-win); font: 800 1.75rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
 
-.roulette__numbers {
+/* ─────────── the board ─────────── */
+body.lx .roulette .roulette__board {
   display: grid;
-  grid-template-columns: repeat(12, minmax(36px, 1fr));
-  gap: 5px;
+  align-content: start;
+  gap: var(--lx-s3);
+  min-width: 0;
+  padding: var(--lx-s4) var(--lx-s5) var(--lx-s5);
+  border: 0;
+  border-radius: 0 var(--lx-r) 0 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.roulette__number,
-.roulette__outside button {
+/* What the table is doing, and the betting window draining under it. */
+.roulette__status {
   position: relative;
-  /* A column, so the label and the stake are stacked by the layout rather than by one of them
-     being lifted out of flow and told where to sit. The first version absolutely positioned the
-     chip over a centred label, and on a narrow spot the two simply landed on each other. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-s3);
+  min-height: 44px;
+  padding: 0 var(--lx-s4);
+  overflow: hidden;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-1);
+}
+.roulette__status strong { color: var(--lx-ink); font: 800 .9375rem/1.2 var(--lx-ui); }
+.roulette:is([data-phase='spinning'], [data-phase='settling'], [data-phase='reconnecting'], [data-phase='paused']) .roulette__status strong { color: var(--lx-mute); }
+.roulette__clock { flex: none; color: var(--lx-gold-hi); font: 800 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.roulette:not([data-phase='betting']) .roulette__clock { color: var(--lx-mute); }
+.roulette__timer { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--lx-3); }
+.roulette__timer i {
+  display: block;
+  height: 100%;
+  background: var(--lx-gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 120ms linear;
+}
+
+/* The felt: one grid for every spot. The two lists the page builds stand aside (display: contents)
+   so their buttons are placed on it directly, by --dc/--dr here and --mc/--mr on a phone. */
+.roulette__felt {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(3, var(--rou-row)) 40px 40px;
+  gap: 4px;
+  min-width: 0;
+}
+.roulette__numbers,
+.roulette__outside { display: contents; }
+
+.roulette__felt [data-selection] {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-height: 48px;
-  padding: 5px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 7px;
-  color: #f5f5f7;
-  font:
-    750 14px/1 'Archivo',
-    sans-serif;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-3);
+  color: var(--rou-ink);
+  font: 800 .875rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 3px 0 var(--rou-lip);
   cursor: pointer;
-  transition:
-    border-color 0.16s,
-    transform 0.16s,
-    box-shadow 0.16s;
+  touch-action: manipulation;
+  grid-column: var(--dc);
+  grid-row: var(--dr);
+  transition: filter var(--lx-quick) var(--rou-ease), transform 110ms var(--rou-ease), box-shadow 110ms var(--rou-ease);
 }
+.roulette__felt [data-zero='1'] { grid-column: 1; grid-row: 1 / 4; }
+/* The felt's colours, at the felt's own weight so the grey above cannot win. */
+.roulette__felt .roulette__number--red { background: var(--rou-red); }
+.roulette__felt .roulette__number--black { background: var(--rou-black); }
+.roulette__felt .roulette__number--green { background: var(--rou-green); }
+.roulette__felt .roulette__spot { font: 700 .8125rem/1 var(--lx-ui); }
+.roulette__felt .roulette__spot[data-color='red'] { background: var(--rou-red); }
+.roulette__felt .roulette__spot[data-color='black'] { background: var(--rou-black); }
+.roulette__felt [data-selection]:hover:not(:disabled) { filter: brightness(1.18); }
+.roulette__felt [data-selection]:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--rou-lip); }
+.roulette__felt [data-selection]:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 1px; }
+.roulette__felt [data-selection]:disabled { cursor: not-allowed; }
+/* Betting is shut (the wheel is spinning, or the round is closing): the felt dims. */
+.roulette.is-locked .roulette__felt { opacity: .62; }
 
-/* The label. `min-width: 0` is the whole point: a flex child will not shrink below its content
-   without it, so "Black" would force the spot wider rather than ellipsing inside it. */
+/* The label shrinks rather than widening the spot (it is a flex child). */
 .roulette__face {
   min-width: 0;
   max-width: 100%;
@@ -259,352 +287,153 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.roulette__number:hover,
-.roulette__outside button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 212, 0, 0.55);
+/* A spot you have chips on: ringed in gold, your chip on it, in the spot's own flow (not out of it,
+   so it can never land on the label). */
+.roulette__felt [data-mine='1'] { box-shadow: inset 0 0 0 2px var(--lx-gold-hi), 0 3px 0 var(--rou-lip); }
+.roulette__mine {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  max-width: 100%;
+  min-width: 26px;
+  height: 17px;
+  padding: 0 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--lx-gold);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .45);
+  color: var(--lx-on-gold);
+  font: 800 .5625rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.roulette__number:disabled,
-.roulette__outside button:disabled {
-  transform: none;
-  filter: saturate(0.45);
-}
-.roulette__number--red {
-  background: linear-gradient(145deg, #8f1d23, #561318);
-}
-.roulette__number--black {
-  background: linear-gradient(145deg, #292a30, #151519);
-}
-.roulette__number--green {
-  background: linear-gradient(145deg, #14784f, #0b4d33);
-  grid-row: span 3;
-}
-.roulette__number.is-selected,
-.roulette__outside button.is-selected {
-  border-color: #ffd400;
-  box-shadow:
-    0 0 0 2px rgba(255, 212, 0, 0.18),
-    inset 0 0 16px rgba(255, 212, 0, 0.09);
-}
-
-/* The table's money on a spot: context, not your position, so it stays out of the way. Moved to
-   the top corner because the bottom of the spot now belongs to the stake chip. */
+/* The whole table's money on a spot: small, in the corner, quiet. */
 .roulette__pool {
   position: absolute;
   top: 3px;
   right: 4px;
-  color: rgba(255, 255, 255, 0.34);
-  font:
-    600 8px/1 'JetBrains Mono',
-    monospace;
+  color: rgba(255, 255, 255, .62);
+  font: 700 .5rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
-/* YOUR money on a spot.
-   A solid chip under the label, in flow. Gold on a dark ink fill so it reads at a glance against
-   either a red or a black field without a glow doing the work — a spot that is lit AND carries a
-   bright pill is two signals for one fact, which is what made the first version shout. */
-.roulette__mine {
-  flex: 0 0 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(10, 8, 2, 0.72);
-  color: #ffd400;
-  font:
-    700 10px/1.4 'JetBrains Mono',
-    monospace;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-}
-
-/* A straight-up number is 36px wide at its narrowest, and a pill with side padding has nowhere to
-   put a five-character figure inside that. On the number grid the chip drops its fill and becomes
-   plain gold digits — same information, none of the box. Anything that still will not fit ellipses
-   and stays recoverable through the button's accessible name. */
-.roulette__number .roulette__mine {
-  padding: 0;
-  background: none;
-  font-size: 9px;
-}
-
-/* And the spot's own edge says it is covered, so a backed number is findable across the board
-   without reading a single figure. One hairline, not a halo. */
-.roulette__number[data-mine='1'],
-.roulette__outside button[data-mine='1'] {
-  border-color: rgba(255, 212, 0, 0.72);
-}
-
-/* The zero spans three rows on the desktop grid, so its column has room the others do not; the
-   chip is centred in that taller box rather than pinned under the label. */
-.roulette__number--green .roulette__mine {
-  font-size: 10px;
-}
-
-.roulette__outside {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
-  margin-top: 5px;
-}
-.roulette__outside button {
-  min-height: 44px;
-  background: #1b1b20;
-  color: #c7c7cd;
-}
-.roulette__outside button[data-color='red'] {
-  background: #771a20;
-  color: #fff;
-}
-.roulette__outside button[data-color='black'] {
-  background: #222329;
-  color: #fff;
-}
-.roulette__outside button:nth-last-child(-n + 3) {
-  grid-column: span 2;
-}
-
+/* ─────────── the chips ─────────── */
 .roulette__slip {
-  display: grid;
-  grid-template-columns: minmax(125px, 0.35fr) minmax(0, 1.65fr);
-  gap: 14px;
+  display: flex;
   align-items: center;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #29292f;
-}
-
-.roulette__choice {
-  display: grid;
-  gap: 4px;
-}
-.roulette__choice > span {
-  color: #73737c;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-}
-.roulette__choice strong {
-  color: #f2f2f4;
-  font-size: 16px;
-}
-.roulette__choice i {
-  color: #a3a3aa;
-  font-size: 10px;
-  font-style: normal;
-}
-
-.roulette__chips {
-  display: grid;
-  grid-template-columns: repeat(9, minmax(48px, 1fr));
-  gap: 7px;
-}
-.roulette__chips button {
-  --chip: #8d6a08;
-  aspect-ratio: 1;
+  gap: var(--lx-s4);
   min-width: 0;
-  border: 3px dashed rgba(255, 255, 255, 0.68);
+  padding: var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-1);
+}
+.roulette__choice { display: grid; gap: 2px; flex: none; min-width: 112px; }
+.roulette__choice span { color: var(--lx-mute); font: 700 .6875rem/1 var(--lx-ui); }
+.roulette__choice strong { color: var(--lx-ink); font: 800 1.125rem/1.1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.roulette__choice i { color: var(--lx-faint); font: 600 .6875rem/1.2 var(--lx-ui); font-style: normal; }
+.roulette__chips {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 2px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.roulette__chips::-webkit-scrollbar { display: none; }
+.roulette__chips button {
+  --chip: #5b6270;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: radial-gradient(circle, #17171b 0 47%, var(--chip) 49% 100%);
-  color: #fff;
-  font:
-    800 clamp(7px, 0.65vw, 10px) / 1 'JetBrains Mono',
-    monospace;
-  text-shadow: 0 1px 3px #000;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .5), inset 0 0 0 6px var(--chip), inset 0 0 0 7px rgba(255, 255, 255, .25), 0 3px 0 var(--rou-lip);
+  color: var(--rou-ink);
+  font: 800 .5625rem/1 var(--lx-ui);
   cursor: pointer;
-  box-shadow:
-    inset 0 0 0 2px rgba(0, 0, 0, 0.58),
-    0 3px 8px rgba(0, 0, 0, 0.3);
-  transition:
-    transform 0.16s,
-    filter 0.16s,
-    box-shadow 0.16s;
+  touch-action: manipulation;
+  transition: transform 140ms var(--rou-ease), box-shadow 140ms var(--rou-ease);
 }
-.roulette__chips button:nth-child(2) {
-  --chip: #315d9e;
-}
-.roulette__chips button:nth-child(3) {
-  --chip: #a4282e;
-}
-.roulette__chips button:nth-child(4) {
-  --chip: #7043a4;
-}
-.roulette__chips button:nth-child(5) {
-  --chip: #1e7a55;
-}
-.roulette__chips button:nth-child(6) {
-  --chip: #b05b1a;
-}
-.roulette__chips button:nth-child(7) {
-  --chip: #167f91;
-}
-.roulette__chips button:nth-child(8) {
-  --chip: #8d326d;
-}
-.roulette__chips button:nth-child(9) {
-  --chip: #b28a0c;
-}
-.roulette__chips button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  filter: brightness(1.15);
-}
+.roulette__chips button:nth-child(2) { --chip: #2563eb; }
+.roulette__chips button:nth-child(3) { --chip: #dc2626; }
+.roulette__chips button:nth-child(4) { --chip: #16a34a; }
+.roulette__chips button:nth-child(5) { --chip: #ea580c; }
+.roulette__chips button:nth-child(6) { --chip: #0891b2; }
+.roulette__chips button:nth-child(7) { --chip: #db2777; }
+.roulette__chips button:nth-child(8) { --chip: #334155; }
+.roulette__chips button:nth-child(9) { --chip: #ca8a04; }
+.roulette__chips button:hover:not(:disabled) { transform: translateY(-2px); }
 .roulette__chips button.is-selected {
-  transform: translateY(-3px) scale(1.06);
-  box-shadow:
-    0 0 0 2px #ffd400,
-    0 0 18px rgba(255, 212, 0, 0.36),
-    inset 0 0 0 2px rgba(0, 0, 0, 0.58);
+  transform: translateY(-5px);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .5), inset 0 0 0 6px var(--chip), inset 0 0 0 7px rgba(255, 255, 255, .25), 0 0 0 2px var(--lx-ink), 0 3px 0 var(--rou-lip);
 }
-.roulette__chips button:disabled,
-.roulette__number:disabled,
-.roulette__outside button:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-.roulette__limits {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: #777780;
-  font-size: 9px;
-}
+.roulette__chips button:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.roulette__chips button:disabled { cursor: not-allowed; opacity: .3; }
 
-.roulette__mine {
-  margin-top: 14px;
-  padding: 13px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.17);
-  border: 1px solid #29292e;
-}
+.roulette__limits { margin: 0; color: var(--lx-faint); font: 600 .6875rem/1.4 var(--lx-ui); }
+
+/* ─────────── your chips, and the table's ─────────── */
 .roulette__subhead {
-  color: #c8c8cd;
-  font-size: 12px;
-}
-.roulette__subhead span {
-  color: #ffd400;
-  font-family: 'JetBrains Mono', monospace;
-}
-.roulette__bets {
   display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-.roulette__bet {
-  display: flex;
-  gap: 7px;
   align-items: center;
-  padding: 7px 9px;
-  border-radius: 7px;
-  background: #19191e;
-  border: 1px solid #303037;
-  font-size: 10px;
+  justify-content: space-between;
+  gap: var(--lx-s3);
 }
-.roulette__bet b {
-  color: #d7d7db;
-}
-.roulette__bet i {
-  color: #ffd400;
-  font:
-    600 9px/1 'JetBrains Mono',
-    monospace;
-  font-style: normal;
-}
-.roulette__empty {
-  color: #777780;
-  font-size: 11px;
-}
-
+.roulette__subhead strong { color: var(--lx-ink); font: 800 .875rem/1.2 var(--lx-ui); }
+.roulette__subhead span { color: var(--lx-gold-hi); font: 700 .75rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.roulette__yours,
 .roulette__livebets {
-  margin-top: 12px;
-  padding: 13px;
-  border: 1px solid #29292e;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.17);
+  display: grid;
+  gap: var(--lx-s2);
+  padding: var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-1);
 }
-.roulette__tablewrap {
-  max-height: 250px;
-  margin-top: 9px;
-  overflow: auto;
-  border: 1px solid #29292f;
-  border-radius: 8px;
+.roulette__bets { display: flex; flex-wrap: wrap; gap: 6px; }
+.roulette__bet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--lx-3);
+  font: 700 .75rem/1 var(--lx-ui);
 }
-.roulette__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
+.roulette__bet b { color: var(--lx-ink); }
+.roulette__bet i { color: var(--lx-gold-hi); font-style: normal; font-variant-numeric: tabular-nums; }
+.roulette__empty { color: var(--lx-faint); font: 600 .75rem var(--lx-ui); }
+
+.roulette__tablewrap { max-height: 260px; overflow: auto; }
+.roulette__table { width: 100%; border-collapse: collapse; font: 600 .75rem/1.2 var(--lx-ui); }
 .roulette__table th {
   position: sticky;
-  z-index: 2;
   top: 0;
-  padding: 8px 10px;
-  background: #121216;
-  border-bottom: 1px solid #303037;
-  color: #71717a;
-  font-size: 9px;
-  letter-spacing: 0.11em;
+  padding: 6px 8px;
+  background: var(--lx-1);
+  color: var(--lx-faint);
+  font: 700 .6875rem/1 var(--lx-ui);
   text-align: left;
-  text-transform: uppercase;
 }
 .roulette__table th:last-child,
-.roulette__tablemoney {
-  text-align: right;
-}
-.roulette__table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #25252b;
-  color: #b8b8bf;
-}
-.roulette__table tbody tr:last-child td {
-  border-bottom: 0;
-}
-.roulette__table tbody tr[data-you='1'] td {
-  background: rgba(255, 212, 0, 0.055);
-}
-.roulette__player {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 125px;
-}
-.roulette__player .dtable__avatar {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  overflow: hidden;
-  border: 1px solid #393941;
-  border-radius: 3px;
-  background: #202027;
-}
-.roulette__player .dtable__avatar img {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  object-fit: cover;
-}
-.roulette__tablemoney {
-  color: #ffd400 !important;
-  white-space: nowrap;
-}
-.roulette__tableempty {
-  padding: 22px 10px !important;
-  color: #73737c !important;
-  text-align: center;
-}
+.roulette__table td:last-child { text-align: right; }
+.roulette__table td { padding: 7px 8px; border-top: 1px solid var(--lx-2); color: var(--lx-text); }
+.roulette__table tr[data-you='1'] td { color: var(--lx-ink); }
+.roulette__player { display: flex; align-items: center; gap: 8px; }
+.roulette__tablemoney { color: var(--lx-gold-hi); font-variant-numeric: tabular-nums; }
+.roulette__tableempty { color: var(--lx-faint); text-align: center; }
 
 .roulette[data-error='1']::before {
   content: 'The shared table is reconnecting…';
   display: block;
   grid-column: 1 / -1;
-  color: #ff8465;
+  padding: 8px 16px;
+  color: var(--lx-loss-text, #ff5c5c);
 }
 
 .gamechip[data-kind='roulette'] {
@@ -671,69 +500,35 @@
 }
 .roulette__gfx select:focus-visible { outline: 2px solid #ffd400; outline-offset: 2px; }
 
-@media (max-width: 1050px) {
-  /* minmax(0, 1fr), never bare 1fr: a bare 1fr track cannot shrink below its widest child, and on
-     a phone that child set the whole table 470px wide inside a 375px screen — wheel, board and
-     chips all cut off at the right edge. */
-  .roulette {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .roulette > * {
-    min-width: 0;
-  }
-  .roulette__wheelwrap {
-    width: min(360px, 80vw);
-  }
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1180px) {
+  .roulette { grid-template-columns: minmax(0, 1fr); }
+  body.lx .roulette .roulette__stage { border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  body.lx .roulette .roulette__board { border-radius: 0; }
 }
-
-@media (max-width: 720px) {
-  .roulette__stage,
-  .roulette__board {
-    padding: 12px;
-    border-radius: 12px;
+@media (max-width: 640px) {
+  /* The vertical table: 0 across the top, the numbers three to a row, then the dozens and the
+     even-money bets three across. */
+  .roulette { --rou-wheel: 250px; --rou-row: 36px; }
+  body.lx .roulette .roulette__stage { padding: var(--lx-s4) var(--lx-s3) var(--lx-s4); }
+  body.lx .roulette .roulette__board { padding: var(--lx-s3); }
+  .roulette__felt {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: 40px repeat(12, var(--rou-row)) 40px 40px 40px;
   }
-  .roulette__guide {
-    flex-wrap: wrap;
-  }
-  .roulette__guide strong {
-    flex-basis: 100%;
-    margin-left: 0;
-    text-align: left;
-  }
-  .roulette__numbers {
-    grid-template-columns: repeat(6, 1fr);
-  }
-  .roulette__number--green {
-    grid-row: auto;
-    grid-column: span 6;
-  }
-  .roulette__outside {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .roulette__outside button:nth-last-child(-n + 3) {
-    grid-column: auto;
-  }
-  .roulette__slip {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* Five across, two rows. Three across made every chip about 110px wide on a phone, three rows
-     deep, with the third column clipped by the board's edge. */
-  .roulette__chips {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    max-width: 430px;
-  }
-  .roulette__chips button {
-    border-width: 2px;
-    font-size: 9px;
-  }
+  .roulette__felt [data-selection] { grid-column: var(--mc); grid-row: var(--mr); flex-direction: row; gap: 6px; }
+  .roulette__felt [data-zero='1'] { grid-column: 1 / 4; grid-row: 1; }
+  .roulette__slip { flex-direction: column; align-items: stretch; gap: var(--lx-s2); padding: var(--lx-s3); }
+  .roulette__choice { grid-template-columns: auto auto 1fr; align-items: baseline; column-gap: var(--lx-s2); }
+  .roulette__choice i { justify-self: end; }
+  .roulette__hub b { font-size: 1.75rem; }
+  .roulette__wheel > span { font-size: 8px; padding-top: 4px; }
+  .roulette__wheel { border-width: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .roulette__wheel {
-    transition: none !important;
-  }
-  .roulette__number,
-  .roulette__outside button {
-    transition: none;
-  }
+  .roulette__felt [data-selection],
+  .roulette__chips button,
+  .roulette__hub,
+  .roulette__timer i { transition: none; }
 }

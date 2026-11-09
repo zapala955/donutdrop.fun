@@ -515,6 +515,37 @@ const CUES = {
     tone(ctx, { freq: 230, type: 'triangle', duration: 0.16, gain: 0.12, sweepTo: 150 });
     noise(ctx, { duration: 0.05, gain: 0.03, frequency: 850, q: 1 });
   },
+
+  /* ── Roulette ──
+   * A chip clacking onto the felt, the ball rattling round a slowing wheel, the drop into the
+   * pocket, and a win.
+   */
+  /** A clay chip set down on the felt: two quick, dry clacks. */
+  rouChip(ctx) {
+    noise(ctx, { duration: 0.025, gain: 0.09, frequency: 3400, q: 1.8 });
+    tone(ctx, { freq: 1250, type: 'triangle', duration: 0.03, gain: 0.05 });
+    noise(ctx, { start: 0.035, duration: 0.02, gain: 0.05, frequency: 3900, q: 2 });
+  },
+  /** The ball round the wheel: a soft whoosh, and a rattle of ticks that spaces out as it slows. */
+  rouSpin(ctx) {
+    noise(ctx, { duration: 0.6, gain: 0.05, frequency: 900, q: 0.6 });
+    let at = 0.12;
+    let gap = 0.045;
+    for (let i = 0; i < 34 && at < 2.6; i += 1) {
+      tone(ctx, { freq: 2100 - i * 18, type: 'triangle', start: at, duration: 0.012, gain: 0.018 + i * 0.0007 });
+      at += gap;
+      gap *= 1.07;
+    }
+  },
+  /** The ball dropping into its pocket: a couple of bounces and a clack. */
+  rouLand(ctx) {
+    tone(ctx, { freq: 1500, type: 'triangle', duration: 0.02, gain: 0.05 });
+    tone(ctx, { freq: 1300, type: 'triangle', start: 0.07, duration: 0.02, gain: 0.04 });
+    noise(ctx, { start: 0.12, duration: 0.05, gain: 0.08, frequency: 2600, q: 1.4 });
+    tone(ctx, { freq: 420, type: 'sine', start: 0.12, duration: 0.09, gain: 0.07, sweepTo: 300 });
+  },
+  /** A win on the table: a bright run of notes. */
+  rouWin(ctx) { CUES.upgWin(ctx); },
 };
 
 /**
