@@ -395,7 +395,15 @@
           </div>
           <div class="tablewrap"><table class="grid" id="raceTable"></table></div>
           <div class="panel__head panel__head--sub">
-            <h3>Daily quests</h3>
+            <div>
+              <h3>Quest board</h3>
+              <span class="hint" id="boardNote">The Quests tab. Every quest resets every 3 days at 00:00 UTC.</span>
+            </div>
+            <button class="btn" type="button" id="createBoardQuest">Add quest</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="boardQuestTable"></table></div>
+          <div class="panel__head panel__head--sub">
+            <h3>Daily quests (old, off)</h3>
             <button class="btn" type="button" id="createQuest">Create quest</button>
           </div>
           <div class="tablewrap"><table class="grid" id="questTable"></table></div>
@@ -614,6 +622,6 @@
 
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-    <script type="module" src="admin.js?v=16"></script>
+    <script type="module" src="admin.js?v=17"></script>
   </body>
 </html>

@@ -126,8 +126,8 @@
 <link rel="stylesheet" href="assets/css/notices.css" />
 <!-- the crowns and bounties above the leaderboard (assets/js/crowns.js); scoped to .crowns -->
 <link rel="stylesheet" href="assets/css/crowns.css" />
-<!-- the week's deposit race and recruit quest on the Quests page (assets/js/weekly-quests.js); scoped to .wq -->
-<link rel="stylesheet" href="assets/css/weekly-quests.css" />
+<!-- the quest board on the Quests page (assets/js/quests.js); scoped to .qb -->
+<link rel="stylesheet" href="assets/css/quest-board.css" />
 <!-- the feedback window: the 3D survey and a note (assets/js/feedback.js); scoped to .fb -->
 <link rel="stylesheet" href="assets/css/feedback.css" />
 <!-- the house pool on the Rewards page (assets/js/staking.js); scoped to .pool -->
@@ -232,7 +232,6 @@
 <link rel="modulepreload" href="assets/js/staking.js" />
 <link rel="modulepreload" href="assets/js/crowns.js" />
 <link rel="modulepreload" href="assets/js/settings.js" />
-<link rel="modulepreload" href="assets/js/weekly-quests.js" />
 <link rel="modulepreload" href="assets/js/profanity.js" />
 <link rel="modulepreload" href="assets/js/audio.js" />
 <link rel="modulepreload" href="assets/js/mc3d.js" />
@@ -281,6 +280,8 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16V20H4z"/><path d="M3 7h18v3.5H3zM12 7v13"/><path d="M12 7H8.5a2.25 2.25 0 1 1 0-4.5C11 2.5 12 7 12 7zm0 0h3.5a2.25 2.25 0 1 0 0-4.5C13 2.5 12 7 12 7z"/></svg><span>Rewards</span></a></li>
       <li><a class="lxnav" href="/daily-rewards" data-route="daily-rewards" data-tip="Daily Rewards">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg><span>Daily Rewards</span></a></li>
+      <li><a class="lxnav" href="/quests" data-route="quests" data-tip="Quests">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="m3.5 6.5 1.6 1.6L8 5.2M3.5 12l1.6 1.6L8 10.7M3.5 17.5l1.6 1.6L8 16.2"/></svg><span>Quests</span></a></li>
       <li><a class="lxnav" href="/race" data-route="race" data-tip="Wager Race">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4.5h12l-2 3.5 2 3.5H5"/></svg><span>Wager Race</span></a></li>
       <li><a class="lxnav" href="/referrals" data-route="referrals" data-tip="Invite &amp; Earn">
@@ -1121,12 +1122,11 @@
     <!-- ─────── QUESTS ─────── -->
     <section class="view" data-view="quests" hidden>
       <header class="phead">
-        <h1>Quests &amp; Streak <button class="ihint" type="button" aria-label="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."
-          data-tip="Counted server-side as you play. Wager $10M each UTC day to claim the daily reward."></button></h1>
+        <h1>Quests <button class="ihint" type="button" aria-label="Finish a quest within the period and claim its reward. Every quest resets every 3 days at 00:00 UTC."
+          data-tip="Finish a quest within the period and claim its reward. Every quest resets every 3 days at 00:00 UTC."></button></h1>
       </header>
-      <!-- the week's quests with their prize pots (assets/js/weekly-quests.js); hidden while they are off -->
-      <div class="wq" id="weeklyQuestsRoot" hidden></div>
-      <div class="quests" id="questRoot"></div>
+      <!-- the quest board (assets/js/quests.js, lib/quest-board.ts); scoped to .qb -->
+      <div class="qb" id="questRoot"></div>
     </section>
 
     <!-- ─────── FACTION WAR ─────── -->

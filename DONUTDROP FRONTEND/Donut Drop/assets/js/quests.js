@@ -1,230 +1,230 @@
-/* quests.js — daily quests and the login streak.
+/* quests.js — the Quests tab: the quest board (GET /v1/quests/board, lib/quest-board.ts).
  *
- * Progress is server-side. Nothing here increments a counter locally, because a bar that advances
- * on the client and then snaps back on the next refresh is worse than a bar that waits.
+ * Quests the operator writes in the admin console, such as "deposit $10M, get $1M". Every quest
+ * resets on the same clock, every three days at 00:00 UTC, and each can be claimed once per period.
+ *
+ * Everything shown is the server's: the quests, the player's progress (read from their deposits,
+ * withdrawals and wagers, never counted here), what is claimed and when the period ends. The page
+ * asks again every thirty seconds while it is open, when the player signs in or out, and the moment
+ * the period turns over. Readable signed out, because a reward nobody can see before signing up is
+ * not one that brings anybody in. Quest names and descriptions are set as text, never as markup.
+ *
+ * (The daily quests and the weekly deposit race and recruit quest that used to sit here are off; the
+ * daily login streak has its own page, Daily Rewards.)
  */
-import { state, bus, refreshQuests, claimQuest, claimStreak } from './store.js';
-import { $, el, money } from './util.js';
+import { api } from './api.js';
+import { bus, refreshBalance, state } from './store.js';
+import { $, money } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { mountWeeklyQuests } from './weekly-quests.js';
+
+const REFRESH_MS = 30_000;
+
+const KIND = {
+  deposit: {
+    verb: 'Deposited',
+    // A coin going in.
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="6.5"/><path d="M12 11.5v5M10 3v4.5M14 3v4.5M8.5 5.5 12 9l3.5-3.5"/></svg>',
+  },
+  wager: {
+    verb: 'Wagered',
+    // A die.
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle class="qb__dot" cx="9" cy="9" r="1.3"/><circle class="qb__dot" cx="15" cy="15" r="1.3"/><circle class="qb__dot" cx="12" cy="12" r="1.3"/></svg>',
+  },
+};
 
 let root = null;
-let countdownTimer = 0;
+let board = null;
+let loading = null;
+let timer = 0;
+let tick = 0;
+const claiming = new Set();
 
-export function mountQuests(view) {
-  // The week's quests sit above the daily ones and read signed out too.
-  mountWeeklyQuests($('#weeklyQuestsRoot', view));
-  root = $('#questRoot', view);
-  if (!root) return;
-  if (!root.dataset.built) {
-    root.dataset.built = '1';
-    bus.addEventListener('change', () => {
-      if (root.isConnected) paint();
-    });
-    if (state.authenticated) refreshQuests().catch(() => undefined);
-  }
-  paint();
-  startCountdown();
+const cash = (minor) => money(Number(minor ?? 0));
+
+/** "2d 4h", "5h 12m", "12m": what is left until an instant. */
+export function timeLeft(iso, now = Date.now()) {
+  const ms = Math.max(0, new Date(iso).getTime() - now);
+  const minutes = Math.ceil(ms / 60_000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${minutes}m`;
 }
 
-/* The reset clock is the only thing on this page allowed to tick locally: it counts down to a
- * fixed UTC boundary, so it cannot drift away from what the server believes. */
-function startCountdown() {
-  if (countdownTimer) window.clearInterval(countdownTimer);
-  countdownTimer = window.setInterval(() => {
-    const label = $('#questReset', root ?? document);
-    if (!label || !label.isConnected) {
-      window.clearInterval(countdownTimer);
-      countdownTimer = 0;
-      return;
+function node(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+async function load() {
+  if (loading) return loading;
+  loading = (async () => {
+    try {
+      board = await api.get('/v1/quests/board');
+    } catch {
+      board = board ?? null;
+    } finally {
+      loading = null;
     }
-    label.textContent = timeToUtcMidnight();
-  }, 1000);
+    paint();
+  })();
+  return loading;
 }
 
-function timeToUtcMidnight() {
-  const now = new Date();
-  const midnight = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1,
-    0, 0, 0, 0,
-  );
-  const remaining = Math.max(0, midnight - now.getTime());
-  const hours = Math.floor(remaining / 3_600_000);
-  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
-  const seconds = Math.floor((remaining % 60_000) / 1000);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+async function claim(quest) {
+  if (claiming.has(quest.id)) return;
+  claiming.add(quest.id);
+  paint();
+  try {
+    const result = await api.post(`/v1/quests/board/${encodeURIComponent(quest.id)}/claim`, {});
+    playSound('reward');
+    toast({ kind: 'win', title: `${cash(result.rewardMinor)} claimed`, body: quest.name });
+    void refreshBalance(false);
+  } catch (error) {
+    toast({ kind: 'lose', title: 'Not claimed', body: error?.message || 'That quest could not be claimed' });
+  } finally {
+    claiming.delete(quest.id);
+    await load();
+  }
+}
+
+/* ─────────── painting ─────────── */
+
+function paintClock() {
+  const left = root && $('#qbLeft', root);
+  if (!left || !board) return;
+  left.textContent = timeLeft(board.periodEnd);
+}
+
+function questCard(quest) {
+  const kind = KIND[quest.kind] ?? KIND.deposit;
+  const signedIn = quest.progressMinor !== null && state.authenticated;
+  const target = BigInt(quest.targetMinor);
+  const done = signedIn ? BigInt(quest.progressMinor) : 0n;
+  const ratio = target > 0n ? Math.min(1, Number(done) / Number(target)) : 0;
+  const status = !signedIn ? 'out' : quest.claimed ? 'claimed' : quest.claimable ? 'ready' : 'going';
+
+  const card = node('li', 'qb__quest');
+  card.dataset.state = status;
+  card.dataset.kind = quest.kind;
+
+  const icon = node('span', 'qb__icon');
+  icon.innerHTML = kind.icon;
+
+  const body = node('div', 'qb__body');
+  body.append(node('h3', 'qb__name', quest.name));
+  if (quest.description) body.append(node('p', 'qb__desc', quest.description));
+  const bar = node('div', 'qb__bar');
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-label', `${quest.name}: progress`);
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  bar.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+  const fill = node('span', 'qb__fill');
+  fill.style.setProperty('--p', ratio.toFixed(4));
+  bar.append(fill);
+  const count = node('p', 'qb__count');
+  if (signedIn) {
+    count.append(node('span', '', `${kind.verb} `), node('b', '', cash(done)), node('span', '', ` of ${cash(target)}`));
+  } else {
+    count.append(node('span', '', `${kind.verb === 'Deposited' ? 'Deposit' : 'Wager'} ${cash(target)} within the period`));
+  }
+  body.append(bar, count);
+
+  const side = node('div', 'qb__side');
+  const reward = node('p', 'qb__reward');
+  reward.append(node('span', 'qb__rewardlabel', 'Reward'), node('b', 'qb__rewardamt', cash(quest.rewardMinor)));
+  side.append(reward);
+  if (status === 'claimed') {
+    side.append(node('span', 'qb__done', 'Claimed'));
+  } else {
+    const button = node('button', 'qb__claim');
+    button.type = 'button';
+    if (status === 'out') {
+      button.textContent = 'Log in';
+      button.addEventListener('click', () => $('#loginBtn')?.click());
+    } else {
+      const busy = claiming.has(quest.id);
+      button.textContent = busy ? 'Claiming…' : 'Claim';
+      button.disabled = status !== 'ready' || busy;
+      button.setAttribute('aria-busy', String(busy));
+      button.addEventListener('click', () => void claim(quest));
+    }
+    side.append(button);
+  }
+
+  card.append(icon, body, side);
+  return card;
 }
 
 function paint() {
-  if (!root?.isConnected) return;
-
-  if (!state.authenticated) {
-    root.innerHTML = `<section class="card"><h2 class="card__h">Log in to track quests</h2>
-      <p class="card__p">Daily goals and your login streak are tied to your account.</p></section>`;
+  if (!root) return;
+  if (!root.dataset.built) {
+    root.dataset.built = '1';
+    root.innerHTML = `
+      <div class="qb__head">
+        <p class="qb__period">Resets every 3 days · <span>next reset in <b id="qbLeft">—</b></span></p>
+      </div>
+      <ul class="qb__list" id="qbList" aria-label="Quests"></ul>
+      <div class="qb__empty" id="qbEmpty" hidden>
+        <p class="qb__emptytitle">No quests right now</p>
+        <p class="qb__emptyline">New quests are on the way. Check back soon.</p>
+      </div>
+      <p class="qb__note" id="qbNote"></p>`;
+  }
+  const list = $('#qbList', root);
+  const empty = $('#qbEmpty', root);
+  const note = $('#qbNote', root);
+  if (!board) {
+    list.replaceChildren();
+    empty.hidden = loading !== null;
+    $('.qb__emptytitle', root).textContent = loading ? '' : 'Quests are not answering';
+    $('.qb__emptyline', root).textContent = loading ? '' : 'Try again in a moment.';
+    note.textContent = '';
     return;
   }
+  list.replaceChildren(...board.quests.map(questCard));
+  empty.hidden = board.quests.length > 0;
+  $('.qb__emptytitle', root).textContent = 'No quests right now';
+  $('.qb__emptyline', root).textContent = 'New quests are on the way. Check back soon.';
+  note.textContent = board.quests.length
+    ? `Deposits count net of withdrawals, and only within the period. A reward is free money: it is wagered ${board.wagerMultiplier}× before it can be withdrawn.`
+    : '';
+  note.hidden = !board.quests.length;
+  paintClock();
+}
 
-  const streak = state.streak;
-  const quests = state.quests || [];
-  const claimable = quests.filter((quest) => quest.claimable).length;
-  const wageredToday = money(Number(streak?.wageredTodayMinor ?? 0));
-  const wagerRequired = money(Number(streak?.wagerRequirementMinor ?? 0));
-  const wagerRemaining = money(Number(streak?.wagerRemainingMinor ?? 0));
-  /* The wager gate is off by default now, and at zero there is no progress to report -- printing
-   * "$0 / $0 wagered today" is a bar that looks broken rather than one that looks finished. The
-   * figures are still read from the server rather than assumed, because the gate remains
-   * configurable and can be switched back on from the admin console without a deploy. */
-  const gated = Number(streak?.wagerRequirementMinor ?? 0) > 0;
-  const streakButton = !streak
-    ? 'Loading…'
-    : streak.claimedToday
-      ? 'Claimed today'
-      : streak.wagerRequirementMet
-        ? `Claim ${money(Number(streak.nextRewardMinor))}`
-        : `Wager ${wagerRemaining} more`;
-  const streakProgress = !streak
-    ? 'Loading daily progress'
-    : gated
-      ? `Longest ${streak.longestStreak} · ${wageredToday} / ${wagerRequired} wagered today`
-      : `Longest ${streak.longestStreak}`;
+/* ─────────── mounting ─────────── */
 
-  root.innerHTML = `
-    <section class="streak glass">
-      <div class="streak__main">
-        <span class="streak__label">Daily streak</span>
-        <b class="streak__figure mono">${streak?.currentStreak ?? 0}<em>days</em></b>
-        <span class="streak__sub">
-          ${streakProgress} · resets in <b class="mono" id="questReset">${timeToUtcMidnight()}</b>
-        </span>
-      </div>
-      <div class="streak__pips" id="streakPips" role="img"
-           aria-label="Streak progress toward the maximum multiplier"></div>
-      <button class="btn btn--go streak__claim" id="streakClaim"
-              ${streak?.claimable ? '' : 'disabled'}>
-        ${streakButton}
-      </button>
-    </section>
+function schedule() {
+  window.clearInterval(timer);
+  window.clearInterval(tick);
+  timer = window.setInterval(() => {
+    if (!root?.isConnected || root.closest('.view')?.hidden) return;
+    if (document.visibilityState === 'visible') void load();
+  }, REFRESH_MS);
+  // The clock, and a fresh board the moment the period turns over.
+  tick = window.setInterval(() => {
+    if (!root?.isConnected || root.closest('.view')?.hidden || !board) return;
+    if (Date.now() >= new Date(board.periodEnd).getTime()) void load();
+    else paintClock();
+  }, 15_000);
+}
 
-    <section class="card">
-      <h2 class="card__h">
-        Today's quests
-        <span>${claimable ? `${claimable} ready to claim` : `${quests.length} active`}</span>
-      </h2>
-      <p class="card__p">Progress is counted by the server as you play. Rewards are paid straight to your balance.</p>
-      <div class="questlist" id="questList"></div>
-    </section>`;
-
-  paintPips($('#streakPips', root), streak);
-  paintQuests($('#questList', root), quests);
-
-  const claimButton = $('#streakClaim', root);
-  if (streak?.claimable) {
-    claimButton.addEventListener('click', async () => {
-      claimButton.disabled = true;
-      try {
-        const result = await claimStreak();
-        playSound('reward');
-        toast({
-          kind: 'win',
-          title: `Day ${result.streakLength} claimed`,
-          body: `+${money(Number(result.rewardMinor))}`,
-        });
-      } catch (error) {
-        claimButton.disabled = false;
-        showError(error);
-      }
+export function mountQuests(view) {
+  root = $('#questRoot', view);
+  if (!root) return;
+  if (!root.dataset.listening) {
+    root.dataset.listening = '1';
+    bus.addEventListener('change', (event) => {
+      if (['login', 'logout', 'ready'].includes(event.detail) && root?.isConnected) void load();
     });
   }
-}
-
-/* One pip per day up to the multiplier cap, so the ladder's end is visible from day one rather
- * than being an unbounded climb the player cannot plan around. */
-function paintPips(mount, streak) {
-  if (!mount) return;
-  const max = Number(streak?.maxMultiplier ?? 7);
-  const current = Number(streak?.currentStreak ?? 0);
-  mount.innerHTML = '';
-  for (let day = 1; day <= max; day += 1) {
-    const pip = el('span', 'pip');
-    pip.dataset.on = day <= current ? '1' : '0';
-    if (day === max) pip.dataset.cap = '1';
-    pip.title = `Day ${day}`;
-    mount.appendChild(pip);
-  }
-}
-
-function paintQuests(mount, quests) {
-  if (!mount) return;
-  if (!quests.length) {
-    mount.innerHTML = '<p class="empty">No quests are active right now. Check back tomorrow.</p>';
-    return;
-  }
-  mount.innerHTML = '';
-
-  quests.forEach((quest) => {
-    const ratio = Math.max(0, Math.min(1, Number(quest.progressRatio) || 0));
-    const card = el('article', 'quest');
-    card.dataset.state = quest.claimed ? 'claimed' : quest.claimable ? 'ready' : 'active';
-
-    card.innerHTML = `
-      <div class="quest__body">
-        <h3 class="quest__name">${escapeText(quest.name)}</h3>
-        <p class="quest__desc">${escapeText(quest.description)}</p>
-        <div class="quest__bar"><i style="width:${(ratio * 100).toFixed(1)}%"></i></div>
-        <span class="quest__progress mono">
-          ${formatMetric(quest.metric, quest.progressValue)} / ${formatMetric(quest.metric, quest.targetValue)}
-        </span>
-      </div>
-      <div class="quest__side">
-        <b class="quest__reward mono">${money(Number(quest.rewardMinor))}</b>
-        <button class="btn btn--tiny quest__claim" type="button"
-                ${quest.claimable ? '' : 'disabled'}>
-          ${quest.claimed ? 'Claimed' : quest.claimable ? 'Claim' : 'In progress'}
-        </button>
-      </div>`;
-
-    const button = card.querySelector('.quest__claim');
-    if (quest.claimable) {
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        try {
-          const result = await claimQuest(quest.code);
-          playSound('reward');
-          toast({
-            kind: 'win',
-            title: quest.name,
-            body: `+${money(Number(result.rewardMinor))}`,
-          });
-        } catch (error) {
-          button.disabled = false;
-          showError(error);
-        }
-      });
-    }
-    mount.appendChild(card);
-  });
-}
-
-/* A wager target of 1000000 should read as $1M, but a target of 3 rolls is just 3. The metric name
- * carries the unit, so the formatter reads it rather than guessing from magnitude. */
-function formatMetric(metric, value) {
-  const number = Number(value) || 0;
-  return String(metric).endsWith('_minor') ? money(number) : number.toLocaleString('en-US');
-}
-
-function showError(error) {
-  toast({
-    kind: 'lose',
-    title: error?.code ? String(error.code).replaceAll('_', ' ') : 'Could not claim',
-    body: error?.message || 'The server rejected the request.',
-  });
-}
-
-function escapeText(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+  paint();
+  void load();
+  schedule();
 }

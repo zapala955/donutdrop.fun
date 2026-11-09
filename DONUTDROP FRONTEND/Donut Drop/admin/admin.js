@@ -3235,11 +3235,12 @@ async function editDiscordBot(guild, maxIds) {
 }
 
 async function loadPrograms() {
-  const [rain, creators, races, quests] = await Promise.all([
+  const [rain, creators, races, quests, board] = await Promise.all([
     api.get('/v1/social/rain').catch((error) => ({ unavailable: error.message })),
     api.get('/v1/admin/creator-applications'),
     api.get('/v1/admin/races'),
     api.get('/v1/admin/quests'),
+    api.get('/v1/admin/quest-board').catch(() => ({ quests: [] })),
   ]);
   renderStats(
     $('rainStats'),
@@ -3336,6 +3337,31 @@ async function loadPrograms() {
         status,
         actions(...(state === 'scheduled' ? [button('Edit', () => editRace(race))] : [])),
       );
+      return tr;
+    },
+  );
+  if (board.periodEnd) {
+    $('boardNote').textContent = `The Quests tab. Every quest resets every 3 days at 00:00 UTC; this period ends ${new Date(board.periodEnd).toUTCString().replace(':00 GMT', ' UTC')}.`;
+  }
+  table(
+    $('boardQuestTable'),
+    ['Order', 'Quest', 'Kind', 'Target', 'Reward', 'Claims this period', 'Paid this period', 'Paid in all', 'Status', ''],
+    board.quests ?? [],
+    (quest) => {
+      const tr = document.createElement('tr');
+      tr.append(
+        cell(quest.sort_order, { mono: true }),
+        cell(quest.name),
+        cell(quest.kind === 'deposit' ? 'Deposit (net)' : 'Wager'),
+        cell(amountText(quest.target_minor), { mono: true }),
+        cell(amountText(quest.reward_minor), { mono: true }),
+        cell(quest.claims_period, { mono: true }),
+        cell(amountText(quest.paid_period_minor), { mono: true }),
+        cell(amountText(quest.paid_total_minor), { mono: true }),
+      );
+      const status = document.createElement('td');
+      status.append(pill(quest.enabled ? 'on' : 'off', quest.enabled ? 'ok' : 'warn'));
+      tr.append(status, actions(button('Edit', () => editBoardQuest(quest))));
       return tr;
     },
   );
@@ -3529,6 +3555,56 @@ async function settleRaces() {
   try {
     const result = await api.post('/v1/admin/races/settle', { reason });
     toast(`${result.settled} race(s) settled; ${result.paid} winner(s) paid.`);
+    await loadPrograms();
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+  }
+}
+
+/** A quest on the board (routes/quest-board.ts): deposit or wager a target within the period. */
+async function editBoardQuest(quest = null) {
+  const values = await editRecord({
+    title: quest ? `Edit ${quest.name}` : 'Add a quest',
+    fields: [
+      { name: 'name', label: 'Name (shown to players)', value: quest?.name ?? '' },
+      {
+        name: 'kind',
+        label: 'Counts',
+        type: 'select',
+        options: ['deposit', 'wager'],
+        value: quest?.kind ?? 'deposit',
+      },
+      { name: 'targetMinor', label: 'Target (e.g. 10m)', value: quest ? amountText(quest.target_minor) : '' },
+      { name: 'rewardMinor', label: 'Reward (e.g. 1m)', value: quest ? amountText(quest.reward_minor) : '' },
+      { name: 'sortOrder', label: 'Sort order', type: 'number', value: quest?.sort_order ?? 0 },
+      { name: 'enabled', label: 'On (shown and claimable)', type: 'checkbox', value: quest?.enabled ?? true },
+      {
+        name: 'description',
+        label: 'Description (optional)',
+        type: 'textarea',
+        value: quest?.description ?? '',
+        required: false,
+        wide: true,
+      },
+      { name: 'reason', label: 'Audit reason', wide: true },
+    ],
+    submitLabel: quest ? 'Save quest' : 'Add quest',
+  });
+  if (!values) return;
+  try {
+    const payload = {
+      name: values.name,
+      description: values.description ?? '',
+      kind: values.kind,
+      targetMinor: parseAmount(values.targetMinor)?.toString() ?? values.targetMinor,
+      rewardMinor: parseAmount(values.rewardMinor)?.toString() ?? values.rewardMinor,
+      sortOrder: Number(values.sortOrder),
+      enabled: values.enabled,
+      reason: values.reason,
+    };
+    if (quest) await api.patch(`/v1/admin/quest-board/${encodeURIComponent(quest.id)}`, payload);
+    else await api.post('/v1/admin/quest-board', payload);
+    toast(quest ? 'Quest saved.' : 'Quest added.');
     await loadPrograms();
   } catch (error) {
     toast(`${error.code}: ${error.message}`, 'bad');
@@ -4746,6 +4822,7 @@ async function start() {
   $('settleRaces').addEventListener('click', () => void settleRaces());
   $('startRain').addEventListener('click', () => void startRain());
   $('createQuest').addEventListener('click', () => void editQuest());
+  $('createBoardQuest').addEventListener('click', () => void editBoardQuest());
   $('sheetClose').addEventListener('click', () => $('playerSheet').close());
   /* Esc closes it natively; this clears the account it was pointed at so a later refresh cannot
      repaint a sheet nobody is looking at. */

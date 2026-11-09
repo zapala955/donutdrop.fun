@@ -178,12 +178,11 @@ describe('weekly quests: the page, the bell and the pop-ups', () => {
     assert.match(app, /startWeeklyQuestSweeper\(app, db, config\);/);
   });
 
-  it('sits above the daily quests on the Quests page', async () => {
+  it('is off the site: the Quests tab is the quest board, and the board module is kept', async () => {
     const html = await front('index.html');
-    assert.match(html, /<div class="wq" id="weeklyQuestsRoot" hidden><\/div>\s*<div class="quests" id="questRoot">/);
-    assert.match(html, /href="assets\/css\/weekly-quests\.css"/);
+    assert.doesNotMatch(html, /weeklyQuestsRoot|weekly-quests\.(css|js)/);
     const quests = await front('assets/js/quests.js');
-    assert.match(quests, /mountWeeklyQuests\(\$\('#weeklyQuestsRoot', view\)\)/);
+    assert.doesNotMatch(quests, /weekly-quests|mountWeeklyQuests/);
     const page = await front('assets/js/weekly-quests.js');
     assert.match(page, /api\.get\('\/v1\/quests\/weekly'\)/);
     // Nothing is counted on the client.
@@ -197,15 +196,8 @@ describe('weekly quests: the page, the bell and the pop-ups', () => {
     assert.match(await front('assets/js/notices.js'), /quest_won: \{/);
   });
 
-  it('promotes both quests with their own pop-ups, never on the Quests page itself', async () => {
+  it('is no longer promoted in a pop-up', async () => {
     const popups = await front('assets/js/popups.js');
-    assert.match(popups, /id: 'quest:deposit_race'/);
-    assert.match(popups, /id: 'quest:recruit'/);
-    assert.match(popups, /if \(currentRouteName\(\) === 'quests'\) return null;/);
-    assert.match(popups, /if \(recruit\.you\?\.done\) return null;/);
-    assert.equal(popups.match(/href: '\/quests'/g)?.length, 2);
-    // Figures are the board's, not written into the copy.
-    assert.match(popups, /money\(Number\(race\.potMinor\)\)/);
-    assert.match(popups, /money\(Number\(recruit\.potMinor\)\)/);
+    assert.doesNotMatch(popups, /quest:deposit_race|quest:recruit|readWeeklyQuests|questPopup/);
   });
 });

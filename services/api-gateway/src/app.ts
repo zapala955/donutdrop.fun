@@ -45,6 +45,7 @@ import { registerInsightRoutes } from './routes/insights.js';
 import { registerCrownRoutes } from './routes/crowns.js';
 import { registerStakingRoutes } from './routes/staking.js';
 import { registerWeeklyQuestRoutes } from './routes/weekly-quests.js';
+import { registerQuestBoardRoutes } from './routes/quest-board.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerReferralRoutes } from './routes/referrals.js';
 import { registerShareRoutes } from './routes/shares.js';
@@ -281,6 +282,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerCrownRoutes(app, db, config);
   await registerStakingRoutes(app, db, config);
   await registerWeeklyQuestRoutes(app, db, config);
+  await registerQuestBoardRoutes(app, db, config);
   await registerFeedbackRoutes(app, db, config);
   await registerVipRoutes(app, db, config);
   await registerMediaTestRoutes(app, db, config);

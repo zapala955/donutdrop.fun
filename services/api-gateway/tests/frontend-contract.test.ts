@@ -296,10 +296,12 @@ describe('frontend/backend contract', () => {
       assert.match(html, new RegExp(`data-route="${route}"`));
       assert.match(html, new RegExp(`data-view="${route}"`));
     }
-    /* Reachable, but no longer on the menu. Skill Duels, Quests & Streak and Faction War were
-     * taken off the board together; their views stay so an existing link or bookmark still
-     * resolves, and so restoring the menu block is all it takes to put a mode back. */
-    for (const view of ['quests', 'war', 'skill-duel']) {
+    /* Reachable, but no longer on the menu. Skill Duels and Faction War were taken off the board
+     * together; their views stay so an existing link or bookmark still resolves, and so restoring
+     * the menu block is all it takes to put a mode back. Quests came back on the menu as the quest
+     * board (2026-11-09). */
+    assert.match(html, /<a class="lxnav" href="\/quests" data-route="quests" data-tip="Quests">/);
+    for (const view of ['war', 'skill-duel']) {
       assert.match(html, new RegExp(`data-view="${view}"`));
       assert.doesNotMatch(html, new RegExp(`data-route="${view}"`));
     }
@@ -342,12 +344,12 @@ describe('frontend/backend contract', () => {
   it('shows the server-enforced daily wager progress before enabling a streak claim', async () => {
     const html = await source('index.html');
     const daily = await source('assets/js/daily.js');
-    const quests = await source('assets/js/quests.js');
     assert.match(html, /Wager at least \$10M each UTC day to claim/);
     assert.match(daily, /streak\.wagerRequirementMet/);
     assert.match(daily, /streak\.wagerRemainingMinor/);
     assert.match(daily, /daily__track/);
-    assert.match(quests, /streak\.wagerRequirementMet/);
+    // The streak lives on Daily Rewards only: the Quests tab is the quest board now.
+    assert.doesNotMatch(await source('assets/js/quests.js'), /\/v1\/streak|streak\.|claimStreak/);
   });
 
   it('uses clean public paths while preserving old fragment bookmarks', async () => {

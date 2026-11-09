@@ -1,0 +1,142 @@
+/* Hallmark · component: quest board · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: site tokens (luxe ladder), so a theme picked in Settings repaints it like every card
+ * states: a quest -- signed out (Log in), in progress (bar, Claim disabled), ready (gold Claim),
+ *         claiming (busy), claimed (a quiet tick); the board -- loading, empty, not answering.
+ *         The Claim button -- default, hover, :focus-visible, :active, disabled, busy.
+ * contrast: the quiet words are --lx-mute on --lx-2 (5.9:1); the reward and the count in --lx-ink.
+ * motion: the bar fills on transform only; nothing else moves. Reduced motion: it is simply there.
+ *
+ * quest-board.css — the Quests tab (assets/js/quests.js). Flat, as a casino's quests are: one row
+ * per quest, its kind's mark, its name and progress, its reward and one button. Scoped to .qb. */
+
+.qb { display: grid; gap: var(--lx-s3); min-width: 0; }
+
+.qb__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); flex-wrap: wrap; }
+.qb__period { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.4 var(--lx-ui); }
+.qb__period b { color: var(--lx-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.qb__list { display: grid; gap: var(--lx-s2); margin: 0; padding: 0; list-style: none; }
+
+.qb__quest {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--lx-s4);
+  padding: var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+}
+.qb__quest[data-state="ready"] { box-shadow: inset 0 0 0 1px var(--lx-gold); }
+
+.qb__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--lx-r);
+  background: var(--lx-3);
+  color: var(--lx-gold);
+}
+.qb__icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.qb__icon .qb__dot { fill: currentColor; stroke: none; }
+
+.qb__body { display: grid; gap: 6px; min-width: 0; }
+.qb__name {
+  margin: 0;
+  color: var(--lx-ink);
+  font: 700 1rem/1.25 var(--lx-ui);
+  overflow-wrap: anywhere;
+}
+.qb__desc { margin: 0; color: var(--lx-mute); font: 400 .8125rem/1.4 var(--lx-ui); overflow-wrap: anywhere; }
+
+.qb__bar {
+  position: relative;
+  height: 8px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: var(--lx-r-pill);
+  background: var(--lx-0);
+}
+.qb__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--lx-gold);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  transition: transform 420ms var(--lx-ease);
+}
+.qb__quest[data-state="claimed"] .qb__fill { background: var(--lx-5); }
+.qb__count { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.qb__count b { color: var(--lx-ink); font-weight: 700; }
+
+.qb__side { display: grid; justify-items: end; gap: var(--lx-s2); }
+.qb__reward { display: grid; justify-items: end; gap: 2px; margin: 0; }
+.qb__rewardlabel { color: var(--lx-mute); font: 600 .6875rem/1 var(--lx-ui); letter-spacing: .04em; text-transform: uppercase; }
+.qb__rewardamt { color: var(--lx-ink); font: 800 1.125rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.qb__claim {
+  min-width: 104px;
+  height: 40px;
+  padding: 0 var(--lx-s4);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .875rem/1 var(--lx-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--lx-quick) var(--lx-ease), transform 120ms var(--lx-ease);
+}
+.qb__claim:hover:not(:disabled) { background: var(--lx-gold-hi); }
+.qb__claim:active:not(:disabled) { transform: translateY(1px); }
+.qb__claim:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.qb__claim:disabled { background: var(--lx-4); color: var(--lx-mute); cursor: not-allowed; }
+.qb__claim[aria-busy="true"] { cursor: progress; }
+.qb__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  color: var(--lx-mute);
+  font: 700 .875rem/1 var(--lx-ui);
+}
+.qb__done::before {
+  content: "";
+  width: 14px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-2px) rotate(-45deg);
+}
+
+.qb__empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--lx-s1);
+  padding: var(--lx-s8) var(--lx-s4);
+  border-radius: var(--lx-r);
+  background: var(--lx-2);
+  text-align: center;
+}
+.qb__empty[hidden] { display: none; }
+.qb__emptytitle { margin: 0; color: var(--lx-ink); font: 700 1rem/1.3 var(--lx-ui); }
+.qb__emptyline { margin: 0; color: var(--lx-mute); font: 400 .875rem/1.4 var(--lx-ui); }
+.qb__emptytitle:empty, .qb__emptyline:empty { display: none; }
+
+.qb__note { margin: 0; color: var(--lx-mute); font: 400 .75rem/1.5 var(--lx-ui); }
+.qb__note[hidden] { display: none; }
+
+/* A phone: the reward and the button go under the name, the button full width. */
+@media (max-width: 560px) {
+  .qb__quest { grid-template-columns: 40px minmax(0, 1fr); gap: var(--lx-s3); padding: var(--lx-s3); }
+  .qb__icon { width: 40px; height: 40px; }
+  .qb__icon svg { width: 22px; height: 22px; }
+  .qb__side { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: start; }
+  .qb__reward { justify-items: start; }
+  .qb__claim, .qb__done { justify-self: end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qb__fill, .qb__claim { transition: none; }
+}
