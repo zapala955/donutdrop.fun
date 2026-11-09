@@ -169,7 +169,7 @@ describe('mines in 3D', () => {
     for (const use of ['tier.particles', 'tier.lights', 'tier.composer', 'tier.antialias', 'frameMs(tier)', 'minFpsFor(tier)']) assert.ok(cave.includes(use), use);
     // The cave is its own chunk, loaded only when the page can draw it; the board stays for the keyboard.
     assert.match(page, /await import\('\.\/mines3d\.js'\)/);
-    assert.match(page, /if \(field\) await field\.dig\(tile, true\);\n\s*else boom\(tile\);/);
+    assert.match(page, /if \(field\) await field\.dig\(tile, true\);\n\s*else await boom\(tile\);/);
     assert.match(page, /board\.addEventListener\('focusin'/);
     assert.match(css, /\.mines:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.mines__board \{\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  opacity: 0;\n  pointer-events: none;\n\}/);
   });

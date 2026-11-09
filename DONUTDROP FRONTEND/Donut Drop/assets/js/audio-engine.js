@@ -458,6 +458,31 @@ const CUES = {
     noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
     tone(ctx, { freq: 196, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 262 });
   },
+
+  /* ── Mines ──
+   * The same language as the Tower's, so a pick, a find and a blast sound alike across the two: a
+   * tap as a tile is chosen, a diamond that rings a step higher for every one found, a short blast,
+   * the field ticking over in rings, and the cash-out.
+   */
+  /** A tile chosen: a soft press, a touch brighter than the Tower's. */
+  minesTap(ctx) {
+    tone(ctx, { freq: 700, type: 'triangle', duration: 0.04, gain: 0.07, sweepTo: 540 });
+    noise(ctx, { duration: 0.02, gain: 0.025, frequency: 2900, q: 1.4 });
+  },
+  /** A game starting: two notes going up. */
+  minesStart(ctx) { CUES.towerStart(ctx); },
+  /** A diamond: a bright crystal ping with a glint. Pitched by the caller, a step up per diamond. */
+  minesGem(ctx) {
+    tone(ctx, { freq: 1174.66, type: 'sine', duration: 0.2, gain: 0.12 });
+    tone(ctx, { freq: 1760, type: 'triangle', start: 0.03, duration: 0.16, gain: 0.07 });
+    noise(ctx, { start: 0.015, duration: 0.07, gain: 0.025, frequency: 7400, q: 0.9 });
+  },
+  /** TNT: a hard crack and a short low boom. */
+  minesBoom(ctx) { CUES.towerBoom(ctx); },
+  /** The rest of the field turning over: a tiny tick per ring, pitched up by the caller. */
+  minesReveal(ctx) { CUES.towerReveal(ctx); },
+  /** Cashed out: a quick run of notes and a shimmer. */
+  minesCash(ctx) { CUES.towerCash(ctx); },
 };
 
 /**
