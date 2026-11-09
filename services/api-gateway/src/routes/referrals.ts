@@ -274,7 +274,7 @@ export async function registerReferralRoutes(
       code,
       // Built here rather than in the browser so one origin is authoritative for the link that
       // gets pasted into public chat.
-      link: `${config.appOrigin}/?ref=${code}`,
+      link: `${config.appOrigin}/r/${code}`,
       terms: {
         bonusMinor: config.referralBonusMinor.toString(),
         bonusWagerMinor: milestone.toString(),
@@ -391,7 +391,7 @@ export async function registerReferralRoutes(
         /* Existing referrals follow the rename through ON UPDATE CASCADE on referrals_code_fkey.
          * Nobody who already used the old link loses their referrer, and nobody has to be told to
          * re-send anything. */
-        return { code, link: `${config.appOrigin}/?ref=${code}` };
+        return { code, link: `${config.appOrigin}/r/${code}` };
       });
     },
   );

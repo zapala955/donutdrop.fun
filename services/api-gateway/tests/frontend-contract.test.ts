@@ -378,7 +378,8 @@ describe('frontend/backend contract', () => {
     assert.match(routing, /migrateLegacyHashRoute/);
     assert.match(routing, /query\.set\('code', parts\[1\]\)/);
     assert.match(nginx, /\|terms\)\$/);
-    assert.match(referralRoutes, /\$\{config\.appOrigin\}\/\?ref=\$\{code\}/);
+    // The invite link is /r/<code> (routes/invite-links.ts), which sends a person on to /?ref=<code>.
+    assert.match(referralRoutes, /\$\{config\.appOrigin\}\/r\/\$\{code\}/);
     assert.match(referralRoutes, /\$\{config\.appOrigin\}\/referrals\?discord=/);
     assert.doesNotMatch(referralRoutes, /\/#\//);
   });
