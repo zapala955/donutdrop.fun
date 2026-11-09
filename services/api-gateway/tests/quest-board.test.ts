@@ -77,6 +77,8 @@ describe('quest board: the Quests tab and the console', () => {
   it('is on the menu, reads the board, and sets quest text as text', async () => {
     const [html, page, css] = await Promise.all([front('index.html'), front('assets/js/quests.js'), front('assets/css/quest-board.css')]);
     assert.match(html, /<a class="lxnav" href="\/quests" data-route="quests" data-tip="Quests">/);
+    // And in the account dropdown, under Daily Rewards.
+    assert.match(html, /<span>Daily Rewards<\/span>\s*<\/a>\s*<a class="menu__row" href="\/quests" data-route="quests" role="menuitem">/);
     assert.match(html, /<div class="qb" id="questRoot"><\/div>/);
     assert.match(html, /href="assets\/css\/quest-board\.css"/);
     assert.match(page, /api\.get\('\/v1\/quests\/board'\)/);
