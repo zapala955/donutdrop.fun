@@ -153,7 +153,6 @@ body.lx :is(
 ):hover:not(:disabled):not(.lxpromo__go) {
   box-shadow: 0 6px 20px -9px rgba(227, 161, 58, .5);
 }
-body.lx .upg #pullBtn:hover:not(:disabled) { box-shadow: 0 6px 20px -9px rgba(227, 161, 58, .5); }
 
 /* The calmer palette, for Dice's own colours: its losing stretch takes the site's red instead of a
    signal red. */

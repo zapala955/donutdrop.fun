@@ -45,11 +45,11 @@
  * not.
  */
 import { reduceMotion } from './util.js';
-import { play } from './audio.js';
+import { playSound } from './audio-engine.js';
 
 const TICKS = 72;                // graduations, and the click resolution
-const SPIN_TIME = 5.2;           // seconds from release to dead stop
-const TURNS = 5;                 // whole turns before the landing angle
+const SPIN_TIME = 3.4;           // seconds from release to dead stop (5.2 before the 2026-11-09 pass)
+const TURNS = 4;                 // whole turns before the landing angle
 
 /* the velocity profile — see the header */
 const LAUNCH = 0.045;            // fraction of the spin spent winding up
@@ -106,12 +106,16 @@ const TOP = Math.PI / 2;         // six o'clock, in canvas angles (y grows down)
  * which is one colour family reading as one band, not two colours meaning two
  * things. What it buys is depth: a flat stroke on a dark ring reads as a
  * sticker, and a graded one reads as lit. */
-const ZONE_HOT = '#ffe45c';
+/* Flat, as the rest of the casino floor (2026-11-09): one gold for the zone, green once it has paid,
+ * a white pointer that reads on the track and on the zone alike, and no light anywhere. */
+const ZONE_HOT = '#ffc233';
 const ZONE_MID = '#ffaa00';
-const ZONE_LOW = '#ff6a00';
-const TRACK = '#221d14';
-const RIM = 'rgba(255,214,150,.14)';
-const TICK = 'rgba(255,200,120,.3)';
+const ZONE_LOW = '#ff9500';
+const ZONE_WON = '#3ecf7d';
+const TRACK = '#1d1d23';
+const RIM = 'rgba(255,255,255,.06)';
+const TICK = 'rgba(255,255,255,.16)';
+const POINTER = '#ffffff';
 
 export function createWheel(canvas) {
   const ctx = canvas.getContext('2d');
@@ -202,7 +206,8 @@ export function createWheel(canvas) {
       g.addColorStop(0, ZONE_LOW);
       g.addColorStop(0.55, ZONE_MID);
       g.addColorStop(1, ZONE_HOT);
-      ctx.strokeStyle = g;
+      // Once a round has landed in it, the zone is the win green until the dial is reset.
+      ctx.strokeStyle = !S.spinning && S.result === 'win' ? ZONE_WON : g;
       ctx.beginPath();
       ctx.arc(cx, cy, R, a0, a1);
       ctx.stroke();
@@ -220,7 +225,7 @@ export function createWheel(canvas) {
       ctx.translate(cx, cy);
       ctx.rotate(TOP);
 
-      ctx.fillStyle = '#ffd24a';
+      ctx.fillStyle = POINTER;
       ctx.fillRect(inn, -R * 0.018, out - inn, R * 0.036);
       const hs = R * 0.085;
       ctx.beginPath();
@@ -272,7 +277,8 @@ export function createWheel(canvas) {
          * so every one of them still clicks. */
         if (now - S.lastClick >= 50) {
           S.lastClick = now;
-          play('click', { volume: 0.16 + k * 0.26, rate: 0.92 + Math.random() * 0.22 });
+          // A ratchet that climbs as the ring slows, so the last clicks are the loudest thing in it.
+          playSound('upgTick', { rate: 0.85 + k * 0.45 });
         }
       }
 
@@ -284,7 +290,7 @@ export function createWheel(canvas) {
       S.zoom += ((tense ? 1 : 0) - S.zoom) * Math.min(1, dt * 2.6);
       if (tense && !S.tenseFired) {
         S.tenseFired = true;
-        play('orb', { volume: 0.26, rate: 0.62 });
+        playSound('upgTense');
         canvas.dispatchEvent(new CustomEvent('wheel:tense', { bubbles: true }));
       }
 
@@ -338,7 +344,8 @@ export function createWheel(canvas) {
       return new Promise((res) => { S.onDone = res; });
     },
 
-    reset() {},
+    /** Back to the odds: the zone gold again after a win. */
+    reset() { if (!S.spinning) S.result = null; },
     dispose() { cancelAnimationFrame(raf); },
   };
 }

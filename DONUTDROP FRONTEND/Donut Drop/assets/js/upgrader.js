@@ -1,8 +1,10 @@
 /* upgrader.js — stake cash, chase a payout. The backend owns the roll.
  *
- * The layout is the nether-gold rig: a card, a dial, a card, and the button under them. Nothing
- * sits between them. A player needs four things here — what goes in, what they are chasing, the
- * odds, and the control — and every number has exactly one home.
+ * The layout is the site's game frame (2026-11-09): the panel on the left holds the stake, the
+ * multiplier and the odds and the one button; the stage holds the stake, the dial and the payout
+ * side by side, and every payout in range under them. On a phone the dial comes first, the panel
+ * straight under it with the button, and the payouts after. The result lands on the dial itself --
+ * no full-screen scene to dismiss, no toast -- and the payout stays chosen for the next round.
  *
  * Cash in, cash out. The server still rolls a catalogue item, because that is what carries the
  * name, the rarity and the art the reveal needs, but it pays the item's full value straight to
@@ -17,7 +19,6 @@ import {
   $, el, money, pct, itemTile, reduceMotion, parseAmount, formatAmountInput, safeImage,
 } from './util.js';
 import { toast, openModal, closeModal, broadcast, fairSheet } from './ui.js';
-import { playReveal, warmReveal } from './reveal.js';
 import { playSound } from './audio-engine.js';
 import { createWheel } from './wheel.js';
 
@@ -40,7 +41,7 @@ let spinning = false;
 let needleDeg = 0;
 let root = null;
 let dial = null;                    // the canvas dial; null means the SVG is doing the work
-let fx = null;
+let resultTimer = 0;                // clears the dial's result back to the odds
 
 export function mountUpgrader(view) {
   root = $('#upgRoot', view);
@@ -154,92 +155,79 @@ function build() {
   }).join('');
 
   root.innerHTML = `
-    <div class="uwrap">
-      <div class="utools" role="group" aria-label="Upgrader options">
-        <button class="utool" id="upgFairBtn" type="button" title="Provably fair"
-                aria-label="Provably fair">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>
-        </button>
-        <span class="utool__stat mono" id="telStat" data-s="idle">STANDBY</span>
-        <button class="ihint" type="button" id="upgHint"></button>
+    <section class="ug__duel" aria-label="The upgrade">
+      <div class="ug__item ug__item--from" id="bayStake" data-loaded="0">
+        <span class="ug__art" id="artStake" data-empty="1"><img src="${IMG}gold_ingot.png" alt=""></span>
+        <span class="ug__cap">You stake</span>
+        <b class="ug__amt mono" id="stakeSub">—</b>
       </div>
 
-      <div class="ustage">
-        <!-- LEFT · the stake. Cash off the wallet, nothing else. -->
-        <section class="ucard ucard--src" id="bayStake" data-loaded="0" aria-label="Your stake">
-          <span class="ucard__head">Your stake</span>
-          <span class="ucard__sub mono" id="stakeSub">—</span>
-
-          <span class="ucard__art" id="artStake" data-empty="1">
-            <img src="${IMG}gold_ingot.png" alt="">
-            <span class="ucard__glyph" aria-hidden="true">${CHEV}</span>
-          </span>
-
-          <div class="amountbox">
-            <span class="amountbox__cur">$</span>
-            <input class="amountbox__in mono" id="stakeIn" inputmode="text" autocomplete="off"
-                   spellcheck="false" aria-label="Stake amount" aria-describedby="stakeHint"
-                   value="0">
-          </div>
-          <!-- Empty unless something is actually wrong. It is a validation channel now, not a
-               place to teach the field's syntax — the chips below do that by being pressable. -->
-          <span class="ucard__hint" id="stakeHint"></span>
-          <div class="qchips" id="stakeChips" role="group" aria-label="Quick stake"></div>
-        </section>
-
-        <!-- CENTRE · the dial, and only the dial -->
-        <div class="udial" id="wheel">
-          <div class="wheel__ring">
-            <svg viewBox="0 0 120 120" aria-hidden="true">
-              <defs>
-                <linearGradient id="upgGrad" x1="0" y1="1" x2="1" y2="0">
-                  <stop offset="0%"   stop-color="#ff6a00"/>
-                  <stop offset="55%"  stop-color="#ffaa00"/>
-                  <stop offset="100%" stop-color="#ffe45c"/>
-                </linearGradient>
-              </defs>
-              <g class="wheel__ticks" id="wheelTicks">${ticks}</g>
-              <circle class="wheel__track" cx="60" cy="60" r="${R}"/>
-              <circle class="wheel__arc" id="wheelArc" cx="60" cy="60" r="${R}"
-                      stroke-dasharray="0 ${C.toFixed(2)}" data-empty="1"/>
-            </svg>
-            <canvas class="wheel__3d" id="wheelGl" aria-hidden="true"></canvas>
-            <canvas class="wheel__fx" id="wheelFx" aria-hidden="true"></canvas>
-            <div class="wheel__needle" id="needle"><i></i></div>
-            <div class="wheel__mid" id="wheelMid" data-state="">
-              <span class="udial__glyph" aria-hidden="true">${CHEV}</span>
-              <span class="wheel__pct" id="wheelPct">—</span>
-              <span class="wheel__lbl" id="wheelLbl">WIN CHANCE</span>
-            </div>
+      <div class="ug__dial" id="wheel">
+        <div class="ug__ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <g class="ug__ticks" id="wheelTicks">${ticks}</g>
+            <circle class="ug__track" cx="60" cy="60" r="${R}"/>
+            <circle class="ug__arc" id="wheelArc" cx="60" cy="60" r="${R}"
+                    stroke-dasharray="0 ${C.toFixed(2)}" data-empty="1"/>
+          </svg>
+          <canvas class="ug__canvas" id="wheelGl" aria-hidden="true"></canvas>
+          <div class="ug__needle" id="needle"><i></i></div>
+          <div class="ug__mid" id="wheelMid" data-state="">
+            <span class="ug__pct" id="wheelPct">—</span>
+            <span class="ug__lbl" id="wheelLbl">Win chance</span>
           </div>
         </div>
-
-        <!-- RIGHT · the payout being chased -->
-        <button class="ucard ucard--dst" id="bayTarget" data-loaded="0"
-                aria-label="Choose the payout you are chasing">
-          <span class="ucard__head">Chasing</span>
-          <span class="ucard__sub mono" id="metaSub">—</span>
-          <span class="ucard__art" id="artTarget" data-empty="1">
-            <img src="${IMG}ender_chest_anim.gif" alt="">
-            <span class="ucard__glyph" aria-hidden="true">${CHEV}</span>
-          </span>
-          <span class="ucard__meta" id="metaTarget"></span>
-        </button>
       </div>
 
-      <button class="btn" id="pullBtn" disabled>
-        <span class="btn__chev" aria-hidden="true">${CHEV}</span>
-        <span id="pullLabel">Upgrade</span>
+      <button class="ug__item ug__item--to" id="bayTarget" type="button" data-loaded="0"
+              aria-label="Choose the payout you are chasing">
+        <span class="ug__art" id="artTarget" data-empty="1">
+          <img src="${IMG}ender_chest_anim.gif" alt="">
+          <span class="ug__glyph" aria-hidden="true">${CHEV}</span>
+        </span>
+        <span class="ug__cap" id="metaSub">Pick a payout</span>
+        <span class="ug__meta" id="metaTarget"></span>
       </button>
-    </div>
+    </section>
 
-    <section class="card" style="margin-top:16px">
-      <h2 class="card__h">Everything you can chase
+    <aside class="ug__panel" aria-label="Your upgrade">
+      <div class="ug__form">
+        <label class="ug__label ug__label--row" for="stakeIn"><span>Stake</span><span class="ug__bal mono" id="upgBalance"></span></label>
+        <div class="ug__field">
+          <span aria-hidden="true">$</span>
+          <input id="stakeIn" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off"
+                 spellcheck="false" aria-label="Stake amount" aria-describedby="stakeHint" value="0">
+          <button type="button" class="ug__adj" data-adj="half" aria-label="Halve the stake">½</button>
+          <button type="button" class="ug__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="ug__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
+        </div>
+        <!-- Empty unless something is actually wrong: a validation channel, not a syntax lesson. -->
+        <span class="ug__hint" id="stakeHint"></span>
+        <div class="ug__adds" id="stakeChips" role="group" aria-label="Add to the stake"></div>
+        <div class="ug__stats">
+          <div class="ug__stat"><span class="ug__label">Multiplier</span><b class="mono" id="upgMult">—</b></div>
+          <div class="ug__stat"><span class="ug__label">Win chance</span><b class="mono" id="upgChance">—</b></div>
+        </div>
+        <button class="btn ug__go" id="pullBtn" type="button" data-sfx="none" disabled>
+          <span id="pullLabel">Upgrade</span>
+        </button>
+        <div class="ug__tools">
+          <button class="ug__fair" id="upgFairBtn" type="button" aria-label="Provably fair">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span>Provably fair</span>
+          </button>
+          <button class="ihint" type="button" id="upgHint"></button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="ug__pick" aria-label="Every payout you can chase">
+      <h2 class="ug__h">Everything you can chase
         <button class="ihint" type="button" aria-label="Each percentage is the real chance at that payout with the stake you have set."
                 data-tip="Each percentage is the real chance at that payout with the stake you have set."></button>
       </h2>
-      <div class="bandrail" id="upgBands" role="group" aria-label="Filter targets by payout"></div>
-      <div class="pickgrid" id="upgCat"></div>
+      <div class="ug__bands" id="upgBands" role="group" aria-label="Filter targets by payout"></div>
+      <div class="pickgrid ug__grid" id="upgCat"></div>
     </section>`;
 
   $('#bayTarget', root).addEventListener('click', pickTarget);
@@ -256,6 +244,7 @@ function build() {
     if (input.value.trim() === '') stakeInputValid = true;
     cashStake = parsed ?? 0;
     dropIneligibleTarget();
+    clearResult();
     sync({ keepInput: true });
   });
   input.addEventListener('blur', () => {
@@ -277,19 +266,18 @@ function build() {
     sync();
   });
 
-  fx = makeFx($('#wheelFx', root));
-
-  /* Decode the reveal sprites now, while the page is idle. Warming at pull time put the cost
-   * inside the spin — the one moment it must not be spent. */
-  const warm = () => warmReveal();
-  if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2500 });
-  else setTimeout(warm, 900);
+  /* ½, 2× and Max in the field, as every game has them; each is clamped by setStake. */
+  root.querySelectorAll('.ug__adj').forEach((button) => button.addEventListener('click', () => {
+    if (spinning) return;
+    const adj = button.dataset.adj;
+    setStake(adj === 'half' ? Math.floor(cashStake / 2) : adj === 'double' ? cashStake * 2 : state.balance);
+  }));
 
   root.addEventListener('wheel:tense', () => { root.dataset.tense = '1'; });
 
   try {
     dial = createWheel($('#wheelGl', root));
-    root.querySelector('.wheel__ring').dataset.mode = '2d';
+    root.querySelector('.ug__ring').dataset.mode = '2d';
     dial.setChance(chancePpm() / 1_000_000);
   } catch {
     dial = null;
@@ -332,26 +320,13 @@ function buildChips() {
   const chips = $('#stakeChips', root);
   chips.innerHTML = '';
 
+  /* ½, 2× and Max live in the field now, as in every other game; the row is the additive steps. */
   for (const [label, step] of STAKE_STEPS) {
-    const chip = el('button', 'qchip', label);
+    const chip = el('button', 'ug__add', label);
     chip.type = 'button';
-    chip.addEventListener('click', () => setStake(cashStake + step));
+    chip.addEventListener('click', () => { if (!spinning) setStake(cashStake + step); });
     chips.appendChild(chip);
   }
-
-  const half = el('button', 'qchip', '&frac12;x');
-  half.type = 'button';
-  half.addEventListener('click', () => setStake(Math.floor(cashStake / 2)));
-
-  const double = el('button', 'qchip', '2x');
-  double.type = 'button';
-  double.addEventListener('click', () => setStake(cashStake * 2));
-
-  const max = el('button', 'qchip qchip--max', 'MAX');
-  max.type = 'button';
-  max.addEventListener('click', () => setStake(state.balance));
-
-  chips.append(half, double, max);
 }
 
 function setStake(value) {
@@ -370,66 +345,6 @@ function dropIneligibleTarget() {
   if (target && !eligibleTargets().some((item) => item.catalogItemId === target.catalogItemId)) {
     target = null;
   }
-}
-
-/* ─────────── particle layer over the ring ───────────
- * Scatter for the sparks, and nothing else. Every outcome on this page is the server's, so no
- * part of this module may look like a source of chance. Keeping the platform's general-purpose
- * random number generator out of this file entirely is what makes that checkable by grep — the
- * frontend contract test asserts it. This xorshift feeds pixel positions and never touches a
- * result. */
-let fxSeed = 0x2f6e2b1;
-function fxRand() {
-  fxSeed ^= fxSeed << 13;
-  fxSeed ^= fxSeed >>> 17;
-  fxSeed ^= fxSeed << 5;
-  return (fxSeed >>> 0) / 4294967296;
-}
-
-function makeFx(canvas) {
-  const bits = [];
-  let raf = 0;
-  const fit = () => {
-    const rect = canvas.getBoundingClientRect();
-    if (canvas.width !== Math.round(rect.width)) canvas.width = Math.max(1, Math.round(rect.width));
-    if (canvas.height !== Math.round(rect.height)) canvas.height = Math.max(1, Math.round(rect.height));
-  };
-  const frame = () => {
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = bits.length - 1; i >= 0; i--) {
-      const b = bits[i];
-      b.life -= 1 / 60;
-      if (b.life <= 0) { bits.splice(i, 1); continue; }
-      b.vy += b.grav / 60;
-      b.x += b.vx / 60; b.y += b.vy / 60;
-      b.vx *= 0.97; b.vy *= 0.97;
-      ctx.globalAlpha = Math.max(0, b.life / b.max);
-      ctx.fillStyle = b.col;
-      const s = b.size * (0.4 + b.life / b.max);
-      ctx.fillRect(b.x - s / 2, b.y - s / 2, s, s);
-    }
-    ctx.globalAlpha = 1;
-    raf = bits.length ? requestAnimationFrame(frame) : 0;
-  };
-  return {
-    burst(col, { n = 60, spd = 260, grav = 240, size = 4 } = {}) {
-      if (reduceMotion()) return;
-      fit();
-      const cx = canvas.width / 2, cy = canvas.height / 2;
-      const ring = Math.min(cx, cy) * 0.82;
-      for (let i = 0; i < n; i++) {
-        const a = fxRand() * Math.PI * 2;
-        const v = spd * (0.4 + fxRand());
-        bits.push({
-          x: cx + Math.cos(a) * ring, y: cy + Math.sin(a) * ring,
-          vx: Math.cos(a) * v, vy: Math.sin(a) * v,
-          life: 0.9 + fxRand() * 0.5, max: 1.4, col, size, grav,
-        });
-      }
-      if (!raf) raf = requestAnimationFrame(frame);
-    },
-  };
 }
 
 /* ─────────── target picker ─────────── */
@@ -451,7 +366,7 @@ function pickTarget() {
       button.type = 'button';
       if (target && target.catalogItemId === item.catalogItemId) button.dataset.on = '1';
       button.appendChild(itemTile(item, { size: 'sm', sub: pct(quoteFor(item), 2) }));
-      button.addEventListener('click', () => { target = item; closeModal(); sync(); });
+      button.addEventListener('click', () => { target = item; closeModal(); clearResult(); sync(); });
       grid.appendChild(button);
     });
   });
@@ -468,18 +383,17 @@ function sync({ keepInput = false } = {}) {
   const chance = ppm / 1_000_000;
   paintChance(chance);
 
-  if (!spinning) {
+  // The dial shows the odds, unless a round's result is still on it (see showResult).
+  if (!spinning && !resultTimer) {
     $('#wheelPct', root).textContent = ppm ? pct(chance, 2) : '—';
-    $('#wheelLbl', root).textContent = 'WIN CHANCE';
+    $('#wheelLbl', root).textContent = 'Win chance';
     $('#wheelMid', root).dataset.state = '';
   }
+  const multiple = hasStake() && target ? Number(targetValue()) / Number(stakeMinor()) : 0;
+  $('#upgMult', root).textContent = multiple > 0 ? `${multiple.toFixed(2)}×` : '—';
+  $('#upgChance', root).textContent = ppm ? pct(chance, 2) : '—';
 
   const armed = hasStake() && !!target;
-  const status = $('#telStat', root);
-  status.dataset.s = spinning ? 'fire' : !stakeAffordable() ? 'warn' : armed ? 'armed' : 'idle';
-  status.textContent = spinning ? 'SERVER ROLL'
-    : !stakeAffordable() ? 'OVER BALANCE'
-    : armed ? 'ARMED' : 'STANDBY';
 
   /* The sentence is set on both the tooltip and the accessible name: the bubble is CSS-generated
    * content, which assistive tech does not reliably announce, so the name has to carry it too. */
@@ -492,12 +406,15 @@ function sync({ keepInput = false } = {}) {
 
   const button = $('#pullBtn', root);
   button.disabled = spinning || !armed || ppm < 1 || !stakeAffordable();
+  button.setAttribute('aria-busy', String(spinning));
   $('#pullLabel', root).textContent = !state.authenticated ? 'Log in first'
+    : spinning ? 'Rolling…'
     : !stakeInputValid ? 'Not an amount'
     : !hasStake() ? 'Set a stake'
     : !stakeAffordable() ? `Need ${money(Number(stakeMinor()))}`
     : !target ? 'Pick a payout'
-    : `Stake ${money(Number(stakeMinor()))}`;
+    : `Upgrade · ${money(Number(stakeMinor()))}`;
+  for (const node of root.querySelectorAll('#stakeIn, .ug__adj, .ug__add')) node.disabled = spinning;
 
   paintCatalog();
 }
@@ -525,7 +442,8 @@ function paintStake(keepInput) {
   card.dataset.loaded = cashStake > 0 ? '1' : '0';
   art.dataset.empty = cashStake > 0 ? '0' : '1';
 
-  $('#stakeSub', root).textContent = state.authenticated ? money(state.balance) : '—';
+  $('#stakeSub', root).textContent = hasStake() ? money(Number(stakeMinor())) : '—';
+  $('#upgBalance', root).textContent = state.authenticated ? money(state.balance) : '';
 
   /* Silent while the figure is usable. The hint used to restate the field's syntax on every
    * render, which meant the one time it had something urgent to say — you cannot afford this —
@@ -557,16 +475,16 @@ function paintTarget() {
      * and by the art; the jump from stake to payout is the figure the choice actually turns on,
      * and it had nowhere else on the card to live. */
     const multiple = stakeMinor() > 0n ? Number(targetValue()) / Number(stakeMinor()) : 0;
-    sub.textContent = multiple > 0 ? `${multiple.toFixed(2)}x` : RARITY[target.rarity].name;
+    sub.textContent = multiple > 0 ? `${multiple.toFixed(2)}× payout` : RARITY[target.rarity].name;
     meta.innerHTML =
-      `<b class="ucard__name">${escapeText(target.name)}</b>` +
-      `<b class="ucard__val mono">${money(target.value)}</b>`;
+      `<b class="ug__name">${escapeText(target.name)}</b>` +
+      `<b class="ug__amt mono">${money(target.value)}</b>`;
   } else {
     card.dataset.loaded = '0';
     card.style.removeProperty('--rar');
     art.dataset.empty = '1';
     art.querySelector('img').src = IMG + 'ender_chest_anim.gif';
-    sub.textContent = '—';
+    sub.textContent = 'Pick a payout';
     meta.innerHTML = '';
   }
 }
@@ -683,7 +601,7 @@ function paintCatalog() {
     button.type = 'button';
     if (target && target.catalogItemId === item.catalogItemId) button.dataset.on = '1';
     button.appendChild(itemTile(item, { size: 'sm', sub: pct(quoteFor(item), 2) }));
-    button.addEventListener('click', () => { target = item; sync(); });
+    button.addEventListener('click', () => { target = item; clearResult(); sync(); });
     grid.appendChild(button);
   });
 }
@@ -696,8 +614,9 @@ async function pull() {
   const destination = target;
   const wagered = stakeMinor();
   spinning = true;
+  clearResult();
   sync();
-  playSound('anvil');
+  playSound('upgStart');
 
   let response;
   try {
@@ -735,10 +654,9 @@ async function pull() {
   await response.settle();
 
   spinning = false;
-  $('#wheel', root).classList.remove('is-win', 'is-lose');
-  /* The stake survives the round: the amount is still valid and re-staking it is the common next
-   * action. Only the target clears, because the window may have moved with the new balance. */
-  target = null;
+  /* The stake and the payout both survive the round: going again is the common next action. The
+   * payout is dropped only if the new balance has moved it out of the window. */
+  dropIneligibleTarget();
   sync();
 }
 
@@ -793,10 +711,7 @@ export async function playTestSpin({ won, roll, item, stake }) {
   delete hint.dataset.bad;
   hint.textContent = '';
   $('#pullLabel', root).textContent = 'Test spin';
-  const status = $('#telStat', root);
-  status.dataset.s = 'fire';
-  status.textContent = 'TEST SPIN';
-  playSound('anvil');
+  playSound('upgStart');
 
   try {
     await spinRound({
@@ -806,7 +721,6 @@ export async function playTestSpin({ won, roll, item, stake }) {
   } finally {
     [cashStake, stakeInputValid, target] = saved;
     spinning = false;
-    $('#wheel', root).classList.remove('is-win', 'is-lose');
     sync();
   }
 }
@@ -818,7 +732,7 @@ async function spinRound({ won, chance, landing, destination, stake, payout, lab
   const wheel = $('#wheel', root);
   const mid = $('#wheelMid', root);
   const needle = $('#needle', root);
-  wheel.classList.remove('is-win', 'is-lose');
+  clearResult();
   wheel.classList.add('is-spinning');
   mid.dataset.state = 'spin';
   $('#wheelPct', root).textContent = pct(chance, 2);
@@ -846,43 +760,55 @@ async function spinRound({ won, chance, landing, destination, stake, payout, lab
     delete root.dataset.tense;
 
     onStop?.();
-
+    showResult({ won, chance, payout, stake, destination });
     if (won) {
-      wheel.classList.add('is-win');
-      mid.dataset.state = 'win';
-      $('#wheelPct', root).textContent = 'HIT';
-      $('#wheelLbl', root).textContent = destination.name.toUpperCase();
-      if (fx) fx.burst('#ffd700', { n: 70 });
-      playSound(payout >= 50_000_000 ? 'jackpot' : 'win');
+      playSound(payout >= 50_000_000 ? 'jackpot' : 'upgWin');
       if (announce) {
-        toast({
-          kind: 'win', img: destination.img, title: `Hit ${destination.name}`,
-          body: `+${money(payout)} cash`,
-        });
         broadcast({
           who: 'you', color: RARITY[destination.rarity].color, img: destination.img,
           text: `turned ${money(stake)} into ${money(payout)} at ${pct(chance, 2)}`,
         });
       }
     } else {
-      wheel.classList.add('is-lose');
-      mid.dataset.state = 'lose';
-      $('#wheelPct', root).textContent = 'MISSED';
-      $('#wheelLbl', root).textContent = money(stake) + ' GONE';
-      if (fx) fx.burst('#ff2222', { n: 40 });
-      playSound('lose');
-      if (announce) {
-        toast({
-          kind: 'lose', img: destination.img, title: `Missed ${destination.name}`,
-          body: `${pct(chance, 2)} was not enough.`,
-        });
-      }
+      playSound('upgLose');
     }
-
-    await playReveal({ won, item: destination, stake, payout: destination.value });
+    // A beat to read it before the button is live again.
+    await wait(reduceMotion() ? 0 : 650);
   } catch (error) {
     console.error('upgrade animation failed', error);
   }
+}
+
+/* The result, on the dial: a hit shows what it paid in the win green and the payout card lights; a
+ * miss turns the odds red. It stays a few seconds, or until the next round or any change. */
+function showResult({ won, chance, payout, destination }) {
+  const wheel = $('#wheel', root);
+  const mid = $('#wheelMid', root);
+  wheel.classList.add(won ? 'is-win' : 'is-lose');
+  mid.dataset.state = won ? 'win' : 'lose';
+  $('#wheelPct', root).textContent = won ? money(payout) : pct(chance, 2);
+  $('#wheelLbl', root).textContent = won ? destination.name : 'Missed';
+  if (!reduceMotion()) {
+    mid.animate(
+      [{ transform: 'scale(.8)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)' }],
+      { duration: 360, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+    );
+    if (won) {
+      $('#bayTarget', root).animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(1.05)', offset: 0.4 }, { transform: 'scale(1)' }],
+        { duration: 420, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+      );
+    }
+  }
+  window.clearTimeout(resultTimer);
+  resultTimer = window.setTimeout(() => { resultTimer = 0; clearResult(); sync(); }, 3200);
+}
+
+function clearResult() {
+  window.clearTimeout(resultTimer);
+  resultTimer = 0;
+  $('#wheel', root)?.classList.remove('is-win', 'is-lose');
+  dial?.reset();
 }
 
 /* The commitment is the server's, so there is nothing to show until one has been issued. Shaped

@@ -483,6 +483,38 @@ const CUES = {
   minesReveal(ctx) { CUES.towerReveal(ctx); },
   /** Cashed out: a quick run of notes and a shimmer. */
   minesCash(ctx) { CUES.towerCash(ctx); },
+
+  /* ── Upgrader ──
+   * A rise as the stake goes in, a ratchet click for every graduation that passes the pointer
+   * (pitched up by the dial as it slows), a low swell when it is about to land on an edge, and the
+   * landing: a bright chord for a hit, a soft knock for a miss.
+   */
+  /** The stake going in: a short rising sweep with a click on top. */
+  upgStart(ctx) {
+    tone(ctx, { freq: 260, type: 'triangle', duration: 0.18, gain: 0.08, sweepTo: 620 });
+    noise(ctx, { duration: 0.03, gain: 0.04, frequency: 3200, q: 1.3 });
+  },
+  /** One graduation past the pointer: a dry, short tick. */
+  upgTick(ctx) {
+    tone(ctx, { freq: 1500, type: 'triangle', duration: 0.016, gain: 0.04 });
+    noise(ctx, { duration: 0.012, gain: 0.02, frequency: 4600, q: 2 });
+  },
+  /** About to land near an edge: a low swell under the ticks. */
+  upgTense(ctx) {
+    tone(ctx, { freq: 110, type: 'sine', duration: 0.9, gain: 0.12, sweepTo: 165 });
+  },
+  /** A hit: a bright chord going up, with a shimmer. */
+  upgWin(ctx) {
+    [659.25, 830.61, 987.77, 1318.5].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.05, duration: 0.32, gain: 0.14 });
+    });
+    noise(ctx, { start: 0.1, duration: 0.26, gain: 0.045, frequency: 6400, q: 0.7 });
+  },
+  /** A miss: a soft, low knock, never a buzzer. */
+  upgLose(ctx) {
+    tone(ctx, { freq: 230, type: 'triangle', duration: 0.16, gain: 0.12, sweepTo: 150 });
+    noise(ctx, { duration: 0.05, gain: 0.03, frequency: 850, q: 1 });
+  },
 };
 
 /**

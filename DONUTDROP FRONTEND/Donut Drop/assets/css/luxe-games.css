@@ -302,27 +302,9 @@ body.lx .roulette__stage { border-radius: var(--lx-r) 0 0 0; background: var(--l
 body.lx .roulette__board { border-radius: 0 var(--lx-r) 0 0; background: transparent; box-shadow: none; }
 body.lx .roulette, body.lx .roulette * { font-family: var(--lx-ui); }
 
-/* ═════════ Upgrader: one flat machine ═════════ */
-body.lx .upg {
-  --u-stage: var(--lx-0);
-  --u-panel: var(--lx-2);
-  --u-panel-2: var(--lx-3);
-  --u-grid: none;
-  border: 0; border-radius: var(--lx-r) var(--lx-r) 0 0;
-  background: var(--lx-0);
-  box-shadow: var(--lx-shade);
-}
+/* ═════════ Upgrader ═════════
+   Its frame, panel, dial and button are in upgrader.css (the 2026-11-09 pass); nothing here. */
 body.lx .upg::before, body.lx .upg::after { content: none; }
-body.lx .ucard {
-  border: 0; border-radius: var(--lx-r);
-  background: var(--lx-2);
-}
-body.lx .ucard--dst:hover { background: var(--lx-3); border: 0; }
-/* An empty card shows its chevron on a clean surface: no darkened, blurred sprite behind it. */
-body.lx .ucard__art[data-empty="1"] img { display: none; }
-body.lx .ucard__art::before { opacity: .35; }
-body.lx .ucard__art[data-empty="1"] .ucard__glyph { opacity: .9; }
-body.lx .ucard__head { color: var(--lx-ink); font-family: var(--lx-ui); }
 body.lx .stakebox {
   border: 2px solid var(--lx-4); border-radius: var(--lx-r-s);
   background: var(--lx-0);
@@ -337,20 +319,6 @@ body.lx .chips .btn {
 }
 body.lx .chips .btn:hover:not(:disabled) { background: var(--lx-5); color: var(--lx-ink); border: 0; }
 body.lx .chips .btn[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
-body.lx .wheel__ring { background: radial-gradient(closest-side, var(--lx-1) 68%, var(--lx-2) 70%, var(--lx-1) 100%); }
-body.lx .wheel__track { stroke: var(--lx-3); }
-body.lx .wheel__ticks .tick { stroke: var(--lx-4); }
-body.lx .utool__stat { letter-spacing: .08em; font-family: var(--lx-ui); }
-
-body.lx .upg #pullBtn {
-  height: 52px; border: 0; border-radius: var(--lx-r-s);
-  background: var(--lx-gold); color: var(--lx-on-gold);
-  font: 800 1rem var(--lx-ui); box-shadow: var(--lx-shade); filter: none;
-}
-body.lx .upg #pullBtn:hover:not(:disabled) { background: var(--lx-gold-hi); transform: none; filter: none; }
-/* Disabled still says what it needs ("Log in first"), so it stays readable: grey, not faded out. */
-body.lx .upg #pullBtn:disabled { background: var(--lx-4); color: var(--lx-text); opacity: 1; box-shadow: none; }
-body.lx .upg #pullBtn:disabled .btn__chev svg path { fill: var(--lx-mute); }
 body.lx .roulette { align-items: stretch; }
 body.lx .roulette__stage { align-self: stretch; }
 
