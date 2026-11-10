@@ -43,6 +43,9 @@ let root = null;
 let view = null;
 let snap = null; // the last GET /v1/crash
 let offsetMs = 0; // server clock minus this clock
+let offsetSet = false;
+let bestRttMs = Infinity;
+let flown = { id: null, seconds: 0 }; // the furthest the round in the air has been drawn
 let liveConnected = false;
 let busy = false;
 let pressed = null;
@@ -121,7 +124,7 @@ async function refresh() {
       const next = await api.get('/v1/crash');
       const received = Date.now();
       // The midpoint of the request is the best local estimate of when the server read its clock.
-      offsetMs = Date.parse(next.serverTime) - (sent + received) / 2;
+      syncClock(Date.parse(next.serverTime) - (sent + received) / 2, received - sent);
       root.dataset.error = '';
       apply(next);
     } catch {
@@ -135,6 +138,23 @@ async function refresh() {
     await wait(180);
     return refresh();
   }
+}
+
+/** The server's clock, kept steady. The first reading is taken as it is; later ones nudge it, a quick
+ * round trip more than a slow one, so a refresh in the middle of a round never jolts the curve. A
+ * reading far off (the machine's clock was changed) is taken at once. */
+function syncClock(sample, rttMs) {
+  if (!Number.isFinite(sample)) return;
+  if (!offsetSet) {
+    offsetMs = sample;
+    offsetSet = true;
+    bestRttMs = rttMs;
+    return;
+  }
+  bestRttMs = Math.min(bestRttMs * 1.05, rttMs);
+  const off = sample - offsetMs;
+  if (Math.abs(off) > 1500) offsetMs = sample;
+  else offsetMs += off * (rttMs <= bestRttMs * 1.5 ? 0.3 : 0.05);
 }
 
 function apply(next) {
@@ -662,10 +682,12 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
     }
   }
 
-  // The head of the curve: the rocket riding it, or the burst where it went up.
+  // The head of the curve: the rocket riding it, or the burst where it went up. The rocket points
+  // along the curve's own slope there (dm/dt = g·m), not along the last few samples, so it turns
+  // smoothly as the curve steepens.
   const [hx, hy] = points[points.length - 1];
-  const [px0, py0] = points[Math.max(0, points.length - 4)];
-  const angle = Math.atan2(hy - py0, hx - px0);
+  const tip = Math.min(Math.exp(g * seconds), top);
+  const angle = Math.atan2((-g * tip * (h - pad.t - pad.b)) / spanY, (w - pad.l - pad.r) / spanX);
   if (bust) {
     sparks = [];
     drawBurst(hx, hy, Date.now() - bustAt);
@@ -682,7 +704,7 @@ function drawRocket(x, y, angle) {
   ctx.rotate(angle);
   const k = rocketScale();
   ctx.scale(k, k);
-  const flicker = reduceMotion() ? 0 : Math.sin(performance.now() / 45) * 3;
+  const flicker = reduceMotion() ? 0 : Math.sin(performance.now() / 90) * 1.2;
   ctx.fillStyle = palette.flame;
   ctx.beginPath();
   ctx.moveTo(-22, -4);
@@ -826,9 +848,15 @@ function render(now) {
     lastWhole = 1;
     sky?.update({ phase, id: snap.round.id });
   } else if (phase === 'running') {
-    const x = liveX100();
-    const seconds = (serverNow() - Date.parse(snap.round.startedAt)) / 1000;
-    drawCurve(seconds, x, { markers: markersFor(snap.bets, x) });
+    // Never behind where this round was last drawn: a clock correction does not pull the rocket back.
+    let seconds = Math.max(0, (serverNow() - Date.parse(snap.round.startedAt)) / 1000);
+    if (flown.id === snap.round.id) seconds = Math.max(seconds, flown.seconds);
+    flown = { id: snap.round.id, seconds };
+    const exact = 100 * Math.exp(growth() * seconds);
+    const x = Math.max(100, Math.floor(exact + 1e-9));
+    // The curve goes to the exact multiplier, not the floored hundredths: drawn to the floor, its tip
+    // went flat and then stepped up every hundredth, and the rocket riding it wobbled.
+    drawCurve(seconds, exact, { markers: markersFor(snap.bets, x) });
     big.textContent = x100(x);
     const bet = myBet();
     status.textContent = '';

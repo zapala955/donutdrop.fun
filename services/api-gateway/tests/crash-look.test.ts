@@ -19,6 +19,19 @@ describe('the crash table', () => {
     assert.doesNotMatch(page, /Math\.random\(/);
   });
 
+  it('keeps the rocket steady: the exact multiplier, the curve’s own slope, a clock that never jolts', async () => {
+    const page = await read('assets/js/crash.js');
+    // Drawn to the floored hundredths, the tip went flat and stepped every 0.01x and the rocket,
+    // aimed along the last few samples, swung up to 22° between frames.
+    assert.match(page, /const exact = 100 \* Math\.exp\(growth\(\) \* seconds\);/);
+    assert.match(page, /drawCurve\(seconds, exact, \{ markers: markersFor\(snap\.bets, x\) \}\);/);
+    assert.match(page, /const angle = Math\.atan2\(\(-g \* tip \* \(h - pad\.t - pad\.b\)\) \/ spanY, \(w - pad\.l - pad\.r\) \/ spanX\);/);
+    assert.doesNotMatch(page, /points\[Math\.max\(0, points\.length - 4\)\]/);
+    // A refresh nudges the clock rather than resetting it, and the round never steps back.
+    assert.match(page, /syncClock\(Date\.parse\(next\.serverTime\) - \(sent \+ received\) \/ 2, received - sent\);/);
+    assert.match(page, /if \(flown\.id === snap\.round\.id\) seconds = Math\.max\(seconds, flown\.seconds\);/);
+  });
+
   it('says nothing in words about how a round went, and shows a card for a cash-out only', async () => {
     const page = await read('assets/js/crash.js');
     // (The screen reader's one sentence per event still says it; nothing on screen does.)
