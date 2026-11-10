@@ -304,14 +304,63 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   .lxperk { height: 68px; }
 }
 @media (max-width: 599px) {
+  /* ── a phone (2026-11-10) ──
+     The games came a long scroll down: a 180px banner, a 48px search, a tab tray that cut off
+     "PvP" and hid "Cases", and under every row of cards a line kept empty for "N playing" whether
+     anyone was playing or not. Now the offers are a short strip, the tabs share the width, the
+     player count rides on the card, and the rewards are three tiles in a row. */
   .lxkbd { display: none; }
-  .lxtabs { margin: var(--lx-s4) calc(-1 * var(--lx-gut)) var(--lx-s5) 0; }
-  .lxtab { height: 40px; padding: 0 var(--lx-s4); font-size: .875rem; }
+
+  /* the offers: a strip of short cards, the next one peeking in */
+  .lxpromos { grid-template-columns: repeat(3, 84%); gap: var(--lx-s2); margin-bottom: var(--lx-s4); }
+  .lxpromo { grid-template-columns: 84px minmax(0, 1fr); min-height: 96px; }
+  .lxpromo__copy { gap: 3px; padding: var(--lx-s2) var(--lx-s3); }
+  .lxtag { padding: 1px 5px; font-size: .625rem; }
+  .lxpromo__h { font-size: .9375rem; line-height: 1.2; }
+  .lxpromo__p { font-size: .75rem; line-height: 1.35; -webkit-line-clamp: 1; }
+  .lxpromo__go { font-size: .8125rem; }
+
+  /* search and the tabs: one slim line each, every tab in sight */
+  .lxsearch { height: 42px; padding: 0 var(--lx-s2) 0 var(--lx-s3); border-width: 1px; border-color: var(--lx-3); }
+  .lxsearch > svg { width: 18px; height: 18px; }
+  .lxsearch input { font-size: .9375rem; }
+  .lxtabs { margin: var(--lx-s3) 0 var(--lx-s4); }
+  .lxtabs__track { width: 100%; padding: 3px; }
+  .lxtab { flex: 1 1 auto; justify-content: center; height: 34px; padding: 0 var(--lx-s2); font-size: .8125rem; }
+  .lxtab svg { display: none; }
+
+  /* the rows: tighter heads, cards four to a row with nothing kept empty under them */
+  .lxrow__head { margin-bottom: var(--lx-s2); }
+  .lxrow__h { gap: 6px; font-size: 1rem; }
+  .lxrow__h svg { width: 18px; height: 18px; }
   /* Four to a row on a phone: every game in four rows, a thumb's scroll from the top. */
-  .lxrow { --lx-card-gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .lxcard__badge { top: 5px; left: 5px; padding: 2px 5px; font-size: .5625rem; }
+  .lxrow { --lx-card-gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--lx-card-gap); padding-top: 0; }
+  .lxrow > li { position: relative; }
+  .lxslots { margin-top: var(--lx-s5); }
+  .lxcard__name { font-size: min(13.5cqi, 1.5rem); }
+  .lxcard__badge { top: 4px; left: 4px; padding: 1px 4px; font-size: .5625rem; }
   .lxcard__brand { display: none; }
-  .lxlive { margin-top: var(--lx-s1); font-size: .6875rem; }
+  /* "N playing" becomes a dot and the number, on the card's top corner; nobody playing, nothing */
+  .lxlive {
+    position: absolute; top: 4px; right: 4px; z-index: 2;
+    gap: 3px; margin: 0; padding: 2px 5px;
+    border-radius: var(--lx-r-pill);
+    background: var(--lx-0);
+    font-size: 0; line-height: 1;
+  }
+  .lxlive b { font-size: .625rem; }
+  .lxlive i { width: 5px; height: 5px; }
+  .lxlive[hidden] { display: none; }
+
+  /* rewards: three tiles in a row, the icon over the name */
+  .lxperks, .lxpulls { margin-top: var(--lx-s6); }
+  .lxperks__row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); }
+  .lxperk { flex-direction: column; justify-content: center; gap: var(--lx-s2); height: auto; min-height: 92px; padding: var(--lx-s3) var(--lx-s1); text-align: center; }
+  .lxperk__ico { width: 36px; height: 36px; padding: 8px; }
+  .lxperk__copy b { font-size: .8125rem; }
+  .lxperk__copy span { display: none; }
+  /* the feed's heading at the size of every other heading here */
+  body.lx .feed__title { font-size: 1rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

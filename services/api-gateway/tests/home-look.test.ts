@@ -24,8 +24,30 @@ describe('the lobby', () => {
     assert.doesNotMatch(css, /grid-auto-flow: column|scroll-snap-type: x mandatory;\n\s*scrollbar-width: none;\n\}|data-all|\.lxmore|\.lxarrow/);
     // Four to a row on a phone, and the "New" tag small enough not to cover the icon.
     const phone = css.slice(css.indexOf('@media (max-width: 599px) {'));
-    assert.match(phone, /\.lxrow \{ --lx-card-gap: 10px; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
-    assert.match(phone, /\.lxcard__badge \{ top: 5px; left: 5px; padding: 2px 5px; font-size: \.5625rem; \}/);
+    assert.match(phone, /\.lxrow \{ --lx-card-gap: 8px; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); gap: var\(--lx-card-gap\); padding-top: 0; \}/);
+    assert.match(phone, /\.lxcard__badge \{ top: 4px; left: 4px; padding: 1px 4px; font-size: \.5625rem; \}/);
+  });
+
+  it('puts the games near the top of a phone: a short offer strip, slim search, every tab in sight', async () => {
+    /* 2026-11-10: on a phone the games came a long scroll down -- a 180px banner, a 48px search, a
+     * tab tray that cut off PvP and hid Cases, and an empty line under every row of cards kept for
+     * "N playing". The first card now starts about 130px higher. */
+    const css = await read('assets/css/luxe-home.css');
+    const phone = css.slice(css.indexOf('@media (max-width: 599px) {'), css.indexOf('@media (prefers-reduced-motion: reduce) {'));
+    assert.match(phone, /\.lxpromos \{ grid-template-columns: repeat\(3, 84%\);/);
+    assert.match(phone, /\.lxpromo \{ grid-template-columns: 84px minmax\(0, 1fr\); min-height: 96px; \}/);
+    assert.match(phone, /\.lxpromo__p \{[^}]*-webkit-line-clamp: 1; \}/);
+    assert.match(phone, /\.lxsearch \{ height: 42px;/);
+    assert.match(phone, /\.lxtabs__track \{ width: 100%; padding: 3px; \}/);
+    assert.match(phone, /\.lxtab \{ flex: 1 1 auto; justify-content: center; height: 34px;/);
+    assert.match(phone, /\.lxtab svg \{ display: none; \}/);
+    // The player count rides on the card's corner, and takes no room when nobody is playing.
+    assert.match(phone, /\.lxlive \{\n\s*position: absolute; top: 4px; right: 4px; z-index: 2;/);
+    assert.match(phone, /\.lxlive\[hidden\] \{ display: none; \}/);
+    // The rewards: three tiles in a row, the icon over the name.
+    assert.match(phone, /\.lxperks__row \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+    assert.match(phone, /\.lxperk \{ flex-direction: column;/);
+    assert.match(phone, /\.lxperk__copy span \{ display: none; \}/);
   });
 
   it('keeps fourteen Originals and two slot machines, Ice Fishing, Coinflip and Mines Duel out', async () => {
