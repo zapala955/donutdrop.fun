@@ -10,8 +10,9 @@ import { describe, it } from 'node:test';
 
 const frontend = path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/Donut Drop');
 const read = async (file: string) => (await readFile(path.join(frontend, file), 'utf8')).replace(/\r\n/g, '\n');
+// The phone block that lays the table out (other sheets' phone blocks come and go around it).
 const phone = (css: string) => {
-  const at = css.lastIndexOf('@media (max-width: 1023px) {');
+  const at = css.lastIndexOf('@media (max-width: 1023px) {', css.indexOf('body.lx .bj { grid-template-columns: minmax(0, 1fr);'));
   return css.slice(at, css.indexOf('\n}\n', at));
 };
 

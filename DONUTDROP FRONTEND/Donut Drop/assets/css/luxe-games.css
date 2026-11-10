@@ -412,3 +412,87 @@ body.lx .feedrow__mult { text-shadow: none; }
   body.lx .mtile::after { animation: none; }
   body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover { transform: none; }
 }
+
+/* ═════════ the betting panel (2026-11-10) ═════════
+   The stages went flat and cool-dark game by game, but the panel beside them kept the crate page's
+   warm brown: dopamine.css warms the control steps (--lx-3..5) and lays a brown ramp on the frame,
+   so ½, 2×, the picks and the wells read as another site from the game they drive. The panel now
+   stands on the stages' own obsidian. With no theme picked, the control steps are luxe.css's own
+   cool ones (a theme brings its own ladder and keeps it); whatever is picked is flat gold, never the
+   ramp; and every control sits on a lip and presses in, as the stages' tiles and the main button do.
+   Colours are the tokens just below; nothing under them writes one. */
+:root:not([data-lxtheme]) body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
+  --lx-3: #24242b;
+  --lx-4: #2f2f38;
+  --lx-5: #3a3a45;
+}
+body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
+  --dd-ramp: var(--lx-gold);
+  --bp-lip: rgba(0, 0, 0, .5);
+  --bp-ease: cubic-bezier(.22, 1, .36, 1);
+  background: var(--lx-2);
+}
+
+/* The stake well: ½, 2× and Max are keys set into it, each on its own lip, not slabs bolted on. */
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake):has(> button) {
+  padding-right: 4px;
+}
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake) {
+  border-radius: 6px;
+}
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step) {
+  align-self: center;
+  height: 32px; min-width: 42px; margin: 0 0 2px 4px; padding: 0 var(--lx-s2);
+  border: 0; border-radius: 4px;
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  box-shadow: 0 2px 0 var(--bp-lip);
+  transition: transform 80ms var(--bp-ease), box-shadow 80ms var(--bp-ease), background 120ms;
+}
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step):active:not(:disabled) {
+  transform: translateY(2px); box-shadow: 0 0 0 var(--bp-lip);
+}
+
+/* The TNT stepper: the same well, − and + as keys at either end. */
+body.lx .view .mines__stepper { padding: 0 4px; border-radius: 6px; }
+body.lx .view .mines__stepper .mines__step { height: 32px; margin: 0 0 2px; border-radius: 4px; }
+
+/* Quick picks (a stake, a cash-out, a TNT count, an add): keys on a lip; the chosen one flat gold. */
+body.lx .view :is(.crash__pick, .mines__pick, .ug__add, .ug__bands .bandchip) {
+  border: 0; border-radius: 6px;
+  background: var(--lx-4); color: var(--lx-ink);
+  box-shadow: 0 3px 0 var(--bp-lip);
+  transition: transform 80ms var(--bp-ease), box-shadow 80ms var(--bp-ease), background 120ms;
+}
+body.lx .view :is(.crash__pick, .mines__pick, .ug__add, .ug__bands .bandchip):hover:not(:disabled) { background: var(--lx-5); }
+body.lx .view :is(.crash__pick, .mines__pick, .ug__add, .ug__bands .bandchip):active:not(:disabled) {
+  transform: translateY(2px); box-shadow: 0 1px 0 var(--bp-lip);
+}
+body.lx .view :is(.crash__pick, .mines__pick, .ug__bands .bandchip)[aria-pressed="true"],
+body.lx .view :is(.crash__pick, .mines__pick, .ug__bands .bandchip)[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  box-shadow: 0 3px 0 var(--lx-gold-lo);
+}
+
+/* The sliding pill under a difficulty or a risk: flat gold on a lip of its own. */
+body.lx .view :is(.tower__modes, .chicken__modes, .plinko__risks)::before { box-shadow: 0 2px 0 var(--lx-gold-lo); }
+
+/* What a win pays: a read-out, not a field to type in. */
+body.lx .view :is(.dice__field--read, .limbo__field--read) { background: var(--lx-1); border-color: var(--lx-3); }
+
+/* The panel meets the stage along a hairline: beside it on a desktop, above it on a phone. */
+body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
+  box-shadow: inset -1px 0 0 var(--lx-3);
+}
+body.lx .view .crash__players { box-shadow: inset -1px 0 0 var(--lx-3), inset 0 1px 0 var(--lx-3); }
+@media (max-width: 1023px) {
+  body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
+    box-shadow: inset 0 1px 0 var(--lx-3);
+  }
+  body.lx .view .crash__players { box-shadow: inset 0 1px 0 var(--lx-3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .mines__pick, .ug__add, .ug__bands .bandchip) { transition: none; }
+  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .mines__pick, .ug__add, .ug__bands .bandchip):active:not(:disabled) { transform: none; }
+}
