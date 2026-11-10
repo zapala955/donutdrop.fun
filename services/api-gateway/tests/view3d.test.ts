@@ -14,7 +14,6 @@ const PAGES = [
   ['roulette', 'wheel3d', 'wheelTried', 'roulette'],
   ['crash', 'sky', 'skyTried', 'crash'],
   ['chicken', 'road3d', 'roadTried', 'chicken'],
-  ['fishing', 'pond', 'pondTried', 'fishing'],
   ['tower', 'tower3d', 'towerTried', 'tower'],
   ['dice', 'range3d', 'rangeTried', 'dice'],
 ] as const;
@@ -22,6 +21,8 @@ const PAGES = [
 /* The pages that are always in 3D, with no switch: the same four things. */
 const ALWAYS = [
   ['icefishing', 'lake', 'lakeTried', 'icefish', '.icefish__lake'],
+  // 2026-11-10: the operator wants Fishing in 3D only.
+  ['fishing', 'pond', 'pondTried', 'fishing', '.fishing__pond'],
   ['derby', 'track', 'trackTried', 'derby', '.derby__track'],
 ] as const;
 
@@ -65,10 +66,11 @@ describe('the 2D/3D switch', () => {
     assert.match(blackjack, /onViewChange\(function follow\(\) \{\n\s*if \(busy\) \{\n\s*setTimeout\(follow, 600\);/);
   });
 
-  it('is off across the site: every game flat and no choice shown, but Slots, Mob Derby and Ice Fishing keep their scenes', async () => {
-    const [view, css, slots, blackjack, coinflip, settings, derby, ice] = await Promise.all([
+  it('is off across the site: every game flat and no choice shown, but Slots, Mob Derby, Fishing and Ice Fishing keep their scenes', async () => {
+    const [view, css, slots, blackjack, coinflip, settings, derby, ice, fishing] = await Promise.all([
       front('assets/js/view3d.js'), front('assets/css/view3d.css'), front('assets/js/slots.js'), front('assets/js/blackjack.js'),
       front('assets/js/coinflip.js'), front('assets/js/settings.js'), front('assets/js/derby.js'), front('assets/js/icefishing.js'),
+      front('assets/js/fishing.js'),
     ]);
     assert.match(view, /export const SCENES_ON = false;/);
     // No switch on any game's panel, none in the top bar (gone from the first paint), none in settings.
@@ -78,10 +80,13 @@ describe('the 2D/3D switch', () => {
     assert.match(settings, /\.\.\.\(SCENES_ON \? \[games3d\.line\] : \[\]\)/);
     assert.match(blackjack, /group\.hidden = no3d \|\| !SCENES_ON;/);
     assert.match(coinflip, /switchRow\.hidden = !group;\n  if \(group\) group\.hidden = no3dCoin;/);
-    // Slots keeps its machine, and its graphics setting; Mob Derby and Ice Fishing never asked.
+    // Slots keeps its machine, and its graphics setting; Mob Derby, Fishing and Ice Fishing never asked.
     assert.match(slots, /else if \(root\.dataset\.scene !== '3d'\) root\.dataset\.scene = '3d';/);
     assert.ok(derby.includes('sceneLoading(root, host, true);') && !derby.includes('wants3d'));
     assert.ok(ice.includes('sceneLoading(root, host, true);') && !ice.includes('wants3d'));
+    assert.ok(fishing.includes('sceneLoading(root, host, true);') && !fishing.includes('wants3d'));
+    // Their graphics settings stay in sight; every other game's goes with its scene.
+    assert.match(css, /\[class\$="__gfx"\]:not\(\.derby__gfx, \.icefish__gfx, \.fishing__gfx\) \{ display: none; \}/);
     // The scenes themselves are all still there.
     for (const file of ['mines3d', 'plinko3d', 'roulette3d', 'crash3d', 'chicken3d', 'fishing3d', 'tower3d', 'dice3d', 'coin3d', 'blackjack3d']) {
       assert.ok((await front(`assets/js/${file}.js`)).length > 1000, file);

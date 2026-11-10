@@ -24,8 +24,8 @@
  * 3D IS OFF (2026-11-09). The site went flat, as a casino's games are: every game shows its 2D board,
  * and the choice is gone from the top bar, the settings page and every game's panel. The scenes are
  * all still here, untouched; `SCENES_ON = true` brings the choice and the scenes back. Slots, Mob
- * Derby and Ice Fishing are the exceptions: they keep their scenes, with no choice to make (they
- * never ask `wants3d`).
+ * Derby, Fishing and Ice Fishing are the exceptions: they keep their scenes, with no choice to make
+ * (they never ask `wants3d`). Fishing joined them on 2026-11-10: the operator wants it in 3D only.
  */
 
 export const SCENES_ON = false;
@@ -101,7 +101,8 @@ const LOADING = `
   </div>`;
 
 /** The loading screen over `host`, while 3D is wanted and `root`'s scene is not drawn yet. A game
- * that is always in 3D (Mob Derby, Ice Fishing) passes `wanted` true: the switch does not reach it. */
+ * that is always in 3D (Mob Derby, Fishing, Ice Fishing) passes `wanted` true: the switch does not
+ * reach it. */
 export function sceneLoading(root, host, wanted = wants3d()) {
   if (!root || !host || !wanted || 'no3d' in root.dataset || root.dataset.render === '3d') return;
   if (!host.querySelector(':scope > .scene3d-load')) host.insertAdjacentHTML('beforeend', LOADING);

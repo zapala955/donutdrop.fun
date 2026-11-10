@@ -30,7 +30,7 @@ import { openModal, toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { onNavigate } from './routing.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
-import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
+import { sceneLoaded, sceneLoading } from './view3d.js';
 
 const SINKERS = [
   { id: 'feather', label: 'Feather', note: 'Drifts down' },
@@ -213,23 +213,21 @@ async function send(stake) {
 
 /* ─────────── the sea ─────────── */
 
-/** Builds the 3D sea over the flat pond, once, as its own download. Any failure leaves the flat pond. */
+/** Builds the 3D sea over the flat pond, once, as its own download. Fishing is always in 3D
+ * (2026-11-10, the operator's call): the site's 2D switch does not reach it, as it does not reach Mob
+ * Derby. Only a machine without WebGL, or a failure, leaves the flat pond. */
 function startPond() {
-  if (pondTried || !wants3d()) return pondTried;
+  if (pondTried) return pondTried;
   pondTried = (async () => {
     const host = $('.fishing__pond', root);
-    sceneLoading(root, host);
+    sceneLoading(root, host, true);
     try {
       const { createPond3d } = await import('./fishing3d.js');
       const built = await createPond3d(host, { sinker, catches: Object.keys(config.catches), icon });
-      if (!built) root.dataset.no3d = '';
-      else if (!wants3d()) {
-        // Switched to 2D while it was loading.
-        built.dispose();
-        pondTried = null;
+      if (!built) {
+        root.dataset.no3d = '';
         return;
       }
-      if (!built) return;
       built.onLost = () => {
         if (pond === built) pond = null;
         built.dispose();
@@ -272,30 +270,6 @@ function setGraphics(value) {
     root.dataset.under = '0';
     if (config) void startPond();
   }
-  paintGraphics();
-}
-
-/** The 2D/3D switch (view3d.js): 2D puts the sea away for the flat board, 3D builds it again. */
-function setView(on) {
-  if (phase !== 'idle') {
-    // Switched somewhere else in the middle of a round: followed once the round lets go.
-    if (on === wants3d()) setTimeout(() => setView(wants3d()), 600);
-    paintGraphics();
-    return;
-  }
-  if (on !== wants3d()) {
-    setWants3d(on);
-    playSound('click');
-  }
-  if (!on) sceneLoaded(root);
-  if (!on && pond) {
-    pond.dispose();
-    pond = null;
-    pondTried = null;
-    root.dataset.render = '2d';
-    root.dataset.under = '0';
-  }
-  if (on && config) void startPond();
   paintGraphics();
 }
 
@@ -651,7 +625,6 @@ function paintSinkers() {
 }
 
 function paintGraphics() {
-  if (root) paintViewSwitch(root, $('#fishingView', root), { disabled: Boolean(phase !== 'idle') });
   const select = root && $('#fishingGfx', root);
   if (!select) return;
   const pref = graphicsPref();
@@ -911,7 +884,6 @@ function build() {
         <span class="fishing__label">Last casts</span>
         <ol class="fishing__log" id="fishingLog"></ol>
         <p class="fishing__logempty" id="fishingLogEmpty">Nothing caught yet.</p>
-        ${viewSwitch('fishingView')}
         <label class="fishing__gfx" for="fishingGfx">
           <span>Graphics</span>
           <select id="fishingGfx">${GRAPHICS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
@@ -948,10 +920,6 @@ function build() {
     $(`.fishing__sinker[data-sinker="${next}"]`, root)?.focus();
   });
   $('#fishingGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
-  onViewSwitch($('#fishingView', root), setView);
-  // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
-  // once, 3D only for the page on screen (the others build theirs when they are next opened).
-  onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
   // The one button: Cast, then Reel up.
   $('#fishingForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1007,6 +975,6 @@ export function mountFishing(section) {
     });
   }
   // A scene still to be built comes up behind the loading screen, not after the flat board.
-  if (!pondTried) sceneLoading(root, $('.fishing__pond', root));
+  if (!pondTried) sceneLoading(root, $('.fishing__pond', root), true);
   void load();
 }
