@@ -329,27 +329,28 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   .lxtab { flex: 1 1 auto; justify-content: center; height: 34px; padding: 0 var(--lx-s2); font-size: .8125rem; }
   .lxtab svg { display: none; }
 
-  /* the rows: tighter heads, cards four to a row with nothing kept empty under them */
+  /* the rows: tighter heads, cards three to a row with nothing kept empty under them */
   .lxrow__head { margin-bottom: var(--lx-s2); }
   .lxrow__h { gap: 6px; font-size: 1rem; }
   .lxrow__h svg { width: 18px; height: 18px; }
-  /* Four to a row on a phone: every game in four rows, a thumb's scroll from the top. */
-  .lxrow { --lx-card-gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--lx-card-gap); padding-top: 0; }
+  /* Three to a row on a phone (2026-11-10): four made each tile about 80px wide, too small to read
+     or hit. Three makes them about 110px, the icon a size up and the name with it. */
+  .lxrow { --lx-card-gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-card-gap); padding-top: 0; }
   .lxrow > li { position: relative; }
   .lxslots { margin-top: var(--lx-s5); }
-  .lxcard__name { font-size: min(13.5cqi, 1.5rem); }
-  .lxcard__badge { top: 4px; left: 4px; padding: 1px 4px; font-size: .5625rem; }
+  .lxcard__name { font-size: min(12.5cqi, 1.5rem); }
+  .lxcard__badge { top: 6px; left: 6px; padding: 2px 5px; font-size: .625rem; }
   .lxcard__brand { display: none; }
   /* "N playing" becomes a dot and the number, on the card's top corner; nobody playing, nothing */
   .lxlive {
-    position: absolute; top: 4px; right: 4px; z-index: 2;
+    position: absolute; top: 6px; right: 6px; z-index: 2;
     gap: 3px; margin: 0; padding: 2px 5px;
     border-radius: var(--lx-r-pill);
     background: var(--lx-0);
     font-size: 0; line-height: 1;
   }
-  .lxlive b { font-size: .625rem; }
-  .lxlive i { width: 5px; height: 5px; }
+  .lxlive b { font-size: .6875rem; }
+  .lxlive i { width: 6px; height: 6px; }
   .lxlive[hidden] { display: none; }
 
   /* rewards: three tiles in a row, the icon over the name */

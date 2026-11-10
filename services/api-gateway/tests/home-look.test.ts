@@ -22,10 +22,10 @@ describe('the lobby', () => {
     const css = await read('assets/css/luxe-home.css');
     assert.match(css, /\.lxrow \{\n\s*--lx-card-gap: 16px;\n\s*display: grid;\n\s*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
     assert.doesNotMatch(css, /grid-auto-flow: column|scroll-snap-type: x mandatory;\n\s*scrollbar-width: none;\n\}|data-all|\.lxmore|\.lxarrow/);
-    // Four to a row on a phone, and the "New" tag small enough not to cover the icon.
+    // Three to a row on a phone (four made the tiles too small), and the "New" tag clear of the icon.
     const phone = css.slice(css.indexOf('@media (max-width: 599px) {'));
-    assert.match(phone, /\.lxrow \{ --lx-card-gap: 8px; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); gap: var\(--lx-card-gap\); padding-top: 0; \}/);
-    assert.match(phone, /\.lxcard__badge \{ top: 4px; left: 4px; padding: 1px 4px; font-size: \.5625rem; \}/);
+    assert.match(phone, /\.lxrow \{ --lx-card-gap: 8px; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); gap: var\(--lx-card-gap\); padding-top: 0; \}/);
+    assert.match(phone, /\.lxcard__badge \{ top: 6px; left: 6px; padding: 2px 5px; font-size: \.625rem; \}/);
   });
 
   it('puts the games near the top of a phone: a short offer strip, slim search, every tab in sight', async () => {
@@ -42,7 +42,7 @@ describe('the lobby', () => {
     assert.match(phone, /\.lxtab \{ flex: 1 1 auto; justify-content: center; height: 34px;/);
     assert.match(phone, /\.lxtab svg \{ display: none; \}/);
     // The player count rides on the card's corner, and takes no room when nobody is playing.
-    assert.match(phone, /\.lxlive \{\n\s*position: absolute; top: 4px; right: 4px; z-index: 2;/);
+    assert.match(phone, /\.lxlive \{\n\s*position: absolute; top: 6px; right: 6px; z-index: 2;/);
     assert.match(phone, /\.lxlive\[hidden\] \{ display: none; \}/);
     // The rewards: three tiles in a row, the icon over the name.
     assert.match(phone, /\.lxperks__row \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
