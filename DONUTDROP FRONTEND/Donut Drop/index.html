@@ -769,14 +769,17 @@
       <header class="phead phead--game">
         <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/game-crates.svg" alt="" width="32" height="32" /></span>
         <div class="phead__txt">
-          <h1>Crates</h1>
+          <h1>Cases</h1>
           <span class="phead__tag">DonutLuxe Originals</span>
         </div>
         <button class="ihint phead__how" type="button"
-          aria-label="How it works: Every crate shows its full drop table and odds before you pay."
-          data-tip="Every crate shows its full drop table and odds before you pay."><span class="phead__howtxt">How it works</span></button>
+          aria-label="How it works: Every case shows its full drop table and odds before you pay."
+          data-tip="Every case shows its full drop table and odds before you pay."><span class="phead__howtxt">How it works</span></button>
       </header>
+      <!-- The game frame (the case and its drops, the controls beside them), the bar under it, then
+           every case to choose from: crates.js builds all three. -->
       <div class="crates" id="crateRoot"></div>
+      <section class="cratebrowse" id="crateBrowse" aria-labelledby="crateBrowseH"></section>
     </section>
 
     <!-- ─────── REFERRALS ─────── -->

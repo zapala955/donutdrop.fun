@@ -245,7 +245,8 @@ describe('the tower page', () => {
   it('sits in the shared game frame, in the site’s tokens', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/tower.css')]);
     assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, [^)]*\.plinko\) \{/);
-    assert.match(frame, /:is\(\.crash, \.mines, \.tower, [^)]*\.plinko, \.bj, \.roulette, \.upg\)/);
+    // Cases joined the frames on 2026-11-10 (cases-look.test.ts).
+    assert.match(frame, /:is\(\.crash, \.mines, \.tower, [^)]*\.plinko, \.bj, \.roulette, \.upg, \.crates\)/);
     // Every colour in the board's rules is a token; the few it needs are lifted to the top.
     const rules = css.slice(css.indexOf('/* ─────────── the tower'));
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');

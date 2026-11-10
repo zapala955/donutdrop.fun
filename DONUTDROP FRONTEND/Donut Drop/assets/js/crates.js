@@ -1,19 +1,21 @@
-/* crates.js — the crate bench.
+/* crates.js — the Cases page.
  *
- * Three regions that never move:
+ * Laid out as every game is (2026-11-10, "rewrite cases like u did with mines"):
  *
- *   LEFT   the bench. What is selected, how many, what it costs, and the one button that spends
- *          money. It stays put while you browse, so the commitment is always in the same place
- *          and never scrolls away mid-decision.
- *   RIGHT  the wall. Search, sort, two range filters, and the grid.
- *   FOOT   the drop table of whatever is selected, always open.
+ *   PANEL  left: which case, how many, quick unbox, and the one gold button that spends money.
+ *   STAGE  right, on the dark: the case itself -- its art, name, price, what it returns on
+ *          average, its edge, its best prize -- and every item in it with its odds. The odds are on
+ *          screen beside the button that charges you, never behind a click.
+ *   BAR    under both: the page's name and "How it works" (index.html, as every game has).
+ *   BROWSE under the bar: every case, with search, sort and the risk and price filters. Picking
+ *          one puts it on the stage.
  *
- * The drop table used to live behind an Inspect modal. Odds you have to click to see are odds
- * most people never look at, which is the wrong default for the one number that decides whether
- * a crate is worth opening. It is now simply on screen, beside the button that charges you.
+ * The opening itself -- the reel, the cutscene, the mystery keynote, the settlement deferred to the
+ * reel -- is the same code as before, untouched: openSelected() below and reel.js, cutscene.js,
+ * mystery.js. Only the page around it changed.
  */
 import { state, bus, openCase as requestCaseOpen, refreshCases } from './store.js';
-import { $, el, money, pct, safeImage, grouped } from './util.js';
+import { $, el, money, pct, safeImage, grouped, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { playReel, warmReel } from './reel.js';
@@ -75,19 +77,21 @@ const view = {
   quickOpen: false,
 };
 
-let root = null;
+let root = null; // the frame: panel and stage
+let browse = null; // every case, under the bar
 let selected = null;
 let opening = false;
 
 export function mountCrates(node) {
   root = $('#crateRoot', node);
-  if (!root) return;
+  browse = $('#crateBrowse', node);
+  if (!root || !browse) return;
   if (!root.dataset.built) {
     root.dataset.built = '1';
     build();
     bus.addEventListener('change', () => {
       if (!root.isConnected || opening) return;
-      // A crate that vanished from the catalogue must not stay selected on the bench.
+      // A crate that vanished from the catalogue must not stay on the stage.
       if (selected && !state.cases.some((crate) => crate.id === selected.id)) selected = null;
       paintAll();
     });
@@ -107,67 +111,106 @@ export function mountCrates(node) {
 /* ─────────── shape ─────────── */
 function build() {
   root.innerHTML = `
-    <div class="bench">
-      <!-- LEFT · the bench -->
-      <aside class="bench__rail" aria-label="Selected crate">
-        <div class="rail" id="railRoot"></div>
-      </aside>
+    <section class="cases__stage" aria-label="The case">
+      <div class="cases__show" id="casesShow">
+        <div class="cases__slot"><img class="cases__art" id="casesArt" alt="" width="128" height="128"></div>
+        <div class="cases__meta">
+          <span class="cases__risk mono" id="casesRisk"></span>
+          <h2 class="cases__name" id="casesName">Loading cases…</h2>
+          <span class="cases__price mono" id="casesPrice"></span>
+          <dl class="cases__facts">
+            <div><dt>Avg return</dt><dd class="mono" id="casesAvg">—</dd></div>
+            <div><dt>House edge</dt><dd class="mono" id="casesEdge">—</dd></div>
+            <div><dt>Top prize</dt><dd class="mono" id="casesTop">—</dd></div>
+            <div><dt>Mystery</dt><dd class="mono" id="casesMyst">—</dd></div>
+          </dl>
+        </div>
+      </div>
+      <div class="cases__items">
+        <div class="cases__itemshead">
+          <h3>In this case</h3>
+          <span class="cases__count mono" id="casesCount"></span>
+        </div>
+        <div class="cases__grid" id="casesItems" role="list" aria-label="Every item in this case, with its odds"></div>
+      </div>
+    </section>
 
-      <!-- RIGHT · the wall -->
-      <div class="bench__wall">
-        <div class="wallbar">
-          <label class="wallbar__search">
-            <span class="sronly">Search crates</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
-            <input type="search" id="crateSearch" placeholder="Search for crates…" autocomplete="off" spellcheck="false">
-          </label>
-          <label class="wallbar__sort">
-            <span class="sronly">Sort crates</span>
-            <select id="crateSort">
-              ${SORTS.map((sort) => `<option value="${sort.code}">${sort.label}</option>`).join('')}
-            </select>
-          </label>
+    <aside class="cases__panel" aria-label="Open the case">
+      <div class="cases__form">
+        <span class="cases__label">Case</span>
+        <div class="cases__pick">
+          <img id="casesPickArt" alt="" width="32" height="32">
+          <span class="cases__pickname" id="casesPickName">—</span>
+          <button type="button" class="cases__change" id="casesChange">Change</button>
         </div>
 
-        <div class="ranges">
-          <div class="range">
-            <span class="range__label">Risk</span>
-            <span class="range__pill range__pill--lo mono" id="riskLowOut">Safe</span>
-            <span class="range__pill range__pill--hi mono" id="riskHighOut">Jackpot</span>
-            <div class="range__track">
-              <i class="range__rail range__rail--risk"></i>
-              <i class="range__fill" id="riskFill"></i>
-              <input type="range" id="riskLow" min="0" max="${RISK_ORDER.length - 1}" step="1" value="0" aria-label="Lowest risk">
-              <input type="range" id="riskHigh" min="0" max="${RISK_ORDER.length - 1}" step="1" value="${RISK_ORDER.length - 1}" aria-label="Highest risk">
-            </div>
-          </div>
-
-          <div class="range">
-            <span class="range__label">Price</span>
-            <span class="range__pill range__pill--lo mono" id="priceLowOut">—</span>
-            <span class="range__pill range__pill--hi mono" id="priceHighOut">—</span>
-            <div class="range__track">
-              <i class="range__rail range__rail--price"></i>
-              <i class="range__fill" id="priceFill"></i>
-              <input type="range" id="priceLow" min="0" max="100" step="1" value="0" aria-label="Lowest price">
-              <input type="range" id="priceHigh" min="0" max="100" step="1" value="100" aria-label="Highest price">
-            </div>
-          </div>
+        <span class="cases__label" id="casesQtyLabel">Quantity</span>
+        <div class="cases__qty" role="group" aria-labelledby="casesQtyLabel">
+          ${QUANTITIES.map((n) => `<button type="button" class="cases__n" data-n="${n}" aria-pressed="${n === view.quantity}">${n}</button>`).join('')}
         </div>
 
-        <p class="wallcount mono" id="crateCount">—</p>
-        <div class="cratewall" id="crateWall"></div>
+        <button class="cases__quick" id="casesQuick" type="button" role="switch" aria-checked="${view.quickOpen}">
+          <span>Quick unbox</span>
+          <i aria-hidden="true"></i>
+        </button>
+
+        <button class="btn btn--go cases__go" id="casesGo" type="button">Open case</button>
+        <p class="cases__hint mono" id="casesHint" aria-live="polite"></p>
+      </div>
+    </aside>`;
+
+  browse.innerHTML = `
+    <div class="lxrow__head">
+      <h2 class="lxrow__h" id="crateBrowseH">All cases</h2>
+      <span class="wallcount mono" id="crateCount">—</span>
+    </div>
+    <div class="wallbar">
+      <label class="wallbar__search">
+        <span class="sronly">Search cases</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <input type="search" id="crateSearch" placeholder="Search for cases…" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="wallbar__sort">
+        <span class="sronly">Sort cases</span>
+        <select id="crateSort">
+          ${SORTS.map((sort) => `<option value="${sort.code}">${sort.label}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+
+    <div class="ranges">
+      <div class="range">
+        <span class="range__label">Risk</span>
+        <span class="range__pill range__pill--lo mono" id="riskLowOut">Safe</span>
+        <span class="range__pill range__pill--hi mono" id="riskHighOut">Jackpot</span>
+        <div class="range__track">
+          <i class="range__rail range__rail--risk"></i>
+          <i class="range__fill" id="riskFill"></i>
+          <input type="range" id="riskLow" min="0" max="${RISK_ORDER.length - 1}" step="1" value="0" aria-label="Lowest risk">
+          <input type="range" id="riskHigh" min="0" max="${RISK_ORDER.length - 1}" step="1" value="${RISK_ORDER.length - 1}" aria-label="Highest risk">
+        </div>
+      </div>
+
+      <div class="range">
+        <span class="range__label">Price</span>
+        <span class="range__pill range__pill--lo mono" id="priceLowOut">—</span>
+        <span class="range__pill range__pill--hi mono" id="priceHighOut">—</span>
+        <div class="range__track">
+          <i class="range__rail range__rail--price"></i>
+          <i class="range__fill" id="priceFill"></i>
+          <input type="range" id="priceLow" min="0" max="100" step="1" value="0" aria-label="Lowest price">
+          <input type="range" id="priceHigh" min="0" max="100" step="1" value="100" aria-label="Highest price">
+        </div>
       </div>
     </div>
 
-    <!-- FOOT · the drop table of whatever is selected -->
-    <section class="drawer" id="crateDrawer" aria-label="Drop table" hidden></section>`;
+    <div class="cratewall" id="crateWall"></div>`;
 
-  $('#crateSearch', root).addEventListener('input', (event) => {
+  $('#crateSearch', browse).addEventListener('input', (event) => {
     view.search = event.target.value.trim().toLowerCase();
     paintWall();
   });
-  $('#crateSort', root).addEventListener('change', (event) => {
+  $('#crateSort', browse).addEventListener('change', (event) => {
     view.sort = event.target.value;
     paintWall();
   });
@@ -182,6 +225,28 @@ function build() {
     view.pricePercentHigh = high;
     paintWall();
   });
+
+  for (const button of root.querySelectorAll('.cases__n')) {
+    button.addEventListener('click', () => {
+      view.quantity = Number(button.dataset.n);
+      paintPanel();
+    });
+  }
+  $('#casesQuick', root).addEventListener('click', () => {
+    view.quickOpen = !view.quickOpen;
+    paintPanel();
+  });
+  $('#casesChange', root).addEventListener('click', () => {
+    browse.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+    $('#crateSearch', browse).focus({ preventScroll: true });
+  });
+  $('#casesGo', root).addEventListener('click', () => {
+    if (!state.authenticated) {
+      $('#loginBtn')?.click();
+      return;
+    }
+    void openSelected();
+  });
 }
 
 /**
@@ -193,9 +258,9 @@ function build() {
  * refusing to move, because refusing feels broken under the hand.
  */
 function wireDualRange(name, onChange) {
-  const low = $(`#${name}Low`, root);
-  const high = $(`#${name}High`, root);
-  const fill = $(`#${name}Fill`, root);
+  const low = $(`#${name}Low`, browse);
+  const high = $(`#${name}High`, browse);
+  const fill = $(`#${name}Fill`, browse);
 
   const apply = (event) => {
     let lowValue = Number(low.value);
@@ -301,34 +366,42 @@ function visibleCrates() {
 
 /* ─────────── painting ─────────── */
 function paintAll() {
+  /* The stage is never empty while there are cases: the cheapest one stands on it until the player
+   * picks another. Showing a case is not spending on it; only the gold button does that. */
+  if (!selected && state.cases.length) {
+    selected = [...state.cases].sort((a, b) => a.price - b.price)[0];
+  }
   paintWall();
-  paintRail();
-  paintDrawer();
+  paintStage();
+  paintPanel();
 }
 
 function paintRangeLabels() {
   const bounds = priceBounds();
-  $('#riskLowOut', root).textContent = RISK_LABEL[RISK_ORDER[view.riskLow]] ?? '—';
-  $('#riskHighOut', root).textContent = RISK_LABEL[RISK_ORDER[view.riskHigh]] ?? '—';
-  $('#priceLowOut', root).textContent = bounds.max
+  $('#riskLowOut', browse).textContent = RISK_LABEL[RISK_ORDER[view.riskLow]] ?? '—';
+  $('#riskHighOut', browse).textContent = RISK_LABEL[RISK_ORDER[view.riskHigh]] ?? '—';
+  $('#priceLowOut', browse).textContent = bounds.max
     ? money(priceAtPercent(bounds, view.pricePercentLow))
     : '—';
-  $('#priceHighOut', root).textContent = bounds.max
+  $('#priceHighOut', browse).textContent = bounds.max
     ? money(priceAtPercent(bounds, view.pricePercentHigh))
     : '—';
 }
 
 function paintWall() {
-  if (!root?.isConnected) return;
+  if (!browse?.isConnected) return;
   paintRangeLabels();
 
-  const wall = $('#crateWall', root);
+  const wall = $('#crateWall', browse);
   const crates = visibleCrates();
-  $('#crateCount', root).textContent = `${crates.length} of ${state.cases.length} crates`;
+  $('#crateCount', browse).textContent = `${crates.length} of ${state.cases.length}`;
 
   wall.innerHTML = '';
   if (!crates.length) {
-    const empty = el('p', 'empty', 'Nothing matches those filters. Widen the risk or price range.');
+    // Before the catalogue arrives there is nothing to filter yet; say so rather than blame the filters.
+    const empty = el('p', 'empty', state.cases.length
+      ? 'Nothing matches those filters. Widen the risk or price range.'
+      : 'Loading cases…');
     wall.appendChild(empty);
     return;
   }
@@ -344,12 +417,8 @@ function paintWall() {
     card.dataset.on = chosen ? '1' : '0';
     card.setAttribute('aria-pressed', String(chosen));
 
-    /* The badge is the figure alone.
-     *
-     * It read "70% Very High" — two encodings of one fact, the longer of which forced the pill
-     * wide enough to crowd the art on a 164px card and wrapped outright on a phone. The colour
-     * already carries the band (gold through amber to ember), so the word was the third copy.
-     * The full wording stays on the tooltip for anyone who wants it spelled out. */
+    /* The badge is the figure alone: the colour already carries the band, and the full wording
+     * stays on the tooltip for anyone who wants it spelled out. */
     const percent = riskPercentOf(crate);
     const badge = el('span', 'cratecard__risk');
     badge.textContent = `${percent}%`;
@@ -372,210 +441,79 @@ function paintWall() {
 
     card.append(badge, art, name, price, foot);
     card.addEventListener('click', () => {
+      if (opening) return;
       selected = crate;
       paintAll();
       playSound('click');
+      // Up to the stage, if it has scrolled away: the case just picked is shown there.
+      if (root.getBoundingClientRect().top < 0) {
+        root.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+      }
     });
     wall.appendChild(card);
   }
 }
 
-function paintRail() {
-  const rail = $('#railRoot', root);
-  if (!rail) return;
-
+/** The case on the stage: art, name, price, its numbers, and every item in it. */
+function paintStage() {
+  if (!root?.isConnected) return;
+  const show = $('#casesShow', root);
+  const items = $('#casesItems', root);
   if (!selected) {
-    rail.innerHTML = `
-      <div class="rail__empty">
-        <span class="rail__label">Selected crate</span>
-        <p>Pick a crate to see every item in it and its odds, then open it here.</p>
-      </div>`;
+    show.dataset.empty = '1';
+    $('#casesName', root).textContent = state.cases.length ? 'Pick a case' : 'Loading cases…';
+    items.replaceChildren();
     return;
   }
+  delete show.dataset.empty;
 
-  const risk = riskOf(selected);
-  const total = selected.price * view.quantity;
-  const affordable = state.authenticated && state.balance >= total;
-
-  rail.innerHTML = `
-    <div class="rail__sec">
-      <span class="rail__label">Selected crate</span>
-      <div class="rail__pick">
-        <img alt="">
-        <span class="rail__pickmeta">
-          <b class="rail__name"></b>
-          <span class="rail__price mono"></span>
-        </span>
-      </div>
-    </div>
-
-    <div class="rail__sec">
-      <span class="rail__label">Quantity</span>
-      <div class="qty" role="group" aria-label="How many to open">
-        ${QUANTITIES.map((n) => `
-          <button class="qty__b" type="button" data-n="${n}"
-                  aria-pressed="${n === view.quantity}">${n}</button>`).join('')}
-      </div>
-    </div>
-
-    <button class="quick" id="railQuick" type="button" role="switch"
-            aria-checked="${view.quickOpen}">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg>
-      <span>Quick unbox</span>
-      <i class="quick__sw" aria-hidden="true"></i>
-    </button>
-
-    <div class="rail__cost">
-      <span class="rail__label">Total cost</span>
-      <b class="rail__total mono"></b>
-    </div>
-
-    <button class="btn btn--go rail__go" id="railOpen" ${affordable ? '' : 'disabled'}></button>
-    <p class="rail__note" id="railNote"></p>`;
-
-  rail.querySelector('.rail__pick').style.setProperty('--risk', riskColorFor(riskPercentOf(selected)));
-  rail.querySelector('.rail__pick img').src = safeImage(selected.art);
+  const percent = riskPercentOf(selected);
+  show.style.setProperty('--risk', riskColorFor(percent));
+  $('#casesArt', root).src = safeImage(selected.art);
   // Server-supplied strings go in as text, never as markup.
-  $('.rail__name', rail).textContent = selected.name;
-  $('.rail__price', rail).append(coin(), document.createTextNode(compact(selected.price)));
-  $('.rail__total', rail).append(coin(), document.createTextNode(compact(total)));
-
-  $('#railOpen', rail).textContent = !state.authenticated
-    ? 'Log in to open'
-    : affordable
-      ? view.quantity > 1 ? `Open ${view.quantity} crates` : 'Open crate'
-      : 'Insufficient balance';
-
-  /* The wallet figure, or nothing. A logged-out player is told to log in by the button directly
-   * above this line; restating the platform's integrity policy underneath it was a sentence
-   * nobody read in the one place it could not act on. */
-  $('#railNote', rail).textContent = state.authenticated ? money(state.balance) : '';
-
-  rail.querySelectorAll('.qty__b').forEach((button) => {
-    button.addEventListener('click', () => {
-      view.quantity = Number(button.dataset.n);
-      paintRail();
-      playSound('click');
-    });
-  });
-
-  $('#railQuick', rail).addEventListener('click', () => {
-    view.quickOpen = !view.quickOpen;
-    paintRail();
-  });
-
-  if (affordable) $('#railOpen', rail).addEventListener('click', openSelected);
-}
-
-function paintDrawer() {
-  const drawer = $('#crateDrawer', root);
-  if (!drawer) return;
-
-  if (!selected) {
-    drawer.hidden = true;
-    drawer.innerHTML = '';
-    return;
-  }
-  drawer.hidden = false;
+  $('#casesName', root).textContent = selected.name;
+  $('#casesRisk', root).textContent = `${percent}% · ${riskWordOf(selected)}`;
+  $('#casesRisk', root).title = `Volatility ${percent}% · ${RISK_LABEL[riskOf(selected)]} profile`;
+  $('#casesPrice', root).replaceChildren(coin(), document.createTextNode(money(selected.price)));
 
   const totalWeight = selected.drops.reduce((sum, drop) => sum + drop.weight, 0) || 1;
-  /* The mystery slot is pulled out and drawn first as a single golden `?`. It stays in the
-   * expected-value arithmetic below, because it is a real outcome with a real weight and leaving
-   * it out would understate what the crate returns. */
+  /* The mystery slot is drawn first as a single golden `?`. It stays in the expected-value
+   * arithmetic, because it is a real outcome with a real weight and leaving it out would
+   * understate what the case returns. */
   const hidden = mysteryDrops(selected);
   const sorted = ordinaryDrops(selected).sort((a, b) => b.value - a.value);
   const expected = selected.drops
     .reduce((sum, drop) => sum + (drop.weight / totalWeight) * drop.value, 0);
   const edge = (1 - expected / selected.price) * 100;
   const odds = mysteryOdds(selected);
+  const top = topMultiple(selected);
 
-  drawer.innerHTML = `
-    <header class="drawer__head">
-      <span class="drawer__title mono"></span>
-      <span class="drawer__facts mono">
-        <span>avg return <b></b></span>
-        <span>house edge <b></b></span>
-        <span>mystery <b></b></span>
-        <span class="drawer__count"></span>
-      </span>
-    </header>
-    <div class="drawer__rows" id="drawerRows"></div>`;
-
-  $('.drawer__title', drawer).textContent = `${selected.name} · items`;
-  const facts = drawer.querySelectorAll('.drawer__facts b');
-  facts[0].textContent = money(Math.round(expected));
-  facts[1].textContent = `${edge.toFixed(2)}%`;
-  /* The slot's own frequency, next to the edge, because it is no longer the same on every crate:
-   * it scales with price, so two crates side by side genuinely differ here and a player
-   * comparing them has to be able to see it. */
-  facts[2].textContent = odds ? `1 in ${grouped(odds)}` : '—';
-  $('.drawer__count', drawer).textContent = hidden.length
-    ? `${sorted.length} items + 1 mystery (${hidden.length} payloads)`
+  $('#casesAvg', root).textContent = money(Math.round(expected));
+  $('#casesEdge', root).textContent = `${edge.toFixed(2)}%`;
+  $('#casesTop', root).textContent = sorted.length
+    ? `${money(sorted[0].value)} · ${top >= 10 ? top.toFixed(0) : top.toFixed(1)}×`
+    : '—';
+  /* The slot's own frequency: it scales with price, so two cases side by side genuinely differ
+   * here and a player comparing them has to be able to see it. */
+  $('#casesMyst', root).textContent = odds ? `1 in ${grouped(odds)}` : '—';
+  $('#casesCount', root).textContent = hidden.length
+    ? `${sorted.length} items + 1 mystery`
     : `${sorted.length} items`;
 
-  const rows = $('#drawerRows', drawer);
+  items.replaceChildren();
 
-  /* Vertical wheel scrolls the strip sideways.
-   *
-   * A horizontal overflow container only responds to shift+wheel or a trackpad swipe, so on a
-   * mouse the row reads as a dead end: tiles are visibly cut off at the edge and nothing the
-   * pointer does moves them. Mapping deltaY onto scrollLeft is what makes it feel scrollable
-   * rather than merely be scrollable.
-   *
-   * passive: false because this calls preventDefault — without the explicit flag the browser
-   * assumes passive on a wheel listener and ignores the call, so the page would scroll behind the
-   * strip at the same time. */
-  rows.addEventListener('wheel', (event) => {
-    // A real horizontal gesture (trackpad, tilt wheel) is left alone; the browser handles it.
-    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-    const scrollable = rows.scrollWidth > rows.clientWidth + 1;
-    if (!scrollable) return;
-    event.preventDefault();
-    rows.scrollLeft += event.deltaY;
-  }, { passive: false });
-
-  // Reachable by keyboard, and announced, rather than being a mouse-only region.
-  rows.tabIndex = 0;
-  rows.setAttribute('role', 'group');
-  rows.setAttribute('aria-label', 'Drop table — scroll sideways for the full list');
-
-  /* The fades at each end are the affordance that says "there is more this way". They are toggled
-   * from the real scroll position, so a strip that fits shows neither and a strip scrolled to the
-   * end stops advertising a direction it cannot go. */
-  const paintEdges = () => {
-    const max = rows.scrollWidth - rows.clientWidth;
-    rows.dataset.more = max > 1 ? '1' : '0';
-    rows.dataset.atStart = rows.scrollLeft <= 1 ? '1' : '0';
-    rows.dataset.atEnd = rows.scrollLeft >= max - 1 ? '1' : '0';
-  };
-  rows.addEventListener('scroll', paintEdges, { passive: true });
-  requestAnimationFrame(paintEdges);
-
-  /* ONE `?` tile for the whole mystery slot.
-   *
-   * The sub-pool holds seven payloads, and this drew a tile for each of them — seven identical
-   * question marks in a row, all reading "$100M+ / 1 in 9.34K", which is wrong twice over. It is
-   * visually absurd, and the number was a lie: each tile printed the odds of the SLOT while
-   * appearing to describe one payload, so the strip claimed seven independent one-in-nine-thousand
-   * chances where there is exactly one.
-   *
-   * The slot is one outcome from the player's side. What is behind it is a detail of that one
-   * outcome, and it belongs in the tooltip and the reveal — not as seven tiles pretending to be
-   * seven drops. Naming the payloads on the strip would defeat the slot anyway; hiding the ODDS
-   * would make it a lottery with unpublished chances, which is the part that has to be verifiable.
-   */
+  /* ONE `?` tile for the whole mystery slot. The slot is one outcome from the player's side; what
+   * is behind it belongs in the tooltip and the reveal, not as seven tiles pretending to be seven
+   * drops. Its ODDS are always shown: a lottery with unpublished chances is the part that has to
+   * stay verifiable. */
   if (hidden.length) {
-    const hiddenWeight = hidden.reduce((sum, drop) => sum + drop.weight, 0);
-    const tile = el('div', 'droptile droptile--myst');
-    /* The tooltip carries the whole sub-pool: what can come out, how likely each payload is
-     * given the slot landed, and the true chance of each one from a single open. The `?` is the
-     * only outcome on this page whose contents are not drawn on screen, so it is the one that
-     * most needs its odds written out rather than implied. */
+    const tile = el('div', 'cases__item cases__item--myst');
+    tile.setAttribute('role', 'listitem');
     const floor = mysteryFloor(selected);
     const worst = mysteryWorstMultiple(selected);
     tile.title = [
       `Mystery slot — 1 in ${grouped(odds)} per open`,
-      `every payload is at least ${money(floor)} — ${worst.toFixed(1)}x this crate's price`,
+      `every payload is at least ${money(floor)} — ${worst.toFixed(1)}x this case's price`,
       '',
       ...mysteryPayloads(selected).map((payload) => {
         const share = payload.shareOfPool * 100;
@@ -585,58 +523,99 @@ function paintDrawer() {
       }),
     ].join('\n');
 
-    const glyph = el('span', 'droptile__q');
+    const glyph = el('span', 'cases__q');
     glyph.setAttribute('aria-hidden', 'true');
     glyph.textContent = '?';
 
-    /* The crate's OWN floor. A flat "$100M+" understated the high tiers by nearly four times. */
-    const value = el('span', 'droptile__val mono');
+    // The case's OWN floor: a flat "$100M+" understated the high tiers by nearly four times.
+    const value = el('span', 'cases__ival mono');
     value.textContent = `${money(floor)}+`;
 
-    const chance = el('span', 'droptile__odds mono');
-    /* Compact, because the tile is 84px wide and "1 in 1,000,000" clips to "1 in 1,000,0" — which
-     * reads as a different, much better number than the real one. The full figure stays on the
-     * tile title and in the reveal. */
-    chance.textContent = odds ? `1 in ${shortOdds(odds)}` : '1 in 1M';
-
-    /* The guaranteed multiple, but only while it is a figure anyone would compare. On a 5,000
-     * crate the floor is twenty thousand times the price, and "20000.0x min" is noise — the
-     * number only earns its place on the tile once the crate is expensive enough that a player
-     * might reasonably wonder whether the slot is still worth hitting. */
-    const label = el('span', 'droptile__name');
-    label.textContent = worst > 0 && worst < 1000
+    const name = el('span', 'cases__iname');
+    name.textContent = worst > 0 && worst < 1000
       ? `Mystery · ${worst >= 100 ? Math.round(worst) : worst.toFixed(1)}x min`
       : 'Mystery slot';
 
-    tile.append(glyph, value, chance, label);
-    rows.appendChild(tile);
-    // The combined weight of every payload behind the slot. Real and published; only the
-    // identities are withheld.
-    tile.dataset.weight = String(hiddenWeight);
+    const chance = el('span', 'cases__iodds mono');
+    chance.textContent = odds ? `1 in ${shortOdds(odds)}` : '1 in 1M';
+
+    tile.append(glyph, value, name, chance);
+    tile.dataset.weight = String(hidden.reduce((sum, drop) => sum + drop.weight, 0));
     tile.dataset.payloads = String(hidden.length);
+    items.appendChild(tile);
   }
+
   for (const drop of sorted) {
     const chance = drop.weight / totalWeight;
-    const tile = el('div', 'droptile');
+    const tile = el('div', 'cases__item');
+    tile.setAttribute('role', 'listitem');
     tile.style.setProperty('--rar', chanceColor(chance));
 
     const art = document.createElement('img');
     art.src = safeImage(drop.img);
     art.alt = '';
     art.loading = 'lazy';
+    art.width = 48;
+    art.height = 48;
 
-    const value = el('span', 'droptile__val mono');
+    const value = el('span', 'cases__ival mono');
     value.append(coin(), document.createTextNode(compact(drop.value)));
 
-    const odds = el('span', 'droptile__odds mono');
-    odds.textContent = chance < 0.0001 ? '<0.01%' : pct(chance, chance < 0.01 ? 2 : 1);
-
-    const name = el('span', 'droptile__name');
+    const name = el('span', 'cases__iname');
     name.textContent = drop.name;
 
-    tile.append(art, value, odds, name);
-    rows.appendChild(tile);
+    const odds = el('span', 'cases__iodds mono');
+    odds.textContent = chance < 0.0001 ? '<0.01%' : pct(chance, chance < 0.01 ? 2 : 1);
+
+    tile.append(art, value, name, odds);
+    items.appendChild(tile);
   }
+}
+
+/** The panel: the case in hand, how many, quick unbox, and the button that spends. */
+function paintPanel() {
+  if (!root?.isConnected) return;
+  const pickArt = $('#casesPickArt', root);
+  if (selected) {
+    pickArt.src = safeImage(selected.art);
+    pickArt.hidden = false;
+  } else {
+    pickArt.hidden = true;
+  }
+  $('#casesPickName', root).textContent = selected ? selected.name : 'No case picked';
+
+  for (const button of root.querySelectorAll('.cases__n')) {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.n) === view.quantity));
+    button.disabled = opening;
+  }
+  const quick = $('#casesQuick', root);
+  quick.setAttribute('aria-checked', String(view.quickOpen));
+  quick.disabled = opening;
+
+  const total = selected ? selected.price * view.quantity : 0;
+  const affordable = state.authenticated && state.balance >= total;
+  const go = $('#casesGo', root);
+  const hint = $('#casesHint', root);
+  const what = view.quantity > 1 ? `Open ${view.quantity} cases` : 'Open case';
+
+  if (!selected) {
+    go.textContent = 'Pick a case';
+    go.disabled = true;
+    hint.textContent = '';
+  } else if (!state.authenticated) {
+    go.textContent = 'Log in to open';
+    go.disabled = false;
+    hint.textContent = '';
+  } else {
+    go.textContent = opening ? 'Opening…' : `${what} · ${money(total)}`;
+    go.disabled = opening || !affordable;
+    /* The wallet figure, or why the button is off. */
+    hint.textContent = affordable || opening
+      ? `Balance ${money(state.balance)}`
+      : `Not enough balance: ${money(total)} needed`;
+  }
+  go.setAttribute('aria-busy', String(opening));
+  $('#casesChange', root).disabled = opening;
 }
 
 /* Rarer is hotter. Derived from the real chance rather than a stored rarity label, so the colour
@@ -670,8 +649,7 @@ async function openSelected() {
   }
 
   opening = true;
-  const button = $('#railOpen', root);
-  if (button) button.disabled = true;
+  paintPanel();
   playSound('click');
 
   let paidOut = 0;
@@ -759,7 +737,7 @@ async function openSelected() {
     });
   } finally {
     opening = false;
-    paintRail();
+    paintPanel();
   }
 }
 

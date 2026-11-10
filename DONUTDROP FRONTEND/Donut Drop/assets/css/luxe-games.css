@@ -16,12 +16,12 @@
 /* ═════════ the frame ═════════ */
 /* Only a single table gets the bar under it. A lobby (Coinflip, Mines Duel, Cases, Case Battles)
    is a list of tables, and its name goes on top like any page's. */
-body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
+body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) { display: flex; flex-direction: column; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > * { order: 1; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game { order: 2; }
 
 /* the bar under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game {
   display: flex; align-items: center; gap: var(--lx-s3);
   height: 56px; margin: 0; padding: 0 var(--lx-s2) 0 var(--lx-s5);
   border: 0; border-top: 2px solid var(--lx-2);
@@ -52,13 +52,13 @@ body.lx .phead--game .phead__how {
 body.lx .phead--game .phead__how:hover { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .phead--game .phead__how[aria-expanded="true"] { color: var(--lx-gold); }
 /* the bubble opens upward when the bar is under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how::after {
   top: auto; bottom: calc(100% + 10px); left: auto; right: 0;
   width: min(360px, 80vw);
   transform: translateY(3px);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:hover::after,
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
 
 /* ═════════ the single-player tables: Crash · Mines · Plinko ═════════ */
 body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko) {
@@ -239,7 +239,7 @@ body.lx .roulette__stage { background: var(--lx-0); }
 
 /* a lobby's title reads as a page title */
 body.lx .phead--game h1 { font-size: 1.375rem; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game h1 { font-size: 1.0625rem; }
 
 /* ═════════ Blackjack: controls left, the felt right ═════════ */
 body.lx .bj {
@@ -296,6 +296,228 @@ body.lx .bj__rules { font-family: var(--lx-ui); }
   --bj-felt-hi: var(--lx-2);
   --bj-felt-lo: var(--lx-0);
   --bj-back: var(--lx-1);
+}
+
+/* ═════════ Cases: the controls left, the case on the dark right, every case under the bar ═════════
+   Hallmark · component: Cases game frame · genre: atmospheric · theme: site tokens
+   states: the quantity keys, quick unbox and Change have default, hover, :focus-visible, :active,
+           [disabled] (while a case opens); the gold button adds aria-busy; a quantity is picked
+           (aria-pressed) and quick unbox is on or off (aria-checked).
+   2026-11-10, "rewrite cases like u did with mines": the bench, the wall and the drop strip were a
+   page of their own; they are now the frame every game has. The reel and the win reveal are their own
+   overlays (reel.js, cutscene.js, mystery.js) and nothing here touches them. */
+body.lx .crates {
+  --cases-lip: rgba(0, 0, 0, .5);
+  --cases-hair: rgba(255, 255, 255, .05);
+  --cases-drop: rgba(0, 0, 0, .45);
+  --cases-ease: cubic-bezier(.22, 1, .36, 1);
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  gap: 0;
+  align-items: stretch;
+  border-radius: var(--lx-r) var(--lx-r) 0 0;
+  background: var(--lx-2);
+  box-shadow: var(--lx-shade);
+  scroll-margin-top: calc(var(--lx-top) + var(--lx-s4));
+}
+
+/* ── the panel ── */
+body.lx .cases__panel {
+  grid-area: panel; min-width: 0;
+  padding: var(--lx-s3) var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r) 0 0 0;
+  background: var(--lx-2);
+  box-shadow: inset -1px 0 0 var(--lx-3);
+}
+.cases__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.cases__label { margin: var(--lx-s2) 0 0; color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+
+/* The case in hand: a well like the stake's, the case's sprite and name, and Change as a key in it. */
+.cases__pick {
+  display: flex; align-items: center; gap: var(--lx-s2);
+  height: 44px; padding: 0 4px 0 var(--lx-s2);
+  border: 2px solid var(--lx-4); border-radius: 6px;
+  background: var(--lx-0);
+}
+.cases__pick img { flex: none; width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
+.cases__pick img[hidden] { display: none; }
+.cases__pickname {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--lx-ink); font: 700 .875rem/1 var(--lx-ui);
+}
+.cases__change, .cases__n {
+  border: 0; cursor: pointer;
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui);
+  transition: transform 80ms var(--cases-ease), box-shadow 80ms var(--cases-ease), background 120ms;
+}
+.cases__change {
+  flex: none; align-self: center;
+  height: 32px; margin: 0 0 2px; padding: 0 var(--lx-s2);
+  border-radius: 4px;
+  box-shadow: 0 2px 0 var(--cases-lip);
+}
+.cases__change:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 0 0 var(--cases-lip); }
+
+/* How many: five keys on a lip; the chosen one flat gold. */
+.cases__qty { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.cases__n {
+  height: 36px; border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 3px 0 var(--cases-lip);
+}
+.cases__n:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--cases-lip); }
+.cases__n[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: 0 3px 0 var(--lx-gold-lo); }
+@media (hover: hover) {
+  .cases__change:hover:not(:disabled), .cases__n:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--lx-5); }
+}
+
+/* Quick unbox: a switch, gold when on. */
+.cases__quick {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s3);
+  height: 44px; margin-top: var(--lx-s2); padding: 0 var(--lx-s3);
+  border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--lx-1); box-shadow: inset 0 0 0 1px var(--lx-3);
+  color: var(--lx-text); font: 600 .875rem/1 var(--lx-ui);
+}
+.cases__quick i { position: relative; flex: none; width: 36px; height: 20px; border-radius: 999px; background: var(--lx-4); transition: background 150ms var(--cases-ease); }
+.cases__quick i::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--lx-mute);
+  transition: transform 150ms var(--cases-ease), background 150ms var(--cases-ease);
+}
+.cases__quick[aria-checked="true"] i { background: var(--lx-gold); }
+.cases__quick[aria-checked="true"] i::after { transform: translateX(16px); background: var(--lx-on-gold); }
+@media (hover: hover) { .cases__quick:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--lx-5); } }
+
+/* The one button: gold, the total on it, a lip it presses into, as every game's. */
+body.lx #casesGo {
+  display: block; width: 100%;
+  height: 52px; margin-top: 14px; padding: 0 var(--lx-s3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 0; border-radius: 6px;
+  background: var(--lx-gold); color: var(--lx-on-gold);
+  font: 800 1rem/52px var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 0 var(--lx-gold-lo);
+  filter: none;
+  touch-action: manipulation;
+  transition: background-color var(--lx-quick) var(--cases-ease), transform 120ms var(--cases-ease), box-shadow 120ms var(--cases-ease);
+}
+body.lx #casesGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--lx-gold-lo); }
+body.lx #casesGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lx-gold-lo); }
+body.lx #casesGo:disabled { opacity: .55; cursor: not-allowed; }
+body.lx #casesGo[aria-busy="true"] { opacity: 1; cursor: progress; }
+.cases__hint { min-height: 1.2em; margin: var(--lx-s1) 0 0; text-align: center; color: var(--lx-faint); font: 500 .75rem/1.2 var(--lx-ui); }
+
+.cases__change:focus-visible, .cases__n:focus-visible, .cases__quick:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx #casesGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+.cases__form :disabled:not(#casesGo) { opacity: .5; cursor: not-allowed; }
+
+/* ── the stage: the case, then everything in it ── */
+body.lx .cases__stage {
+  grid-area: stage; min-width: 0; min-height: 600px;
+  display: flex; flex-direction: column; gap: var(--lx-s6);
+  padding: var(--lx-s6);
+  border-radius: 0 var(--lx-r) 0 0;
+  background: var(--lx-0);
+}
+.cases__show { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--lx-s6); }
+/* The case's sprite in a slot, its risk colour along the slot's foot. */
+.cases__slot {
+  display: grid; place-items: center;
+  width: 176px; aspect-ratio: 1;
+  border-radius: var(--lx-r);
+  background: var(--lx-1);
+  box-shadow: inset 0 0 0 1px var(--cases-hair), inset 0 -3px 0 var(--risk, var(--lx-4));
+}
+.cases__art { width: 128px; height: 128px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 8px 0 var(--cases-drop)); }
+.cases__show[data-empty] .cases__art { visibility: hidden; }
+.cases__meta { display: flex; flex-direction: column; align-items: flex-start; gap: var(--lx-s2); min-width: 0; }
+.cases__risk {
+  padding: 4px 8px 3px; border-radius: 4px;
+  color: var(--risk, var(--lx-gold));
+  background: color-mix(in srgb, var(--risk, var(--lx-gold)) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--risk, var(--lx-gold)) 38%, transparent);
+  font: 800 .6875rem/1 var(--lx-display); letter-spacing: .08em; text-transform: uppercase;
+}
+.cases__risk:empty { display: none; }
+.cases__name {
+  margin: 0; max-width: 100%;
+  color: var(--lx-ink);
+  font: 900 clamp(1.375rem, 2.3vw, 2rem)/1.05 var(--lx-display);
+  text-transform: uppercase; overflow-wrap: anywhere;
+}
+.cases__price { display: inline-flex; align-items: center; gap: 6px; color: var(--lx-gold-hi); font: 800 1.125rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.cases__facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--lx-s2); width: 100%; margin: var(--lx-s2) 0 0; }
+.cases__facts div { min-width: 0; padding: var(--lx-s2) var(--lx-s3); border-radius: 6px; background: var(--lx-1); box-shadow: inset 0 0 0 1px var(--lx-3); }
+.cases__facts dt { margin: 0 0 4px; color: var(--lx-mute); font: 600 .6875rem/1 var(--lx-ui); }
+.cases__facts dd {
+  margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--lx-ink); font: 800 .875rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+
+.cases__items { display: flex; flex-direction: column; gap: var(--lx-s3); min-width: 0; }
+.cases__itemshead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-s3); }
+.cases__itemshead h3 { margin: 0; color: var(--lx-ink); font: 700 1rem/1.2 var(--lx-ui); }
+.cases__count { color: var(--lx-faint); font: 600 .75rem/1 var(--lx-ui); }
+.cases__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: var(--lx-s2); min-width: 0; }
+/* An item: its sprite, what it pays, its name, its odds; rarer is hotter along the top edge. */
+.cases__item {
+  display: grid; justify-items: center; align-content: start; gap: 4px;
+  min-width: 0; padding: var(--lx-s3) var(--lx-s2) var(--lx-s2);
+  border-radius: 6px;
+  background: var(--lx-1);
+  box-shadow: inset 0 2px 0 var(--rar, var(--lx-4)), inset 0 0 0 1px var(--cases-hair);
+  text-align: center;
+}
+.cases__item img { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 3px 0 var(--cases-drop)); }
+.cases__ival { display: inline-flex; align-items: center; gap: 4px; color: var(--lx-ink); font: 800 .875rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.cases__iname {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 2.5em; overflow-wrap: anywhere;
+  color: var(--lx-text); font: 600 .75rem/1.25 var(--lx-ui);
+}
+.cases__iodds { color: var(--rar, var(--lx-mute)); font: 700 .6875rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.cases__item--myst { --rar: var(--lx-gold); background: color-mix(in srgb, var(--lx-gold) 7%, var(--lx-1)); cursor: help; }
+.cases__q { display: grid; place-items: center; width: 48px; height: 48px; color: var(--lx-gold); font: 900 2rem/1 var(--lx-display); }
+
+/* ── every case, under the bar ── */
+body.lx .view:has(> .crates) > .cratebrowse { order: 3; margin-top: var(--lx-s8); gap: var(--lx-s3); }
+body.lx .cratebrowse .lxrow__head { margin: 0; }
+
+@media (max-width: 1023px) {
+  body.lx .crates { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  body.lx .cases__stage { min-height: 0; gap: var(--lx-s4); padding: var(--lx-s4); border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  body.lx .cases__panel { border-radius: 0; box-shadow: inset 0 1px 0 var(--lx-3); }
+  .cases__show { align-items: start; gap: var(--lx-s4); }
+  .cases__slot { width: 120px; }
+  .cases__art { width: 96px; height: 96px; filter: drop-shadow(0 6px 0 var(--cases-drop)); }
+  .cases__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The items become one sideways strip, so the gold button stays a short scroll from the case. */
+  .cases__grid {
+    grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 104px;
+    overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
+    padding-bottom: var(--lx-s1); scrollbar-width: thin;
+  }
+  .cases__item { scroll-snap-align: start; }
+}
+@media (max-width: 599px) {
+  .cases__show { gap: var(--lx-s3); }
+  .cases__slot { width: 88px; }
+  .cases__art { width: 64px; height: 64px; filter: drop-shadow(0 4px 0 var(--cases-drop)); }
+  .cases__price { font-size: 1rem; }
+  .cases__facts { gap: 6px; }
+  .cases__facts div { padding: 6px var(--lx-s2); }
+  body.lx .view:has(> .crates) > .cratebrowse { margin-top: var(--lx-s6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cases__change, .cases__n, .cases__quick i, .cases__quick i::after { transition: none; }
+  body.lx #casesGo { transition: none; }
+  .cases__change:active:not(:disabled), .cases__n:active:not(:disabled), body.lx #casesGo:active:not(:disabled) { transform: none; }
 }
 
 /* ═════════ Roulette: the wheel on the dark, the board on the panel ═════════ */

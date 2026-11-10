@@ -724,7 +724,7 @@ export function initAudioEngine() {
   document.addEventListener(
     'pointerover',
     (event) => {
-      const target = event.target.closest('.btn--go, .cratecard, .qty__b, .quick');
+      const target = event.target.closest('.btn--go, .cratecard, .cases__n, .cases__quick');
       if (!target || target.disabled) return;
       playSound('hover');
     },

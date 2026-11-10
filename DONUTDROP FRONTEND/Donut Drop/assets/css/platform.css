@@ -23,7 +23,7 @@
    Tables and the ticker are the only horizontal scrollers, and each owns its
    own overflow container.                                                   */
 
-.crates, .quests, .war, .fair {
+.crates, .cratebrowse, .quests, .war, .fair {
   --p-obsidian: #0a0a0c;
   --p-charcoal: #14120c;
   --p-panel:    #17140d;
