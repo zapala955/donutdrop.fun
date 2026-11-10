@@ -79,8 +79,12 @@ describe('turnstile verification', () => {
     const source = await readFile(path.join(process.cwd(), 'src/routes/auth-pay.ts'), 'utf8');
     const start = source.indexOf("'/v1/auth/pay/start'");
     const verify = source.indexOf('verifyTurnstile(config', start);
-    const botLookup = source.indexOf('await selectOnlineBot()', start);
+    /* The bot lookup and the sweep live in createPaymentChallenge since 2026-11-10 (shared with
+     * moving an account to another Minecraft account); the route must verify before it calls it. */
+    const botLookup = source.indexOf('await createPaymentChallenge(db, config', start);
     assert.ok(verify > start, 'the start route does not verify a challenge');
-    assert.ok(verify < botLookup, 'the challenge is checked after the bot lookup');
+    assert.ok(botLookup > verify, 'the challenge is checked after the bot lookup');
+    const helper = source.slice(source.indexOf('export async function createPaymentChallenge('));
+    assert.ok(helper.indexOf('pickReceivingBot(db, config)') < helper.indexOf('DELETE FROM auth_link_challenges'), 'the bot lookup comes before the sweep');
   });
 });

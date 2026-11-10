@@ -1,5 +1,5 @@
 import { randomInt, randomUUID } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { linkCookieName } from '../lib/auth.js';
@@ -86,14 +86,6 @@ export async function registerPayLoginRoutes(
     return unsigned.value;
   };
 
-  /* A public account that is online and matches its configured identity: the emptiest node of
-   * the pool, or the teller without one.
-   *
-   * A login nonce is paid to a name the player is shown, so this is a second place the vault's
-   * username must never be able to surface. Asking by role rather than for whichever bot happens
-   * to be online is what makes that a property of the code instead of an accident of ordering. */
-  const selectOnlineBot = async () => (await pickReceivingBot(db, config)) ?? undefined;
-
   /* What the browser needs to know before it can draw a challenge, and nothing else. Public on
    * purpose: the site key is rendered into the widget, and a deployment with Turnstile off answers
    * `enabled: false` so the sign-in card simply does not draw one. */
@@ -125,77 +117,13 @@ export async function registerPayLoginRoutes(
         await verifyTurnstile(config, body.turnstileToken, request.ip);
       }
 
-      const selectedBot = await selectOnlineBot();
-      if (!selectedBot) {
-        throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
-      }
-      // Expired challenges keep holding their amount, so the uniqueness guarantee never depends
-      // on a clock comparison inside an index predicate. Clearing them frees those amounts.
-      await db.query(
-        `DELETE FROM auth_link_challenges
-          WHERE method = 'payment' AND completed_at IS NULL AND confirmed_at IS NULL
-            AND expires_at <= now()`,
-      );
-
-      const browserToken = randomToken();
-      const span = config.payLoginMaxAmount - config.payLoginMinAmount + 1;
-      for (let attempt = 0; attempt < PAY_AMOUNT_ATTEMPTS; attempt += 1) {
-        const payAmount = config.payLoginMinAmount + randomInt(span);
-        const challengeId = randomUUID();
-        try {
-          await db.transaction(async (client) => {
-            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8842))', [
-              `payment-lane:${selectedBot.id}`,
-            ]);
-            await client.query(
-              `INSERT INTO auth_link_challenges
-                 (id, requested_username, normalized_username, code_hash, browser_token_hash,
-                  bot_id, expires_at, method, pay_amount, referral_code)
-               VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
-                       'payment', $8, $9)`,
-              [
-                challengeId,
-                body.minecraftUsername,
-                body.minecraftUsername.toLowerCase(),
-                // Unused by this method; the column is NOT NULL UNIQUE for the chat-code flow.
-                sha256(randomToken()),
-                sha256(browserToken),
-                selectedBot.id,
-                PAY_CHALLENGE_TTL_MINUTES,
-                payAmount,
-                body.referralCode ?? null,
-              ],
-            );
-          });
-          reply.setCookie(linkCookieName(config), browserToken, {
-            path: '/',
-            httpOnly: true,
-            secure: config.secureCookies,
-            sameSite: 'strict',
-            signed: true,
-            maxAge: PAY_CHALLENGE_TTL_MINUTES * 60,
-          });
-          return reply.code(201).send({
-            challengeId,
-            payAmount,
-            botUsername: selectedBot.username,
-            expiresInSeconds: PAY_CHALLENGE_TTL_MINUTES * 60,
-            instruction: `/pay ${selectedBot.username} ${payAmount}`,
-          });
-        } catch (error) {
-          // Another live challenge already owns that amount, so draw a different one.
-          const code =
-            error !== null && typeof error === 'object'
-              ? (error as { code?: unknown }).code
-              : undefined;
-          if (code !== UNIQUE_VIOLATION) throw error;
-        }
-      }
-      throw new AppError(
-        503,
-        'PAY_LOGIN_BUSY',
-        'Too many logins are in progress; try again in a few minutes',
-      );
+      const challenge = await createPaymentChallenge(db, config, {
+        minecraftUsername: body.minecraftUsername,
+        referralCode: body.referralCode ?? null,
+        relinkUserId: null,
+      });
+      setPaymentChallengeCookie(reply, config, challenge.browserToken);
+      return reply.code(201).send(paymentChallengeAnswer(challenge));
     },
   );
 
@@ -247,4 +175,110 @@ export async function registerPayLoginRoutes(
     );
     return { ...base, state: 'confirmed' };
   });
+}
+
+export interface PaymentChallenge {
+  challengeId: string;
+  payAmount: number;
+  botUsername: string;
+  browserToken: string;
+}
+
+/**
+ * A pay-login challenge: an exact amount the player pays the bot from the Minecraft account named.
+ * Shared by sign-in (relinkUserId null) and by moving an account to another Minecraft account
+ * (relinkUserId set): the same proof, and the same bot, amount and expiry rules, either way. A
+ * challenge marked with an account can only complete that move, never a sign-in (routes/auth.ts).
+ */
+export async function createPaymentChallenge(
+  db: Database,
+  config: AppConfig,
+  input: { minecraftUsername: string; referralCode: string | null; relinkUserId: string | null },
+): Promise<PaymentChallenge> {
+  /* A public account that is online and matches its configured identity: the emptiest node of
+   * the pool, or the teller without one.
+   *
+   * A login nonce is paid to a name the player is shown, so this is a second place the vault's
+   * username must never be able to surface. Asking by role rather than for whichever bot happens
+   * to be online is what makes that a property of the code instead of an accident of ordering. */
+  const selectedBot = await pickReceivingBot(db, config);
+  if (!selectedBot) {
+    throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
+  }
+  // Expired challenges keep holding their amount, so the uniqueness guarantee never depends
+  // on a clock comparison inside an index predicate. Clearing them frees those amounts.
+  await db.query(
+    `DELETE FROM auth_link_challenges
+      WHERE method = 'payment' AND completed_at IS NULL AND confirmed_at IS NULL
+        AND expires_at <= now()`,
+  );
+
+  const browserToken = randomToken();
+  const span = config.payLoginMaxAmount - config.payLoginMinAmount + 1;
+  for (let attempt = 0; attempt < PAY_AMOUNT_ATTEMPTS; attempt += 1) {
+    const payAmount = config.payLoginMinAmount + randomInt(span);
+    const challengeId = randomUUID();
+    try {
+      await db.transaction(async (client) => {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 8842))', [
+          `payment-lane:${selectedBot.id}`,
+        ]);
+        await client.query(
+          `INSERT INTO auth_link_challenges
+             (id, requested_username, normalized_username, code_hash, browser_token_hash,
+              bot_id, expires_at, method, pay_amount, referral_code, relink_user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(mins => $7),
+                   'payment', $8, $9, $10)`,
+          [
+            challengeId,
+            input.minecraftUsername,
+            input.minecraftUsername.toLowerCase(),
+            // Unused by this method; the column is NOT NULL UNIQUE for the chat-code flow.
+            sha256(randomToken()),
+            sha256(browserToken),
+            selectedBot.id,
+            PAY_CHALLENGE_TTL_MINUTES,
+            payAmount,
+            input.referralCode,
+            input.relinkUserId,
+          ],
+        );
+      });
+      return { challengeId, payAmount, botUsername: selectedBot.username, browserToken };
+    } catch (error) {
+      // Another live challenge already owns that amount, so draw a different one.
+      const code =
+        error !== null && typeof error === 'object'
+          ? (error as { code?: unknown }).code
+          : undefined;
+      if (code !== UNIQUE_VIOLATION) throw error;
+    }
+  }
+  throw new AppError(
+    503,
+    'PAY_LOGIN_BUSY',
+    'Too many logins are in progress; try again in a few minutes',
+  );
+}
+
+/** The browser's half of a challenge: a signed, HTTP-only cookie that only it holds. */
+export function setPaymentChallengeCookie(reply: FastifyReply, config: AppConfig, browserToken: string): void {
+  reply.setCookie(linkCookieName(config), browserToken, {
+    path: '/',
+    httpOnly: true,
+    secure: config.secureCookies,
+    sameSite: 'strict',
+    signed: true,
+    maxAge: PAY_CHALLENGE_TTL_MINUTES * 60,
+  });
+}
+
+export function paymentChallengeAnswer(challenge: PaymentChallenge) {
+  return {
+    challengeId: challenge.challengeId,
+    payAmount: challenge.payAmount,
+    botUsername: challenge.botUsername,
+    expiresInSeconds: PAY_CHALLENGE_TTL_MINUTES * 60,
+    instruction: `/pay ${challenge.botUsername} ${challenge.payAmount}`,
+  };
 }

@@ -39,6 +39,10 @@ const FILE_BACKED_SETTINGS = [
    * it is public by design and printed into the page; this one is what stops somebody minting
    * their own "passed" answer, so it is read the same careful way as every other secret here. */
   'TURNSTILE_SECRET_KEY',
+  /* The Resend API key the site sends its emails with (sign-in codes, account notices). Anyone
+   * holding it can send mail as donutluxe.com, so it is a secret file like the rest, never a line
+   * in the env file. See infra/vps/set-email.sh. */
+  'RESEND_API_KEY',
 ] as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1003,6 +1007,15 @@ const environmentSchema = z
     TURNSTILE_ENABLED: booleanString,
     TURNSTILE_SITE_KEY: z.string().max(128).default(''),
     TURNSTILE_SECRET_KEY: z.string().max(256).default(''),
+    /* Email (2026-11-10): an address linked to an account, sign-in by a code sent to it, and the
+     * Minecraft account changed on the strength of it. Off until a Resend key is in place. The daily
+     * limit is the provider plan's (Resend's free plan sends 100 a day); the site counts every email
+     * it sends over the last 24 hours and stops before it, so a busy day pauses email rather than
+     * having the provider refuse a sign-in code half way through. */
+    EMAIL_ENABLED: booleanString,
+    EMAIL_FROM: z.string().min(3).max(200).default('DonutLuxe <login@donutluxe.com>'),
+    EMAIL_DAILY_LIMIT: z.coerce.number().int().min(0).max(1_000_000).default(100),
+    RESEND_API_KEY: z.string().max(256).default(''),
     TRUSTED_PROXY_CIDRS: z.string().default('127.0.0.1/32,::1/128'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -1494,6 +1507,15 @@ const environmentSchema = z
         });
       }
     }
+    /* A placeholder key is what deploy.sh writes so the secret mount exists; email on with it would
+     * fail every send, so it is refused here, at boot, where it is one clear error. */
+    if (env.EMAIL_ENABLED && (!env.RESEND_API_KEY.startsWith('re_') || env.RESEND_API_KEY.length < 10)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['RESEND_API_KEY'],
+        message: 'must be a Resend API key (re_...) when EMAIL_ENABLED is on',
+      });
+    }
     // A daily rate with no ceiling compounds without bound. Refusing the combination outright is
     // safer than shipping a yield that only stops when someone notices the economy has drifted.
     if (env.VAULT_YIELD_BPS_PER_DAY > 0 && env.VAULT_YIELD_CAP_BPS === 0) {
@@ -1849,6 +1871,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     turnstileEnabled: env.TURNSTILE_ENABLED,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     turnstileSecretKey: env.TURNSTILE_SECRET_KEY,
+    emailEnabled: env.EMAIL_ENABLED,
+    emailFrom: env.EMAIL_FROM,
+    emailDailyLimit: env.EMAIL_DAILY_LIMIT,
+    resendApiKey: env.RESEND_API_KEY,
     trustedProxyCidrs,
     logLevel: env.LOG_LEVEL,
     secureCookies: env.NODE_ENV === 'production',

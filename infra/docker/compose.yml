@@ -247,6 +247,12 @@ services:
       TURNSTILE_ENABLED: '${TURNSTILE_ENABLED:-false}'
       TURNSTILE_SITE_KEY: '${TURNSTILE_SITE_KEY:-}'
       TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key
+      # Email: linking an address, signing in with a code, moving an account to another Minecraft
+      # account. Off until infra/vps/set-email.sh puts a Resend key in place and turns it on.
+      EMAIL_ENABLED: '${EMAIL_ENABLED:-false}'
+      EMAIL_FROM: '${EMAIL_FROM:-DonutLuxe <login@donutluxe.com>}'
+      EMAIL_DAILY_LIMIT: '${EMAIL_DAILY_LIMIT:-100}'
+      RESEND_API_KEY_FILE: /run/secrets/resend_api_key
       PAY_LOGIN_MIN_AMOUNT: '${PAY_LOGIN_MIN_AMOUNT:-100}'
       PAY_LOGIN_MAX_AMOUNT: '${PAY_LOGIN_MAX_AMOUNT:-999}'
       TRUSTED_PROXY_CIDRS: '${EDGE_NETWORK_CIDR:-172.30.0.0/24}'
@@ -267,6 +273,7 @@ services:
       - community_bot_hmac_key
       - turnstile_secret_key
       - discord_client_secret
+      - resend_api_key
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -624,6 +631,9 @@ secrets:
   # Defaulted for the same reason; deploy.sh writes a placeholder when the file does not exist yet.
   discord_client_secret:
     file: ${DISCORD_CLIENT_SECRET_FILE:-/opt/donutdrop/shared/secrets/discord-client-secret}
+  # Defaulted the same way; deploy.sh writes a placeholder until set-email.sh writes the real key.
+  resend_api_key:
+    file: ${RESEND_API_KEY_FILE:-/opt/donutdrop/shared/secrets/resend-api-key}
 
 volumes:
   postgres-data:

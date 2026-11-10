@@ -49,6 +49,7 @@ import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
 import { mountProfile, mountWallet, mountHistory, mountSettings } from './account.js';
+import { emailSignInOffered, offerEmailLink, renderEmailSignIn } from './email.js';
 import { mountSupport, mountTerms } from './info.js';
 import { mountStudio } from './studio.js';
 import { mountQuests } from './quests.js';
@@ -431,6 +432,8 @@ function openLoginModal() {
         <div class="auth__foot">
           <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
         </div>
+        <!-- Shown only while email sign-in is on and today's email allowance is not spent (email.js). -->
+        <button class="auth__link" type="button" id="linkByEmail" hidden>Have an email linked? Log in with email</button>
       </form>
       <div id="linkProgress" role="status"></div>`;
 
@@ -442,6 +445,23 @@ function openLoginModal() {
     const go = $('#linkGo', body);
     const slot = $('#linkChallenge', body);
     const inlineError = $('#linkError', body);
+
+    /* Log in with email: a code to the linked address instead of a payment. Offered only once the
+     * server says email is on and has allowance left today; back returns to this card. */
+    const byEmail = $('#linkByEmail', body);
+    void emailSignInOffered().then((offered) => {
+      if (offered && byEmail.isConnected) byEmail.hidden = false;
+    });
+    byEmail.addEventListener('click', () => {
+      renderEmailSignIn(body, {
+        loadTurnstile,
+        onBack: () => openLoginModal(),
+        onDone: (user) => {
+          closeModal();
+          toast({ kind: 'win', title: 'Welcome back', body: user.minecraftUsername });
+        },
+      });
+    });
 
     /* The signup offer, from the server's own settings. Hidden until they answer and hidden if the
      * bonus is switched off: a figure this screen cannot confirm is not one it should promise. The
@@ -1063,8 +1083,17 @@ async function finishLogin(challengeId, body) {
 
   try {
     const user = await completeLogin(challengeId);
-    if (signInOpen()) closeModal();
     toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
+    /* A first sign-up: the card stays open one more step to offer an email (skippable; the profile
+     * offers it again). A returning player's card closes as before. */
+    if (user.created && signInOpen()) {
+      await offerEmailLink(body, {
+        username: user.minecraftUsername,
+        onDone: () => { if ($('#modal').open) closeModal(); },
+      });
+      return;
+    }
+    if (signInOpen()) closeModal();
   } catch (error) {
     if (!body.isConnected) return;
     if (status) status.textContent = 'payment received, sign-in failed';

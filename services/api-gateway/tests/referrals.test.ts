@@ -589,7 +589,10 @@ describe('custom invite codes', () => {
       path.resolve(import.meta.dirname, '../src/routes/auth.ts'),
       'utf8',
     );
-    assert.match(auth, /!existing\.rows\[0\] && config\.referralsEnabled && challenge\.referral_code/);
+    /* `rewardable` is that same `!existing.rows[0]`, and also false for a Minecraft account an account
+     * moved away from (2026-11-10, routes/email.ts): it brought its invite with it once already. */
+    assert.match(auth, /const created = !existing\.rows\[0\];\n\s*const rewardable = created && !retired\.rows\[0\];/);
+    assert.match(auth, /rewardable && config\.referralsEnabled && challenge\.referral_code/);
     assert.match(auth, /INSERT INTO referrals \(referee_id, referrer_id, code\)/);
 
     /* Entering a code afterwards used to be impossible: an unlimited attach endpoint let an account

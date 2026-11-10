@@ -642,6 +642,166 @@ body.lx .feedrow__mult { text-shadow: none; }
   body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover { transform: none; }
 }
 
+/* ═════════ the profile, and email on the sign-in card (2026-11-10) ═════════
+   Hallmark · component: profile page + sign-in card steps · genre: atmospheric · theme: site tokens
+   states: every button here has default, hover, :focus-visible, :active and [disabled]; the busy
+           one carries aria-busy and its own label ("Sending…"); a field has default, hover, focus and
+           an error line under it; a code is accepted only as six digits.
+   The profile is the account at a glance (the head, the name, since when, the balance) and three cards
+   on the panel material: Email, the Minecraft account, sign-in. Flat, edged, gold only for what acts. */
+body.lx .prof { display: grid; gap: var(--lx-s4); }
+body.lx .prof__hero {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--lx-s4);
+  padding: var(--lx-s5);
+  border-radius: var(--lx-r);
+  background: var(--dd-panel, var(--lx-2));
+  box-shadow: var(--dd-edge, none), var(--lx-shade);
+}
+body.lx .prof__avatar {
+  flex: none; width: 72px; height: 72px;
+  border-radius: 8px;
+  background: var(--lx-0);
+  image-rendering: pixelated;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+body.lx .prof__avatar[hidden] { display: none; }
+body.lx .prof__who { flex: 1 1 200px; min-width: 0; }
+body.lx .prof__name { margin: 0; color: var(--lx-ink); font: 900 1.5rem/1.1 var(--lx-display); overflow-wrap: anywhere; }
+body.lx .prof__since { margin: 6px 0 0; color: var(--lx-mute); font: 500 .8125rem/1.3 var(--lx-ui); }
+body.lx .prof__since:empty { display: none; }
+body.lx .prof__money { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+body.lx .prof__k { color: var(--lx-mute); font: 600 .75rem/1 var(--lx-ui); }
+body.lx .prof__balance { color: var(--lx-gold-hi); font: 800 1.375rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .prof__hero .acct__actions { display: flex; flex-direction: row; gap: var(--lx-s2); margin: 0; }
+/* The same pair as the top bar: Deposit gold, Withdraw a grey key, side by side. */
+body.lx .prof__hero .acct__actions .btn {
+  height: 40px; min-width: 112px; padding: 0 var(--lx-s4); margin: 0;
+  border: 0; border-radius: 6px;
+  font: 700 .875rem/1 var(--lx-ui);
+  filter: none;
+}
+body.lx .prof__hero .acct__actions .btn--withdraw { background: var(--lx-4); color: var(--lx-ink); box-shadow: 0 3px 0 var(--lx-0); }
+body.lx .prof__hero .acct__actions .btn--go { background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: 0 3px 0 var(--lx-gold-lo); }
+@media (hover: hover) {
+  body.lx .prof__hero .acct__actions .btn--withdraw:hover { background: var(--lx-5); }
+  body.lx .prof__hero .acct__actions .btn--go:hover { background: var(--lx-gold-hi); }
+}
+
+body.lx .prof__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--lx-s4); align-items: start;
+}
+body.lx .prof__card {
+  display: flex; flex-direction: column; gap: var(--lx-s3); min-width: 0;
+  padding: var(--lx-s5);
+  border-radius: var(--lx-r);
+  background: var(--dd-panel, var(--lx-2));
+  box-shadow: var(--dd-edge, none), var(--lx-shade);
+}
+body.lx .prof__cardhead { display: flex; align-items: center; gap: var(--lx-s2); }
+body.lx .prof__icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; background: var(--lx-gold-wash); }
+body.lx .prof__icon svg { width: 18px; height: 18px; fill: var(--lx-gold); }
+body.lx .prof__h { margin: 0; color: var(--lx-ink); font: 700 1rem/1.2 var(--lx-ui); }
+body.lx .prof__body { display: flex; flex-direction: column; gap: var(--lx-s3); min-width: 0; }
+body.lx .prof__p { margin: 0; color: var(--lx-text); font: 500 .875rem/1.5 var(--lx-ui); }
+body.lx .prof__p b { color: var(--lx-ink); overflow-wrap: anywhere; }
+body.lx .prof__note { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--lx-ui); }
+body.lx .prof__steps { margin: 0; padding-left: 1.25em; color: var(--lx-text); font: 500 .875rem/1.6 var(--lx-ui); }
+body.lx .prof__steps b { color: var(--lx-ink); }
+body.lx .prof__value { display: flex; align-items: center; gap: var(--lx-s2); min-width: 0; }
+body.lx .prof__strong { min-width: 0; color: var(--lx-ink); font: 700 1rem/1.3 var(--lx-ui); overflow-wrap: anywhere; }
+body.lx .prof__tag {
+  flex: none; padding: 4px 7px 3px; border-radius: 4px;
+  background: var(--lx-gold-wash); color: var(--lx-gold-hi);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lx-gold) 38%, transparent);
+  font: 800 .625rem/1 var(--lx-display); letter-spacing: .1em; text-transform: uppercase;
+}
+body.lx .prof__head { flex: none; width: 40px; height: 40px; border-radius: 6px; background: var(--lx-0); image-rendering: pixelated; }
+body.lx .prof__head[hidden] { display: none; }
+body.lx .prof__form { display: grid; gap: var(--lx-s2); }
+
+/* buttons: grey keys on a lip; the one that moves things on is gold; quiet ones are outlined */
+body.lx .prof__actions { display: flex; flex-wrap: wrap; gap: var(--lx-s2); margin-top: var(--lx-s1); }
+body.lx .prof .prof__btn {
+  height: 40px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: 6px;
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .875rem/1 var(--lx-ui);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .5);
+  cursor: pointer;
+  transition: transform 80ms var(--lx-ease), box-shadow 80ms var(--lx-ease), background 120ms;
+}
+body.lx .prof .prof__btn.btn--go { background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: 0 3px 0 var(--lx-gold-lo); }
+body.lx .prof .prof__btn--quiet { background: transparent; color: var(--lx-text); box-shadow: inset 0 0 0 1px var(--lx-4); }
+body.lx .prof .prof__btn--danger { background: var(--lx-red); color: var(--lx-ink); box-shadow: 0 3px 0 rgba(0, 0, 0, .5); }
+@media (hover: hover) {
+  body.lx .prof .prof__btn:hover:not(:disabled) { background: var(--lx-5); }
+  body.lx .prof .prof__btn.btn--go:hover:not(:disabled) { background: var(--lx-gold-hi); }
+  body.lx .prof .prof__btn--quiet:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-ink); }
+}
+body.lx .prof .prof__btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, .5); }
+body.lx .prof .prof__btn--quiet:active:not(:disabled) { box-shadow: inset 0 0 0 1px var(--lx-5); }
+body.lx .prof .prof__btn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .prof .prof__btn:disabled { opacity: .5; cursor: not-allowed; }
+body.lx .prof .prof__btn[aria-busy="true"] { opacity: 1; cursor: progress; }
+
+/* the fields: the sign-in card's wells, here too */
+body.lx .prof .auth__label { margin: var(--lx-s1) 0 0; color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .prof .auth__field {
+  display: flex; align-items: center; gap: var(--lx-s2);
+  height: 44px; padding: 0 var(--lx-s3);
+  border: 2px solid var(--lx-4); border-radius: 6px;
+  background: var(--lx-0);
+}
+body.lx .prof .auth__field:hover { border-color: var(--lx-5); }
+body.lx .prof .auth__field:focus-within { border-color: var(--lx-gold); }
+body.lx .prof .auth__input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--lx-ink); font: 600 .9375rem var(--lx-ui); }
+body.lx .prof .auth__input:focus { outline: none; }
+body.lx .prof .auth__input::placeholder { color: var(--lx-faint); }
+body.lx .prof .auth__err { margin: 0; color: var(--lx-loss-text); font: 600 .8125rem/1.4 var(--lx-ui); }
+body.lx .prof .auth__err[hidden] { display: none; }
+body.lx .prof .auth__note { margin: 0; color: var(--lx-faint); font: 500 .75rem/1.45 var(--lx-ui); }
+body.lx .prof .auth__field--static { height: auto; min-height: 44px; padding: var(--lx-s2) var(--lx-s3); }
+body.lx .prof .auth__value { color: var(--lx-gold-hi); font: 700 1rem/1.3 var(--lx-ui); overflow-wrap: anywhere; }
+
+/* a code: six digits, spaced so they can be checked against the email at a glance */
+body.lx .auth__input--code { letter-spacing: .35em; font-variant-numeric: tabular-nums; }
+
+/* the sign-in card's new parts: "Log in with email", and a second button beside the main one */
+body.lx .modal .auth__link,
+body.lx .prof .auth__link {
+  display: block; margin: var(--lx-s3) auto 0; padding: var(--lx-s1) var(--lx-s2);
+  border: 0; background: none; cursor: pointer;
+  color: var(--lx-gold); font: 700 .8125rem/1.3 var(--lx-ui);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+body.lx .modal .auth__link[hidden] { display: none; }
+body.lx .modal .auth__link:hover { color: var(--lx-gold-hi); }
+body.lx .modal .auth__link:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; border-radius: 3px; }
+body.lx .modal .auth__foot--pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--lx-s2); align-items: end; }
+body.lx .modal .auth__ghost {
+  height: 52px; margin-top: 22px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-s);
+  background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .9375rem/1 var(--lx-ui); white-space: nowrap; cursor: pointer;
+}
+body.lx .modal .auth__ghost:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .modal .auth__ghost:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .modal .auth__ghost:disabled { opacity: .5; cursor: not-allowed; }
+body.lx .modal .auth__err[hidden] { display: none; }
+
+@media (max-width: 599px) {
+  body.lx .prof__hero { padding: var(--lx-s4); }
+  body.lx .prof__money { align-items: flex-start; flex-basis: 100%; }
+  body.lx .prof__hero .acct__actions { flex-basis: 100%; }
+  body.lx .prof__hero .acct__actions .btn { flex: 1; }
+  body.lx .prof__card { padding: var(--lx-s4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.lx .prof .prof__btn { transition: none; }
+  body.lx .prof .prof__btn:active:not(:disabled) { transform: none; }
+}
+
 /* ═════════ the betting panel (2026-11-10) ═════════
    The stages went flat and cool-dark game by game, but the panel beside them kept the crate page's
    warm brown: dopamine.css warms the control steps (--lx-3..5) and lays a brown ramp on the frame,

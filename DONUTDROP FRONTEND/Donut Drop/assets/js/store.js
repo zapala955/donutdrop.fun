@@ -478,6 +478,14 @@ export async function loginStatus(challengeId) {
 
 export async function completeLogin(challengeId) {
   const result = await api.post('/v1/auth/link/complete', { challengeId });
+  await adoptSession(result);
+  /* `created`: this payment made a brand-new account, so the sign-in card offers to link an email
+   * before it closes (email.js). Not kept on state.user. */
+  return { ...result.user, created: Boolean(result.created) };
+}
+
+/* A new session from the server, by any route in: the pay-login above or an email code. */
+async function adoptSession(result) {
   setCsrfToken(result.csrfToken);
   state.user = result.user;
   state.authenticated = true;
@@ -491,7 +499,34 @@ export async function completeLogin(challengeId) {
     console.warn('Post-login data refresh failed', error);
   }
   emit('login');
+}
+
+/* ─────────── email (2026-11-10) ───────────
+ * An address linked to the account, sign-in by a code sent to it, and moving the account to another
+ * Minecraft account once one is linked. Every figure and every rule is the server's (routes/email.ts);
+ * these only carry the requests. */
+export const emailConfig = () => api.get('/v1/auth/email/config');
+export const emailLoginStart = (email, turnstileToken) =>
+  api.post('/v1/auth/email/start', turnstileToken ? { email, turnstileToken } : { email });
+export async function emailLoginComplete(email, code) {
+  const result = await api.post('/v1/auth/email/complete', { email, code });
+  await adoptSession(result);
   return result.user;
+}
+export const accountEmail = () => api.get('/v1/account/email');
+export const emailLinkStart = (email, confirmCode) =>
+  api.post('/v1/account/email/start', confirmCode ? { email, confirmCode } : { email });
+export const emailLinkVerify = (code) => api.post('/v1/account/email/verify', { code });
+export const emailConfirmCode = (action) => api.post('/v1/account/email/confirm-code', { action });
+export const emailRemove = (code) => api.post('/v1/account/email/remove', { code });
+export const relinkStart = (minecraftUsername, code) =>
+  api.post('/v1/account/minecraft/start', { minecraftUsername, code });
+export async function relinkComplete(challengeId) {
+  const result = await api.post('/v1/account/minecraft/complete', { challengeId });
+  // The header, the profile and every "you" on the page now read the new name.
+  state.user = { ...state.user, ...result.user };
+  emit('login');
+  return result;
 }
 
 /* Developer login. Skips the pay-login challenge so the site can be worked on with no custody
@@ -513,6 +548,16 @@ export async function devLogin(token, balanceMinor) {
 
 export async function logout() {
   await api.post('/v1/auth/logout', {});
+  forgetSession();
+}
+
+/* Every session of the account ends, on every device, this one included (the profile's button). */
+export async function logoutEverywhere() {
+  await api.post('/v1/auth/logout-all', {});
+  forgetSession();
+}
+
+function forgetSession() {
   state.authenticated = false;
   state.user = null;
   state.balance = 0;

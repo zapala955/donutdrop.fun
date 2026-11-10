@@ -17,8 +17,11 @@ import {
   refreshReferrals,
   attachReferralCode,
   roundHistory,
+  logoutEverywhere,
 } from './store.js';
+import { API_BASE_URL } from './api.js';
 import { $, el, money } from './util.js';
+import { emailCard, loadEmailInfo, minecraftCard } from './email.js';
 import { toast } from './ui.js';
 import { isShareable, shareRound } from './share.js';
 import { buildPreferences } from './settings.js';
@@ -201,37 +204,125 @@ function ledgerTable(rows) {
 
 // ─────────── /profile ───────────
 
+/* The profile (redesigned 2026-11-10): who the account is -- the Minecraft head and name, since
+ * when, the balance with Deposit and Withdraw -- then three cards: Email (link, change, remove), the
+ * Minecraft account (and moving to another one once an email is linked), and signing out everywhere.
+ *
+ * The cards are built once per account and then left alone: a balance or a feed update repaints the
+ * top of the page only, never a card in the middle of a flow (somebody typing a code). A card asks
+ * for a rebuild itself, through reloadCards(), once an action it ran has finished. */
 let profileRoot = null;
+let profileFor = null;
 
 export function mountProfile(view) {
   profileRoot = view;
   bindOnce(view, 'profile', () => paintProfile());
-  if (state.authenticated) {
-    refreshBalance(false).then(paintProfile).catch(() => undefined);
-  }
   paintProfile();
 }
+
+const avatarOf = (user, size) =>
+  `${API_BASE_URL}/v1/avatars/${encodeURIComponent(user.id)}?s=${size}&v=${encodeURIComponent(user.minecraftUsername ?? '')}`;
 
 function paintProfile() {
   if (!profileRoot?.isConnected) return;
   const root = ensureShell(profileRoot, 'Profile', 'profileRoot');
-  root.innerHTML = '';
 
   if (!state.authenticated) {
+    profileFor = null;
+    root.innerHTML = '';
     root.appendChild(notice('Log in to see your profile.'));
     return;
   }
 
   const user = state.user ?? {};
+  if (profileFor !== user.id || !$('.prof', root)) {
+    profileFor = user.id;
+    root.innerHTML = `
+      <div class="prof">
+        <section class="prof__hero">
+          <img class="prof__avatar" alt="" width="72" height="72">
+          <div class="prof__who">
+            <h2 class="prof__name"></h2>
+            <p class="prof__since"></p>
+          </div>
+          <div class="prof__money">
+            <span class="prof__k">Balance</span>
+            <b class="prof__balance mono"></b>
+          </div>
+        </section>
+        <div class="prof__grid"></div>
+      </div>`;
+    $('.prof__hero', root).appendChild(moneyActions());
+    $('.prof__avatar', root).addEventListener('error', (event) => { event.currentTarget.hidden = true; });
+    void reloadCards();
+    /* The page can be built before the session check answered (a refresh lands here signed out for
+     * a moment), so the account's own details are asked for here, once per account. */
+    Promise.allSettled([refreshBalance(false), refreshAccount(false)]).then(() => {
+      if ($('.prof', root)) paintHero(root, state.user ?? {});
+    });
+  }
+  paintHero(root, user);
+}
 
-  root.appendChild(
-    statGrid([
-      ['Username', String(user.minecraftUsername ?? '—'), null],
-      ['Balance', money(state.balance), 'gold'],
-    ]),
-  );
+function paintHero(root, user) {
+  const avatar = $('.prof__avatar', root);
+  const next = avatarOf(user, 72);
+  if (avatar.getAttribute('src') !== next) {
+    avatar.hidden = false;
+    avatar.src = next;
+  }
+  $('.prof__name', root).textContent = String(user.minecraftUsername ?? '—');
+  const since = state.account?.created_at;
+  $('.prof__since', root).textContent = since
+    ? `Member since ${new Date(since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
+    : '';
+  $('.prof__balance', root).textContent = money(state.balance);
+}
 
-  root.appendChild(moneyActions());
+/* The three cards, from the server's current answer. */
+async function reloadCards() {
+  const root = profileRoot && $('#profileRoot', profileRoot);
+  const grid = root && $('.prof__grid', root);
+  if (!grid) return;
+  if (!grid.children.length) {
+    grid.innerHTML = '<section class="prof__card prof__card--loading" aria-busy="true"><p class="prof__note">Loading…</p></section>';
+  }
+  const info = await loadEmailInfo();
+  if (!grid.isConnected || !state.authenticated) return;
+  const user = state.user ?? {};
+  const cards = info
+    ? [emailCard(info, reloadCards), minecraftCard(info, reloadCards, avatarOf(user, 40))]
+    : [notice('Your email and Minecraft settings could not be loaded. Reload the page to try again.')];
+  grid.replaceChildren(...cards, securityCard());
+  paintHero(root, user);
+}
+
+function securityCard() {
+  const section = el('section', 'prof__card');
+  section.innerHTML = `
+    <header class="prof__cardhead">
+      <span class="prof__icon" aria-hidden="true"><svg viewBox="0 0 256 256"><path d="M208,40H48A16,16,0,0,0,32,56v58.77c0,89.61,75.82,119.34,91,124.39a15.53,15.53,0,0,0,10,0c15.2-5.05,91-34.78,91-124.39V56A16,16,0,0,0,208,40Zm0,74.79c0,78.42-66.35,104.62-80,109.18-13.53-4.51-80-30.69-80-109.18V56H208ZM82.34,141.66a8,8,0,0,1,11.32-11.32L112,148.68l50.34-50.34a8,8,0,0,1,11.32,11.32l-56,56a8,8,0,0,1-11.32,0Z"/></svg></span>
+      <h2 class="prof__h">Sign-in</h2>
+    </header>
+    <div class="prof__body">
+      <p class="prof__p">Signed in somewhere you shouldn't be? End every session of this account, on
+        every device, this one included.</p>
+      <div class="prof__actions"><button class="btn prof__btn prof__btn--quiet" type="button">Log out everywhere</button></div>
+    </div>`;
+  const button = $('button', section);
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    button.textContent = 'Logging out…';
+    try {
+      await logoutEverywhere();
+      toast({ kind: 'win', title: 'Logged out everywhere', body: 'Every session of this account has ended.' });
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Log out everywhere';
+      toast({ kind: 'lose', title: 'Could not log out', body: error?.message || 'Try again.' });
+    }
+  });
+  return section;
 }
 
 /**

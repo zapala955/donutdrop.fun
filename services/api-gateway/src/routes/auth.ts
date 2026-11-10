@@ -68,6 +68,8 @@ interface ChallengeRow {
   attempts: number;
   /** Only selected by the completion path; the status route has no use for it. */
   referral_code?: string | null;
+  /** Set on a challenge that moves an account to another Minecraft account (routes/email.ts). */
+  relink_user_id?: string | null;
   expired: boolean;
 }
 
@@ -79,7 +81,7 @@ interface LinkedUser {
   status: string;
 }
 
-type LinkCompletion = { ok: true; user: LinkedUser } | { ok: false; error: AppError };
+type LinkCompletion = { ok: true; user: LinkedUser; created: boolean } | { ok: false; error: AppError };
 
 function generateLinkCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -200,7 +202,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         const result = await client.query<ChallengeRow>(
           `SELECT id, method, requested_username, pay_amount, confirmed_identity,
                   confirmed_username, confirmed_at, completed_at, attempts, referral_code,
-                  expires_at <= now() AS expired
+                  relink_user_id, expires_at <= now() AS expired
              FROM auth_link_challenges
             WHERE id = $1 AND browser_token_hash = $2 FOR UPDATE`,
           [body.challengeId, sha256(browserToken)],
@@ -209,6 +211,12 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         if (!challenge)
           throw new AppError(404, 'CHALLENGE_NOT_FOUND', 'Link challenge was not found');
         if (challenge.completed_at) conflict('CHALLENGE_USED', 'Link challenge was already used');
+        /* A challenge made to move an account to another Minecraft account proves that account, and
+         * is finished from the profile that asked for it (POST /v1/account/minecraft/complete). Signing
+         * in with it here would create or open the other account instead, so it is refused. */
+        if (challenge.relink_user_id) {
+          conflict('CHALLENGE_IS_RELINK', 'This payment moves an account; finish it from your profile');
+        }
         if (challenge.attempts >= MAX_ADMIN_MFA_ATTEMPTS) {
           return { ok: false, error: adminMfaChallengeLocked() };
         }
@@ -241,6 +249,15 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
              FROM users WHERE minecraft_identity = $1 FOR UPDATE`,
           [minecraftIdentity],
         );
+        /* A Minecraft account that an account has moved away from (routes/email.ts) has no account
+         * now, so it can sign up again; but it already brought one sign-up bonus and one invite with
+         * it, and moving accounts round in a circle must not mint more. Such a sign-up gets neither. */
+        const retired = await client.query(
+          'SELECT 1 FROM minecraft_relinks WHERE old_identity = $1 LIMIT 1',
+          [minecraftIdentity],
+        );
+        const created = !existing.rows[0];
+        const rewardable = created && !retired.rows[0];
         let acceptedTotpCounter: bigint | null = null;
         let adminMfaKeyFingerprint: string | null = null;
         if (desiredRole === 'admin') {
@@ -359,7 +376,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
          * once for sharing the inviter's network. Such an account gets the invite signup bonus
          * instead of the ordinary one (below). */
         let invited = false;
-        if (!existing.rows[0] && config.referralsEnabled && challenge.referral_code) {
+        if (rewardable && config.referralsEnabled && challenge.referral_code) {
           /* A test twin's code (minted before 2026-10-24) binds the creator behind it, never the
            * play-money twin. */
           const referrer = await client.query<{ user_id: string }>(
@@ -395,7 +412,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
          * moment this codebase knows for certain that an account is new. Referenced by the account's
          * own id, so the ledger's unique (kind, reference_id) index is what makes a second one
          * impossible. Playable at once; withdrawable once its requirement has been wagered. */
-        if (!existing.rows[0] && invited && config.referralSignupBonusMinor > 0n) {
+        if (rewardable && invited && config.referralSignupBonusMinor > 0n) {
           /* Joined on a live invite: the invite signup bonus instead of the ordinary one, at once,
            * with its own wager multiplier. The same kind and reference as the ordinary bonus, so the
            * ledger's unique index still allows one signup bonus per account, of either size. */
@@ -408,7 +425,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
             'UPDATE referrals SET signup_bonus_wager_left_minor = $2 WHERE referee_id = $1',
             [row.id, bonusWager.toString()],
           );
-        } else if (!existing.rows[0] && config.signupBonusMinor > 0n) {
+        } else if (rewardable && config.signupBonusMinor > 0n) {
           await creditWallet(client, row.id, config.signupBonusMinor, 'signup_bonus', row.id);
           await addWagerRequirement(
             client,
@@ -436,6 +453,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
             `SELECT id, pay_amount FROM auth_link_challenges
               WHERE method = 'payment' AND confirmed_identity = $1
                 AND confirmed_at IS NOT NULL AND completed_at IS NULL
+                AND relink_user_id IS NULL
               ORDER BY confirmed_at, id FOR UPDATE`,
             [minecraftIdentity],
           );
@@ -494,7 +512,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
         await client.query('UPDATE auth_link_challenges SET completed_at = now() WHERE id = $1', [
           challenge.id,
         ]);
-        return { ok: true, user: row };
+        return { ok: true, user: row, created };
       });
 
       // MFA failures are represented as a committed transaction result. Throwing inside the
@@ -514,6 +532,8 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           status: user.status,
         },
         csrfToken,
+        /* A brand-new account: the sign-in card offers to link an email before it closes. */
+        created: completion.created,
       });
     },
   );
@@ -573,7 +593,7 @@ interface UsernameOwner {
   minecraft_identity: string;
 }
 
-async function unusedRelinkPlaceholder(client: DbClient, owner: UsernameOwner): Promise<string> {
+export async function unusedRelinkPlaceholder(client: DbClient, owner: UsernameOwner): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     // A leading '~' is deliberately outside Minecraft's username alphabet, so only this
     // ownership-recovery path can create these temporary values.

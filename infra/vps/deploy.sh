@@ -72,6 +72,19 @@ if [[ ! -s "$discord_secret_file" ]]; then
   echo "Wrote a placeholder $discord_secret_file (Discord OAuth stays off until it is set up)."
 fi
 
+# ── the Resend key, mounted the same way ──────────────────────────────────────────────────────────
+# Same bind-mount rule again. A placeholder cannot send anything, and the gateway refuses to start
+# with EMAIL_ENABLED on and no real key, so email stays off until set-email.sh writes one.
+resend_key_file="${RESEND_API_KEY_FILE:-/opt/donutdrop/shared/secrets/resend-api-key}"
+if [[ ! -s "$resend_key_file" ]]; then
+  secrets_dir="$(dirname "$resend_key_file")"
+  [[ -d "$secrets_dir" ]] || install -d -m 0700 "$secrets_dir"
+  printf '%s' 'not-configured' >"$resend_key_file"
+  chown 0:0 "$resend_key_file"
+  chmod 0444 "$resend_key_file"
+  echo "Wrote a placeholder $resend_key_file (email stays off until set-email.sh is run)."
+fi
+
 "${compose[@]}" config --quiet
 
 # Preserve the exact images currently serving traffic. If the new API never becomes ready they
