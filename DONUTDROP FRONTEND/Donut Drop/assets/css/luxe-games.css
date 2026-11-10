@@ -264,9 +264,26 @@ body.lx .bj__stake span { color: var(--lx-gold); font: 700 .9375rem var(--lx-ui)
 body.lx .bj__stake input { color: var(--lx-ink); font: 700 .9375rem var(--lx-ui); }
 body.lx .bj .bj__deal, body.lx .bj__actions .btn { height: 52px; margin-top: var(--lx-s3); font-size: 1rem; }
 body.lx .bj__actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
-body.lx .bj__actions[hidden] { display: none; }
+/* One set of controls at a time. The grid above outranked the plain [hidden] rule, so the stake box and
+   a "Deal again" stayed on screen through a hand and pushed Hit, Stand and Double down the page. */
+body.lx .bj__betting[hidden], body.lx .bj__actions[hidden] { display: none; }
 body.lx .bj__actions .btn:not(.btn--go) { background: var(--lx-4); color: var(--lx-ink); }
-body.lx .bj__actions .btn:not(.btn--go):hover:not(:disabled) { background: var(--lx-5); }
+/* A finger leaves :hover behind on the button it last touched; only a pointer gets the lighter face. */
+@media (hover: hover) {
+  body.lx .bj__actions .btn:not(.btn--go):hover:not(:disabled) { background: var(--lx-5); }
+}
+/* The moves and the deal sit on a lip and press in, as every game's main button does. */
+body.lx .bj :is(.bj__deal, .bj__actions .btn) {
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none;
+  box-shadow: 0 4px 0 var(--bj-lip);
+  transition: transform 80ms var(--lx-ease, ease-out), box-shadow 80ms var(--lx-ease, ease-out), background 120ms;
+}
+body.lx .bj { --bj-lip: rgba(0, 0, 0, .5); }
+body.lx .bj :is(.bj__deal, .bj__actions .btn--go) { --bj-lip: var(--lx-gold-lo); }
+body.lx .bj :is(.bj__deal, .bj__actions .btn):active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--bj-lip); }
+body.lx .bj :is(.bj__deal, .bj__actions .btn):focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx .bj :is(.bj__deal, .bj__actions .btn):disabled { opacity: .45; cursor: not-allowed; }
+body.lx .bj :is(.bj__deal, .bj__actions .btn)[aria-busy="true"] { opacity: 1; cursor: progress; }
 body.lx .bj__actions .btn kbd { font-family: var(--lx-ui); border-color: currentColor; }
 body.lx .bj__hint { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
 body.lx .bj__label { color: var(--lx-text); font: 700 .875rem var(--lx-ui); text-transform: none; letter-spacing: 0; }
@@ -369,12 +386,29 @@ body.lx .feedrow__mult { text-shadow: none; }
   /* Blackjack was left out of the one-column layout: on a phone its 260px controls kept their column
      and the felt was squeezed into what was left. The table goes on top, as every game's stage does. */
   body.lx .bj { grid-template-columns: minmax(0, 1fr); grid-template-areas: "table" "controls"; }
-  body.lx .bj__table { min-height: 480px; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  /* The table gives up height until the moves fit above the bottom bar: what is left of the screen
+     after the top bar (80px), the controls (164px) and the bar (64px). No scrolling to reach Hit. */
+  body.lx .bj__table {
+    min-height: clamp(304px, calc(100dvh - 308px - env(safe-area-inset-bottom)), 480px);
+    padding: var(--lx-s4) var(--lx-s3);
+    border-radius: var(--lx-r) var(--lx-r) 0 0;
+  }
+  /* The arc is too small to read here; the line under it says the same at reading size. */
+  body.lx .bj__felt { display: none; }
+  body.lx .bj__rules-tie { display: inline; }
+  /* As tall with the stake and the deal as with the moves, so nothing below jumps between them. */
+  body.lx .bj__controls { min-height: 164px; }
+  body.lx .bj .bj__deal { height: 56px; margin-top: var(--lx-s1); }
+  /* Hit and Stand side by side under the thumb, Double across the row below. */
+  body.lx .bj__actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--lx-s3) var(--lx-s2); }
+  body.lx .bj__actions .btn { height: 56px; margin-top: 0; font-size: 1.0625rem; }
+  body.lx .bj__actions #bjDouble { grid-column: 1 / -1; height: 48px; font-size: 1rem; }
   body.lx .phead--game { padding-left: var(--lx-s4); }
   body.lx .phead--game .phead__tag { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  body.lx .bj :is(.bj__deal, .bj__actions .btn) { transition: none; }
   body.lx .mtile::after { animation: none; }
   body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:hover { transform: none; }
 }
