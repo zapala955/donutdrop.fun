@@ -11,7 +11,8 @@
  *         default, hover, chosen (lifted, ringed), disabled (will not fit the limit); the status
  *         bar -- betting (the countdown draining), spinning, settling, reconnecting; the hub --
  *         the pocket's own colour once it lands; the win card.
- * motion: the wheel turning to the pocket (roulette.js), the hub popping as it lands, your chip
+ * motion: the wheel turning one way and the ball the other, the ball falling off its track, skipping
+ *         over the frets and riding the winning pocket to the top (roulette.js), the hub popping as it lands, your chip
  *         dropping onto its spot, the countdown bar, the win card popping and counting up. Flat,
  *         no glow. Reduced motion: the wheel and the result are simply there.
  */
@@ -105,22 +106,41 @@ body.lx .roulette .roulette__stage {
   width: min(var(--rou-wheel), 100%);
   aspect-ratio: 1;
 }
-.roulette__wheel {
+/* The bowl, which does not turn: a rim, and inside it the track the ball runs on. The wheel sits
+   inside it at 85% of its radius; the ball's track (BALL_TRACK in roulette.js) is the band between. */
+.roulette__wheelwrap::before {
+  content: '';
   position: absolute;
   inset: 0;
-  border: 10px solid var(--lx-1);
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--lx-3), 0 0 0 1px var(--lx-3);
+  background: radial-gradient(circle closest-side, transparent 0 84.5%, #2c2c34 84.5% 86%, #141418 86% 96.5%, #2c2c34 96.5% 100%);
+}
+/* The wheel: the pockets in their colours with frets between (roulette.js), a metal edge. */
+.roulette__wheel {
+  position: absolute;
+  inset: 7.5%;
+  border: 3px solid #3a3a43;
+  border-radius: 50%;
   will-change: transform;
+}
+/* The pocket ring, a shade deeper than the numbers' ring, with a fine line between them. */
+.roulette__wheel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle closest-side, transparent 0 77%, rgba(255, 255, 255, .22) 77% 78%, transparent 78%),
+    radial-gradient(circle closest-side, transparent 0 51%, rgba(0, 0, 0, .28) 51% 77%, transparent 77%);
 }
 /* The cone in the middle the pockets run down to. */
 .roulette__wheel::after {
   content: '';
   position: absolute;
-  inset: 21%;
+  inset: 24%;
   border-radius: 50%;
   background: var(--lx-1);
-  box-shadow: 0 0 0 4px var(--lx-2);
+  box-shadow: 0 0 0 3px #3a3a43;
 }
 .roulette__wheel > span {
   position: absolute;
@@ -130,7 +150,7 @@ body.lx .roulette .roulette__stage {
   width: 22px;
   height: 50%;
   margin: -50% 0 0 -11px;
-  padding-top: 6px;
+  padding-top: 5px;
   box-sizing: border-box;
   transform-origin: 50% 100%;
   transform: rotate(var(--pocket-angle));
@@ -138,16 +158,25 @@ body.lx .roulette .roulette__stage {
   font: 800 10px/1 var(--lx-ui);
   text-align: center;
 }
-/* The ball's mark: fixed at the top, white so it reads on every pocket. */
-.roulette__pointer {
+/* The ball. Its orbit turns it round the centre (--a, from the top, clockwise); --r is how far out
+   it is, as a fraction of the wheel's width, which top: and the margins resolve against. */
+.roulette__orbit {
   position: absolute;
-  z-index: 5;
-  top: -9px;
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 18px solid var(--rou-ink);
+  z-index: 4;
+  inset: 0;
+  transform: rotate(var(--a, 0deg));
+  pointer-events: none;
+}
+.roulette__ball {
+  position: absolute;
+  left: 50%;
+  top: calc((0.5 - var(--r, 0.272)) * 100%);
+  width: 3.8%;
+  aspect-ratio: 1;
+  margin: -1.9% 0 0 -1.9%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 22%, #e4e6ea 45%, #a8acb5 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
 /* The result, in the colour of the pocket it landed in. */
 .roulette__hub {
@@ -460,6 +489,8 @@ body.lx .roulette .roulette__board {
 }
 .roulette__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .roulette:is([data-render="3d"], [data-render="loading"]) .roulette__wheel,
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__orbit,
+.roulette:is([data-render="3d"], [data-render="loading"]) .roulette__wheelwrap::before,
 .roulette:is([data-render="3d"], [data-render="loading"]) .roulette__pointer { display: none; }
 /* Over the fortress the result is a plate at the bottom, clear of the wheel. */
 .roulette:is([data-render="3d"], [data-render="loading"]) .roulette__hub {
@@ -522,8 +553,8 @@ body.lx .roulette .roulette__board {
   .roulette__choice { grid-template-columns: auto auto 1fr; align-items: baseline; column-gap: var(--lx-s2); }
   .roulette__choice i { justify-self: end; }
   .roulette__hub b { font-size: 1.75rem; }
-  .roulette__wheel > span { font-size: 8px; padding-top: 4px; }
-  .roulette__wheel { border-width: 8px; }
+  .roulette__wheel > span { font-size: 7.5px; padding-top: 3px; }
+  .roulette__wheel { border-width: 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

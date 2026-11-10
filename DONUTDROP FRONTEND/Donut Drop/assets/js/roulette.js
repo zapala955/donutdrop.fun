@@ -11,7 +11,13 @@
  * says how long betting has left. The wheel's hub takes the colour of the pocket it landed on, a
  * win pops a card over the wheel that counts up, and nothing toasts: the chip on the board is the
  * confirmation, the hub and the card are the result. Its own sounds: a chip clacking down, the
- * ball rattling round and dropping, and a win. */
+ * ball rattling round and dropping, and a win.
+ *
+ * The flat wheel is a roulette wheel, not a prize wheel: no pointer, a ball. The wheel turns
+ * clockwise; the ball is launched round the track outside the pockets the other way, slows, falls
+ * in, skips over a few frets, and is caught by the winning pocket and rides it to the top as the
+ * wheel stops (rollBall). It reads where the pocket really is from the wheel's own transform every
+ * frame, so it lands where the server said whatever the frame rate. */
 import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
 import { onNavigate } from './routing.js';
@@ -55,6 +61,12 @@ const CHIPS = Object.freeze([
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 /* The pop of the hub, a chip and the win card: quick out, a little past, settled. */
 const POP_EASE = 'cubic-bezier(.16, 1, .3, 1)';
+/* The ball, in fractions of the wheel's width from its centre: running on the track outside the
+ * pockets, and resting in a pocket. Both match the rings drawn in roulette.css. */
+const BALL_TRACK = 0.462;
+const BALL_POCKET = 0.272;
+/* How many times it goes round the track against the wheel before it is caught. */
+const BALL_TURNS = 3;
 const OUTSIDE = Object.freeze([
   ['low', '1–18'],
   ['even', 'Even'],
@@ -226,8 +238,8 @@ function build() {
         <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
       </div>
       <div class="roulette__wheelwrap">
-        <span class="roulette__pointer" aria-hidden="true"></span>
         <div class="roulette__wheel" id="rouletteWheel" aria-hidden="true"></div>
+        <div class="roulette__orbit" id="rouletteOrbit" aria-hidden="true"><span class="roulette__ball" id="rouletteBall"></span></div>
         <div class="roulette__hub" id="rouletteHub" data-color=""><b id="rouletteResult">—</b></div>
         <div class="roulette__win" id="rouletteWin" hidden><span>You won</span><b>$0</b></div>
       </div>
@@ -351,11 +363,13 @@ function build() {
 function buildWheel() {
   const wheel = $('#rouletteWheel', root);
   const step = 360 / ORDER.length;
+  /* Each pocket in its colour, with a thin fret before the next: a pocket wheel's dividers. */
+  const fret = 0.45;
   const stops = ORDER.map((number, index) => {
-    const start = (index * step).toFixed(5);
-    const end = ((index + 1) * step).toFixed(5);
+    const start = index * step;
+    const end = (index + 1) * step;
     const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#1c1c22';
-    return `${shade} ${start}deg ${end}deg`;
+    return `${shade} ${start.toFixed(4)}deg ${(end - fret).toFixed(4)}deg, #8d8f97 ${(end - fret).toFixed(4)}deg ${end.toFixed(4)}deg`;
   });
   wheel.style.background = `conic-gradient(from -${step / 2}deg, ${stops.join(',')})`;
   ORDER.forEach((number, index) => {
@@ -874,6 +888,60 @@ function setWheel(result) {
   wheel.style.transition = 'none';
   wheel.style.transform = `rotate(${wheelRotation}deg)`;
   wheel3d?.rest(index);
+  // The last result's pocket is at the top, and the ball sits in it.
+  placeBall(0, BALL_POCKET);
+}
+
+/* ─────────── the ball ─────────── */
+let ballFrame = 0;
+
+/** Puts the ball at `angle` degrees clockwise from the top, `radius` of the wheel's width out. */
+function placeBall(angle, radius) {
+  const orbit = $('#rouletteOrbit', root);
+  const ball = $('#rouletteBall', root);
+  if (!orbit || !ball) return;
+  orbit.style.setProperty('--a', `${angle.toFixed(2)}deg`);
+  ball.style.setProperty('--r', radius.toFixed(4));
+}
+
+/** The wheel's rotation as it is drawn right now, mid-transition included, in degrees. */
+function wheelAngleNow(wheel) {
+  const match = /matrix\(([^,]+),\s*([^,]+)/.exec(getComputedStyle(wheel).transform);
+  return match ? (Math.atan2(Number(match[2]), Number(match[1])) * 180) / Math.PI : 0;
+}
+
+/**
+ * The ball's run, for the length of the wheel's spin.
+ *
+ * Out of its pocket onto the track, round it anticlockwise (against the wheel) slowing on an
+ * ease-out, down off the track with a few bounces across the frets, and caught by the winning
+ * pocket: from 72% of the run it is drawn toward where that pocket really is, and from 88% it rides
+ * in it. At the end the wheel has the pocket at the top, so the ball is there too.
+ */
+function rollBall(index, ms) {
+  cancelAnimationFrame(ballFrame);
+  const wheel = $('#rouletteWheel', root);
+  const step = 360 / ORDER.length;
+  const started = performance.now();
+  const frame = (now) => {
+    if (!root?.isConnected) return;
+    const t = Math.min(1, (now - started) / ms);
+    const free = -BALL_TURNS * 360 * (1 - (1 - t) ** 3);
+    const pocket = wheelAngleNow(wheel) + index * step;
+    const pull = t < 0.72 ? 0 : t > 0.88 ? 1 : (t - 0.72) / 0.16;
+    const delta = ((((pocket - free) % 360) + 540) % 360) - 180;
+    const angle = free + delta * pull * pull * (3 - 2 * pull);
+    let radius = BALL_POCKET;
+    if (t < 0.06) radius = BALL_POCKET + (BALL_TRACK - BALL_POCKET) * (t / 0.06);
+    else if (t < 0.55) radius = BALL_TRACK;
+    else if (t < 0.85) {
+      const u = (t - 0.55) / 0.3;
+      radius = BALL_POCKET + (BALL_TRACK - BALL_POCKET) * (1 - u) ** 2 * Math.abs(Math.cos(u * Math.PI * 2.5));
+    }
+    placeBall(angle, radius);
+    if (t < 1) ballFrame = requestAnimationFrame(frame);
+  };
+  ballFrame = requestAnimationFrame(frame);
 }
 
 /**
@@ -948,6 +1016,8 @@ function spinTo(result, bets, opensAt) {
      * SITE until a reload — a far worse bug than the spoiler it was taken to prevent. */
     try {
       wheel.classList.remove('is-spinning');
+      cancelAnimationFrame(ballFrame);
+      placeBall(0, BALL_POCKET);
       pendingResultId = null;
       const face = $('#rouletteResult', root);
       if (face) face.textContent = String(result);
@@ -983,13 +1053,15 @@ function spinTo(result, bets, opensAt) {
   takeSpinHold();
   wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
   wheel.classList.add('is-spinning');
-  $('#rouletteResult', root).textContent = '•';
+  // Empty while the ball runs: a dot here read as a second ball.
+  $('#rouletteResult', root).textContent = '';
   $('#rouletteHub', root).dataset.color = '';
   $('#rouletteWin', root).hidden = true;
   if (!root.closest('.view')?.hidden) playSound('rouSpin');
   requestAnimationFrame(() => {
     wheel.style.transform = `rotate(${wheelRotation}deg)`;
   });
+  if (!wheel3d) rollBall(index, animationMs);
   window.setTimeout(finish, animationMs + 40);
 }
 
