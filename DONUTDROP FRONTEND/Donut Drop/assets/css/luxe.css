@@ -184,7 +184,10 @@ body[data-side="open"] .lxside__head {
   border: 0; background: none; color: var(--lx-mute); cursor: pointer;
 }
 body[data-side="open"] .lxside__burger { width: 32px; height: 40px; }
-.lxside__burger svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+/* The menu's icons are Phosphor glyphs (MIT licence, Copyright (c) 2023 Phosphor Icons, phosphoricons.com),
+   bold weight, one filled path each on a 256 grid (Plinko's pegs are drawn to the same grid):
+   one family, one weight, so no icon reads as drawn by a different hand (2026-11-10). */
+.lxside__burger svg { width: 22px; height: 22px; fill: currentColor; }
 .lxside__burger:hover { color: var(--lx-ink); }
 .lxside__burger:active { transform: scale(.94); }
 
@@ -203,7 +206,7 @@ body[data-side="open"] .lxmodes { flex-direction: row; flex: 1; min-width: 0; }
 .lxmode span { display: none; }
 body[data-side="open"] .lxmode { flex: 1; width: auto; height: 40px; padding: 0 var(--lx-s2); }
 body[data-side="open"] .lxmode span { display: inline; }
-.lxmode svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lxmode svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
 .lxmode:hover { background: var(--lx-4); }
 .lxmode:active { transform: scale(.97); }
 .lxmode[aria-current="page"] { background: var(--lx-gold); color: var(--lx-on-gold); }
@@ -232,7 +235,7 @@ body[data-side="open"] .lxnavs { padding: var(--lx-s1); border-radius: var(--lx-
 }
 .lxnav span { display: none; }
 body[data-side="open"] .lxnav span { display: inline; color: var(--lx-text); }
-.lxnav svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lxnav svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
 .lxnav:hover { color: var(--lx-ink); background: var(--lx-3); }
 .lxnav:active { transform: scale(.98); }
 .lxnav[aria-current="page"] { color: var(--lx-gold); background: var(--lx-3); }
@@ -925,11 +928,10 @@ body.lx .chat__dock { display: none; }
     border: 0; background: none; color: var(--lx-mute);
     font: 600 .6875rem var(--lx-ui); cursor: pointer;
   }
-  .lxdock__btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .lxdock__btn svg { width: 22px; height: 22px; fill: currentColor; }
   .lxdock__btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lxdock__btn:hover, .lxdock__btn[aria-current="page"], .lxdock__btn[aria-expanded="true"] { color: var(--lx-ink); }
-  .lxdock__btn[aria-current="page"] svg, .lxdock__btn[aria-expanded="true"] svg { stroke: var(--lx-gold); }
-  .lxdock__btn[aria-current="page"] .lxfill { fill: var(--lx-gold); }
+  .lxdock__btn[aria-current="page"] svg, .lxdock__btn[aria-expanded="true"] svg { fill: var(--lx-gold); }
   .lxdock__btn:active { transform: scale(.94); }
 
   body.lx .toasts { top: calc(var(--lx-top) + 8px); right: 8px; left: 8px; }

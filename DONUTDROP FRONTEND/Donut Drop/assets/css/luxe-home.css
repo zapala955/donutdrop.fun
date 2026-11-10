@@ -150,13 +150,13 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
   cursor: pointer;
   transition: background var(--lx-quick) var(--lx-ease);
 }
-.lxtab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* Phosphor glyphs, filled, the same family as the menu beside them (luxe.css). */
+.lxtab svg { width: 18px; height: 18px; fill: currentColor; }
 .lxtab:hover { background: var(--lx-3); }
 .lxtab:active { transform: scale(.98); }
 .lxtab:focus-visible { outline-offset: -2px; }
 .lxtab[aria-pressed="true"] { background: var(--lx-4); }
-.lxtab[aria-pressed="true"] svg { stroke: var(--lx-gold); }
-.lxtab[aria-pressed="true"] .lxfill { fill: var(--lx-gold); }
+.lxtab[aria-pressed="true"] svg { fill: var(--lx-gold); }
 .lxtab[hidden] { display: none; }
 
 /* ═════════ a row ═════════ */
