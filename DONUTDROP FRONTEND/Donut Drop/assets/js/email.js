@@ -26,7 +26,7 @@ import {
   turnstileConfig,
 } from './store.js';
 import { $ } from './util.js';
-import { toast } from './ui.js';
+import { closeModal, openModal, toast } from './ui.js';
 
 const EMAIL = /^[^\s@<>()[\]\\,;:"]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 const CODE = /^\d{6}$/;
@@ -494,147 +494,217 @@ export function emailCard(info, refresh) {
   return section;
 }
 
-/** The Minecraft account card: the linked name, and moving the account to another one. */
+/* ═════════════════════════ the Minecraft account ═════════════════════════ */
+
+const ARROW_ICON = '<svg class="mcswap__arrow" viewBox="0 0 256 256" aria-hidden="true"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>';
+const DONE_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M176.49,95.51a12,12,0,0,1,0,17l-56,56a12,12,0,0,1-17,0l-24-24a12,12,0,1,1,17-17L112,143l47.51-47.52A12,12,0,0,1,176.49,95.51ZM236,128A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-24,0a84,84,0,1,0-84,84A84.09,84.09,0,0,0,212,128Z"/></svg>';
+const PERSON_ICON = '<svg class="auth__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+/**
+ * The Minecraft card: the linked account, head and name, and one button that changes it. The change
+ * itself happens in its own window (openRelink), never in a form squeezed into the card.
+ */
 export function minecraftCard(info, refresh, avatarUrl) {
   const { section, body } = card('Minecraft account', CUBE_ICON);
-
-  const idle = () => {
-    const changed = info.minecraftRelinkedAt ? `Changed ${escapeText(dateOf(info.minecraftRelinkedAt))}.` : '';
-    const paused = info.enabled && !info.available;
-    body.innerHTML = `
-      <div class="prof__value prof__value--player">
-        <img class="prof__head" alt="" width="40" height="40">
-        <b class="prof__strong"></b>
+  const changed = info.minecraftRelinkedAt ? ` · changed ${dateOf(info.minecraftRelinkedAt)}` : '';
+  const paused = info.enabled && !info.available;
+  const hint = !info.email ? 'Link an email first to be able to change it.' : paused ? PAUSED : '';
+  body.innerHTML = `
+    <div class="mcacct">
+      <img class="mcacct__head" alt="" width="48" height="48">
+      <div class="mcacct__who">
+        <b class="mcacct__name"></b>
+        <span class="mcacct__sub"></span>
       </div>
-      <p class="prof__note">Deposits are credited from this account and withdrawals are paid to it. ${changed}</p>
-      ${!info.email ? '<p class="prof__note">Link an email to be able to move your account to a different Minecraft account.</p>' : ''}
-      ${info.email && paused ? `<p class="prof__note">${PAUSED}</p>` : ''}
-      <div class="prof__actions">
-        <button class="btn prof__btn" type="button" data-act="change" ${info.canChangeMinecraft && !paused ? '' : 'disabled'}>Change Minecraft account</button>
-      </div>`;
-    $('.prof__strong', body).textContent = info.minecraftUsername;
-    const head = $('.prof__head', body);
+      <button class="btn prof__btn" type="button" data-act="change" ${info.canChangeMinecraft && !paused ? '' : 'disabled'}>Change account</button>
+    </div>
+    <p class="prof__note">Deposits are credited from this account and withdrawals are paid to it.</p>
+    ${hint ? '<p class="prof__note prof__note--hint"></p>' : ''}`;
+  $('.mcacct__name', body).textContent = info.minecraftUsername;
+  $('.mcacct__sub', body).textContent = `Linked account${changed}`;
+  if (hint) $('.prof__note--hint', body).textContent = hint;
+  const head = $('.mcacct__head', body);
+  head.src = avatarUrl;
+  head.addEventListener('error', () => { head.hidden = true; });
+  body.querySelector('[data-act="change"]').addEventListener('click', () => openRelink(info, refresh, avatarUrl));
+  return section;
+}
+
+/**
+ * Changing the linked Minecraft account, one step to a screen:
+ *   1  the new username   2  the code sent to the email   3  the payment from the new account,
+ *   exactly as at sign-up   then done.
+ * The account in hand and the one it is moving to stay on screen the whole way.
+ */
+function openRelink(info, refresh, avatarUrl) {
+  let newName = '';
+
+  const steps = (step) => `
+    <ol class="relink__steps" aria-label="Step ${step} of 3">
+      ${[1, 2, 3].map((n) => `<li${n < step ? ' data-done' : ''}${n === step ? ' aria-current="step"' : ''}></li>`).join('')}
+    </ol>`;
+  const swap = () => `
+    <div class="mcswap" aria-hidden="true">
+      <span class="mcswap__acct"><img class="mcswap__head" alt="" width="32" height="32"><b data-old></b></span>
+      ${ARROW_ICON}
+      <span class="mcswap__acct mcswap__acct--new"${newName ? ' data-set' : ''}><span class="mcswap__unknown">?</span><b data-new></b></span>
+    </div>`;
+  const fillSwap = (body) => {
+    const head = $('.mcswap__head', body);
     head.src = avatarUrl;
     head.addEventListener('error', () => { head.hidden = true; });
-    body.querySelector('[data-act="change"]').addEventListener('click', explain);
+    $('[data-old]', body).textContent = info.minecraftUsername;
+    $('[data-new]', body).textContent = newName || 'New account';
   };
 
-  const explain = () => {
+  /* 1 · the new username */
+  const nameStep = (body) => {
     body.innerHTML = `
-      <p class="prof__p">Your balance, VIP level and history stay with your account. Withdrawals go to the
-        new Minecraft account from then on, and deposits are credited from it.</p>
-      <ol class="prof__steps">
-        <li>We send a code to <b>${escapeText(info.email)}</b>.</li>
-        <li>You enter it with the new Minecraft username.</li>
-        <li>You pay the bot a small exact amount from the new account, as at sign-up. It's added to your balance.</li>
-      </ol>
-      <p class="auth__err" data-err role="alert" hidden></p>
-      <div class="prof__actions">
-        <button class="btn btn--go prof__btn" type="button" data-act="send">Send code</button>
-        <button class="btn prof__btn prof__btn--quiet" type="button" data-act="cancel">Cancel</button>
-      </div>`;
-    const err = body.querySelector('[data-err]');
-    body.querySelector('[data-act="cancel"]').addEventListener('click', idle);
-    body.querySelector('[data-act="send"]').addEventListener('click', async (event) => {
-      try {
-        await busy(event.currentTarget, 'Sending…', () => emailConfirmCode('change_minecraft'));
-        details();
-      } catch (failure) {
-        err.textContent = messageOf(failure, 'The code could not be sent.');
-        err.hidden = false;
-      }
-    });
-  };
-
-  const details = () => {
-    body.innerHTML = `
-      <form class="prof__form" novalidate>
-        <label class="auth__label" for="mcCode">Code sent to ${escapeText(info.email)}</label>
-        ${codeField('mcCode')}
-        <label class="auth__label" for="mcName">New Minecraft username</label>
+      <h3 class="auth__title" aria-hidden="true">Change Minecraft account</h3>
+      ${steps(1)}
+      <p class="auth__lede">Move this account to a different Minecraft account. Your balance, VIP level
+        and history come with it; withdrawals go to the new account from then on.</p>
+      ${swap()}
+      <form id="rlNameForm" novalidate>
+        <label class="auth__label" for="rlName">New Minecraft username</label>
         <div class="auth__field">
-          <input id="mcName" class="auth__input" type="text" maxlength="16" autocapitalize="none" spellcheck="false" placeholder="Enter the new username…">
+          ${PERSON_ICON}
+          <input id="rlName" class="auth__input" type="text" maxlength="16" autocomplete="off"
+                 autocapitalize="none" spellcheck="false" placeholder="Enter the new username…">
         </div>
         <p class="auth__note">On Bedrock? Your name works with or without the dot.</p>
-        <p class="auth__err" data-err role="alert" hidden></p>
-        <div class="prof__actions">
-          <button class="btn btn--go prof__btn" type="submit" data-act="go" disabled>Continue</button>
-          <button class="btn prof__btn prof__btn--quiet" type="button" data-act="cancel">Cancel</button>
-        </div>
+        <p class="auth__err" id="rlErr" role="alert" hidden></p>
+        <div class="auth__foot"><button class="btn btn--go auth__go" type="submit" id="rlGo" disabled>Continue</button></div>
       </form>`;
-    const code = $('#mcCode', body);
-    const name = $('#mcName', body);
-    const go = body.querySelector('[data-act="go"]');
-    const err = body.querySelector('[data-err]');
-    digitsOnly(code);
-    const sync = () => { err.hidden = true; go.disabled = !(CODE.test(code.value) && MINECRAFT_NAME.test(name.value.trim())); };
-    code.addEventListener('input', sync);
-    name.addEventListener('input', sync);
-    body.querySelector('[data-act="cancel"]').addEventListener('click', idle);
-    $('.prof__form', body).addEventListener('submit', async (event) => {
+    fillSwap(body);
+    const input = $('#rlName', body);
+    const go = $('#rlGo', body);
+    const error = $('#rlErr', body);
+    input.value = newName;
+    const sync = () => {
+      error.hidden = true;
+      const name = input.value.trim();
+      go.disabled = !MINECRAFT_NAME.test(name) || name.toLowerCase() === String(info.minecraftUsername).toLowerCase();
+      $('[data-new]', body).textContent = name || 'New account';
+      $('.mcswap__acct--new', body).toggleAttribute('data-set', MINECRAFT_NAME.test(name));
+    };
+    input.addEventListener('input', sync);
+    sync();
+    $('#rlNameForm', body).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (go.disabled) return;
+      newName = input.value.trim();
+      try {
+        const sent = await busy(go, 'Sending code…', () => emailConfirmCode('change_minecraft'));
+        codeStep(body, sent.email);
+      } catch (failure) {
+        error.textContent = messageOf(failure, 'The code could not be sent.');
+        error.hidden = false;
+      }
+    });
+    input.focus();
+  };
+
+  /* 2 · the code from the email */
+  const codeStep = (body, masked) => {
+    body.innerHTML = `
+      <h3 class="auth__title" aria-hidden="true">Confirm it's you</h3>
+      ${steps(2)}
+      <p class="auth__lede">We sent a 6-digit code to <b class="relink__mail"></b>. It works for 10 minutes.</p>
+      ${swap()}
+      <form id="rlCodeForm" novalidate>
+        <label class="auth__label" for="rlCode">Code</label>
+        ${codeField('rlCode')}
+        <p class="auth__err" id="rlErr" role="alert" hidden></p>
+        <div class="auth__foot auth__foot--pair">
+          <button class="btn btn--go auth__go" type="submit" id="rlGo" disabled>Continue</button>
+          <button class="btn auth__ghost" type="button" id="rlResend">Send again</button>
+        </div>
+        <button class="auth__link" type="button" id="rlBack">Change the username</button>
+      </form>`;
+    fillSwap(body);
+    $('.relink__mail', body).textContent = masked;
+    const input = $('#rlCode', body);
+    const go = $('#rlGo', body);
+    const error = $('#rlErr', body);
+    const fail = (failure, fallback) => { error.textContent = messageOf(failure, fallback); error.hidden = false; };
+    digitsOnly(input);
+    input.addEventListener('input', () => { error.hidden = true; go.disabled = !CODE.test(input.value); });
+    armResend($('#rlResend', body), async () => {
+      try { await emailConfirmCode('change_minecraft'); } catch (failure) { fail(failure, 'The code could not be sent.'); throw failure; }
+    });
+    $('#rlBack', body).addEventListener('click', () => nameStep(body));
+    $('#rlCodeForm', body).addEventListener('submit', async (event) => {
       event.preventDefault();
       if (go.disabled) return;
       try {
-        const challenge = await busy(go, 'Checking…', () => relinkStart(name.value.trim(), code.value));
-        pay(challenge, name.value.trim());
+        const challenge = await busy(go, 'Checking…', () => relinkStart(newName, input.value));
+        payStep(body, challenge);
       } catch (failure) {
-        err.textContent = messageOf(failure, 'That did not go through.');
-        err.hidden = false;
+        fail(failure, 'That did not go through.');
       }
     });
-    code.focus();
+    input.focus();
   };
 
-  /* The payment, then the move: the same command and the same wait as signing up. */
-  const pay = (challenge, newName) => {
+  /* 3 · the payment from the new account, then the move */
+  const payStep = (body, challenge) => {
     body.innerHTML = `
-      <p class="prof__p">Log in to DonutSMP as <b>${escapeText(newName)}</b> and run this exact command:</p>
-      <div class="auth__field auth__field--static"><span class="auth__value auth__value--lg mono"></span></div>
-      <div class="prof__actions"><button class="btn btn--go prof__btn" type="button" data-act="copy">Copy command</button></div>
-      <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))}: the amount is what identifies you. It's added to your balance.</p>
-      <div class="kv"><span>status</span><span data-state>waiting for your payment</span></div>
-      <p class="auth__err" data-err role="alert" hidden></p>
-      <div class="prof__actions"><button class="btn prof__btn prof__btn--quiet" type="button" data-act="cancel">Cancel</button></div>`;
-    $('.auth__value', body).textContent = challenge.instruction;
-    const status = body.querySelector('[data-state]');
-    const err = body.querySelector('[data-err]');
-    let stopped = false;
-    body.querySelector('[data-act="cancel"]').addEventListener('click', () => { stopped = true; idle(); });
-    body.querySelector('[data-act="copy"]').addEventListener('click', async (event) => {
+      <h3 class="auth__title" aria-hidden="true">Pay from the new account</h3>
+      ${steps(3)}
+      <p class="auth__lede">Log in to DonutSMP as <b class="relink__new"></b> and run this exact command. The
+        amount is what identifies the account, and it's added to your balance.</p>
+      <div class="auth__field auth__field--static"><span class="auth__value auth__value--lg mono" id="rlCommand"></span></div>
+      <button class="btn btn--go auth__go" type="button" id="rlCopy">Copy command</button>
+      <div class="relink__status" id="rlStatus" data-state="waiting" role="status">
+        <i aria-hidden="true"></i><span>Waiting for your payment…</span>
+      </div>
+      <p class="auth__err" id="rlErr" role="alert" hidden></p>
+      <button class="auth__link" type="button" id="rlAgain" hidden>Start again</button>`;
+    $('.relink__new', body).textContent = newName;
+    $('#rlCommand', body).textContent = challenge.instruction;
+    const status = $('#rlStatus', body);
+    const error = $('#rlErr', body);
+    const say = (state, text) => { status.dataset.state = state; $('span', status).textContent = text; };
+    $('#rlAgain', body).addEventListener('click', () => nameStep(body));
+    $('#rlCopy', body).addEventListener('click', async (event) => {
       const button = event.currentTarget;
       try { await navigator.clipboard.writeText(challenge.instruction); button.textContent = 'Copied'; } catch { button.textContent = 'Select it above'; }
       setTimeout(() => { if (button.isConnected) button.textContent = 'Copy command'; }, 1800);
     });
 
     const finish = async () => {
-      status.textContent = 'payment received, moving your account';
+      say('moving', 'Payment received. Moving your account…');
       try {
         const result = await relinkComplete(challenge.challengeId);
-        toast({ kind: 'win', title: 'Minecraft account changed', body: `Now linked to ${result.user.minecraftUsername}` });
         refresh();
+        doneStep(body, result.user.minecraftUsername);
       } catch (failure) {
-        status.textContent = 'payment received';
-        err.textContent = messageOf(failure, 'The account could not be moved.');
-        err.hidden = false;
+        say('stopped', 'Payment received');
+        error.textContent = messageOf(failure, 'The account could not be moved.');
+        error.hidden = false;
       }
     };
     const poll = async () => {
-      if (stopped || !body.isConnected) return;
+      // Closing the window stops the wait; the payment, if it comes, stays redeemable.
+      if (!status.isConnected) return;
       try {
         const result = await loginStatus(challenge.challengeId);
         if (result.state === 'confirmed') { void finish(); return; }
-        if (result.state === 'completed') { refresh(); return; }
+        if (result.state === 'completed') { refresh(); doneStep(body, newName); return; }
         if (result.state === 'expired') {
-          status.textContent = 'expired';
-          err.textContent = 'The ten minutes ran out before a payment arrived. Start again.';
-          err.hidden = false;
+          say('stopped', 'The ten minutes ran out');
+          error.textContent = 'No payment arrived in time. Start again to get a new amount.';
+          error.hidden = false;
+          $('#rlAgain', body).hidden = false;
           return;
         }
       } catch (failure) {
-        /* A name that resolves to no Minecraft account stops here; anything else is retried. */
         if (failure?.code === 'MINECRAFT_ACCOUNT_NOT_FOUND') {
-          err.textContent = failure.message;
-          err.hidden = false;
+          say('stopped', 'Account not found');
+          error.textContent = failure.message;
+          error.hidden = false;
+          $('#rlAgain', body).hidden = false;
           return;
         }
       }
@@ -643,8 +713,20 @@ export function minecraftCard(info, refresh, avatarUrl) {
     setTimeout(poll, 2500);
   };
 
-  idle();
-  return section;
+  /* done */
+  const doneStep = (body, name) => {
+    body.innerHTML = `
+      <div class="relink__done">${DONE_ICON}</div>
+      <h3 class="auth__title relink__center">All set</h3>
+      <p class="auth__lede relink__center">Your account is now linked to <b class="relink__new"></b>. Deposits
+        from it are credited to you and withdrawals are paid to it.</p>
+      <div class="auth__foot"><button class="btn btn--go auth__go" type="button" id="rlDone">Done</button></div>`;
+    $('.relink__new', body).textContent = name;
+    $('#rlDone', body).addEventListener('click', closeModal);
+    $('#rlDone', body).focus();
+  };
+
+  openModal('Change Minecraft account', nameStep, { variant: 'auth' });
 }
 
 /** The profile's email data, or a disabled stand-in when the server cannot be asked. */

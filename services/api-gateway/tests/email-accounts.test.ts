@@ -139,5 +139,14 @@ describe('email on accounts', () => {
     assert.match(email, /export function renderEmailSignIn\(/);
     const account = await front('account.js');
     assert.match(account, /\[emailCard\(info, reloadCards\), minecraftCard\(info, reloadCards, avatarOf\(user, 40\)\)\]/);
+    /* The owner: "make it so theres a button to change ur linked account not just the ign and code
+     * form". The card shows the linked account with one button; the change is its own window, one
+     * step to a screen: the new name, the code, the payment, done. */
+    assert.match(email, />Change account<\/button>/);
+    assert.match(email, /openModal\('Change Minecraft account', nameStep, \{ variant: 'auth' \}\);/);
+    assert.match(email, /const nameStep = \(body\) => \{/);
+    assert.match(email, /const codeStep = \(body, masked\) => \{/);
+    assert.match(email, /const payStep = \(body, challenge\) => \{/);
+    assert.match(email, /const doneStep = \(body, name\) => \{/);
   });
 });
