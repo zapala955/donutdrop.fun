@@ -82,20 +82,18 @@ function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
 
-  /* The lobby. Every card is in the markup; this filters the rows, names the first after the tab,
-   * drives the arrows and sets the "New" tags. A card shows when it is in the chosen category and
-   * its name or its keywords contain every word typed. The Originals come first; the slot machines
-   * have a row of their own under them, which goes when nothing in it matches. */
+  /* The lobby. Every card is in the markup; this filters the grids, names the first after the tab
+   * and sets the "New" tags. A card shows when it is in the chosen category and its name or its
+   * keywords contain every word typed. The Originals come first; the slot machines have a section
+   * of their own under them, which goes when nothing in it matches. Every card that matches is in
+   * sight: the grids wrap, with no arrows and no "See all games" (2026-11-10). */
   const search = $('#lobbySearch', view);
   const none = $('#lobbyNone', view);
   const tabs = $$('.lobby__tab', view);
   const cards = $$('.gcard', view);
   const track = $('#lobbyTrack', view);
   const title = $('#lobbyTitle', view);
-  const prev = $('#lobbyPrev', view);
-  const next = $('#lobbyNext', view);
   const mainHead = $('#lobbyH', view).closest('.lxrow__head');
-  const more = $('.lxmore', view);
   const slotsRow = $('#slotsRow', view);
   const slotsTrack = $('#slotsTrack', view);
   let category = 'all';
@@ -104,32 +102,6 @@ function mountHome(view) {
     const game = SPOTLIGHT_GAMES.find((entry) => entry.route === card.getAttribute('href'));
     $('.gcard__badge', card).hidden = !(game && isNewGame(game));
   }
-
-  // Each arrow is live only while there is more of its row to see on its side.
-  const wireRow = (row, back, forward) => {
-    const paint = () => {
-      const end = row.scrollWidth - row.clientWidth;
-      back.disabled = row.scrollLeft <= 2;
-      forward.disabled = row.scrollLeft >= end - 2;
-    };
-    const scrollRow = (direction) => {
-      row.scrollBy({
-        left: direction * row.clientWidth * 0.85,
-        behavior: reduceMotion() ? 'auto' : 'smooth',
-      });
-    };
-    back.addEventListener('click', () => scrollRow(-1));
-    forward.addEventListener('click', () => scrollRow(1));
-    row.addEventListener('scroll', paint, { passive: true });
-    new ResizeObserver(paint).observe(row);
-    return paint;
-  };
-  const paintMainArrows = wireRow(track, prev, next);
-  const paintSlotArrows = wireRow(slotsTrack, $('#slotsPrev', view), $('#slotsNext', view));
-  const paintArrows = () => {
-    paintMainArrows();
-    paintSlotArrows();
-  };
 
   const filterLobby = () => {
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -148,11 +120,7 @@ function mountHome(view) {
     track.hidden = originals === 0;
     // With only slots left, the Originals heading goes too; with nothing left it stays over the note.
     mainHead.hidden = originals === 0 && slots > 0;
-    more.hidden = originals === 0;
     slotsRow.hidden = slots === 0;
-    track.scrollLeft = 0;
-    slotsTrack.scrollLeft = 0;
-    paintArrows();
   };
   const pickCategory = (code) => {
     category = code;
@@ -171,7 +139,6 @@ function mountHome(view) {
     pickCategory('all');
     search.focus();
   });
-  paintArrows();
 
   /* The three offers at the top. Every figure is the server's: before /v1/promotions answers, and
    * with an offer switched off, each one says what it can say without a number. */
@@ -216,7 +183,7 @@ function mountHome(view) {
         ? bonus > 0
           ? 'Added the moment your account is created. Log in with your Minecraft name.'
           : 'Log in with your Minecraft name, deposit in game and play.'
-        : 'Crash, Mines, Coinflip, Plinko, Blackjack and more.';
+        : 'Crash, Mines, Plinko, Blackjack and more.';
     $('#pbanLeadArt', lead).src = `${IMG}${signedOut ? 'gold_block.png' : 'ender_chest.png'}`;
   };
 

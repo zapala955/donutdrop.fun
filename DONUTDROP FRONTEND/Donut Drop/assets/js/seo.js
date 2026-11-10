@@ -225,6 +225,9 @@ export const PRIVATE_ROUTES = new Set([
   'studio',
   'war',
   'quests',
+  /* Ice Fishing came off the site (2026-11-10): no card, no sidebar link, no sitemap entry. The page
+   * stays at its address only so a game left open can still be finished; search engines skip it. */
+  'ice-fishing',
 ]);
 
 /** The URL a route is known by. Home is `/`, never `/home`, so the two are one page to Google. */

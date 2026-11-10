@@ -199,7 +199,6 @@ document.addEventListener('keydown', (event) => {
 
 /* ═════════ the lobby ═════════ */
 const lobby = $('#lobby');
-const more = $('#lxMore');
 
 /* "New" is a category the markup cannot know: app.js decides which cards are new (data.js) and
  * shows their tag. Those cards join the category, and the tab goes when none is new. */
@@ -217,14 +216,6 @@ function syncNewTab() {
   }
   tab.hidden = !any;
 }
-
-more?.addEventListener('click', () => {
-  const all = lobby.dataset.all !== '1';
-  lobby.dataset.all = all ? '1' : '0';
-  more.setAttribute('aria-expanded', String(all));
-  more.textContent = all ? 'Show fewer' : 'See all games';
-  if (!all) $('#lobbyTrack').scrollLeft = 0;
-});
 
 /* "N playing": distinct players with a round in each game over the server's window. A game with
  * nobody in it says nothing, rather than a zero next to its name. */

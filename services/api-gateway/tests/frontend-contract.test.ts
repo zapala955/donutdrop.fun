@@ -194,7 +194,7 @@ describe('frontend/backend contract', () => {
     const art = [...html.matchAll(/<img class="lxcard__art retroart" src="assets\/img\/items\/([a-z-]+\.svg)" alt="" width="96" height="96"/g)];
     // Every card in the lobby, the slot machines' row included (2026-10-19: they wore item textures until then).
     assert.equal(art.length, html.match(/<a class="gcard lxcard"/g)?.length);
-    assert.equal(art.length, 19);
+    assert.equal(art.length, 16);
     for (const [, file] of art) {
       assert.match(await source(`assets/img/items/${file}`), /viewBox="0 0 16 16" shape-rendering="crispEdges"/, file);
     }
@@ -427,7 +427,8 @@ describe('frontend/backend contract', () => {
      * Originals" list, each one an ordinary routed link, and a card in the lobby row. */
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
     const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
-    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'fishing', 'mines-duel', 'coinflip', 'upgrader', 'battles']) {
+    // Coinflip and Mines Duel are hidden for now (2026-11-10): home-look.test.ts holds them out.
+    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'fishing', 'upgrader', 'battles']) {
       assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
       assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
       assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);

@@ -42,7 +42,7 @@ describe('the casino-lobby shell', () => {
       'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuInvites', 'signOutBtn', 'dailyCodeBtn',
       'vaultJackpot', 'tickerRoot', 'devRoot', 'toasts', 'modal', 'modalTitle', 'modalClose',
       'modalBody', 'main', 'lobby', 'lobbySearch', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
-      'lobbyPrev', 'lobbyNext', 'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',
+      'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',
       'pbanExplore', 'pbanLeadEyebrow', 'pbanLeadH', 'pbanLeadP', 'pbanLeadArt', 'pbanInvite',
       'pbanInviteH', 'pbanInviteGo', 'bigDrops', 'lxSide', 'lxSideBtn', 'lxChatBtn', 'lxRegister',
     ];
@@ -50,14 +50,14 @@ describe('the casino-lobby shell', () => {
     assert.match(html, /<body class="lx">/);
     // Every game card links to a route and names its game for the live count.
     const cards = [...html.matchAll(/<a class="gcard lxcard" href="\/([a-z-]+)"[^>]*data-game="([a-z-]+)"/g)];
-    assert.equal(cards.length, 19);
+    assert.equal(cards.length, 16);
     for (const [, route, game] of cards) assert.equal(route, game);
     // The skin and its script, after app.js; the old home sheet is gone with the old home.
     assert.match(html, /<script type="module" src="assets\/js\/app\.js\?v=\d+"><\/script>[\s\S]*<script type="module" src="assets\/js\/luxe\.js\?v=\d+"><\/script>/);
     assert.doesNotMatch(html, /assets\/css\/home\.css/);
     // Retro skin: every card wears a real Minecraft item sprite (retro.css draws it pixel-sharp).
     const cardArt = [...html.matchAll(/<img class="lxcard__art retroart" src="([^"]+)"/g)];
-    assert.equal(cardArt.length, 19);
+    assert.equal(cardArt.length, 16);
     for (const [, src] of cardArt) assert.match(src ?? '', /^assets\/img\/items\/[a-z_-]+\.(png|svg)$/);
   });
 

@@ -148,46 +148,24 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
   font: 700 1.125rem/1.2 var(--lx-ui);
 }
 .lxrow__h svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--lx-mute); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.lxrow__arrows { display: flex; gap: var(--lx-s2); }
-.lxarrow {
-  display: grid; place-items: center;
-  width: 44px; height: 36px; padding: 0;
-  border: 2px solid var(--lx-4); border-radius: var(--lx-r-pill);
-  background: transparent; color: var(--lx-ink);
-  cursor: pointer;
-  transition: background var(--lx-quick) var(--lx-ease), border-color var(--lx-quick) var(--lx-ease);
-}
-.lxarrow svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.lxarrow:hover:not(:disabled) { background: var(--lx-3); border-color: var(--lx-5); }
-.lxarrow:active:not(:disabled) { transform: scale(.96); }
-.lxarrow:disabled { color: var(--lx-faint); border-color: var(--lx-3); cursor: default; }
 
-/* Eight cards to the width, the rest a swipe away; "See all games" wraps them into a grid. */
+/* Every game in sight (2026-11-10): the cards wrap into a grid, seven to the width, with nothing
+   behind an arrow or a "See all games". The fourteen Originals fill two rows; the slots sit under
+   them at the same card size. (Eight to the width when Coinflip and Mines Duel come back: sixteen.) */
 .lxrow {
   --lx-card-gap: 16px;
-  display: grid; grid-auto-flow: column;
-  grid-auto-columns: calc((100% - 7 * var(--lx-card-gap)) / 8);
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--lx-s2) var(--lx-card-gap);
   margin: 0; padding: 8px 0 4px;
   list-style: none;
-  overflow-x: auto; overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
 }
-.lxrow::-webkit-scrollbar { display: none; }
-/* A search or a tab can empty a row, or every row: then it goes, heading and all. */
+/* A search or a tab can empty a grid, or every grid: then it goes, heading and all. */
 .lxrow[hidden], .lxrow__head[hidden], .lxslots[hidden] { display: none; }
-/* The slot machines' row, under the Originals and their "See all games". */
+/* The slot machines' section, under the Originals. */
 .lxslots { margin-top: var(--lx-s6); }
-.lxrow > li { scroll-snap-align: start; min-width: 0; }
+.lxrow > li { min-width: 0; }
 .lxrow > li[hidden] { display: none; }
-.lxlobby[data-all="1"] .lxrow {
-  grid-auto-flow: row;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: var(--lx-s4) var(--lx-card-gap);
-  overflow: visible;
-}
-.lxlobby[data-all="1"] .lxrow__arrows { visibility: hidden; }
 
 /* ── the card ──
    The art fills it; the name sits on the art's dark foot in wide black capitals, with the house
@@ -261,22 +239,6 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
 }
 .lxnone[hidden] { display: none; }
 
-/* the "See all games" divider: hairlines either side of a quiet button */
-.lxmore {
-  display: flex; align-items: center; gap: var(--lx-s4);
-  margin: var(--lx-s4) 0 0;
-}
-.lxmore::before, .lxmore::after { content: ""; flex: 1; height: 1px; background: var(--lx-3); }
-.lxmore__btn {
-  height: 36px; padding: 0 var(--lx-s4);
-  border: 0; border-radius: var(--lx-r-s);
-  background: none; color: var(--lx-text);
-  font: 700 .9375rem var(--lx-ui);
-  cursor: pointer;
-}
-.lxmore__btn:hover { background: var(--lx-3); color: var(--lx-ink); }
-.lxmore__btn:active { transform: translateY(1px); }
-.lxmore[hidden] { display: none; }
 
 /* ═════════ rewards ═════════ */
 .lxperks { margin-top: var(--lx-s8); }
@@ -330,8 +292,6 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
 
 /* ═════════ narrower ═════════ */
 @media (max-width: 1279px) {
-  .lxrow { grid-auto-columns: calc((100% - 5 * var(--lx-card-gap)) / 6); }
-  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .lxpromos { grid-template-columns: repeat(3, minmax(260px, 1fr)); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 2px; }
   .lxpromos::-webkit-scrollbar { display: none; }
   .lxpromo { scroll-snap-align: start; }
@@ -339,8 +299,7 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
 @media (max-width: 1023px) {
   .lxpromos { grid-template-columns: repeat(3, minmax(300px, 86%)); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
   .lxpromo { grid-template-columns: 120px minmax(0, 1fr); min-height: 120px; }
-  .lxrow { --lx-card-gap: 12px; grid-auto-columns: calc((100% - 3.5 * var(--lx-card-gap)) / 4.5); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
-  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-right: 0; padding-right: 0; }
+  .lxrow { --lx-card-gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lxperks__row { grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
   .lxperk { height: 68px; }
 }
@@ -348,15 +307,15 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   .lxkbd { display: none; }
   .lxtabs { margin: var(--lx-s4) calc(-1 * var(--lx-gut)) var(--lx-s5) 0; }
   .lxtab { height: 40px; padding: 0 var(--lx-s4); font-size: .875rem; }
-  .lxrow { grid-auto-columns: calc((100% - 2.5 * var(--lx-card-gap)) / 3.3); }
-  .lxlobby[data-all="1"] .lxrow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .lxrow__arrows { display: none; }
+  /* Four to a row on a phone: every game in four rows, a thumb's scroll from the top. */
+  .lxrow { --lx-card-gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lxcard__badge { top: 5px; left: 5px; padding: 2px 5px; font-size: .5625rem; }
   .lxcard__brand { display: none; }
-  .lxlive { font-size: .75rem; }
+  .lxlive { margin-top: var(--lx-s1); font-size: .6875rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lxcard, .lxpromo, .lxpromo__art img, .lxtab, .lxarrow, .lxperk { transition: none; }
+  .lxcard, .lxpromo, .lxpromo__art img, .lxtab, .lxperk { transition: none; }
   .lxcard:hover, .lxcard:active { transform: none; }
   a.lxpromo:hover .lxpromo__art img { transform: none; }
 }

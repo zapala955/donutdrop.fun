@@ -116,32 +116,34 @@ describe('ice fishing: the page and the lake', () => {
     assert.match(lake, /import \{ BRIGHTNESS, chooseTier, createGovernor, frameMs, minFpsFor, ratioFor \} from '\.\/quality3d\.js';/);
   });
 
-  it('is a page of its own: route, view, lobby card, sidebar, feed, search and sitemap', async () => {
+  it('is off the site: no lobby card, no sidebar link, no sitemap entry, never suggested', async () => {
+    /* Taken off the site at the operator's request (2026-11-10). The page and its route stay, reachable
+     * only at /ice-fishing, so a player with a game still on the ice can pull out: nothing settles an
+     * open game on its own, and its stake is already down. New games close with "Ice Fishing open" in
+     * Admin -> System. Its name stays in the feed, the history and the chat, for rounds already played. */
     const [html, app, chat, data, store, ticker, account, seo, sitemap, nginx, css] = await Promise.all([
       front('index.html'), front('assets/js/app.js'), front('assets/js/chat.js'), front('assets/js/data.js'), front('assets/js/store.js'),
       front('assets/js/ticker.js'), front('assets/js/account.js'), front('assets/js/seo.js'), front('sitemap.xml'), read('infra/nginx/nginx.conf'),
       front('assets/css/icefishing.css'),
     ]);
+    assert.doesNotMatch(html, /href="\/ice-fishing"/);
+    assert.doesNotMatch(html, /data-game="ice-fishing"|data-live="ice-fishing"/);
+    assert.doesNotMatch(sitemap, /ice-fishing/);
+    assert.doesNotMatch(data, /route: '\/ice-fishing'/);
+    assert.match(seo, /\n {2}'ice-fishing',\n\]\);/);
+    // Still there for a game left open.
     assert.match(html, /<link rel="stylesheet" href="assets\/css\/icefishing\.css" \/>/);
-    assert.match(html, /<a class="lxnav" href="\/ice-fishing" data-route="ice-fishing" data-tip="Ice Fishing">/);
-    assert.match(html, /<a class="gcard lxcard" href="\/ice-fishing" data-cat="casino" data-game="ice-fishing"/);
     assert.match(html, /<section class="view" data-view="ice-fishing" hidden>[\s\S]*?<div class="icefish" id="icefishRoot"><\/div>/);
     assert.match(app, /'ice-fishing': mountIceFishing,/);
+    assert.match(nginx, /\|fishing\|ice-fishing\|/);
+    // Rounds already played still have a name.
     assert.match(app, /icefishing: \{ name: 'Ice Fishing', art: 'assets\/img\/items\/game-ice-fishing\.svg' \}/);
     assert.match(chat, /\['icefishing', 'Ice Fishing'\]/);
-    assert.match(data, /route: '\/ice-fishing', name: 'Ice Fishing', art: 'game-ice-fishing\.svg', shipped: '2026-10-22'/);
     assert.match(store, /raw\.kind === 'icefishing'/);
     assert.match(ticker, /if \(kind === 'icefishing'\) return 'Ice Fishing';/);
     assert.match(account, /ice_fishing_stake: 'Ice Fishing game',\n\s*ice_fishing_payout: 'Ice Fishing catch',/);
-    assert.match(seo, /'ice-fishing': \{\n\s*title: 'DonutLuxe Ice Fishing — DonutSMP Mines',/);
-    assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/ice-fishing<\/loc>/);
-    assert.ok(nginx.includes('/ice-fishing "https://donutluxe.com/ice-fishing"'));
-    assert.match(nginx, /\|fishing\|ice-fishing\|/);
-    assert.match(await front('assets/img/items/game-ice-fishing.svg'), /viewBox="0 0 16 16" shape-rendering="crispEdges"/);
     const rules = css.slice(css.indexOf('/* ─────────── the lake'));
     assert.ok(rules.length > 1000);
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
-    assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-    assert.match(css, /\.icefish:is\(\[data-render="3d"\], \[data-render="loading"\]\) \.icefish__flat \{ display: none; \}/);
   });
 });
