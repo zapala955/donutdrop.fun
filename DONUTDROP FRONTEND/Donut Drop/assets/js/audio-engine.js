@@ -560,6 +560,56 @@ const CUES = {
   limboWin(ctx) { CUES.diceWin(ctx); },
   limboBig(ctx) { CUES.diceBig(ctx); },
   limboLose(ctx) { CUES.diceLose(ctx); },
+
+  /* ── Chicken ──
+   * A cluck and two notes as a run starts, a soft spring for every hop and a landing that rings a
+   * step higher for every lane, the minecart rattling down its rails and the crash as it lands, the
+   * minecart rolling in after a cash-out, and the cash-out.
+   */
+  /** A run starting: a quick cluck, then two notes going up. */
+  chickenStart(ctx) {
+    tone(ctx, { freq: 640, type: 'triangle', duration: 0.05, gain: 0.07, sweepTo: 420 });
+    noise(ctx, { duration: 0.03, gain: 0.02, frequency: 2400, q: 1.2 });
+    tone(ctx, { freq: 587.33, type: 'triangle', start: 0.08, duration: 0.1, gain: 0.1 });
+    tone(ctx, { freq: 880, type: 'triangle', start: 0.15, duration: 0.16, gain: 0.09 });
+  },
+  /** A hop: a soft spring up. */
+  chickenHop(ctx) {
+    tone(ctx, { freq: 300, type: 'sine', duration: 0.13, gain: 0.07, sweepTo: 720 });
+    noise(ctx, { duration: 0.05, gain: 0.018, frequency: 1900, q: 0.9 });
+  },
+  /** Landing on a block: a soft thud and a bright ping. Pitched by the caller, a step up per lane. */
+  chickenLand(ctx) {
+    tone(ctx, { freq: 150, type: 'sine', duration: 0.07, gain: 0.09, sweepTo: 95 });
+    tone(ctx, { freq: 987.77, type: 'triangle', start: 0.01, duration: 0.18, gain: 0.1 });
+    tone(ctx, { freq: 1479.98, type: 'sine', start: 0.035, duration: 0.15, gain: 0.05 });
+  },
+  /** The minecart coming down its rails: a rising rattle and a thin squeal. */
+  chickenCart(ctx) {
+    noise(ctx, { duration: 0.34, gain: 0.1, frequency: 420, q: 0.6 });
+    noise(ctx, { start: 0.04, duration: 0.28, gain: 0.03, frequency: 3400, q: 2.4 });
+    tone(ctx, { freq: 1800, type: 'triangle', start: 0.1, duration: 0.22, gain: 0.018, sweepTo: 2500 });
+  },
+  /** The minecart landing: an iron clank and a low thump. */
+  chickenCrash(ctx) {
+    noise(ctx, { duration: 0.07, gain: 0.26, frequency: 2600, q: 0.7 });
+    tone(ctx, { freq: 230, type: 'square', duration: 0.12, gain: 0.05, sweepTo: 120 });
+    noise(ctx, { duration: 0.42, gain: 0.2, frequency: 170, q: 0.4 });
+    tone(ctx, { freq: 88, type: 'sine', duration: 0.38, gain: 0.24, sweepTo: 40 });
+  },
+  /** After a cash-out, the minecart rolling into view: a soft rumble. */
+  chickenReveal(ctx) {
+    noise(ctx, { duration: 0.5, gain: 0.05, frequency: 380, q: 0.7 });
+    tone(ctx, { freq: 120, type: 'sine', duration: 0.4, gain: 0.04, sweepTo: 80 });
+  },
+  /** Cashed out: a quick run of four notes and a shimmer. */
+  chickenCash(ctx) {
+    [659.25, 880, 1108.73, 1318.51].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
+    });
+    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
+    tone(ctx, { freq: 220, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 294 });
+  },
 };
 
 /**

@@ -1,28 +1,57 @@
 /* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
- * Hallmark · component: chicken road · genre: atmospheric (the site's obsidian + gold) · theme: luxe tokens
- * states: lanes -- ahead (default, carries its price), next (lit gold), done, hit (error), cart (the
- *         reveal after a cash-out); the chicken -- walking, safe, hit; the Go button and Cash out --
- *         default, hover, :focus-visible, :active, disabled, aria-busy (a step or cash-out out), and
- *         the result banner (won / lost). The difficulty radios share the frame's states.
- * signature: the road is Minecraft's rails, one lane per price. The chicken stands on the last lane it
- *            crossed, the next lane is the one lit in gold, and when a run ends the lane the minecart
- *            was on is shown, cash-out or not.
- * motion: the chicken's hop (260ms), the minecart coming down (300ms) and one shake of its lane.
- *         Reduced motion: none -- the end state is drawn at once.
+ * Hallmark · component: chicken road · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; the road's colours lifted into tokens below
+ * layout: the site's game frame (2026-11-10): the panel on the left (stake with ½ 2× Max, difficulty,
+ *         Go, Cash out), the road on the right, filling the stage. On a phone, the road first.
+ * states: lanes -- ahead (a dark block carrying its price), next (a lighter block, its price in gold,
+ *         breathing; it can be tapped to step), done (a green block), hit (red: the minecart came down),
+ *         cart (after a cash-out, the lane the minecart was on); the chicken -- walking (an idle bob),
+ *         safe (a little cheer), hit (knocked over); the difficulty switch -- a gold pill sliding under
+ *         the choice, locked during a run; Go and Cash out -- default, hover, :focus-visible, :active
+ *         (pressed into their lip), disabled, busy (a sheen runs across). The win card, on a cash-out
+ *         only; a loss has no card or banner.
+ * signature: the road is Minecraft's rails, one lane per price, and a block on every lane for the
+ *            chicken to hop to. The chicken stands on the last block it reached; the next block is the
+ *            lit one; when a run ends the lane the minecart was on is shown, cash-out or not.
+ * motion: the blocks waking as a run starts, the chicken's hop (an arc, a squash as it lands, the block
+ *         pressing in), the minecart coming down its rails, the chicken knocked over in a puff of
+ *         feathers and the road shaking, the minecart rolling into view after a cash-out, the win card
+ *         popping and counting up, the difficulty pill sliding. Flat throughout, no glow.
+ *         Reduced motion: all of it is an instant change of state.
  */
 
 .chicken {
-  /* The road's own colours, lifted so no rule below writes one inline. */
-  --chicken-rail: rgba(144, 150, 160, .38);
-  --chicken-tie: rgba(255, 255, 255, .06);
-  --chicken-loss-wash: rgba(255, 34, 34, .14);
-  --chicken-gold-ring: rgba(255, 170, 0, .55);
-  --chicken-shadow: rgba(0, 0, 0, .55);
-  --chicken-lane: 84px;
-  --chicken-curb: 96px;
-  --chicken-road-h: 300px;
-  --chicken-hen: 60px;
-  --chicken-cart: 58px;
+  /* The road's own colours and measures, lifted so no rule below writes one inline. */
+  --chicken-ground: var(--lx-1);
+  --chicken-seam: rgba(255, 255, 255, .025);
+  --chicken-bed: rgba(255, 255, 255, .03);
+  --chicken-rail: #434953;
+  --chicken-tie: rgba(150, 112, 72, .14);
+  --chicken-curb: var(--lx-2);
+  --chicken-lip: rgba(0, 0, 0, .55);
+  --chicken-win: oklch(0.77 0.17 152);
+  --chicken-win-lo: oklch(0.52 0.13 152);
+  --chicken-win-ink: #04130a;
+  --chicken-win-wash: color-mix(in oklab, var(--chicken-win) 20%, var(--lx-2));
+  --chicken-loss: #ff4d5e;
+  --chicken-loss-wash: color-mix(in oklab, var(--chicken-loss) 26%, var(--lx-2));
+  --chicken-loss-lane: color-mix(in oklab, var(--chicken-loss) 10%, transparent);
+  --chicken-feather: #f7f7f2;
+  --chicken-feather-lo: #cfcfc4;
+  --chicken-go-lip: var(--lx-gold-lo);
+  --chicken-sheen: rgba(255, 255, 255, .38);
+  --chicken-idle-lip: var(--lx-1);
+  --chicken-ease: cubic-bezier(.16, 1, .3, 1);
+
+  --chicken-lane: 92px;
+  --chicken-curb-w: 112px;
+  --chicken-road-h: 536px;
+  --chicken-block-w: 70px;
+  --chicken-block-h: 52px;
+  /* Where a block's top sits, down the road: the chicken stands on it, the minecart lands on it. */
+  --chicken-floor: 56%;
+  --chicken-hen: 64px;
+  --chicken-cart: 76px;
 
   display: grid;
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
@@ -36,29 +65,17 @@
   position: relative;
   display: grid;
   align-content: center;
-  gap: var(--lx-s4);
-  padding: var(--lx-s6);
   min-width: 0;
+  padding: var(--lx-s4);
 }
-
-.chicken__readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--lx-s1) var(--lx-s3);
-}
-.chicken__readout b { color: var(--lx-gold-hi); font: 800 1.25rem/1.2 var(--lx-display); font-variant-numeric: tabular-nums; }
-.chicken__readout span { color: var(--lx-mute); font: 600 .8125rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
 
 /* The road scrolls inside its own box; the page never scrolls sideways. */
 .chicken__road {
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  border-radius: var(--lx-r);
-  background: var(--lx-1);
-  box-shadow: inset 0 0 0 1px var(--lx-3);
+  border-radius: 10px;
+  background: var(--chicken-ground);
   scrollbar-width: thin;
   scrollbar-color: var(--lx-4) transparent;
 }
@@ -74,53 +91,98 @@
 .clane {
   position: relative;
   flex: 0 0 var(--chicken-lane);
-  /* One narrow track down the middle of the lane -- two rails and the ties between them, drawn,
-     not a texture -- and open ground either side, so twenty lanes read as twenty tracks. */
-  background:
-    linear-gradient(90deg, transparent 35%, var(--chicken-rail) 35% 38%, transparent 38% 62%,
-      var(--chicken-rail) 62% 65%, transparent 65%),
-    repeating-linear-gradient(180deg, var(--chicken-tie) 0 7px, transparent 7px 24px) center / 30% 100% no-repeat;
-  transition: background-color var(--lx-quick) var(--lx-ease);
+  /* One track down the middle of the lane, drawn, not a texture: a gravel bed, wooden ties across
+     it, two steel rails on top; and a faint seam between lanes, so twenty lanes read as twenty. */
+  background-color: var(--chicken-ground);
+  background-image:
+    linear-gradient(90deg, transparent calc(50% - 21px), var(--chicken-rail) calc(50% - 21px) calc(50% - 17px),
+      transparent calc(50% - 17px) calc(50% + 17px), var(--chicken-rail) calc(50% + 17px) calc(50% + 21px), transparent calc(50% + 21px)),
+    repeating-linear-gradient(180deg, var(--chicken-tie) 0 9px, transparent 9px 26px),
+    linear-gradient(90deg, var(--chicken-bed), var(--chicken-bed));
+  background-size: 100% 100%, 58px 100%, 50px 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset -1px 0 0 var(--chicken-seam);
+  transition: background-color 200ms var(--chicken-ease);
 }
+
+/* A block on every lane, its price on its face, standing on a lip it presses into. */
 .clane__x {
   position: absolute;
+  z-index: 1;
   left: 50%;
-  bottom: var(--lx-s4);
-  transform: translateX(-50%);
-  min-width: 60px;
-  padding: 6px 8px;
-  border-radius: var(--lx-r-pill);
+  top: var(--chicken-floor);
+  display: grid;
+  place-items: center;
+  width: var(--chicken-block-w);
+  height: var(--chicken-block-h);
+  margin-left: calc(var(--chicken-block-w) / -2);
+  border-radius: 8px;
   background: var(--lx-3);
+  box-shadow: 0 5px 0 var(--chicken-lip);
   color: var(--lx-mute);
-  font: 700 .8125rem/1 var(--lx-ui);
+  font: 800 .875rem/1 var(--lx-ui);
   font-variant-numeric: tabular-nums;
-  text-align: center;
   white-space: nowrap;
-  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+  transition: background-color 200ms var(--chicken-ease), color 200ms var(--chicken-ease), opacity 200ms var(--chicken-ease);
 }
 
-/* The curbs either side: the chicken starts on the left one and wants the right one. */
+/* The curbs either side: the chicken starts on a plain block on the left one; the right one has the flag. */
 .clane--start,
 .clane--end {
-  flex-basis: var(--chicken-curb);
-  background: var(--lx-2);
-  box-shadow: inset -1px 0 0 var(--lx-3);
+  flex-basis: var(--chicken-curb-w);
+  background: var(--chicken-curb);
+  box-shadow: none;
 }
-.clane--end { background: linear-gradient(90deg, var(--lx-2), var(--lx-gold-wash)); box-shadow: none; }
+.clane__x--start { background: var(--lx-4); }
+.chicken__flag {
+  position: absolute;
+  left: calc(50% - 2px);
+  bottom: calc(100% - var(--chicken-floor));
+  width: 4px;
+  height: 92px;
+  border-radius: 2px;
+  background: var(--lx-5);
+}
+.chicken__flag::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 34px;
+  height: 26px;
+  background: var(--lx-gold);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  transform-origin: left center;
+  animation: chicken-flag 1.8s ease-in-out infinite;
+}
+@keyframes chicken-flag {
+  50% { transform: scaleX(.86) skewY(-4deg); }
+}
 
-/* The next lane: lit, its price in gold. */
-.clane[data-state="next"] { background-color: var(--lx-gold-wash); }
+/* The next lane: a lighter block, its price in gold, breathing; tap it to step. */
 .clane[data-state="next"] .clane__x {
-  background: var(--lx-4);
+  background: var(--lx-5);
   color: var(--lx-gold-hi);
-  box-shadow: inset 0 0 0 2px var(--chicken-gold-ring);
+  animation: chicken-breathe 1.6s ease-in-out infinite;
 }
-/* Lanes crossed: their price spent. */
-.clane[data-state="done"] .clane__x { background: var(--lx-2); color: var(--lx-faint); }
-/* The lane the minecart came down: red. After a cash-out, the lane it was on: plain, named. */
-.clane[data-state="hit"] { background-color: var(--chicken-loss-wash); }
-.clane[data-state="hit"] .clane__x { color: var(--lx-loss); box-shadow: inset 0 0 0 2px var(--lx-loss); }
-.clane[data-state="cart"] .clane__x { color: var(--lx-text); }
+.chicken__track[data-state="play"] .clane[data-state="next"] .clane__x { cursor: pointer; }
+.chicken__track[data-busy="1"] .clane[data-state="next"] .clane__x { animation-duration: .55s; }
+@keyframes chicken-breathe {
+  50% { transform: translateY(-3px); box-shadow: 0 8px 0 var(--chicken-lip); }
+}
+/* Lanes crossed: green, the colour once the chicken has landed on them. */
+.clane[data-state="done"] .clane__x {
+  background: var(--chicken-win-wash);
+  color: var(--chicken-win);
+  transition-delay: 300ms;
+}
+/* The lane the minecart came down: red, as it lands. After a cash-out, the lane it was on. */
+.clane[data-state="hit"] { background-color: var(--chicken-loss-lane); transition-delay: 380ms; }
+.clane[data-state="hit"] .clane__x { background: var(--chicken-loss-wash); color: var(--chicken-loss); transition-delay: 380ms; }
+.clane[data-state="cart"] .clane__x { background: var(--chicken-loss-wash); color: var(--chicken-loss); }
+/* A run over: what was left on the road goes quiet. */
+.chicken__track[data-state="over"] .clane[data-state="ahead"] .clane__x { background: var(--lx-2); color: var(--lx-faint); }
 
 .chicken__hen,
 .chicken__cart {
@@ -129,52 +191,76 @@
   pointer-events: none;
   user-select: none;
 }
+/* The chicken's feet on the block's top edge (the sprite's last row is empty). */
 .chicken__hen {
-  top: calc(50% - var(--chicken-hen) / 2 - 18px);
+  z-index: 2;
+  top: calc(var(--chicken-floor) - var(--chicken-hen) + var(--chicken-hen) / 16 + 1px);
   width: var(--chicken-hen);
   height: var(--chicken-hen);
-  z-index: 2;
-  transition: transform 260ms var(--lx-ease);
+  transition: transform 380ms cubic-bezier(.3, .7, .4, 1);
 }
-.chicken__hen img,
-.chicken__cart {
+.chicken__hen img {
+  display: block;
+  width: 100%;
+  height: 100%;
   image-rendering: pixelated;
-  filter: drop-shadow(0 6px 8px var(--chicken-shadow));
+  transform-origin: 50% 94%;
 }
-.chicken__hen img { display: block; width: 100%; height: 100%; }
-.chicken__hen[data-state="hit"] img { transform: rotate(-90deg); opacity: .55; }
+.chicken__track:is([data-state="idle"], [data-state="play"]) .chicken__hen[data-state="walk"] img { animation: chicken-bob 2.4s ease-in-out infinite; }
+@keyframes chicken-bob {
+  40% { transform: scale(1.03, .97); }
+  55% { transform: translateY(-2px); }
+}
+.chicken__hen[data-state="safe"] img { animation: chicken-cheer 520ms var(--chicken-ease) 3; }
+@keyframes chicken-cheer {
+  45% { transform: translateY(-14px) scale(.96, 1.05); }
+  80% { transform: scale(1.06, .92); }
+}
+.chicken__hen[data-state="hit"] img { transform: translateY(10%) rotate(-90deg); opacity: .6; }
+
+/* The minecart: on its lane's block, under the chicken's spot. */
 .chicken__cart {
-  top: calc(50% - var(--chicken-cart) / 2 - 30px);
-  width: var(--chicken-cart);
-  height: var(--chicken-cart);
   z-index: 3;
+  top: calc(var(--chicken-floor) - var(--chicken-cart) * .84 + 10px);
+  width: var(--chicken-cart);
+  height: calc(var(--chicken-cart) * .84);
+  object-fit: contain;
 }
 .chicken__cart[hidden] { display: none; }
-.chicken__cart[data-tone="reveal"] { top: var(--lx-s4); opacity: .5; }
+.chicken__cart[data-tone="reveal"] { opacity: .7; }
 
-/* Over the top of the road, not its middle: the chicken and the minecart it explains stay in view. */
+/* The feathers, as the minecart lands: a few flat squares, thrown out and gone. */
+.chicken__feather {
+  position: absolute;
+  z-index: 4;
+  width: 8px;
+  height: 8px;
+  background: var(--chicken-feather);
+  pointer-events: none;
+}
+.chicken__feather:nth-child(even) { width: 6px; height: 6px; background: var(--chicken-feather-lo); }
+
+/* The win card: the multiplier in the win green, what it paid under it. Over the road, on a win only. */
 .chicken__banner {
   position: absolute;
+  z-index: 5;
   left: 50%;
   top: 34%;
   display: grid;
   justify-items: center;
-  gap: 2px;
-  min-width: 170px;
-  padding: var(--lx-s3) var(--lx-s6);
-  border-radius: var(--lx-r);
-  background: var(--lx-1);
-  box-shadow: 0 0 0 3px var(--lx-gold), var(--lx-shade-hi);
+  gap: 4px;
+  min-width: 190px;
+  padding: var(--lx-s4) var(--lx-s6);
+  border-radius: 12px;
+  background: var(--lx-2);
+  box-shadow: inset 0 0 0 2px var(--chicken-win), 0 6px 0 var(--chicken-lip);
   transform: translate(-50%, -50%);
   text-align: center;
   pointer-events: none;
-  z-index: 4;
 }
 .chicken__banner[hidden] { display: none; }
-.chicken__banner b { color: var(--lx-gold-hi); font: 800 1.75rem/1.1 var(--lx-display); font-variant-numeric: tabular-nums; }
-.chicken__banner span { color: var(--lx-text); font: 700 .875rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
-.chicken__banner[data-tone="lost"] { box-shadow: 0 0 0 3px var(--lx-loss), var(--lx-shade-hi); }
-.chicken__banner[data-tone="lost"] b { color: var(--lx-loss); }
+.chicken__banner b { color: var(--chicken-win); font: 800 2rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+.chicken__banner span { color: var(--lx-ink); font: 700 1rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
 
 /* ─────────── the panel ─────────── */
 .chicken__panel { grid-area: panel; min-width: 0; }
@@ -185,60 +271,107 @@
 .chicken__adj { cursor: pointer; }
 .chicken__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
 
-/* Difficulty: two by two, so "Hardcore" never has to squeeze. */
-.chicken__modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s1); }
+/* Difficulty: one dark well, two by two so "Hardcore" never squeezes, and a gold pill sliding under
+   the choice (as Tower's and Plinko's). */
+.chicken__modes {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+}
+.chicken__modes::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  height: calc((100% - 6px) / 2);
+  border-radius: 4px;
+  background: var(--dd-ramp, var(--lx-gold));
+  transform: translate(calc(var(--mode-x, 0) * 100%), calc(var(--mode-y, 0) * 100%));
+  transition: transform 260ms var(--chicken-ease);
+}
 .chicken__mode {
-  height: 40px;
+  height: 38px;
   min-width: 0;
   border: 0;
-  border-radius: var(--lx-r-s);
-  background: var(--lx-4);
-  color: var(--lx-ink);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lx-mute);
   font: 700 .8125rem/1 var(--lx-ui);
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--lx-quick) var(--lx-ease), color var(--lx-quick) var(--lx-ease);
+  transition: color 140ms var(--chicken-ease), transform 120ms var(--chicken-ease);
 }
-.chicken__mode:hover:not(:disabled) { background: var(--lx-5); }
-.chicken__mode:active:not(:disabled) { transform: translateY(1px); }
-.chicken__mode:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
-.chicken__mode[aria-checked="true"] { background: var(--lx-gold); color: var(--lx-on-gold); }
-.chicken__mode:disabled { cursor: not-allowed; opacity: .55; }
-.chicken__mode[aria-checked="true"]:disabled { opacity: .8; }
+.chicken__mode:hover:not(:disabled) { color: var(--lx-ink); }
+.chicken__mode:active:not(:disabled) { transform: scale(.96); }
+.chicken__mode:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 1px; }
+.chicken__mode[aria-checked="true"],
+.chicken__mode[aria-checked="true"]:hover:not(:disabled) { color: var(--lx-on-gold); }
+.chicken__mode:disabled { cursor: not-allowed; }
+.chicken__modes:has(.chicken__mode:disabled) { opacity: .7; }
+/* Past dopamine.css, which dresses the chosen difficulty in the gold ramp with a light: the pill
+   carries the ramp here, flat. */
+body.lx .chicken .chicken__mode,
+body.lx .chicken .chicken__mode[aria-checked="true"] { background: transparent; box-shadow: none; }
+body.lx .chicken .chicken__mode[aria-checked="true"] { color: var(--lx-on-gold); }
 
-/* Go: the frame's gold button (luxe-games.css). Its shape here. */
+/* Go: gold, with a lip it presses into, as every game's. */
 .chicken .chicken__go {
   display: flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  transition: background var(--lx-quick) var(--lx-ease), transform 90ms var(--lx-ease);
+  touch-action: manipulation;
 }
-.chicken .chicken__go:active:not(:disabled) { transform: translateY(1px); }
-.chicken .chicken__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
-.chicken .chicken__go[aria-busy="true"] { cursor: progress; }
-
-/* Cash out: the money, one step quieter than Go -- gold ink on the dark, ringed in gold. */
-.chicken__cash {
-  height: 48px;
+body.lx #chickenGo,
+body.lx #chickenCash {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
   border: 0;
-  border-radius: var(--lx-r-s);
-  background: var(--lx-2);
-  color: var(--lx-gold-hi);
-  box-shadow: inset 0 0 0 2px var(--lx-gold);
-  font: 800 .9375rem/1 var(--lx-ui);
+  border-radius: 6px;
+  font: 800 1rem/1 var(--lx-ui);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  cursor: pointer;
-  transition: background var(--lx-quick) var(--lx-ease);
+  filter: none;
+  touch-action: manipulation;
+  transition: background-color var(--lx-quick) var(--chicken-ease), transform 120ms var(--chicken-ease);
 }
-.chicken__cash[hidden] { display: none; }
-.chicken__cash:hover:not(:disabled) { background: var(--lx-gold-wash); }
-.chicken__cash:active:not(:disabled) { transform: translateY(1px); }
-.chicken__cash:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
-.chicken__cash:disabled { cursor: default; color: var(--lx-faint); box-shadow: inset 0 0 0 2px var(--lx-4); }
-.chicken__cash[aria-busy="true"] { cursor: progress; }
+body.lx #chickenGo { margin-top: 14px; background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: 0 4px 0 var(--chicken-go-lip); }
+body.lx #chickenGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--chicken-go-lip); }
+body.lx #chickenGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--chicken-go-lip); }
+body.lx #chickenGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #chickenGo:disabled { cursor: not-allowed; opacity: .5; }
+body.lx #chickenGo[aria-busy="true"] { cursor: progress; opacity: 1; }
+
+/* Cash out: the money, in the win green, the moment there is some to take. */
+body.lx #chickenCash { margin-top: 6px; background: var(--chicken-win); color: var(--chicken-win-ink); box-shadow: 0 4px 0 var(--chicken-win-lo); cursor: pointer; }
+body.lx #chickenCash[hidden] { display: none; }
+body.lx #chickenCash:hover:not(:disabled) { filter: brightness(1.08); }
+body.lx #chickenCash:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--chicken-win-lo); }
+body.lx #chickenCash:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #chickenCash:disabled { cursor: default; background: var(--lx-4); color: var(--lx-mute); box-shadow: 0 4px 0 var(--chicken-idle-lip); }
+body.lx #chickenCash[aria-busy="true"] { cursor: progress; }
+
+/* Busy: a start, a step or a cash-out is with the server. A sheen runs across the button. */
+body.lx :is(#chickenGo, #chickenCash)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, var(--chicken-sheen) 50%, transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+body.lx :is(#chickenGo, #chickenCash)[aria-busy="true"]::after { opacity: 1; animation: chicken-sheen 900ms linear infinite; }
+@keyframes chicken-sheen { to { transform: translateX(100%); } }
 
 .chicken__hint { min-height: 1.1em; margin: 0; text-align: center; }
 
@@ -252,7 +385,6 @@
   white-space: nowrap;
 }
 
-/* ─────────── narrower screens ─────────── */
 /* ─────────── the meadow (chicken3d.js) ─────────── */
 .chicken__view { display: none; }
 .chicken:is([data-render="3d"], [data-render="loading"]) .chicken__view {
@@ -303,27 +435,38 @@
 .chicken__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
 .chicken__gfx select:disabled { cursor: not-allowed; opacity: .6; }
 
+/* ─────────── narrower screens ─────────── */
 @media (max-width: 1023px) {
-  .chicken { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
-  .chicken__stage { padding: var(--lx-s4) var(--lx-s3); }
+  .chicken { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; --chicken-road-h: 380px; }
+  .chicken__stage { padding: var(--lx-s3); }
 }
 @media (max-width: 560px) {
   .chicken {
-    --chicken-lane: 72px;
-    --chicken-curb: 64px;
-    --chicken-road-h: 230px;
-    --chicken-hen: 48px;
-    --chicken-cart: 46px;
+    --chicken-lane: 76px;
+    --chicken-curb-w: 80px;
+    --chicken-road-h: 300px;
+    --chicken-block-w: 60px;
+    --chicken-block-h: 44px;
+    --chicken-hen: 52px;
+    --chicken-cart: 62px;
   }
-  .clane__x { min-width: 54px; font-size: .75rem; }
-  .chicken__readout b { font-size: 1.0625rem; }
+  .clane__x { font-size: .8125rem; }
+  .chicken__flag { height: 72px; }
+  .chicken__banner { min-width: 160px; padding: var(--lx-s3) var(--lx-s5); }
+  .chicken__banner b { font-size: 1.625rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .clane,
   .clane__x,
   .chicken__hen,
+  .chicken__modes::before,
   .chicken__mode,
-  .chicken__cash,
-  .chicken .chicken__go { transition: none; }
+  body.lx #chickenGo,
+  body.lx #chickenCash { transition: none; }
+  .clane[data-state] .clane__x,
+  .chicken__flag::after,
+  .chicken__hen img,
+  .chicken__track .chicken__hen[data-state] img { animation: none; }
+  body.lx :is(#chickenGo, #chickenCash)[aria-busy="true"]::after { animation: none; opacity: 0; }
 }

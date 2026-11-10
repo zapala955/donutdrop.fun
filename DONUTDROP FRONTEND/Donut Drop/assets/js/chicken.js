@@ -7,8 +7,12 @@
  * keeps the buttons in step with the run: Start, then Go and Cash out, then the result.
  *
  * The road scrolls inside its own box and follows the chicken; the page itself never scrolls
- * sideways. Motion is two things: the chicken's hop to the next lane, and the minecart coming down
- * on a hit. With reduced motion both become an instant change of state.
+ * sideways. The look (2026-11-10) is the casino floor's: flat, no line of text over the road, a win
+ * card on a cash-out and nothing on a loss. A block on every lane carries its price; the chicken
+ * hops from block to block in an arc and squashes as it lands, the block pressing in under it. On a
+ * hit the minecart comes down the rails, the chicken goes over in a puff of feathers and the road
+ * shakes; on a cash-out the minecart rolls into view on the lane it was on. With reduced motion all
+ * of it is an instant change of state.
  *
  * The road is drawn in WebGL (chicken3d.js), its own chunk, at the graphics the player picked or the
  * machine can manage: rail lines across a meadow, a sign at each with what it pays, the chicken
@@ -34,6 +38,29 @@ const MODES = {
   hardcore: { hit: 1, of: 2, label: 'Hardcore' },
 };
 const MODE_NAMES = Object.keys(MODES);
+const EASE = 'cubic-bezier(.16, 1, .3, 1)';
+/* The hop: a crouch, an arc up and over, a squash as it lands. The block it lands on presses in at
+ * LAND_MS, as the chicken's feet meet it. */
+const HOP = [
+  { transform: 'none' },
+  { transform: 'scale(1.08, .9)', offset: 0.12 },
+  { transform: 'translateY(-34px) scale(.95, 1.06)', offset: 0.5 },
+  { transform: 'scale(1.1, .88)', offset: 0.84 },
+  { transform: 'none' },
+];
+const HOP_MS = 420;
+const LAND_MS = 340;
+/* A hit: the hop, the minecart landing on the chicken at CART_HITS_MS, the chicken thrown up and
+ * over, coming to rest on its side. */
+const KNOCKED = [
+  { transform: 'none', opacity: 1 },
+  { transform: 'translateY(-30px) scale(.95, 1.06)', offset: 0.2 },
+  { transform: 'scale(1.1, .88)', offset: 0.38 },
+  { transform: 'none', offset: 0.46 },
+  { transform: 'translate(20px, -52px) rotate(150deg)', opacity: 1, offset: 0.64 },
+  { transform: 'translateY(10%) rotate(-90deg)', opacity: 0.6 },
+];
+const CART_HITS_MS = 420;
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
@@ -145,7 +172,8 @@ async function start() {
     ));
     game = response.game;
     road3d?.reset();
-    playSound('click');
+    playSound('chickenStart');
+    wake();
     say(`Run started on ${MODES[mode].label}. Lane 1 pays ${times(game.nextMultiplierBps)}.`);
     await refreshSeed();
   } catch (error) {
@@ -183,7 +211,7 @@ async function step() {
     } else {
       paint();
       follow(true);
-      hop();
+      hop(lane);
       if (over()) {
         finished();
       } else {
@@ -223,10 +251,24 @@ async function cashOut() {
 
 function finished() {
   if (game?.outcome !== 'cashout') return;
-  playSound('win');
+  playSound('chickenCash');
   road3d?.celebrate(game.multiplierBps);
   const across = game.crossed === LANES ? ' from the far side' : '';
   say(`Cashed out${across} at ${times(game.multiplierBps)} for ${money(Number(game.payoutMinor))}.`);
+  if (road3d) return;
+  paintRoad();
+  if (reduceMotion()) return;
+  const banner = $('#chickenBanner', root);
+  banner.animate(
+    [
+      { opacity: 0, transform: 'translate(-50%, -50%) scale(.82)' },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.04)', offset: 0.6 },
+      { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
+    ],
+    { duration: 380, easing: EASE },
+  );
+  countUp($('span', banner), Number(game.payoutMinor), 650);
+  rollCartIn(game.crossed === LANES ? 0 : 260);
 }
 
 /* ─────────── motion ─────────── */
@@ -250,30 +292,128 @@ function follow(animate) {
   road.scrollTo({ left: target, behavior: animate && !reduceMotion() ? 'smooth' : 'auto' });
 }
 
-function hop() {
-  playSound('tick');
+/** A safe step: the chicken hops onto the lane's block, which presses in as it lands; the landing
+ * rings a step higher for every lane. */
+function hop(lane) {
+  playSound('chickenHop');
+  setTimeout(() => playSound('chickenLand', { rate: 1 + lane * 0.045 }), LAND_MS);
   if (reduceMotion()) return;
-  $('#chickenHen img', root)?.animate(
-    [{ transform: 'translateY(0)' }, { transform: 'translateY(-16px)', offset: 0.45 }, { transform: 'translateY(0)' }],
-    { duration: 260, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+  $('#chickenHen img', root)?.animate(HOP, { duration: HOP_MS, easing: 'linear' });
+  pressBlock(laneNode(lane), LAND_MS);
+}
+
+/** The block under the chicken's feet, pressed into its lip. */
+function pressBlock(node, delay) {
+  $('.clane__x', node ?? undefined)?.animate(
+    [{ transform: 'none' }, { transform: 'translateY(4px)', offset: 0.35 }, { transform: 'none' }],
+    { duration: 260, delay, easing: EASE },
   );
 }
 
+/** A hit: the hop, the minecart coming down the rails onto the chicken, the chicken knocked over in
+ * a puff of feathers, and the road shaking. */
 function hit(lane) {
-  playSound('slam');
-  try { navigator.vibrate?.(60); } catch { /* not every browser lets a page vibrate */ }
+  playSound('chickenHop');
+  setTimeout(() => playSound('chickenCart'), 90);
+  setTimeout(() => {
+    playSound('chickenCrash');
+    try { navigator.vibrate?.(60); } catch { /* not every browser lets a page vibrate */ }
+  }, CART_HITS_MS);
   if (reduceMotion()) return;
   const cart = $('#chickenCart', root);
   const track = $('.chicken__track', root);
   if (!cart || !track) return;
   cart.animate(
     [{ transform: `${cart.style.transform} translateY(-${track.clientHeight}px)` }, { transform: cart.style.transform }],
-    { duration: 300, easing: 'cubic-bezier(.4, 0, 1, 1)' },
+    { duration: 300, delay: CART_HITS_MS - 300, easing: 'cubic-bezier(.5, 0, .9, .6)', fill: 'backwards' },
   );
-  laneNode(lane)?.animate(
-    [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }],
-    { duration: 300, delay: 280, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+  $('#chickenHen img', root)?.animate(KNOCKED, { duration: 900, easing: 'linear' });
+  feathers(lane, CART_HITS_MS);
+  $('#chickenRoad', root)?.animate(
+    [
+      { transform: 'none' },
+      { transform: 'translate(-6px, 3px)' },
+      { transform: 'translate(5px, -2px)' },
+      { transform: 'translate(-3px, 1px)' },
+      { transform: 'translate(2px, 0)' },
+      { transform: 'none' },
+    ],
+    { duration: 360, delay: CART_HITS_MS, easing: 'linear' },
   );
+}
+
+/** A puff of feathers where the chicken stood: flat squares, thrown out round a circle, then gone. */
+function feathers(lane, delay) {
+  const node = laneNode(lane);
+  const track = $('.chicken__track', root);
+  const hen = $('#chickenHen', root);
+  if (!node || !track || !hen) return;
+  const x = node.offsetLeft + node.offsetWidth / 2;
+  const y = hen.offsetTop + hen.offsetHeight * 0.55;
+  const puff = document.createElement('div');
+  puff.setAttribute('aria-hidden', 'true');
+  for (let index = 0; index < 10; index += 1) {
+    const feather = document.createElement('i');
+    feather.className = 'chicken__feather';
+    feather.style.left = `${x}px`;
+    feather.style.top = `${y}px`;
+    puff.append(feather);
+    const angle = (index / 10) * Math.PI * 2 + 0.3;
+    const reach = 46 + (index % 3) * 18;
+    const dx = Math.cos(angle) * reach;
+    const dy = Math.sin(angle) * reach * 0.8 - 18;
+    feather.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(.4)', opacity: 0 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.08 },
+        { transform: `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px)) rotate(${index * 37}deg)`, opacity: 1, offset: 0.55 },
+        { transform: `translate(calc(-50% + ${(dx * 1.15).toFixed(1)}px), calc(-50% + ${(dy + 40).toFixed(1)}px)) rotate(${index * 61}deg)`, opacity: 0 },
+      ],
+      { duration: 900, delay, easing: 'cubic-bezier(.2, .7, .4, 1)', fill: 'both' },
+    );
+  }
+  track.append(puff);
+  setTimeout(() => puff.remove(), delay + 960);
+}
+
+/** After a cash-out: the minecart rolls down the lane it was on, to show where it was. */
+function rollCartIn(delay) {
+  const cart = $('#chickenCart', root);
+  const track = $('.chicken__track', root);
+  if (!cart || cart.hidden || !track) return;
+  setTimeout(() => playSound('chickenReveal'), delay);
+  cart.animate(
+    [{ transform: `${cart.style.transform} translateY(-${track.clientHeight}px)`, opacity: 0 }, { transform: cart.style.transform }],
+    { duration: 700, delay, easing: EASE, fill: 'backwards' },
+  );
+}
+
+/** A run starting: the chicken gives a little hop on the curb and the blocks ahead wake one by one. */
+function wake() {
+  if (reduceMotion()) return;
+  $('#chickenHen img', root)?.animate(HOP, { duration: HOP_MS, easing: 'linear' });
+  for (let lane = 0; lane < 12; lane += 1) {
+    $('.clane__x', laneNode(lane) ?? undefined)?.animate(
+      [
+        { transform: 'translateY(10px) scale(.7)', opacity: 0 },
+        { transform: 'translateY(-3px) scale(1.06)', opacity: 1, offset: 0.6 },
+        { transform: 'none', opacity: 1 },
+      ],
+      { duration: 320, delay: 60 + lane * 30, easing: EASE, fill: 'backwards' },
+    );
+  }
+}
+
+/** The win card's amount, counted up from nothing. */
+function countUp(node, value, ms) {
+  const started = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / ms);
+    node.textContent = money(Math.round(value * (1 - (1 - t) ** 3)));
+    if (t < 1 && node.isConnected) requestAnimationFrame(step);
+  };
+  node.textContent = money(0);
+  requestAnimationFrame(step);
 }
 
 /* One polite, whole sentence per event. */
@@ -289,7 +429,6 @@ function say(text) {
 function paint() {
   if (!root) return;
   paintRoad();
-  paintReadout();
   paintControls();
   paintGraphics();
   syncRoad();
@@ -325,10 +464,10 @@ function startRoad() {
         follow(false);
       };
       built.onCue = (cue) => {
-        if (cue === 'hop') playSound('tick');
-        else if (cue === 'cart') playSound('boost');
+        if (cue === 'hop') playSound('chickenHop');
+        else if (cue === 'cart') playSound('chickenCart');
         else if (cue === 'hit') {
-          playSound('slam');
+          playSound('chickenCrash');
           try { navigator.vibrate?.(60); } catch { /* not every browser lets a page vibrate */ }
         } else if (cue === 'egg') playSound('coin');
       };
@@ -423,6 +562,7 @@ function paintRoad() {
   const cart = over() ? game.cartLane : null;
   track.dataset.state = inPlay() ? 'play' : over() ? 'over' : 'idle';
   track.dataset.outcome = game?.outcome ?? '';
+  track.dataset.busy = pressed === 'step' ? '1' : '';
 
   for (let lane = 0; lane < LANES; lane += 1) {
     const node = laneNode(lane);
@@ -454,35 +594,14 @@ function paintRoad() {
   if (!cartNode.hidden) placeOver(cartNode, laneNode(cart));
   cartNode.dataset.tone = game?.outcome === 'hit' ? 'hit' : 'reveal';
 
+  // A win card on a cash-out, and nothing on a loss: the red lane and the minecart say it.
   const banner = $('#chickenBanner', root);
-  if (over()) {
-    const won = game.outcome === 'cashout';
-    const profit = BigInt(game.payoutMinor || '0') - BigInt(game.stakeMinor);
+  if (over() && game.outcome === 'cashout') {
     banner.hidden = false;
-    banner.dataset.tone = won ? 'won' : 'lost';
-    $('b', banner).textContent = won ? times(game.multiplierBps) : 'Minecart';
-    $('span', banner).textContent = won
-      ? `${profit >= 0n ? '+' : '−'}${money(Number(profit >= 0n ? profit : -profit))}`
-      : `−${money(Number(game.stakeMinor))}`;
+    $('b', banner).textContent = times(game.multiplierBps);
+    $('span', banner).textContent = money(Number(game.payoutMinor));
   } else {
     banner.hidden = true;
-  }
-}
-
-function paintReadout() {
-  const now = $('#chickenNow', root);
-  const next = $('#chickenNext', root);
-  const name = roadMode();
-  const { hit, of } = MODES[name];
-  const safePct = `${Math.round(((of - hit) / of) * 100)}% clear`;
-  if (inPlay()) {
-    now.textContent = game.crossed
-      ? `${times(game.multiplierBps)} · ${money(Number(game.cashoutMinor))}`
-      : 'On the curb · step onto lane 1';
-    next.textContent = game.nextMultiplierBps ? `Lane ${game.crossed + 1} pays ${times(game.nextMultiplierBps)} · ${safePct}` : '';
-  } else {
-    now.textContent = `${MODES[name].label} · a minecart 1 lane in ${of}`;
-    next.textContent = `Lane ${LANES} pays ${times(multiplierBps(name, LANES))}`;
   }
 }
 
@@ -525,6 +644,10 @@ function paintControls() {
     node.disabled = locked;
   }
   const name = roadMode();
+  const index = MODE_NAMES.indexOf(name);
+  const modes = $('.chicken__modes', root);
+  modes.style.setProperty('--mode-x', String(index % 2));
+  modes.style.setProperty('--mode-y', String(Math.floor(index / 2)));
   root.querySelectorAll('.chicken__mode').forEach((button) => {
     const chosen = button.dataset.mode === name;
     button.setAttribute('aria-checked', String(chosen));
@@ -549,21 +672,17 @@ function build() {
   ).join('');
   root.innerHTML = `
     <section class="chicken__stage" aria-label="The rails">
-      <div class="chicken__readout">
-        <b id="chickenNow">—</b>
-        <span id="chickenNext"></span>
-      </div>
       <div class="chicken__view" aria-hidden="true"></div>
       <div class="chicken__road" id="chickenRoad" tabindex="0" aria-label="Twenty lanes of rails, crossed left to right">
         <div class="chicken__track" role="list">
-          <div class="clane clane--start" role="listitem" aria-label="The starting curb"></div>
+          <div class="clane clane--start" role="listitem" aria-label="The starting curb"><span class="clane__x clane__x--start" aria-hidden="true"></span></div>
           ${lanes}
-          <div class="clane clane--end" role="listitem" aria-label="The far side"></div>
+          <div class="clane clane--end" role="listitem" aria-label="The far side"><span class="chicken__flag" aria-hidden="true"></span></div>
           <div class="chicken__hen" id="chickenHen" aria-hidden="true"><img src="assets/img/items/chicken.svg" alt="" draggable="false" /></div>
           <img class="chicken__cart" id="chickenCart" src="assets/img/items/minecart.png" alt="" draggable="false" hidden />
         </div>
       </div>
-      <div class="chicken__banner" id="chickenBanner" hidden><b></b><span></span></div>
+      <div class="chicken__banner" id="chickenBanner" aria-hidden="true" hidden><b></b><span></span></div>
     </section>
 
     <aside class="chicken__panel" aria-label="Your run">
@@ -580,10 +699,10 @@ function build() {
         <div class="chicken__modes" role="radiogroup" aria-labelledby="chickenModeLabel">
           ${MODE_NAMES.map((name) => `<button type="button" class="chicken__mode" role="radio" data-mode="${name}" aria-checked="false">${MODES[name].label}</button>`).join('')}
         </div>
-        <button class="btn chicken__go" id="chickenGo" type="submit" data-tone="go">
+        <button class="btn chicken__go" id="chickenGo" type="submit" data-tone="go" data-sfx="none">
           <span id="chickenGoLabel">Loading…</span>
         </button>
-        <button class="chicken__cash" id="chickenCash" type="button" hidden>Cash out</button>
+        <button class="chicken__cash" id="chickenCash" type="button" data-sfx="none" hidden>Cash out</button>
         <p class="chicken__hint" id="chickenHint" aria-live="polite"></p>
         ${viewSwitch('chickenView')}
         <label class="chicken__gfx" for="chickenGfx">
@@ -626,6 +745,11 @@ function build() {
     else void start();
   });
   $('#chickenCash', root).addEventListener('click', () => void cashOut());
+  // The lit block is a second Go: tap the next lane to step onto it.
+  $('.chicken__track', root).addEventListener('click', (event) => {
+    const lane = event.target.closest('.clane[data-lane]');
+    if (lane && inPlay() && !busy && Number(lane.dataset.lane) === game.crossed) void step();
+  });
   $('#chickenGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#chickenView', root), setView);
   // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
