@@ -80,7 +80,6 @@ body.lx :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice_
   background: var(--lx-0);
   box-shadow: none;
 }
-body.lx .crash[data-phase="busted"] .crash__stage { border: 0; box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .35); }
 body.lx :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
   padding: var(--lx-s3) var(--lx-s3) var(--lx-s4);
   border: 0; border-radius: var(--lx-r) 0 0 0;
@@ -154,12 +153,9 @@ body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .c
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .fishing .fishing__go, .icefish .icefish__go, .derby .derby__go, .slots .slots__go, .plinko .plinko__go):hover:not(:disabled) { background: var(--lx-gold-hi); filter: none; }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="cash"] { background: var(--lx-gold-hi); box-shadow: 0 0 0 3px rgba(255, 215, 0, .22), var(--lx-shade); }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="idle"] { background: var(--lx-4); color: var(--lx-mute); }
-body.lx .crash .crash__go[data-tone="won"] { background: var(--lx-gold-wash); color: var(--lx-gold-hi); box-shadow: inset 0 0 0 2px rgba(255, 215, 0, .45); }
-body.lx .crash .crash__go[data-tone="lost"] { background: rgba(255, 34, 34, .1); color: var(--lx-loss); box-shadow: inset 0 0 0 2px rgba(255, 34, 34, .4); }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go, .chicken .chicken__go, .dice .dice__go, .fishing .fishing__go, .icefish .icefish__go, .derby .derby__go, .slots .slots__go, .plinko .plinko__go):disabled { filter: none; opacity: .55; }
 body.lx :is(.crash__go, .mines__go, .tower__go, .chicken__go, .dice__go, .fishing__go, .icefish__go, .derby__go, .slots__go, .plinko__go) kbd { border-color: currentColor; font-family: var(--lx-ui); }
 body.lx :is(.crash__hint, .mines__hint, .tower__hint, .chicken__hint, .dice__hint, .fishing__hint, .icefish__hint, .derby__hint, .slots__hint, .plinko__hint, .plinko__falling) { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
-body.lx :is(.crash__mine) { border: 0; border-radius: var(--lx-r-s); background: var(--lx-0); }
 body.lx .mines__random {
   border: 0; border-radius: var(--lx-r-s);
   background: var(--lx-4); color: var(--lx-ink);
@@ -168,20 +164,7 @@ body.lx .mines__random {
 body.lx .mines__random:hover:not(:disabled) { background: var(--lx-5); }
 
 /* ── Crash ── */
-body.lx .crash {
-  --crash-stage-bg-a: var(--lx-0);
-  --crash-stage-bg-b: var(--lx-0);
-  --crash-grid: rgba(255, 255, 255, .05);
-  --crash-label: rgba(209, 213, 219, .45);
-}
-body.lx .crash__history { padding: var(--lx-s3) var(--lx-s4) 0; }
-body.lx .crash__past {
-  border: 0; border-radius: var(--lx-r-pill);
-  background: var(--lx-3); color: var(--lx-text);
-  font: 700 .75rem/1 var(--lx-ui);
-  box-shadow: none;
-}
-body.lx .crash__big, body.lx .crash__readout b { font-family: var(--lx-display); font-stretch: 100%; }
+/* Crash's own look (crash.css, 2026-11-10): the history chips, the number and the win card. */
 body.lx .crash__players {
   margin: 0; padding: 0 var(--lx-s3) var(--lx-s3);
   border: 0; border-radius: 0; background: none; box-shadow: none;

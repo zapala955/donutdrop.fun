@@ -1,29 +1,47 @@
 /* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
- * Hallmark · component: crash table · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
- * states: the one button -- default (bet), hover, :focus-visible, :active, [disabled], aria-busy
- *         (placing / cashing out), lost (busted) and won (cashed out); the fields have default,
- *         focus and an invalid hint; history chips carry three bands in text as well as colour.
- * signature: the multiplier is the page -- one large figure over the curve that makes it, gold in
- *            the air, crimson when it busts, and the player's own cash-out marked on the curve.
- * motion: the curve, and nothing else; one short shake on a bust. Reduced motion: the curve is
- *         redrawn four times a second and nothing shakes.
+ * Hallmark · component: crash table · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; the table's colours lifted into tokens below, read by the canvas too
+ * layout: the site's game frame (2026-11-10): the panel on the left (bet with ½ 2× Max and quick
+ *         amounts, auto cash-out and its quick targets, the one button) with the round's players under
+ *         it, the stage on the right (the strip of recent crash points, the curve, the big number).
+ *         On a phone, the stage first, then the panel, then the players.
+ * states: the number -- counting down (quiet), climbing (white, a bump at every whole multiplier),
+ *         busted (red, a pop); the one button -- default (bet), hover, :focus-visible, :active (pressed
+ *         into its lip), disabled, busy (a sheen runs across), and its tones: go, cash (green), idle,
+ *         won; the history chips -- under 2x, 2x to 10x, 10x and up, and fresh (sliding in); the
+ *         win card, on the viewer's cash-out only. No frame and no banner on a bust.
+ * signature: one number over the curve that makes it, a rocket riding the head of the curve.
+ * motion: the rocket and its sparks (crash.js, on the canvas), the burst where it busts and one shake
+ *         of the stage, the number popping, the countdown bar draining, the win card popping and
+ *         counting up, the newest crash point sliding into the strip, the button pressing in. Flat
+ *         throughout, no glow. Reduced motion: the canvas is redrawn four times a second, nothing
+ *         shakes or pops.
  */
 
 .crash {
-  /* The table's palette, lifted so the canvas and the page read the same tokens. */
-  --crash-line: var(--gold-bright);
-  --crash-fill-top: rgba(255, 170, 0, .3);
-  --crash-fill-bottom: rgba(255, 170, 0, 0);
-  --crash-bust: var(--red);
-  /* The live feed's profit green, so a cash-out reads the same here as in the feed. The site's own
-     --win token is gold in this theme, and a gold marker on a gold curve is no marker at all. */
-  --crash-win: #35d07f;
-  --crash-grid: rgba(255, 215, 0, .07);
-  --crash-label: rgba(236, 237, 240, .42);
-  --crash-head: #fff6cc;
-  --crash-ease: cubic-bezier(.22, 1, .36, 1);
-  --crash-stage-bg-a: #131317;
-  --crash-stage-bg-b: #08080a;
+  /* The table's palette: the canvas reads these, so the page and the curve agree. */
+  --crash-line: var(--lx-gold-hi);
+  --crash-fill-top: rgba(255, 190, 40, .2);
+  --crash-fill-bottom: rgba(255, 190, 40, 0);
+  --crash-bust: #ff4d5e;
+  --crash-bust-fill: rgba(255, 77, 94, .16);
+  --crash-win: oklch(0.77 0.17 152);
+  --crash-win-lo: oklch(0.52 0.13 152);
+  --crash-win-ink: #04130a;
+  --crash-win-wash: color-mix(in oklab, var(--crash-win) 16%, transparent);
+  --crash-gold-wash: color-mix(in oklab, var(--lx-gold) 18%, transparent);
+  --crash-grid: rgba(255, 255, 255, .045);
+  --crash-label: rgba(209, 213, 219, .42);
+  --crash-rocket: #efeae0;
+  --crash-rocket-band: #e2453c;
+  --crash-rocket-nose: var(--lx-gold);
+  --crash-flame: #ffb02e;
+  --crash-spark: #ffd166;
+  --crash-lip: rgba(0, 0, 0, .55);
+  --crash-go-lip: var(--lx-gold-lo);
+  --crash-sheen: rgba(255, 255, 255, .38);
+  --crash-idle-lip: var(--lx-1);
+  --crash-ease: cubic-bezier(.16, 1, .3, 1);
 
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -42,217 +60,200 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 440px;
-  border-radius: 18px;
-  border: 1px solid var(--ob-line-hi);
-  background:
-    radial-gradient(120% 90% at 18% 0%, rgba(255, 170, 0, .08), transparent 62%),
-    linear-gradient(160deg, var(--crash-stage-bg-a), var(--crash-stage-bg-b));
-  box-shadow: inset 0 0 60px rgba(0, 0, 0, .5), 0 24px 50px -30px rgba(0, 0, 0, .9);
   overflow: hidden;
 }
-.crash[data-phase="busted"] .crash__stage { border-color: color-mix(in srgb, var(--crash-bust) 45%, transparent); }
+body.lx .crash .crash__stage { background: var(--lx-0); box-shadow: none; }
+body.lx .crash[data-phase="busted"] .crash__stage { box-shadow: none; }
 
+/* The last crash points, newest first. */
 .crash__history {
   display: flex;
   gap: 6px;
   margin: 0;
-  padding: 12px 14px 0;
+  padding: 14px 16px 0;
   list-style: none;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent);
-  mask-image: linear-gradient(90deg, #000 82%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, #000 84%, transparent);
 }
-.crash__past {
+body.lx .crash .crash__past {
   flex: none;
-  padding: 5px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  font: 700 .75rem/1 var(--mono);
-  color: var(--muted);
+  min-width: 58px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-3);
+  color: var(--lx-mute);
+  font: 700 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  box-shadow: none;
 }
-.crash__past[data-band="low"] { color: color-mix(in srgb, var(--crash-bust) 75%, var(--text)); }
-.crash__past[data-band="mid"] { color: var(--gold-bright); border-color: rgba(255, 215, 0, .25); }
-.crash__past[data-band="high"] {
-  color: var(--bg);
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+body.lx .crash .crash__past[data-band="mid"] { background: var(--crash-win-wash); color: var(--crash-win); }
+body.lx .crash .crash__past[data-band="high"] { background: var(--crash-gold-wash); color: var(--lx-gold-hi); }
+.crash__past[data-fresh="1"] { animation: crash-chip-in 360ms var(--crash-ease) both; }
+@keyframes crash-chip-in {
+  from { opacity: 0; transform: translateX(-12px) scale(.9); }
+  to { opacity: 1; transform: none; }
 }
 
 .crash__plot { position: relative; min-height: 0; }
 .crash__plot canvas { position: absolute; inset: 0; display: block; }
 
-/* Spans the stage rather than sitting at left: 50%, which would cap its width at half the stage
-   and break the status line in two on a phone. */
+/* The number, over the curve. Spans the stage rather than sitting at left: 50%, which would cap its
+   width at half the stage on a phone. */
 .crash__readout {
   position: absolute;
   left: 12px;
   right: 12px;
-  top: 40%;
+  top: 42%;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 10px;
   transform: translateY(-50%);
   text-align: center;
   pointer-events: none;
 }
-.crash__big {
-  font-family: var(--pixel);
-  font-size: clamp(2.75rem, 7vw, 5.25rem);
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -.02em;
-  color: var(--text);
+body.lx .crash .crash__big {
+  display: block;
+  color: var(--lx-ink);
+  font: 800 clamp(3.25rem, 8vw, 6.5rem)/1 var(--lx-display);
+  font-stretch: 100%;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 4px 30px rgba(0, 0, 0, .7);
+  letter-spacing: -.02em;
+  text-shadow: none;
+  transition: color 140ms var(--crash-ease);
 }
-.crash[data-phase="running"] .crash__big { color: var(--gold-bright); text-shadow: 0 0 34px rgba(255, 170, 0, .35); }
-.crash[data-phase="busted"] .crash__big { color: var(--crash-bust); }
-.crash__status { font-size: .8125rem; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+body.lx .crash[data-phase="betting"] .crash__big { color: var(--lx-mute); font-size: clamp(2.5rem, 5.5vw, 4.25rem); }
+body.lx .crash[data-phase="running"] .crash__big { color: var(--lx-ink); text-shadow: none; }
+body.lx .crash[data-phase="busted"] .crash__big { color: var(--crash-bust); }
+.crash__status { color: var(--lx-mute); font: 600 .875rem/1.3 var(--lx-ui); }
+.crash__status:empty { display: none; }
+/* Betting: a bar draining to the launch. */
 .crash__bar {
-  width: 180px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .07);
+  width: 200px;
+  height: 6px;
   overflow: hidden;
+  border-radius: 3px;
+  background: var(--lx-3);
 }
 .crash__bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--gold-body), var(--gold-bright));
+  background: var(--lx-gold);
   transform-origin: left;
 }
 .crash__bar i[hidden] { display: none; }
-.crash:not([data-phase="betting"]) .crash__bar { visibility: hidden; }
+.crash:not([data-phase="betting"]) .crash__bar { display: none; }
 .crash[data-error="1"] .crash__status::after { content: " · reconnecting"; color: var(--crash-bust); }
+.crash[data-error="1"] .crash__status:empty { display: block; }
+
+/* The win card: the viewer's cash-out, the multiplier in the win green, what it paid under it. */
+.crash__card {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 170px;
+  padding: 12px 22px;
+  border-radius: 12px;
+  background: var(--lx-2);
+  box-shadow: inset 0 0 0 2px var(--crash-win), 0 6px 0 var(--crash-lip);
+}
+.crash__card[hidden] { display: none; }
+.crash__card b { color: var(--crash-win); font: 800 1.5rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+.crash__card span { color: var(--lx-ink); font: 700 .9375rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
 
 /* ─────────── the bet ─────────── */
-.crash__panel {
-  grid-area: panel;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid var(--ob-line);
-  background: linear-gradient(180deg, var(--panel), var(--bg2));
-}
+.crash__panel { grid-area: panel; min-width: 0; }
 /* One pinned column: the stake input's natural width must not set the panel's. */
-.crash__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.crash__label {
-  margin-top: 4px;
-  font-size: .6875rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.crash__field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 46px;
-  padding: 0 6px 0 12px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--line2);
-  background: var(--panel);
-  transition: border-color 150ms var(--crash-ease), box-shadow 150ms var(--crash-ease);
-}
-.crash__field:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
-.crash__field span { color: var(--gold-bright); font-weight: 800; padding-right: 6px; }
-.crash__field input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
+.crash__form { display: grid; grid-template-columns: minmax(0, 1fr); }
+.crash__field { display: flex; align-items: center; }
+.crash__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; }
 .crash__field input:focus { outline: none; }
-.crash__field input::placeholder { color: var(--faint); font-weight: 600; }
-.crash__adj {
-  min-width: 36px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--panel2);
-  color: var(--muted);
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-}
-.crash__picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 6px; }
+.crash__field input::placeholder { color: var(--lx-faint); font-weight: 600; }
+.crash__adj { cursor: pointer; }
+.crash__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+
+/* Quick amounts and quick targets: one row each, however many there are. */
+.crash__picks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
 .crash__pick {
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--panel2);
-  color: var(--muted);
-  font: 700 .75rem/1 var(--mono);
+  min-width: 0;
   cursor: pointer;
-  transition: color 150ms var(--crash-ease), border-color 150ms var(--crash-ease), background 150ms var(--crash-ease);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: background-color 140ms var(--crash-ease), color 140ms var(--crash-ease), transform 120ms var(--crash-ease);
 }
-.crash__adj:hover:not(:disabled),
-.crash__pick:hover:not(:disabled) { color: var(--text); background: var(--panel3); }
-.crash__adj:active:not(:disabled),
-.crash__pick:active:not(:disabled) { transform: translateY(1px); }
-.crash__adj:focus-visible,
-.crash__pick:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
-.crash__pick[aria-pressed="true"] {
-  color: var(--gold-bright);
-  border-color: var(--gold-edge-hi);
-  background: color-mix(in srgb, var(--gold-body) 12%, var(--panel2));
-}
+.crash__pick:active:not(:disabled) { transform: scale(.95); }
+.crash__pick:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+/* Past dopamine.css, which gives the chosen pick the gold ramp with a light: flat gold here. */
+body.lx .crash .crash__pick[aria-pressed="true"] { background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: none; }
 .crash__form :disabled { cursor: not-allowed; opacity: .5; }
 
-/* The one button. Its tone is its phase: bet, cash out, and the two ways a round ends for you. */
+/* The one button: gold, with a lip it presses into, as every game's. Its tone is its phase: bet,
+   cash out (the win green), idle, and won. */
 .crash .crash__go {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  height: 56px;
-  margin-top: 8px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  transition: filter 150ms var(--crash-ease), transform 90ms var(--crash-ease), box-shadow 150ms var(--crash-ease);
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
 }
-.crash .crash__go[data-tone="go"],
-.crash .crash__go[data-tone="cash"] {
-  color: var(--bg);
-  background: linear-gradient(135deg, var(--gold-body), var(--gold-bright));
+body.lx #crashGo {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--crash-go-lip);
+  filter: none;
+  transition: background-color var(--lx-quick) var(--crash-ease), transform 120ms var(--crash-ease);
 }
-.crash .crash__go[data-tone="cash"] { box-shadow: 0 0 0 3px rgba(255, 215, 0, .18), 0 10px 30px -10px rgba(255, 170, 0, .7); }
-.crash .crash__go[data-tone="idle"] { color: var(--muted); background: var(--panel2); border-color: var(--line2); }
-.crash .crash__go[data-tone="won"] { color: var(--crash-win); background: color-mix(in srgb, var(--crash-win) 10%, var(--panel)); border-color: color-mix(in srgb, var(--crash-win) 45%, transparent); }
-.crash .crash__go[data-tone="lost"] { color: var(--crash-bust); background: color-mix(in srgb, var(--crash-bust) 10%, var(--panel)); border-color: color-mix(in srgb, var(--crash-bust) 45%, transparent); }
-.crash .crash__go:hover:not(:disabled) { filter: brightness(1.07); }
-.crash .crash__go:active:not(:disabled) { transform: translateY(1px) scale(.99); }
-.crash .crash__go:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
-.crash .crash__go:disabled { cursor: default; opacity: 1; }
-.crash .crash__go[data-tone="go"]:disabled { filter: saturate(.4) brightness(.7); }
-.crash .crash__go[aria-busy="true"] { cursor: progress; }
+body.lx #crashGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--crash-go-lip); }
+body.lx #crashGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--crash-go-lip); }
+body.lx #crashGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #crashGo:disabled { cursor: not-allowed; opacity: .5; filter: none; }
+body.lx #crashGo[data-tone="cash"] { background: var(--crash-win); color: var(--crash-win-ink); box-shadow: 0 4px 0 var(--crash-win-lo); }
+body.lx #crashGo[data-tone="cash"]:hover:not(:disabled) { background: var(--crash-win); filter: brightness(1.08); }
+body.lx #crashGo[data-tone="cash"]:active:not(:disabled) { box-shadow: 0 1px 0 var(--crash-win-lo); }
+body.lx #crashGo:is([data-tone="idle"], [data-tone="won"], [data-tone="lost"]) { background: var(--lx-4); color: var(--lx-mute); box-shadow: 0 4px 0 var(--crash-idle-lip); opacity: 1; }
+body.lx #crashGo[data-tone="won"] { color: var(--crash-win); }
+body.lx #crashGo[aria-busy="true"] { cursor: progress; opacity: 1; }
+/* Busy: the bet or the cash-out is with the server. A sheen runs across the button. */
+body.lx #crashGo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, var(--crash-sheen) 50%, transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+body.lx #crashGo[aria-busy="true"]::after { opacity: 1; animation: crash-sheen 900ms linear infinite; }
+@keyframes crash-sheen { to { transform: translateX(100%); } }
 .crash__go kbd {
-  padding: 0 5px;
+  padding: 1px 5px;
   border: 1px solid currentColor;
   border-radius: 4px;
-  font-family: var(--mono);
-  font-size: .625rem;
-  font-weight: 700;
+  font: 700 .625rem/1.2 var(--lx-ui);
   opacity: .55;
 }
+@media (hover: none) { .crash__go kbd { display: none; } }
+
+.crash__hint { min-height: 1.1em; margin: 0; text-align: center; }
+
 /* ─────────── the sky (crash3d.js) ─────────── */
 .crash__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-.crash:is([data-render="3d"], [data-render="loading"]) .crash__plot { overflow: hidden; border-radius: 0 0 18px 18px; }
+.crash:is([data-render="3d"], [data-render="loading"]) .crash__plot { overflow: hidden; }
 .crash:is([data-render="3d"], [data-render="loading"]) #crashCanvas { display: none; }
-/* Over the sky the figure sits up top, clear of the ghast, and keeps its shadow for the clouds. */
+/* Over the sky the figure sits up top, clear of the ghast, on a hard shadow for the clouds. */
 .crash:is([data-render="3d"], [data-render="loading"]) .crash__readout { top: 54px; transform: none; z-index: 2; }
-.crash:is([data-render="3d"], [data-render="loading"]) .crash__big { text-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 4px 24px rgba(0, 0, 0, .55); }
-.crash:is([data-render="3d"], [data-render="loading"]) .crash__status { color: var(--text); text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
+body.lx .crash:is([data-render="3d"], [data-render="loading"]) .crash__big { text-shadow: 0 3px 0 var(--crash-lip); }
 .crash:is([data-render="3d"], [data-render="loading"]) .crash__history { position: relative; z-index: 2; }
 
 .crash__gfx {
@@ -261,7 +262,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: 6px;
-  color: var(--faint);
+  color: var(--lx-faint);
   font-size: .75rem;
   font-weight: 700;
 }
@@ -269,83 +270,64 @@
 .crash__gfx select {
   height: 32px;
   padding: 0 8px;
-  border: 1px solid var(--line2);
-  border-radius: 8px;
-  background: var(--panel2);
-  color: var(--text);
+  border: 0;
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+  color: var(--lx-ink);
   font: inherit;
   font-size: .8125rem;
   cursor: pointer;
 }
-.crash__gfx select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
-
-@media (hover: none) { .crash__go kbd { display: none; } }
-
-.crash__hint { min-height: 1.1em; margin: 0; font-size: .75rem; text-align: center; color: var(--faint); }
-.crash__mine {
-  margin: 0;
-  padding: 9px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  font-size: .8125rem;
-  font-weight: 700;
-  text-align: center;
-  color: var(--text);
-}
-.crash__mine[hidden] { display: none; }
-.crash__mine[data-tone="won"] { color: var(--crash-win); border-color: color-mix(in srgb, var(--crash-win) 35%, transparent); }
-.crash__mine[data-tone="lost"] { color: var(--crash-bust); border-color: color-mix(in srgb, var(--crash-bust) 35%, transparent); }
+.crash__gfx select:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
 
 /* ─────────── the players ─────────── */
-.crash__players {
-  grid-area: players;
-  border-radius: 18px;
-  border: 1px solid var(--ob-line);
-  background: var(--panel);
-  overflow: hidden;
-}
+.crash__players { grid-area: players; min-width: 0; }
 .crash__players header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 14px 4px 8px;
 }
-.crash__players header b { font-family: var(--disp); font-weight: 800; }
-.crash__players header span { font: 600 .75rem/1 var(--mono); color: var(--faint); }
-.crash__players ol { max-height: 360px; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
-.crash__player {
+.crash__players header b { color: var(--lx-ink); font: 700 .875rem var(--lx-ui); }
+.crash__players header span { color: var(--lx-faint); font: 600 .75rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.crash__players ol { display: grid; gap: 4px; max-height: 360px; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
+body.lx .crash .crash__player {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 72px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 62px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding: 9px 16px;
-  border-top: 1px solid var(--line);
-  font-size: .8125rem;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-1);
+  font: 600 .8125rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
 }
-.crash__player[data-viewer] { background: color-mix(in srgb, var(--gold-body) 7%, transparent); }
+body.lx .crash .crash__player[data-viewer] { background: var(--lx-3); }
 .crash__who { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.crash__who .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crash__head {
+.crash__who .mono { overflow: hidden; color: var(--lx-text); text-overflow: ellipsis; white-space: nowrap; }
+body.lx .crash .crash__head {
   display: grid;
   flex: none;
   width: 22px;
   height: 22px;
+  padding: 0;
   place-items: center;
-  border-radius: 5px;
-  background: var(--panel3);
   overflow: hidden;
+  border-radius: 5px;
+  background: var(--lx-4);
 }
 .crash__head img { width: 100%; height: 100%; image-rendering: pixelated; }
-.crash__head i { font-style: normal; font-size: .6875rem; font-weight: 800; color: var(--muted); }
-.crash__amt { color: var(--muted); }
-.crash__at { text-align: right; color: var(--faint); }
+.crash__head i { color: var(--lx-mute); font-size: .6875rem; font-style: normal; font-weight: 800; }
+.crash__amt { color: var(--lx-mute); }
+.crash__at { color: var(--lx-faint); text-align: right; }
 .crash__profit { text-align: right; }
 .crash__player[data-state="won"] .crash__at,
 .crash__player[data-state="won"] .crash__profit { color: var(--crash-win); }
 .crash__player[data-state="lost"] .crash__at,
-.crash__player[data-state="lost"] .crash__profit { color: color-mix(in srgb, var(--crash-bust) 85%, var(--text)); }
+.crash__player[data-state="lost"] .crash__profit { color: var(--lx-faint); }
 
 .crash__say {
   position: absolute;
@@ -367,14 +349,21 @@
 }
 @media (max-width: 560px) {
   .crash { gap: 12px; }
-  .crash__stage { min-height: 300px; border-radius: 16px; }
-  .crash__readout { top: 42%; }
-  .crash__panel { padding: 14px; }
-  .crash__player { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 60px minmax(0, 1fr); padding: 9px 12px; font-size: .75rem; }
+  .crash__stage { min-height: 320px; }
+  .crash__history { padding: 12px 12px 0; }
+  body.lx .crash .crash__past { min-width: 0; flex: 1 1 0; padding: 8px 4px; }
+  body.lx .crash .crash__past:nth-child(n + 6) { display: none; }
+  .crash__readout { top: 44%; }
+  .crash__bar { width: 160px; }
+  .crash__card { min-width: 150px; padding: 10px 18px; }
+  .crash__card b { font-size: 1.3rem; }
+  body.lx .crash .crash__player { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 56px minmax(0, 1fr); font-size: .75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crash__field,
   .crash__pick,
-  .crash .crash__go { transition: none; }
+  body.lx .crash .crash__big,
+  body.lx #crashGo { transition: none; }
+  .crash__past[data-fresh="1"] { animation: none; }
+  body.lx #crashGo[aria-busy="true"]::after { animation: none; opacity: 0; }
 }

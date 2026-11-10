@@ -8,8 +8,13 @@
  * climbing on for as long as a refetch takes; the exact crash point replaces the frozen figure
  * when the refetch lands.
  *
- * Motion is one thing: the curve. With reduced motion it is redrawn four times a second instead of
- * every frame, and the bust does not shake.
+ * The look (2026-11-10) is the casino floor's: flat, no glow, no line of text saying how a round went,
+ * a win card for the viewer's own cash-out and nothing for a loss. A rocket rides the head of the
+ * curve trailing sparks; the number bumps at every whole multiplier; on the bust the rocket goes up
+ * in a burst, the number pops red and the stage shakes once. The round has its own sounds: the bet
+ * going in, the last three seconds ticking, the launch, a ping at every whole multiplier, the bust,
+ * the cash-out. With reduced motion the curve is redrawn four times a second instead of every frame,
+ * and nothing shakes or pops.
  *
  * The round is drawn in WebGL (crash3d.js), its own chunk, at the graphics the player picked or the
  * machine can manage: Steve on a happy ghast, climbing off a meadow through the clouds for as long
@@ -31,6 +36,8 @@ const BLIND_POLL_MS = 1_000; // no live stream: poll while a round is in the air
 const QUICK_STAKES = [1_000_000, 10_000_000, 100_000_000, 1_000_000_000];
 const QUICK_TARGETS = [[null, 'Off'], [150, '1.5×'], [200, '2×'], [500, '5×'], [1000, '10×']];
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
+const EASE = 'cubic-bezier(.16, 1, .3, 1)';
+const BURST_MS = 900; // the burst where the rocket busts
 
 let root = null;
 let view = null;
@@ -55,6 +62,13 @@ let ctx = null;
 let size = { w: 0, h: 0, dpr: 1 };
 let sky = null; // the 3D round, once it is up
 let skyTried = null;
+let sparks = []; // the rocket's trail: { x, y, vx, vy, at }
+let sparkSeed = 1;
+let bustAt = 0; // when the bust on the stage happened (Date.now), for its burst
+let lastWhole = 1; // the last whole multiplier the climb rang for
+let lastTick = 0; // the last second of the countdown that ticked
+let cardKey; // the cash-out the win card is showing; undefined until the first look
+let historyKey = null;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const growth = () => Number(snap?.config?.growthPerSecond) || 0.07;
@@ -159,15 +173,28 @@ function onBust(bust) {
         ? `Busted at ${x100(bust.x100)}. Your bet was lost.`
         : `Busted at ${x100(bust.x100)}.`,
   );
-  if (mine && mine.status !== 'cashed_out') playSound('lose');
-  if (!reduceMotion()) {
-    const stage = $('.crash__stage', root);
-    stage?.animate(
-      [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, { transform: 'translateX(4px)' },
-        { transform: 'translateX(-2px)' }, { transform: 'translateX(0)' }],
-      { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)' },
-    );
-  }
+}
+
+/** The stage has just shown a bust: the sound, the number popping red, one shake. */
+function bustFx() {
+  playSound('crashBust');
+  if (reduceMotion()) return;
+  $('#crashBig', root)?.animate(
+    [{ transform: 'scale(1.18)' }, { transform: 'scale(.96)', offset: 0.55 }, { transform: 'none' }],
+    { duration: 420, easing: EASE },
+  );
+  $('.crash__stage', root)?.animate(
+    [{ transform: 'none' }, { transform: 'translate(-6px, 2px)' }, { transform: 'translate(5px, -2px)' },
+      { transform: 'translate(-3px, 1px)' }, { transform: 'translate(2px, 0)' }, { transform: 'none' }],
+    { duration: 380, easing: 'linear' },
+  );
+}
+
+/** A whole multiplier passed: the number bumps and a ping rings, a step higher each time. */
+function milestone(whole) {
+  playSound('crashUp', { rate: Math.min(2, 1 + (whole - 2) * 0.08) });
+  if (reduceMotion()) return;
+  $('#crashBig', root)?.animate([{ transform: 'scale(1.08)' }, { transform: 'none' }], { duration: 220, easing: EASE });
 }
 
 /** The live stream says the round just busted: stop the curve where it is, then fetch the figure. */
@@ -227,7 +254,7 @@ async function placeBet() {
       { idempotencyKey: idempotencyKey() },
     );
     snap.yourBet = response.bet;
-    playSound('click');
+    playSound('crashBet');
     announce(`Bet placed: ${money(Number(response.bet.stakeMinor))}.`);
   } catch (error) {
     if (['ROUND_CHANGED', 'BETTING_CLOSED'].includes(error?.code)) {
@@ -254,7 +281,7 @@ async function cashOut() {
     const response = await api.post('/v1/crash/cashout', { roundId: bet.roundId });
     snap.yourBet = response.bet;
     const won = BigInt(response.bet.payoutMinor || '0');
-    playSound('coin');
+    // The win card rings the cash-out as it pops (paintCard), for this press and for an auto cash-out alike.
     announce(`Cashed out at ${x100(response.bet.cashoutX100)} for ${money(Number(won))}.`);
   } catch (error) {
     if (error?.code === 'ROUND_CRASHED') {
@@ -306,7 +333,7 @@ function buttonState() {
   if (bet?.status === 'cashed_out') {
     return { action: '', label: `Cashed out ${x100(bet.cashoutX100)}`, tone: 'won', disabled: true };
   }
-  if (phase === 'busted' && bet) return { action: '', label: 'Busted', tone: 'lost', disabled: true };
+  if (phase === 'busted' && bet) return { action: '', label: 'Round over', tone: 'idle', disabled: true };
   return queued
     ? { action: 'unqueue', label: 'Queued for next round', tone: 'idle' }
     : { action: 'queue', label: 'Bet next round', tone: 'go', disabled: Boolean(betProblem()) };
@@ -331,33 +358,7 @@ function paintControls() {
   const phase = roundPhase();
   const problem = state.authenticated && phase === 'betting' && !myBet() ? betProblem() : '';
   hint.textContent = problem;
-
-  // What the player has riding, in words.
-  const mine = $('#crashMine', root);
   const bet = myBet();
-  const recent = lastBust && Date.now() - lastBust.at < BUST_HOLD_MS * 2 ? lastBust.mine : null;
-  let line = '';
-  let tone = '';
-  if (bet?.status === 'cashed_out') {
-    const profit = BigInt(bet.payoutMinor) - BigInt(bet.stakeMinor);
-    line = `You cashed out at ${x100(bet.cashoutX100)} · +${money(Number(profit))}`;
-    tone = 'won';
-  } else if (bet) {
-    line = `${money(Number(bet.stakeMinor))} in · ${bet.autoCashoutX100 ? `auto cash-out at ${x100(bet.targetX100)}` : `cashes out at ${x100(bet.targetX100)} at the latest`}`;
-  } else if (recent) {
-    if (recent.status === 'cashed_out') {
-      line = `Last round: out at ${x100(recent.cashoutX100)} · +${money(Number(BigInt(recent.payoutMinor) - BigInt(recent.stakeMinor)))}`;
-      tone = 'won';
-    } else {
-      line = `Last round: busted · −${money(Number(recent.stakeMinor))}`;
-      tone = 'lost';
-    }
-  } else if (queued) {
-    line = 'Your bet goes in as soon as the next round opens.';
-  }
-  mine.textContent = line;
-  mine.dataset.tone = tone;
-  mine.hidden = !line;
 
   // A bet already in this round cannot be changed; between rounds the fields set up the next one.
   const lockInputs = busy || (phase === 'betting' && Boolean(bet));
@@ -382,11 +383,14 @@ function paintHistory() {
   const rows = (snap?.history || []).slice(0, 16);
   const key = rows.map((row) => row.id).join();
   if (strip.dataset.key === key) return;
+  const fresh = historyKey !== null && rows[0] && !historyKey.split(',').includes(rows[0].id);
+  historyKey = key;
   strip.dataset.key = key;
-  strip.replaceChildren(...rows.map((row) => {
+  strip.replaceChildren(...rows.map((row, index) => {
     const chip = el('li', 'crash__past');
     chip.dataset.band = band(row.crashPointX100);
     chip.textContent = x100(row.crashPointX100);
+    if (fresh && index === 0) chip.dataset.fresh = '1';
     return chip;
   }));
 }
@@ -476,7 +480,7 @@ function startSky() {
         lastDraw = 0;
       };
       built.onCue = (cue) => {
-        if (cue === 'strike') playSound('thunder');
+        if (cue === 'strike') playSound('crashBust');
         else if (cue === 'firework') playSound('shatter', { rate: 1.5 });
       };
       sky = built;
@@ -542,14 +546,19 @@ function readPalette() {
   const token = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
   palette = {
     line: token('--crash-line', '#ffd700'),
-    fillTop: token('--crash-fill-top', 'rgba(255, 170, 0, .34)'),
-    fillBottom: token('--crash-fill-bottom', 'rgba(255, 170, 0, 0)'),
+    fillTop: token('--crash-fill-top', 'rgba(255, 190, 40, .2)'),
+    fillBottom: token('--crash-fill-bottom', 'rgba(255, 190, 40, 0)'),
     bust: token('--crash-bust', '#ff4d5e'),
-    win: token('--crash-win', '#3fd3ff'),
-    grid: token('--crash-grid', 'rgba(255, 215, 0, .08)'),
-    label: token('--crash-label', 'rgba(236, 237, 240, .45)'),
-    head: token('--crash-head', '#fff6cc'),
-    mono: token('--mono', 'ui-monospace, monospace'),
+    bustFill: token('--crash-bust-fill', 'rgba(255, 77, 94, .16)'),
+    win: token('--crash-win', '#35d07f'),
+    grid: token('--crash-grid', 'rgba(255, 255, 255, .045)'),
+    label: token('--crash-label', 'rgba(209, 213, 219, .42)'),
+    rocket: token('--crash-rocket', '#efeae0'),
+    band: token('--crash-rocket-band', '#e2453c'),
+    nose: token('--crash-rocket-nose', '#e3a13a'),
+    flame: token('--crash-flame', '#ffb02e'),
+    spark: token('--crash-spark', '#ffd166'),
+    ui: token('--lx-ui', 'system-ui, sans-serif'),
   };
 }
 
@@ -576,7 +585,7 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
   const { w, h, dpr } = size;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  const pad = { l: 44, r: 18, t: 20, b: 28 };
+  const pad = { l: 48, r: 34, t: 34, b: 30 };
   const g = growth();
   const top = topX100 / 100;
   const spanX = Math.max(8, seconds * 1.18);
@@ -585,7 +594,7 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
   const py = (m) => h - pad.b - ((m - 1) / spanY) * (h - pad.t - pad.b);
 
   // Grid: multiplier lines with labels, and the time along the foot.
-  ctx.font = `600 10px ${palette.mono}`;
+  ctx.font = `600 11px ${palette.ui}`;
   ctx.fillStyle = palette.label;
   ctx.strokeStyle = palette.grid;
   ctx.lineWidth = 1;
@@ -605,7 +614,10 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
   ctx.textBaseline = 'top';
   for (let t = 0; t <= spanX; t += tStep) ctx.fillText(`${t}s`, px(t), h - pad.b + 8);
 
-  if (seconds <= 0) return;
+  if (seconds <= 0) {
+    sparks = [];
+    return;
+  }
   // The curve and the area under it.
   const points = [];
   const samples = 72;
@@ -614,7 +626,7 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
     points.push([px(t), py(Math.min(Math.exp(g * t), top))]);
   }
   const area = ctx.createLinearGradient(0, pad.t, 0, h - pad.b);
-  area.addColorStop(0, bust ? 'rgba(255, 77, 94, .22)' : palette.fillTop);
+  area.addColorStop(0, bust ? palette.bustFill : palette.fillTop);
   area.addColorStop(1, palette.fillBottom);
   ctx.beginPath();
   ctx.moveTo(points[0][0], py(1));
@@ -627,13 +639,10 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
   ctx.beginPath();
   points.forEach(([x, y], index) => (index ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.strokeStyle = bust ? palette.bust : palette.line;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 4;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.shadowColor = bust ? palette.bust : palette.line;
-  ctx.shadowBlur = 12;
   ctx.stroke();
-  ctx.shadowBlur = 0;
 
   // Cash-outs along the curve: the viewer's with its figure, everybody else's as a dot.
   for (const marker of markers) {
@@ -643,25 +652,134 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
     const y = py(marker.x100 / 100);
     ctx.fillStyle = palette.win;
     ctx.beginPath();
-    ctx.arc(x, y, marker.mine ? 5 : 3, 0, Math.PI * 2);
+    ctx.arc(x, y, marker.mine ? 6 : 3.5, 0, Math.PI * 2);
     ctx.fill();
     if (marker.mine) {
-      ctx.font = `800 11px ${palette.mono}`;
+      ctx.font = `800 12px ${palette.ui}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       ctx.fillText(`You ${x100(marker.x100)}`, x + 8, y - 6);
     }
   }
 
-  // The head of the curve.
+  // The head of the curve: the rocket riding it, or the burst where it went up.
   const [hx, hy] = points[points.length - 1];
-  ctx.fillStyle = bust ? palette.bust : palette.head;
-  ctx.shadowColor = bust ? palette.bust : palette.line;
-  ctx.shadowBlur = 18;
+  const [px0, py0] = points[Math.max(0, points.length - 4)];
+  const angle = Math.atan2(hy - py0, hx - px0);
+  if (bust) {
+    sparks = [];
+    drawBurst(hx, hy, Date.now() - bustAt);
+  } else {
+    drawSparks(hx, hy, angle);
+    drawRocket(hx, hy, angle);
+  }
+}
+
+/** A flat firework rocket: a paper tube with a red band, a gold nose, two fins, a flickering flame. */
+function drawRocket(x, y, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  const k = rocketScale();
+  ctx.scale(k, k);
+  const flicker = reduceMotion() ? 0 : Math.sin(performance.now() / 45) * 3;
+  ctx.fillStyle = palette.flame;
   ctx.beginPath();
-  ctx.arc(hx, hy, 6, 0, Math.PI * 2);
+  ctx.moveTo(-22, -4);
+  ctx.lineTo(-34 - flicker, 0);
+  ctx.lineTo(-22, 4);
+  ctx.closePath();
   ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.fillStyle = palette.band;
+  ctx.beginPath();
+  ctx.moveTo(-22, -6);
+  ctx.lineTo(-28, -11);
+  ctx.lineTo(-15, -6);
+  ctx.moveTo(-22, 6);
+  ctx.lineTo(-28, 11);
+  ctx.lineTo(-15, 6);
+  ctx.fill();
+  ctx.fillStyle = palette.rocket;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-23, -6, 23, 12, 2);
+  else ctx.rect(-23, -6, 23, 12);
+  ctx.fill();
+  ctx.fillStyle = palette.band;
+  ctx.fillRect(-14, -6, 4, 12);
+  ctx.fillStyle = palette.nose;
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.lineTo(11, 0);
+  ctx.lineTo(0, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/** The rocket's size: larger on a wide stage. */
+const rocketScale = () => (size.w >= 700 ? 1.5 : 1.15);
+
+/** A spread from a seed, for the sparks: the same every time the page runs, no Math.random. */
+function jitter() {
+  sparkSeed = (sparkSeed * 16807) % 2147483647;
+  return sparkSeed / 2147483647 - 0.5;
+}
+
+/** The rocket's trail: small flat squares shed from its tail, drifting back and fading. */
+function drawSparks(x, y, angle) {
+  const now = performance.now();
+  if (!reduceMotion()) {
+    const tailX = x - Math.cos(angle) * 30 * rocketScale();
+    const tailY = y - Math.sin(angle) * 30 * rocketScale();
+    for (let i = 0; i < 2; i += 1) {
+      sparks.push({
+        x: tailX,
+        y: tailY,
+        vx: -Math.cos(angle) * 60 + jitter() * 70,
+        vy: -Math.sin(angle) * 60 + jitter() * 70 + 20,
+        at: now,
+      });
+    }
+  }
+  sparks = sparks.filter((spark) => now - spark.at < 420).slice(-60);
+  for (const spark of sparks) {
+    const t = (now - spark.at) / 420;
+    const age = (now - spark.at) / 1000;
+    const s = (4 * (1 - t) + 1) * rocketScale();
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = t < 0.35 ? palette.spark : palette.flame;
+    ctx.fillRect(spark.x + spark.vx * age - s / 2, spark.y + spark.vy * age - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** Where the rocket went up: a ring and flat squares thrown out round a circle, then gone. */
+function drawBurst(x, y, ms) {
+  if (ms < 0 || ms > BURST_MS || reduceMotion()) {
+    ctx.fillStyle = palette.bust;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  const t = ms / BURST_MS;
+  const eased = 1 - (1 - t) ** 3;
+  ctx.strokeStyle = palette.bust;
+  ctx.globalAlpha = Math.max(0, 1 - t * 1.6);
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(x, y, (8 + eased * 46) * rocketScale(), 0, Math.PI * 2);
+  ctx.stroke();
+  const colours = [palette.bust, palette.spark, palette.rocket, palette.flame];
+  for (let i = 0; i < 18; i += 1) {
+    const a = (i / 18) * Math.PI * 2 + 0.2;
+    const reach = (50 + (i % 4) * 22) * eased * rocketScale();
+    const s = (7 * (1 - t) + 2) * rocketScale();
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = colours[i % colours.length];
+    ctx.fillRect(x + Math.cos(a) * reach - s / 2, y + Math.sin(a) * reach + 30 * t * t - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
 }
 
 function markersFor(bets, limitX100) {
@@ -687,9 +805,10 @@ function render(now) {
     const bust = frozen && frozen.roundId === snap?.round?.id ? frozen : lastBust;
     const point = bust?.x100 ?? 100;
     const seconds = Math.log(point / 100) / growth();
+    bustAt = bust?.at ?? 0;
     drawCurve(seconds, point, { bust: true, markers: markersFor(bust?.bets, point) });
     big.textContent = x100(point);
-    status.textContent = bust === frozen ? 'Busted' : `Busted at ${x100(point)}`;
+    status.textContent = '';
     bar.hidden = true;
     sky?.update({ phase, x100: point, id: bust?.roundId ?? null, mine: bust === lastBust ? lastBust?.mine : myBet(), cashouts: markersFor(bust?.bets, point).length });
   } else if (phase === 'betting') {
@@ -697,9 +816,14 @@ function render(now) {
     const total = (snap.config?.bettingSeconds || 10) * 1000;
     drawCurve(0, 100);
     big.textContent = `${(left / 1000).toFixed(1)}s`;
-    status.textContent = myBet() ? 'You are in. Launching in' : 'Place your bet. Launching in';
+    status.textContent = '';
     bar.hidden = false;
     bar.style.transform = `scaleX(${Math.min(1, left / total)})`;
+    // The last three seconds tick.
+    const second = Math.ceil(left / 1000);
+    if (second <= 3 && second >= 1 && second !== lastTick && lastPhase === 'betting') playSound('crashTick', { rate: 1 + (3 - second) * 0.12 });
+    lastTick = second;
+    lastWhole = 1;
     sky?.update({ phase, id: snap.round.id });
   } else if (phase === 'running') {
     const x = liveX100();
@@ -707,12 +831,11 @@ function render(now) {
     drawCurve(seconds, x, { markers: markersFor(snap.bets, x) });
     big.textContent = x100(x);
     const bet = myBet();
-    status.textContent = bet?.status === 'cashed_out'
-      ? `You are out at ${x100(bet.cashoutX100)}`
-      : bet
-        ? `Current payout ${money(Number((BigInt(bet.stakeMinor) * BigInt(x)) / 100n))}`
-        : 'In the air';
+    status.textContent = '';
     bar.hidden = true;
+    const whole = Math.floor(x / 100);
+    if (whole > lastWhole && lastPhase === 'running') milestone(whole);
+    lastWhole = whole;
     sky?.update({ phase, seconds, growth: growth(), id: snap.round.id, mine: bet, cashouts: markersFor(snap.bets, x).length });
   } else {
     drawCurve(0, 100);
@@ -723,12 +846,63 @@ function render(now) {
   }
 
   if (phase !== lastPhase) {
-    if (phase === 'running' && lastPhase === 'betting') announce('Launched.');
+    if (phase === 'running' && lastPhase === 'betting') {
+      announce('Launched.');
+      playSound('crashLaunch');
+    }
+    if (phase === 'busted' && lastPhase === 'running') bustFx();
     lastPhase = phase;
     paintPlayers();
   }
+  paintCard();
   // The button carries the live payout while a bet is in the air.
   paintButton();
+}
+
+/** The win card: the viewer's cash-out, this round's or the one busting on the stage. It pops, counts
+ * up and rings once per cash-out; one that was already there when the page opened just sits there. */
+function paintCard() {
+  const card = $('#crashCard', root);
+  if (!card || !snap) return;
+  const bet = myBet();
+  let out = null;
+  let key = null;
+  if (bet?.status === 'cashed_out') {
+    out = bet;
+    key = bet.roundId;
+  } else if (stagePhase() === 'busted' && lastBust?.mine?.status === 'cashed_out') {
+    out = lastBust.mine;
+    key = lastBust.roundId;
+  }
+  card.hidden = !out;
+  if (!out || key === cardKey) {
+    if (cardKey === undefined) cardKey = key;
+    return;
+  }
+  const quiet = cardKey === undefined;
+  cardKey = key;
+  $('b', card).textContent = x100(out.cashoutX100);
+  $('span', card).textContent = money(Number(out.payoutMinor));
+  if (quiet) return;
+  playSound('crashCash');
+  if (reduceMotion()) return;
+  card.animate(
+    [{ opacity: 0, transform: 'scale(.82)' }, { opacity: 1, transform: 'scale(1.04)', offset: 0.6 }, { opacity: 1, transform: 'none' }],
+    { duration: 380, easing: EASE },
+  );
+  countUp($('span', card), Number(out.payoutMinor), 650);
+}
+
+/** The win card's amount, counted up from nothing. */
+function countUp(node, value, ms) {
+  const started = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / ms);
+    node.textContent = money(Math.round(value * (1 - (1 - t) ** 3)));
+    if (t < 1 && node.isConnected) requestAnimationFrame(step);
+  };
+  node.textContent = money(0);
+  requestAnimationFrame(step);
 }
 
 /* One polite, whole sentence per event -- never the number as it climbs. */
@@ -750,6 +924,7 @@ function build() {
         <b class="crash__big" id="crashBig">—</b>
         <span class="crash__status" id="crashStatus">Connecting…</span>
         <span class="crash__bar" aria-hidden="true"><i id="crashBar" hidden></i></span>
+        <div class="crash__card" id="crashCard" aria-hidden="true" hidden><b></b><span></span></div>
       </div>
     </section>
 
@@ -774,11 +949,10 @@ function build() {
         <div class="crash__picks" role="group" aria-label="Auto cash-out targets">
           ${QUICK_TARGETS.map(([target, label]) => `<button type="button" class="crash__pick" data-target="${target ?? ''}" aria-pressed="false">${label}</button>`).join('')}
         </div>
-        <button class="btn crash__go" id="crashGo" type="submit" aria-keyshortcuts="Space">
+        <button class="btn crash__go" id="crashGo" type="submit" aria-keyshortcuts="Space" data-sfx="none">
           <span id="crashGoLabel">Loading…</span><kbd aria-hidden="true">Space</kbd>
         </button>
         <p class="crash__hint" id="crashHint" aria-live="polite"></p>
-        <p class="crash__mine" id="crashMine" hidden></p>
         ${viewSwitch('crashView')}
         <label class="crash__gfx" for="crashGfx">
           <span>Graphics</span>

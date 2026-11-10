@@ -610,6 +610,49 @@ const CUES = {
     noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
     tone(ctx, { freq: 220, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 294 });
   },
+
+  /* ── Crash ──
+   * A chip clack as the bet goes in, a soft tick for each of the last three seconds, a whoosh at the
+   * launch, a ping at every whole multiplier (pitched up by the caller as it climbs), the rocket
+   * going up when the round busts, and the cash-out.
+   */
+  /** The bet going in: a chip clacking down. */
+  crashBet(ctx) {
+    tone(ctx, { freq: 1300, type: 'triangle', duration: 0.03, gain: 0.07, sweepTo: 900 });
+    noise(ctx, { duration: 0.035, gain: 0.05, frequency: 3000, q: 1.3 });
+    tone(ctx, { freq: 330, type: 'sine', start: 0.01, duration: 0.07, gain: 0.05, sweepTo: 240 });
+  },
+  /** One of the last three seconds: a soft tick, pitched up by the caller. */
+  crashTick(ctx) {
+    tone(ctx, { freq: 880, type: 'sine', duration: 0.05, gain: 0.06 });
+    noise(ctx, { duration: 0.02, gain: 0.015, frequency: 4200, q: 1.6 });
+  },
+  /** The launch: a rising whoosh with a spark of ignition. */
+  crashLaunch(ctx) {
+    noise(ctx, { duration: 0.06, gain: 0.06, frequency: 2800, q: 0.9 });
+    tone(ctx, { freq: 160, type: 'triangle', duration: 0.55, gain: 0.08, sweepTo: 640 });
+    noise(ctx, { start: 0.04, duration: 0.5, gain: 0.05, frequency: 900, q: 0.5 });
+  },
+  /** A whole multiplier passed: a small bright ping. */
+  crashUp(ctx) {
+    tone(ctx, { freq: 1046.5, type: 'triangle', duration: 0.12, gain: 0.06 });
+    tone(ctx, { freq: 1568, type: 'sine', start: 0.02, duration: 0.1, gain: 0.03 });
+  },
+  /** The bust: a crack, a boom and a low fall. */
+  crashBust(ctx) {
+    noise(ctx, { duration: 0.09, gain: 0.3, frequency: 1700, q: 0.6 });
+    tone(ctx, { freq: 320, type: 'square', duration: 0.18, gain: 0.04, sweepTo: 90 });
+    noise(ctx, { duration: 0.7, gain: 0.24, frequency: 150, q: 0.4 });
+    tone(ctx, { freq: 72, type: 'sine', duration: 0.6, gain: 0.26, sweepTo: 32 });
+  },
+  /** Cashed out: a quick run of four notes and a shimmer. */
+  crashCash(ctx) {
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
+      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
+    });
+    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6400, q: 0.7 });
+    tone(ctx, { freq: 196, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 262 });
+  },
 };
 
 /**
