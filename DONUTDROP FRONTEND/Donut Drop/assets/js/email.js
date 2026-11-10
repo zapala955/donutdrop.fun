@@ -80,9 +80,9 @@ function armResend(button, send) {
 }
 
 const codeField = (id) => `
-  <div class="auth__field">
-    <input id="${id}" class="auth__input auth__input--code mono" type="text" inputmode="numeric"
-           autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" spellcheck="false">
+  <div class="auth__field auth__field--code">
+    <input id="${id}" class="auth__input auth__input--code" type="text" inputmode="numeric"
+           autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" spellcheck="false">
   </div>`;
 
 const emailField = (id, placeholder = 'you@example.com') => `
@@ -316,10 +316,11 @@ function card(title, icon) {
   return { section, body: $('.prof__body', section) };
 }
 
-const MAIL_ICON = '<svg viewBox="0 0 256 256"><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>';
+export const MAIL_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"/></svg>';
 const CUBE_ICON = '<svg viewBox="0 0 256 256"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z"/></svg>';
 
-const dateOf = (value) => (value ? new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+/* English dates, like the rest of the site's words (chat.js uses en-GB too), whatever the browser's language. */
+const dateOf = (value) => (value ? new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** The Email card. `info` is GET /v1/account/email; `refresh` repaints the whole profile. */
 export function emailCard(info, refresh) {

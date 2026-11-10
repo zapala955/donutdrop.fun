@@ -826,20 +826,55 @@ body.lx .prof .auth__note { margin: 0; color: var(--lx-faint); font: 500 .75rem/
 body.lx .prof .auth__field--static { height: auto; min-height: 44px; padding: var(--lx-s2) var(--lx-s3); }
 body.lx .prof .auth__value { color: var(--lx-gold-hi); font: 700 1rem/1.3 var(--lx-ui); overflow-wrap: anywhere; }
 
-/* a code: six digits, spaced so they can be checked against the email at a glance */
-body.lx .auth__input--code { letter-spacing: .35em; font-variant-numeric: tabular-nums; }
+/* a code: six digits, large and centred, in the same face as the code in the email, and spaced so
+ * they can be checked against it at a glance */
+body.lx .modal .auth__field--code,
+body.lx .prof .auth__field--code { height: 60px; }
+body.lx .modal .auth__input--code,
+body.lx .prof .auth__input--code {
+  padding: 0 0 0 .45em; text-align: center;
+  font: 800 1.5rem/1 var(--lx-display); letter-spacing: .45em; font-variant-numeric: tabular-nums;
+}
+body.lx .modal .auth__input--code::placeholder,
+body.lx .prof .auth__input--code::placeholder { color: var(--lx-4); }
 
-/* the sign-in card's new parts: "Log in with email", and a second button beside the main one */
+/* the second ways round a step ("Use a different email", "Log in with Minecraft instead"): quiet
+ * grey words, so gold stays on the one button that moves the step on */
 body.lx .modal .auth__link,
 body.lx .prof .auth__link {
   display: block; margin: var(--lx-s3) auto 0; padding: var(--lx-s1) var(--lx-s2);
   border: 0; background: none; cursor: pointer;
-  color: var(--lx-gold); font: 700 .8125rem/1.3 var(--lx-ui);
-  text-decoration: underline; text-underline-offset: 3px;
+  color: var(--lx-mute); font: 600 .8125rem/1.3 var(--lx-ui);
+  text-decoration: none;
 }
 body.lx .modal .auth__link[hidden] { display: none; }
-body.lx .modal .auth__link:hover { color: var(--lx-gold-hi); }
+body.lx .modal .auth__link:hover { color: var(--lx-ink); text-decoration: underline; text-underline-offset: 3px; }
 body.lx .modal .auth__link:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; border-radius: 3px; }
+
+/* errors in the sign-in card read red, as they do on the profile */
+body.lx .modal .auth__err { color: var(--lx-loss-text); font: 600 .8125rem/1.4 var(--lx-ui); }
+
+/* "or", then "Log in with email": a real second button under the sign-in, not a line of link text.
+ * Outlined, so it never reads as the greyed-out Continue above it. */
+body.lx .modal .auth__alt { margin-top: var(--lx-s4); }
+body.lx .modal .auth__alt[hidden] { display: none; }
+body.lx .modal .auth__or {
+  display: flex; align-items: center; gap: var(--lx-s3); margin: 0 0 var(--lx-s4);
+  color: var(--lx-faint); font: 600 .8125rem/1 var(--lx-ui);
+}
+body.lx .modal .auth__or::before,
+body.lx .modal .auth__or::after { content: ''; flex: 1; height: 1px; background: var(--lx-4); }
+body.lx .modal .auth__altbtn {
+  display: flex; align-items: center; justify-content: center; gap: var(--lx-s2);
+  width: 100%; height: 52px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-s);
+  background: transparent; box-shadow: inset 0 0 0 1px var(--lx-5); color: var(--lx-ink);
+  font: 700 .9375rem/1 var(--lx-ui); cursor: pointer;
+}
+body.lx .modal .auth__altbtn svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
+body.lx .modal .auth__altbtn:hover { background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-gold); }
+body.lx .modal .auth__altbtn:active { transform: translateY(1px); }
+body.lx .modal .auth__altbtn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
 body.lx .modal .auth__foot--pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--lx-s2); align-items: end; }
 body.lx .modal .auth__ghost {
   height: 52px; margin-top: 22px; padding: 0 var(--lx-s4);

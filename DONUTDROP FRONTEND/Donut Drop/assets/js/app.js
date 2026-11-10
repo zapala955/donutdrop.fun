@@ -49,7 +49,7 @@ import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
 import { mountProfile, mountWallet, mountHistory, mountSettings } from './account.js';
-import { emailSignInOffered, offerEmailLink, renderEmailSignIn } from './email.js';
+import { MAIL_ICON, emailSignInOffered, offerEmailLink, renderEmailSignIn } from './email.js';
 import { mountSupport, mountTerms } from './info.js';
 import { mountStudio } from './studio.js';
 import { mountQuests } from './quests.js';
@@ -433,7 +433,10 @@ function openLoginModal() {
           <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
         </div>
         <!-- Shown only while email sign-in is on and today's email allowance is not spent (email.js). -->
-        <button class="auth__link" type="button" id="linkByEmail" hidden>Have an email linked? Log in with email</button>
+        <div class="auth__alt" id="linkByEmailRow" hidden>
+          <p class="auth__or">or</p>
+          <button class="btn auth__altbtn" type="button" id="linkByEmail">${MAIL_ICON}<span>Log in with email</span></button>
+        </div>
       </form>
       <div id="linkProgress" role="status"></div>`;
 
@@ -448,11 +451,11 @@ function openLoginModal() {
 
     /* Log in with email: a code to the linked address instead of a payment. Offered only once the
      * server says email is on and has allowance left today; back returns to this card. */
-    const byEmail = $('#linkByEmail', body);
+    const byEmailRow = $('#linkByEmailRow', body);
     void emailSignInOffered().then((offered) => {
-      if (offered && byEmail.isConnected) byEmail.hidden = false;
+      if (offered && byEmailRow.isConnected) byEmailRow.hidden = false;
     });
-    byEmail.addEventListener('click', () => {
+    $('#linkByEmail', body).addEventListener('click', () => {
       renderEmailSignIn(body, {
         loadTurnstile,
         onBack: () => openLoginModal(),

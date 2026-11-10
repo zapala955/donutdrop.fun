@@ -253,58 +253,174 @@ function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
-/* One plain layout: light background (most mail clients render a dark one badly), the gold of the
- * site as the only colour, and the code large and easy to copy. Every email has a text part too. */
-function layout(title: string, lines: string[], code?: string): string {
-  const body = lines.map((line) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.5;color:#2b2b30">${escapeHtml(line)}</p>`).join('');
-  const block = code
-    ? `<p style="margin:6px 0 18px;font:700 32px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:6px;color:#121216">${escapeHtml(code)}</p>`
-    : '';
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f4f2ee;font-family:Arial,Helvetica,sans-serif">`
-    + `<div style="max-width:480px;margin:0 auto;padding:28px;background:#ffffff;border-radius:8px;border-top:4px solid #e3a13a">`
-    + `<p style="margin:0 0 18px;font:800 18px/1 Arial,Helvetica,sans-serif;color:#121216">DonutLuxe</p>`
-    + `<h1 style="margin:0 0 14px;font-size:20px;color:#121216">${escapeHtml(title)}</h1>${block}${body}`
-    + `<p style="margin:18px 0 0;font-size:12px;color:#8a8a92">You are receiving this because this address was entered on donutluxe.com.</p>`
-    + `</div></body></html>`;
+/* The emails wear the site's own skin (assets/css/luxe.css): the #121216 page, a flat #1c1c22 panel
+ * with a hairline edge, a #0a0a0c well for the code, and gold only on the one thing to act on. The
+ * logo is the live pixel lockup (logo-com.png, 1320x300), whose own background is the page colour,
+ * so it sits on the page with no box around it; it is shown at a quarter or a fifth, so its pixels
+ * stay whole. Everything is inline and laid out with tables, because Gmail and Outlook
+ * drop most of a <style> block; the one <style> only tightens the padding on a phone. Fonts fall
+ * back to Segoe UI / Helvetica / Arial where a client will not load Figtree and Archivo.
+ * Every email has a plain-text part too. */
+const SITE_URL = 'https://donutluxe.com';
+const DISCORD_URL = 'https://discord.gg/aHfRsUaGgx';
+const LOGO_URL = `${SITE_URL}/assets/img/brand/logo-com.png`;
+const MAIL = {
+  page: '#121216',
+  panel: '#1c1c22',
+  well: '#0a0a0c',
+  edge: '#2a2a31',
+  goldEdge: '#7a5410',
+  title: '#ffffff',
+  text: '#d1d5db',
+  mute: '#9096a0',
+  faint: '#757b85',
+  gold: '#ffaa00',
+  onGold: '#0a0a0c',
+} as const;
+const UI_FONT = "Figtree,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const DISPLAY_FONT = "Archivo,Figtree,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+type Detail = readonly [label: string, value: string];
+type Email = { subject: string; text: string; html: string };
+interface Letter {
+  preheader: string;
+  title: string;
+  intro: string;
+  code?: string;
+  details: Detail[];
+  /** Notices about a change already made end on a gold "Contact staff on Discord" button. */
+  help?: boolean;
+  note: string;
 }
+
+function whenUtc(at: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}, ${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())} UTC`;
+}
+
+function layout(letter: Letter): string {
+  const e = escapeHtml;
+  const table = 'role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"';
+  const code = letter.code
+    ? `<tr><td style="padding:24px 0 0">`
+      + `<table ${table} style="border-collapse:separate"><tr>`
+      + `<td align="center" bgcolor="${MAIL.well}" style="background:${MAIL.well};border:1px solid ${MAIL.goldEdge};border-radius:12px;padding:24px 8px 24px 20px">`
+      + `<div class="code" style="font:800 40px/1 ${DISPLAY_FONT};letter-spacing:12px;color:${MAIL.title}">${e(letter.code)}</div>`
+      + `</td></tr></table>`
+      + `<p style="margin:12px 0 0;font:500 13px/1.4 ${UI_FONT};color:${MAIL.mute};text-align:center">Expires in ${CODE_TTL_MINUTES} minutes and works once</p>`
+      + `</td></tr>`
+    : '';
+  const rows = letter.details.map(([label, value], index) => {
+    const line = `border-top:1px solid ${MAIL.edge};${index === letter.details.length - 1 ? `border-bottom:1px solid ${MAIL.edge};` : ''}`;
+    return `<tr><td style="${line}padding:12px 12px 12px 0;font:400 14px/1.4 ${UI_FONT};color:${MAIL.mute};white-space:nowrap;vertical-align:top">${e(label)}</td>`
+      + `<td align="right" style="${line}padding:12px 0;font:600 14px/1.4 ${UI_FONT};color:${MAIL.title};text-align:right;word-break:break-word">${e(value)}</td></tr>`;
+  }).join('');
+  const details = rows ? `<tr><td style="padding:24px 0 0"><table ${table} style="border-collapse:collapse">${rows}</table></td></tr>` : '';
+  const help = letter.help
+    ? `<tr><td style="padding:24px 0 0">`
+      + `<p style="margin:0 0 14px;font:400 15px/1.55 ${UI_FONT};color:${MAIL.text}">Wasn't you? Contact staff straight away.</p>`
+      + `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>`
+      + `<td bgcolor="${MAIL.gold}" style="background:${MAIL.gold};border-radius:10px">`
+      + `<a href="${DISCORD_URL}" style="display:inline-block;padding:13px 22px;font:700 15px/1 ${UI_FONT};color:${MAIL.onGold};text-decoration:none;border-radius:10px">Contact staff on Discord</a>`
+      + `</td></tr></table></td></tr>`
+    : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">`
+    + `<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting">`
+    + `<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">`
+    + `<title>${e(letter.title)}</title>`
+    + `<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&amp;family=Figtree:wght@400;500;600;700&amp;display=swap" rel="stylesheet">`
+    + `<style>:root{color-scheme:dark;supported-color-schemes:dark}body{margin:0;padding:0;background:${MAIL.page}}`
+    + `@media (max-width:540px){.card{padding:28px 20px!important}.code{font-size:32px!important;letter-spacing:9px!important}.h1{font-size:22px!important}.logo{width:264px!important;height:60px!important}}</style>`
+    + `</head><body style="margin:0;padding:0;background:${MAIL.page}" bgcolor="${MAIL.page}">`
+    + `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">${e(letter.preheader)}</div>`
+    + `<table ${table} bgcolor="${MAIL.page}" style="background:${MAIL.page}"><tr><td align="center" style="padding:28px 12px 40px">`
+    + `<!--[if mso]><table role="presentation" width="520" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`
+    + `<table ${table} style="max-width:520px">`
+    + `<tr><td align="center" style="padding:0 0 16px"><a href="${SITE_URL}" style="text-decoration:none">`
+    + `<img class="logo" src="${LOGO_URL}" width="330" height="75" alt="DonutLuxe" style="display:block;border:0;width:330px;height:75px;image-rendering:pixelated;font:800 22px/75px ${DISPLAY_FONT};color:${MAIL.title};text-align:center"></a></td></tr>`
+    + `<tr><td class="card" bgcolor="${MAIL.panel}" style="background:${MAIL.panel};border:1px solid ${MAIL.edge};border-radius:16px;padding:36px 36px 32px">`
+    + `<table ${table}>`
+    + `<tr><td><h1 class="h1" style="margin:0;font:800 26px/1.2 ${DISPLAY_FONT};color:${MAIL.title}">${e(letter.title)}</h1>`
+    + `<p style="margin:10px 0 0;font:400 15px/1.55 ${UI_FONT};color:${MAIL.text}">${e(letter.intro)}</p></td></tr>`
+    + code + details + help
+    + `<tr><td style="padding:24px 0 0;font:400 13px/1.55 ${UI_FONT};color:${MAIL.mute}">${e(letter.note)}</td></tr>`
+    + `</table></td></tr>`
+    + `<tr><td align="center" style="padding:22px 12px 0;font:400 12px/1.7 ${UI_FONT};color:${MAIL.faint}">`
+    + `<a href="${SITE_URL}" style="color:${MAIL.mute};text-decoration:none">donutluxe.com</a>`
+    + `&nbsp;&nbsp;&middot;&nbsp;&nbsp;<a href="${DISCORD_URL}" style="color:${MAIL.mute};text-decoration:none">Discord</a><br>`
+    + `You're getting this because this address was entered on donutluxe.com.</td></tr>`
+    + `</table><!--[if mso]></td></tr></table><![endif]-->`
+    + `</td></tr></table></body></html>`;
+}
+
+function plainText(letter: Letter, lead: string): string {
+  const details = letter.details.map(([label, value]) => `${label}: ${value}`).join('\n');
+  const help = letter.help ? `\n\nWasn't you? Contact staff on Discord straight away: ${DISCORD_URL}` : '';
+  return `${lead}\n\n${letter.intro}${details ? `\n\n${details}` : ''}${help}\n\n${letter.note}\n\n${SITE_URL}`;
+}
+
+const CODE_LETTERS: Record<CodePurpose, { subject: string; lead: string; title: string; intro: string; note: string }> = {
+  login: {
+    subject: 'is your DonutLuxe sign-in code',
+    lead: 'Your DonutLuxe sign-in code is',
+    title: 'Your sign-in code',
+    intro: 'Enter this code on DonutLuxe to sign in.',
+    note: "Didn't try to sign in? Ignore this email. Nobody can get in without this code, and staff will never ask you for it.",
+  },
+  link: {
+    subject: 'is your DonutLuxe email code',
+    lead: 'Your DonutLuxe email code is',
+    title: 'Confirm your email',
+    intro: 'Enter this code on DonutLuxe to link this email to your account.',
+    note: "Didn't ask for this? Ignore this email and nothing will be linked.",
+  },
+  confirm: {
+    subject: 'is your DonutLuxe confirmation code',
+    lead: 'Your DonutLuxe confirmation code is',
+    title: 'Confirm a change',
+    intro: 'Enter this code on DonutLuxe to confirm the change below.',
+    note: "Didn't ask for this? Don't share the code with anyone. Without it nothing changes, and staff will never ask you for it.",
+  },
+};
 
 export function codeEmail(
   purpose: CodePurpose,
   code: string,
   minecraftUsername: string | null,
   action?: string,
-): { subject: string; text: string; html: string } {
-  const minutes = `It works for ${CODE_TTL_MINUTES} minutes.`;
-  if (purpose === 'login') {
-    const lines = [minutes, 'If you did not ask to sign in, ignore this email: nobody can sign in without this code.'];
-    return {
-      subject: `${code} is your DonutLuxe sign-in code`,
-      text: `Your DonutLuxe sign-in code is ${code}.\n\n${lines.join('\n')}`,
-      html: layout('Your sign-in code', lines, code),
-    };
+): Email {
+  const words = CODE_LETTERS[purpose];
+  const details: Detail[] = [];
+  if (minecraftUsername) details.push(['Account', minecraftUsername]);
+  if (purpose === 'confirm') {
+    const request = action ?? 'a change to your account';
+    details.push(['Request', request.charAt(0).toUpperCase() + request.slice(1)]);
   }
-  if (purpose === 'link') {
-    const lines = [
-      `Enter it on DonutLuxe to link this email to ${minecraftUsername ?? 'your account'}. ${minutes}`,
-      'If you did not ask for this, ignore this email and nothing will be linked.',
-    ];
-    return {
-      subject: `${code} is your DonutLuxe email code`,
-      text: `Your DonutLuxe email code is ${code}.\n\n${lines.join('\n')}`,
-      html: layout('Link your email', lines, code),
-    };
-  }
-  const lines = [
-    `Enter it on DonutLuxe to confirm: ${action ?? 'a change to your account'}. ${minutes}`,
-    'If you did not ask for this, do not share the code with anyone. Without it nothing changes.',
-  ];
+  const letter: Letter = {
+    preheader: `Expires in ${CODE_TTL_MINUTES} minutes. Never share it with anyone.`,
+    title: words.title,
+    intro: words.intro,
+    code,
+    details,
+    note: words.note,
+  };
   return {
-    subject: `${code} is your DonutLuxe confirmation code`,
-    text: `Your DonutLuxe confirmation code is ${code}.\n\n${lines.join('\n')}`,
-    html: layout('Confirm a change', lines, code),
+    subject: `${code} ${words.subject}`,
+    text: plainText(letter, `${words.lead} ${code}. It expires in ${CODE_TTL_MINUTES} minutes and works once.`),
+    html: layout(letter),
   };
 }
 
-export function noticeEmail(title: string, lines: string[]): { subject: string; text: string; html: string } {
-  return { subject: `DonutLuxe: ${title}`, text: `${title}\n\n${lines.join('\n')}`, html: layout(title, lines) };
+/** A notice that something on the account already changed, sent to the address that would want to know. */
+export function noticeEmail(title: string, intro: string, details: Detail[], at = new Date()): Email {
+  const letter: Letter = {
+    preheader: intro,
+    title,
+    intro,
+    details: [...details, ['When', whenUtc(at)]],
+    help: true,
+    note: "If this was you, there's nothing to do.",
+  };
+  return { subject: `DonutLuxe: ${title}`, text: plainText(letter, title), html: layout(letter) };
 }

@@ -147,9 +147,9 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
 
   /** Best effort: a notice that cannot be sent (the daily limit, the provider down) never undoes
    * the change it describes, which has already been committed. */
-  const sendNotice = async (to: string, userId: string, title: string, lines: string[], request: FastifyRequest) => {
+  const sendNotice = async (to: string, userId: string, notice: ReturnType<typeof noticeEmail>, request: FastifyRequest) => {
     try {
-      await sendEmail(db, config, { to, userId, purpose: 'notice', ...noticeEmail(title, lines) });
+      await sendEmail(db, config, { to, userId, purpose: 'notice', ...notice });
     } catch (error) {
       request.log.warn({ err: error }, 'Could not send an account notice email');
     }
@@ -356,10 +356,11 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
       if (!outcome.ok) throw outcome.error;
       const { email, previous, username } = outcome.value;
       if (previous && previous !== email) {
-        await sendNotice(previous, userId, 'Your email was changed', [
-          `The email on the DonutLuxe account ${username} was changed to ${maskEmail(email)}.`,
-          'If this was not you, contact staff on the DonutLuxe Discord straight away.',
-        ], request);
+        await sendNotice(previous, userId, noticeEmail(
+          'Your email was changed',
+          'The email on your DonutLuxe account was changed. This address can no longer be used to sign in.',
+          [['Account', username], ['New email', maskEmail(email)]],
+        ), request);
       }
       return reply.send({ email, verifiedAt: new Date().toISOString() });
     },
@@ -406,10 +407,11 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
         return { ok: true, value: { email: account.email, username: account.minecraft_username } };
       });
       if (!outcome.ok) throw outcome.error;
-      await sendNotice(outcome.value.email, userId, 'Your email was removed', [
-        `This email is no longer linked to the DonutLuxe account ${outcome.value.username}, and can no longer be used to sign in to it.`,
-        'If this was not you, contact staff on the DonutLuxe Discord straight away.',
-      ], request);
+      await sendNotice(outcome.value.email, userId, noticeEmail(
+        'Your email was removed',
+        'This email is no longer linked to your DonutLuxe account and can no longer be used to sign in to it.',
+        [['Account', outcome.value.username]],
+      ), request);
       return { email: null };
     },
   );
@@ -592,10 +594,11 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
       reply.clearCookie(linkCookieName(config), { path: '/' });
       if (!outcome.ok) throw outcome.error;
       const moved = outcome.value;
-      await sendNotice(moved.email, userId, 'Your Minecraft account was changed', [
-        `Your DonutLuxe account is now linked to the Minecraft account ${moved.to} (it was ${moved.from}).`,
-        `Withdrawals now go to ${moved.to}. If this was not you, contact staff on the DonutLuxe Discord straight away.`,
-      ], request);
+      await sendNotice(moved.email, userId, noticeEmail(
+        'Your Minecraft account was changed',
+        'Your DonutLuxe account is now linked to a different Minecraft account. Withdrawals go to the new account from now on.',
+        [['Previous account', moved.from], ['New account', moved.to]],
+      ), request);
       return reply.send({
         user: {
           id: userId,

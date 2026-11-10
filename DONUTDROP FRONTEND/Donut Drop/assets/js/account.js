@@ -274,7 +274,7 @@ function paintHero(root, user) {
   $('.prof__name', root).textContent = String(user.minecraftUsername ?? '—');
   const since = state.account?.created_at;
   $('.prof__since', root).textContent = since
-    ? `Member since ${new Date(since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
+    ? `Member since ${new Date(since).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`
     : '';
   $('.prof__balance', root).textContent = money(state.balance);
 }

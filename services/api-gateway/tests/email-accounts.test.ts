@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { loadConfig } from '../src/config.js';
-import { CODE_MAX_ATTEMPTS, CODE_TTL_MINUTES, EMAIL_PATTERN, codeEmail, maskEmail, normalizeEmail } from '../src/lib/email.js';
+import { CODE_MAX_ATTEMPTS, CODE_TTL_MINUTES, EMAIL_PATTERN, codeEmail, maskEmail, noticeEmail, normalizeEmail } from '../src/lib/email.js';
 
 /* Email on accounts (2026-11-10). The owner's spec: after a first sign-up (paying the bot) the site
  * offers to link an email; it can be linked later from a redesigned profile; with one linked, the
@@ -62,6 +62,18 @@ describe('email on accounts', () => {
     assert.match(login.text, /123456/);
     // Server strings in the HTML are escaped.
     assert.doesNotMatch(codeEmail('link', '123456', '<b>x</b>').html, /<b>x<\/b>/);
+    /* The owner (2026-11-10): the first light design "doesnt fit the new premium real online casino
+     * design". The emails wear the site's dark skin: the page, a flat panel, the code in a well. */
+    assert.match(login.html, /background:#121216/);
+    assert.match(login.html, /bgcolor="#1c1c22"/);
+    assert.match(login.html, /src="https:\/\/donutluxe\.com\/assets\/img\/brand\/logo-com\.png"/);
+    assert.match(login.html, /<meta name="color-scheme" content="dark">/);
+    assert.match(login.html, />123456<\/div>/);
+    const notice = noticeEmail('Your email was changed', 'Changed.', [['Account', 'Alice']], new Date('2026-11-10T22:54:00Z'));
+    assert.equal(notice.subject, 'DonutLuxe: Your email was changed');
+    assert.match(notice.html, />10 Nov 2026, 22:54 UTC</);
+    assert.match(notice.html, /href="https:\/\/discord\.gg\/aHfRsUaGgx"[^>]*>Contact staff on Discord<\/a>/);
+    assert.match(notice.text, /Account: Alice\nWhen: 10 Nov 2026, 22:54 UTC/);
   });
 
   it('counts every send over 24 hours under a lock, and refuses at the daily limit', async () => {
@@ -130,7 +142,9 @@ describe('email on accounts', () => {
   it('offers an email after a first sign-up, signs in by code, and draws the profile cards', async () => {
     const app = await front('app.js');
     assert.match(app, /if \(user\.created && signInOpen\(\)\) \{\n\s*await offerEmailLink\(body, \{/);
-    assert.match(app, /<button class="auth__link" type="button" id="linkByEmail" hidden>/);
+    // "or", then a real "Log in with email" button, shown only once the server says email is on.
+    assert.match(app, /<div class="auth__alt" id="linkByEmailRow" hidden>/);
+    assert.match(app, /<button class="btn auth__altbtn" type="button" id="linkByEmail">\$\{MAIL_ICON\}<span>Log in with email<\/span><\/button>/);
     const store = await front('store.js');
     assert.match(store, /return \{ \.\.\.result\.user, created: Boolean\(result\.created\) \};/);
     const email = await front('email.js');
