@@ -1098,9 +1098,38 @@ canvas.play {
    works. Press is faster than release on purpose: the acknowledgement has to
    beat the eye, the recovery does not.
    ═══════════════════════════════════════════════════════════════ */
-.btn, .chip, .tabs a, .menu__row, .acct__btn, .lvl,
-.promo, .gamecard, .mode, .pickgrid button, .subnav a, .stakes button {
+/* No tap wash, anywhere. A phone painted whatever was tapped in its translucent blue, and only a
+   handful of controls opted out, so game tiles, the stake keys and the lobby cards still flashed.
+   Every control here has its own pressed state, so the wash only ever read as a glitch. The
+   property inherits, so the root covers the page. (2026-11-10) */
+html {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Controls are pressed, not read. A quick double tap or a long press on a button selected its label
+   and painted it blue, and a click on a bet button left a text caret blinking in the empty hint
+   under it. So controls never select, and a game screen -- its stage and its betting panel -- holds
+   neither a selection nor a caret. Whatever you type into keeps both. Pages that are there to be
+   read or copied from (chat, invite and link codes, the fairness seeds) are not in the list. */
+:where(button, [role="button"], [role="tab"], .btn, .chip, summary, label) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+:where(#upgRoot, #rouletteRoot, #blackjackRoot, #crashRoot, #minesRoot, #towerRoot, #chickenRoot,
+  #plinkoRoot, #diceRoot, #limboRoot, #fishingRoot, #icefishRoot, #derbyRoot, #slotsRoot,
+  #monumentRoot, #minesDuelRoot, #coinflipRoot, #duelRoot, #crateRoot, #battleRoot) {
+  -webkit-user-select: none;
+  user-select: none;
+  caret-color: transparent;
+}
+:where(#upgRoot, #rouletteRoot, #blackjackRoot, #crashRoot, #minesRoot, #towerRoot, #chickenRoot,
+  #plinkoRoot, #diceRoot, #limboRoot, #fishingRoot, #icefishRoot, #derbyRoot, #slotsRoot,
+  #monumentRoot, #minesDuelRoot, #coinflipRoot, #duelRoot, #crateRoot, #battleRoot)
+  :is(input, textarea, select) {
+  -webkit-user-select: text;
+  user-select: text;
+  caret-color: auto;
 }
 .btn:active:not([disabled]) { transform: translateY(1px) scale(.978); transition-duration: .05s; }
 .chip:active, .pickgrid button:active, .stakes button:active { transform: scale(.955); transition-duration: .05s; }

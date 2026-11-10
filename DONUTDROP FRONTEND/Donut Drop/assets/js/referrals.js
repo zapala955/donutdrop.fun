@@ -332,12 +332,11 @@ function appendDeal(card, terms, ledeText) {
   /* What the friend gets for joining on the link: the invite signup bonus, in place of the
    * ordinary one, at signup (GET /v1/promotions referralSignupBonus). */
   const invite = state.promotions?.referralSignupBonus;
-  /* Wagering that clears that bonus is not counted toward yours (lib/referrals.ts). */
+  /* Wagering that clears that bonus is still not counted toward yours (lib/referrals.ts), but the
+   * owner took the "Not counted" row off the terms (2026-11-10): each invite's own progress line
+   * ("Clearing their bonus: … left") already says it where it applies. */
   const friend = invite
-    ? [
-      ['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`],
-      ['Not counted', `The ${money(Number(invite.wagerMinor))} that clears their bonus`],
-    ]
+    ? [['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`]]
     : [];
   for (const [label, value] of [
     ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],

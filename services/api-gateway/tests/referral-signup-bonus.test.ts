@@ -33,9 +33,10 @@ describe('the invite signup bonus', () => {
     // Every counted wager goes to what is left of the bonus's wagering first.
     assert.match(lib, /const toBonus = counted < bonusLeft \? counted : bonusLeft;\s*const wageredAfter = BigInt\(referral\.wagered_minor\) \+ counted - toBonus;/);
     assert.match(lib, /signup_bonus_wager_left_minor = \$4,/);
-    // The inviter sees what is left of it, and is told up front it does not count.
+    // The inviter sees what is left of it on each invite. The "Not counted" row in the terms came
+    // off at the owner's request (2026-11-10); the progress line says it where it applies.
     assert.match(referrals, /`Clearing their bonus: \$\{money\(Number\(invite\.bonusWagerLeftMinor\)\)\} left`/);
-    assert.match(referrals, /\['Not counted', `The \$\{money\(Number\(invite\.wagerMinor\)\)\} that clears their bonus`\]/);
+    assert.doesNotMatch(referrals, /'Not counted'/);
   });
 
   it('is a live setting, $10M at 10x by default, and public for a visitor', async () => {
