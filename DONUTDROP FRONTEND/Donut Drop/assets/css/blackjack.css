@@ -1,36 +1,57 @@
-/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4
- * Hallmark · component: blackjack table · genre: atmospheric (the site's obsidian + gold) · theme: site tokens
- * states: deal / hit / stand / double buttons use the site's .btn (default, hover, :focus-visible,
- *         :active, [disabled]) plus aria-busy for the one waiting on the server; the stake field has
- *         default, focus, and an invalid hint; results carry win / push / lose tones.
- * signature: the table's payouts printed on the felt in an arc, as a real table prints them -- the
- *            number that makes the edge (wins pay 1.8x) is on the felt, not in small print.
- * motion: a card flies from the shoe (340ms), the hole card turns (380ms), one pulse on a win.
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+ * Hallmark · component: blackjack table · genre: atmospheric · theme: site tokens (warm obsidian + amber gold)
+ * states: deal / hit / stand / double use the site's .btn and the frame in luxe-games.css (default, hover,
+ *         :focus-visible, :active, [disabled], aria-busy for the one waiting on the server); the stake
+ *         field has default, hover, focus and an invalid hint; totals carry soft / 21 / bust; the result
+ *         plate carries win / blackjack / push / lose.
+ * signature: a card room, not a green felt. The table is the site's warm obsidian under one lamp, the
+ *            payouts printed in a gold-lined band as a real table prints them, ivory cards, and backs in
+ *            a gold lattice with the pixel donut in the middle. Gold is still the only thing that means
+ *            "this is yours": your bet chip, a 21, a win.
+ * motion: a card flies from the shoe (340ms), the hole card turns (380ms), one ring of light on a win.
  *         Reduced motion: short fades, nothing moves across the table.
+ * Rewritten 2026-11-10: the owner said the old emerald felt "doesn't fit the site's premium theme at all".
  */
 
 .bj {
-  /* The table's own palette, lifted here so nothing below writes a colour inline. Felt is a deep
-     emerald that sits under the site's gold without turning the page into a different site. */
-  --bj-felt: #0c2a21;
-  --bj-felt-hi: #134133;
-  --bj-felt-lo: #06140f;
-  --bj-print: rgba(255, 215, 0, .62);
-  --bj-print-dim: rgba(236, 237, 240, .52);
-  --bj-card: #f6f1e6;
-  --bj-ink: #16161a;
-  --bj-red: #b3202a;
-  --bj-back-a: #1a1206;
-  --bj-back-b: #2a1c02;
-  --bj-shadow: 0 6px 16px -6px rgba(0, 0, 0, .75);
-  --bj-card-w: clamp(52px, 14vw, 86px);
+  /* Every colour the table uses, named here, so nothing below writes one inline. The surface is the
+     crates page's warm obsidian; the lines and the lettering are the site's gold, thinned. */
+  --bj-felt: #100d08;
+  --bj-felt-hi: #1b170f;
+  --bj-felt-lo: #070605;
+  --bj-lamp: color-mix(in srgb, var(--lx-gold, #e3a13a) 9%, transparent);
+  --bj-inlay: color-mix(in srgb, var(--lx-gold, #e3a13a) 34%, transparent);
+  --bj-print: color-mix(in srgb, var(--lx-gold, #e3a13a) 78%, transparent);
+  --bj-hair: color-mix(in srgb, var(--lx-gold, #e3a13a) 16%, transparent);
+  --bj-hair-hi: color-mix(in srgb, var(--lx-gold, #e3a13a) 42%, transparent);
+  --bj-glow: color-mix(in srgb, var(--lx-gold, #e3a13a) 55%, transparent);
+  --bj-well: rgba(0, 0, 0, .42);
+
+  --bj-card: #f6f1e7;
+  --bj-card-lo: #ebe3d3;
+  --bj-card-edge: rgba(60, 44, 20, .16);
+  --bj-ink: #17150f;
+  --bj-red: #b11f2b;
+  --bj-court: #b8862c;
+  --bj-back: #15110a;
+  --bj-back-lattice: color-mix(in srgb, var(--lx-gold, #e3a13a) 15%, transparent);
+  --bj-back-line: color-mix(in srgb, var(--lx-gold, #e3a13a) 70%, transparent);
+  --bj-shadow: 0 2px 3px rgba(0, 0, 0, .35), 0 12px 22px -10px rgba(0, 0, 0, .9);
+  --bj-veil: rgba(8, 7, 5, .5);
+  --bj-foil: linear-gradient(180deg, var(--lx-gold-hi, #f0c35a) 25%, var(--lx-gold, #e3a13a) 62%, var(--lx-gold-lo, #b97c22));
+
+  --bj-card-w: clamp(56px, 14vw, 92px);
   --bj-card-h: calc(var(--bj-card-w) * 1.4);
-  --bj-ease: cubic-bezier(.22, 1, .36, 1);
+  --bj-card-r: calc(var(--bj-card-w) * .085);
+  --bj-ease: var(--lx-ease, cubic-bezier(.16, 1, .3, 1));
 
   display: grid;
   gap: 14px;
   min-width: 0;
 }
+
+/* A theme picked in Settings redraws the felt from its own ladder: see luxe-games.css (the theme
+   rules live after luxe.css, as every theme rule does). */
 
 /* ─────────── the table ─────────── */
 .bj__table {
@@ -42,22 +63,21 @@
   min-height: calc(var(--bj-card-h) * 2 + 220px);
   padding: 22px 16px 24px;
   border-radius: 22px;
-  border: 1px solid var(--ob-line-hi);
-  background: radial-gradient(ellipse 80% 70% at 50% 40%, var(--bj-felt-hi), var(--bj-felt) 58%, var(--bj-felt-lo));
-  box-shadow:
-    inset 0 0 0 5px rgba(0, 0, 0, .28),
-    inset 0 0 70px rgba(0, 0, 0, .55),
-    0 24px 50px -30px rgba(0, 0, 0, .9);
+  /* One lamp over the middle of the table, the corners falling off into the dark. */
+  background:
+    radial-gradient(ellipse 58% 46% at 50% 44%, var(--bj-lamp), transparent 72%),
+    radial-gradient(ellipse 110% 85% at 50% 38%, var(--bj-felt-hi), var(--bj-felt) 58%, var(--bj-felt-lo));
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, .55);
   overflow: hidden;
 }
 
-/* Where every card comes from: a short stack of backs in the corner. */
+/* Where every card comes from: a squared deck in the corner, the top card's back showing. */
 .bj__shoe {
   position: absolute;
-  top: 16px;
-  right: 18px;
-  width: calc(var(--bj-card-w) * .62);
-  height: calc(var(--bj-card-h) * .62);
+  top: 18px;
+  right: 20px;
+  width: calc(var(--bj-card-w) * .58);
+  height: calc(var(--bj-card-h) * .58);
 }
 .bj__shoe::before,
 .bj__shoe::after,
@@ -65,18 +85,29 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 6px;
-  background: repeating-linear-gradient(45deg, var(--bj-back-a) 0 5px, var(--bj-back-b) 5px 10px);
-  box-shadow: inset 0 0 0 2px var(--gold-deep), var(--bj-shadow);
+  border-radius: calc(var(--bj-card-r) * .7);
+  background: var(--bj-back);
+  box-shadow: inset 0 0 0 1px var(--bj-back-line), 0 1px 0 rgba(0, 0, 0, .6);
 }
-.bj__shoe::before { transform: translate(-6px, 5px) rotate(-6deg); opacity: .7; }
-.bj__shoe::after { transform: translate(-3px, 2px) rotate(-3deg); opacity: .85; }
+.bj__shoe::before { transform: translate(0, 6px); opacity: .55; }
+.bj__shoe::after { transform: translate(0, 3px); opacity: .8; }
+/* The span is the top card; ::after would paint over it without this. */
+.bj__shoe span {
+  z-index: 1;
+  background:
+    url("../img/brand/donut.svg") center / 46% auto no-repeat,
+    repeating-linear-gradient(45deg, var(--bj-back-lattice) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, var(--bj-back-lattice) 0 1px, transparent 1px 6px),
+    var(--bj-back);
+  box-shadow: inset 0 0 0 2px var(--bj-back), inset 0 0 0 3px var(--bj-back-line), var(--bj-shadow);
+  image-rendering: pixelated;
+}
 
 .bj__seat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 .bj__cards {
@@ -86,73 +117,108 @@
   min-height: var(--bj-card-h);
   padding: 0 calc(var(--bj-card-w) * .3);
 }
+/* Before the first deal, each seat shows the box the cards land in, printed on the table. */
+.bj__cards:empty::before {
+  content: '';
+  width: var(--bj-card-w);
+  height: var(--bj-card-h);
+  border-radius: var(--bj-card-r);
+  box-shadow: inset 0 0 0 1px var(--bj-hair);
+}
 /* A fanned hand: each card tucked under the one after it, so eight cards still fit a phone. */
 .bjslot + .bjslot { margin-left: calc(var(--bj-card-w) * -.46); }
 
+/* "Dealer" and "You", each with its total; yours with the bet. */
 .bj__label {
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 26px;
-  font-size: .8125rem;
-  font-weight: 700;
-  color: var(--bj-print-dim);
+}
+.bj__label > span:first-child {
+  color: var(--lx-mute, #9096a0);
+  font: 800 .6875rem/1 var(--lx-display, sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
 }
 .bj__total {
   min-width: 34px;
-  padding: 2px 9px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, .5);
-  border: 1px solid rgba(255, 255, 255, .08);
-  color: var(--text);
-  font-weight: 800;
+  background: var(--bj-well);
+  box-shadow: inset 0 0 0 1px var(--bj-hair);
+  color: var(--lx-ink, #f2eee6);
+  font: 800 .8125rem/1 var(--lx-ui, sans-serif);
   font-variant-numeric: tabular-nums;
   text-align: center;
+  white-space: nowrap;
 }
 .bj__total[hidden] { display: none; }
-.bj__total[data-state="twentyone"] { color: var(--gold-bright); border-color: var(--ob-line-hi); }
-.bj__total[data-state="bust"] { color: var(--bj-card); background: var(--bj-red); }
+.bj__total[data-state="twentyone"] { background: var(--lx-gold, #e3a13a); color: var(--lx-on-gold, #0a0a0c); box-shadow: none; }
+.bj__total[data-state="bust"] { background: var(--lx-red, #c0392b); color: var(--lx-ink, #f2eee6); box-shadow: none; }
+
+/* The bet: a chip and the figure, the one gold thing on your side of the table. */
 .bj__bet {
-  padding: 2px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
   border-radius: 999px;
-  font-size: .75rem;
-  font-weight: 800;
-  color: var(--gold-bright);
-  background: rgba(255, 170, 0, .12);
-  border: 1px solid rgba(255, 170, 0, .3);
+  background: var(--lx-gold-wash, rgba(227, 161, 58, .12));
+  box-shadow: inset 0 0 0 1px var(--bj-hair-hi);
+  color: var(--lx-gold-hi, #f0c35a);
+  font: 800 .75rem/1 var(--lx-ui, sans-serif);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bj__bet::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  /* a gold chip: eight ivory notches round the rim, a plain gold centre */
+  background:
+    radial-gradient(circle, var(--lx-gold, #e3a13a) 0 44%, var(--lx-gold-lo, #b97c22) 45% 52%, transparent 53%),
+    repeating-conic-gradient(var(--lx-gold, #e3a13a) 0 30deg, var(--bj-card) 0 45deg);
+  box-shadow: 0 0 0 1px var(--lx-gold-lo, #b97c22), 0 1px 2px rgba(0, 0, 0, .6);
 }
 .bj__bet[hidden] { display: none; }
 
-/* The felt print. */
+/* The table's print. */
 .bj__felt {
   width: min(560px, 100%);
   height: auto;
-  margin: 2px 0 -8px;
+  margin: 4px 0 -6px;
   overflow: visible;
+}
+.bj__felt .bj__inlay {
+  fill: none;
+  stroke: var(--bj-inlay);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
 }
 .bj__felt text {
   fill: var(--bj-print);
-  font-family: var(--pixel);
-  font-size: 17px;
+  font-family: var(--lx-display, sans-serif);
+  font-size: 15px;
   font-weight: 800;
-  letter-spacing: .16em;
+  letter-spacing: .2em;
 }
 .bj__rules {
   margin: 0;
   max-width: 48ch;
   text-align: center;
-  font-size: .6875rem;
-  line-height: 1.45;
-  color: var(--bj-print-dim);
+  font: 500 .6875rem/1.5 var(--lx-ui, sans-serif);
+  color: var(--lx-faint, #757b85);
 }
 /* The result sits where the print is. While it shows, the print steps back so neither is read
    through the other. */
-.bj__rules-tie { display: none; color: var(--gold-bright); font-weight: 800; }
+.bj__rules-tie { display: none; color: var(--lx-gold, #e3a13a); font-weight: 800; }
 .bj__felt,
 .bj__rules { transition: opacity 240ms var(--bj-ease); }
 .bj__table[data-result] .bj__felt,
-.bj__table[data-result] .bj__rules { opacity: .16; }
+.bj__table[data-result] .bj__rules { opacity: .14; }
 
 /* ─────────── cards ─────────── */
 .bjslot { flex: none; }
@@ -176,48 +242,97 @@
 .bjcard__face {
   position: absolute;
   inset: 0;
-  border-radius: 7px;
+  border-radius: var(--bj-card-r);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   box-shadow: var(--bj-shadow);
 }
 .bjcard__front {
   display: grid;
-  background: var(--bj-card);
+  background: linear-gradient(180deg, var(--bj-card), var(--bj-card-lo));
+  box-shadow: inset 0 0 0 1px var(--bj-card-edge), var(--bj-shadow);
   color: var(--bj-ink);
-  border: 1px solid rgba(0, 0, 0, .18);
-  font-family: var(--body);
+  font-family: var(--lx-display, sans-serif);
 }
 .bjcard[data-suit="heart"] .bjcard__front,
 .bjcard[data-suit="diamond"] .bjcard__front { color: var(--bj-red); }
 .bjcard__corner {
   position: absolute;
-  top: 5px;
-  left: 6px;
+  top: calc(var(--bj-card-w) * .07);
+  left: calc(var(--bj-card-w) * .08);
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 1px;
   line-height: 1;
 }
-.bjcard__corner b { font-size: calc(var(--bj-card-w) * .25); font-weight: 800; letter-spacing: -.02em; }
-.bjcard__corner i { font-style: normal; font-size: calc(var(--bj-card-w) * .2); }
-.bjcard__pip { place-self: center; font-size: calc(var(--bj-card-w) * .5); line-height: 1; }
+.bjcard__corner--end {
+  top: auto;
+  left: auto;
+  bottom: calc(var(--bj-card-w) * .07);
+  right: calc(var(--bj-card-w) * .08);
+  transform: rotate(180deg);
+}
+.bjcard__corner b { font-size: calc(var(--bj-card-w) * .24); font-weight: 800; letter-spacing: -.03em; }
+.bjcard__corner i { font-style: normal; font-size: calc(var(--bj-card-w) * .18); font-family: var(--lx-ui, sans-serif); }
+.bjcard__pip {
+  place-self: center;
+  font-family: var(--lx-ui, sans-serif);
+  font-size: calc(var(--bj-card-w) * .46);
+  line-height: 1;
+}
+/* Court cards: a gold frame round the pip, as a printed jack, queen or king has round its picture. */
+.bjcard[data-court] .bjcard__front::before {
+  content: '';
+  position: absolute;
+  inset: 20% 19%;
+  border-radius: calc(var(--bj-card-r) * .5);
+  box-shadow: inset 0 0 0 1px var(--bj-court), inset 0 0 0 3px var(--bj-card), inset 0 0 0 4px color-mix(in srgb, var(--bj-court) 45%, transparent);
+}
+/* The back: a fine gold lattice, a gold frame, the pixel donut in a dark medallion. */
 .bjcard__back {
   transform: rotateY(180deg);
-  background: repeating-linear-gradient(45deg, var(--bj-back-a) 0 6px, var(--bj-back-b) 6px 12px);
-  box-shadow: inset 0 0 0 2px var(--gold-deep), inset 0 0 0 5px var(--bj-back-a), var(--bj-shadow);
+  background:
+    url("../img/brand/donut.svg") center / 38% auto no-repeat,
+    radial-gradient(circle at 50% 50%, var(--bj-back) 0 27%, var(--bj-back-line) 27% calc(27% + 1px), transparent calc(27% + 1.5px)),
+    repeating-linear-gradient(45deg, var(--bj-back-lattice) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, var(--bj-back-lattice) 0 1px, transparent 1px 7px),
+    var(--bj-back);
+  box-shadow:
+    inset 0 0 0 calc(var(--bj-card-w) * .05) var(--bj-back),
+    inset 0 0 0 calc(var(--bj-card-w) * .05 + 1px) var(--bj-back-line),
+    inset 0 0 0 1px rgba(0, 0, 0, .6),
+    var(--bj-shadow);
+  image-rendering: pixelated;
 }
 
-/* One pulse on a winning hand; a losing hand steps back. Neither loops. */
-.bj__seat--player[data-result="win"] .bjcard__front {
-  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 18px rgba(255, 215, 0, .45);
-  animation: bj-win 700ms var(--bj-ease) 1;
+/* One ring of light on a winning hand; a losing hand steps back. Neither loops. */
+.bj__seat--player[data-result="win"] .bjcard__front::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--lx-gold, #e3a13a), 0 0 26px -4px var(--bj-glow);
+  pointer-events: none;
+  animation: bj-win 900ms var(--bj-ease) 1 both;
 }
-.bj__seat--player[data-result="lose"] .bjslot { opacity: .58; transition: opacity 300ms var(--bj-ease); }
+/* A veil over each card, not see-through cards: faded ivory let the cards under it show through. */
+.bj__seat--player[data-result="lose"] .bjcard__front::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--bj-veil);
+  pointer-events: none;
+  animation: bj-veil 300ms var(--bj-ease) 1 both;
+}
 @keyframes bj-win {
-  0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
-  45% { box-shadow: 0 0 0 3px var(--gold-bright), 0 0 30px rgba(255, 215, 0, .7); }
-  100% { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 18px rgba(255, 215, 0, .45); }
+  0% { opacity: 0; }
+  40% { opacity: 1; }
+  100% { opacity: .8; }
+}
+@keyframes bj-veil {
+  from { opacity: 0; }
 }
 
 /* ─────────── the result ─────────── */
@@ -226,27 +341,41 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 190px;
-  padding: 12px 22px;
-  border-radius: 14px;
-  background: rgba(6, 8, 10, .86);
-  border: 1px solid var(--ob-line-hi);
-  box-shadow: 0 20px 40px -18px rgba(0, 0, 0, .95);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  gap: 6px;
+  min-width: 200px;
+  padding: 14px 26px 13px;
+  border-radius: 12px;
+  background: var(--dd-pop, var(--lx-1, #121216));
+  box-shadow: inset 0 0 0 1px var(--bj-hair-hi), 0 24px 48px -18px rgba(0, 0, 0, .95);
   pointer-events: none;
   text-align: center;
 }
 .bj__result[hidden] { display: none; }
-.bj__result b { font-family: var(--pixel); font-size: 1.25rem; font-weight: 800; color: var(--text); }
-.bj__result span { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
-.bj__result[data-tone="win"] { border-color: var(--gold-bright); box-shadow: 0 0 28px rgba(255, 170, 0, .3); }
-.bj__result[data-tone="win"] b,
-.bj__result[data-tone="win"] span { color: var(--gold-bright); }
+.bj__result b {
+  color: var(--lx-ink, #f2eee6);
+  font: 900 1.125rem/1.1 var(--lx-display, sans-serif);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.bj__result span {
+  color: var(--lx-mute, #9096a0);
+  font: 800 .9375rem/1 var(--lx-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+.bj__result[data-tone="win"] { box-shadow: inset 0 0 0 1px var(--lx-gold, #e3a13a), 0 0 34px -10px var(--bj-glow), 0 24px 48px -18px rgba(0, 0, 0, .95); }
+.bj__result[data-tone="win"] :is(b, span) { color: var(--lx-gold-hi, #f0c35a); }
+/* A natural: the title in gold foil, lit from above. */
+.bj__result[data-outcome="blackjack"] b {
+  background: var(--bj-foil);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.bj__result[data-tone="lose"] span { color: var(--lx-loss-text, #ff5c5c); }
 
 /* ─────────── controls ─────────── */
 .bj__controls { display: flex; justify-content: center; }
@@ -271,8 +400,8 @@
   background: var(--panel);
   transition: border-color 150ms var(--bj-ease), box-shadow 150ms var(--bj-ease);
 }
-.bj__stake:focus-within { border-color: var(--gold-bright); box-shadow: 0 0 0 3px rgba(255, 215, 0, .16); }
-.bj__stake span { color: var(--gold-bright); font-weight: 800; }
+.bj__stake:focus-within { border-color: var(--lx-gold, #e3a13a); }
+.bj__stake span { color: var(--lx-gold, #e3a13a); font-weight: 800; }
 .bj__stake input {
   flex: 1;
   min-width: 0;
@@ -341,13 +470,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bj__seat--player[data-result="win"] .bjcard__front { animation: none; }
-  .bj__seat--player[data-result="lose"] .bjslot,
+  .bj__seat--player[data-result="win"] .bjcard__front::after { animation: none; opacity: .8; }
+  .bj__seat--player[data-result="lose"] .bjcard__front::after { animation: none; }
+  .bj__felt,
+  .bj__rules,
   .bj__stake,
   .bj__adj { transition: none; }
 }
 
 /* ─────────── the 3D table (blackjack3d.js) ───────────
+ * Off across the site since 3D was switched off (view3d.js SCENES_ON); kept so it comes back whole.
  * The canvas is the whole felt: the library, the table, the librarian. The cards stay in the DOM,
  * out of sight, because they are what a screen reader reads; each seat's name and total, the bet,
  * the result and the 2D/3D switch float over the canvas. */
@@ -378,8 +510,8 @@
 .bj__view button[aria-pressed="true"] { background: var(--lx-4, #2f2f38); color: var(--lx-ink, #fff); }
 .bj__view button:disabled { cursor: default; opacity: .55; }
 .bj__view button:focus-visible { outline: 2px solid var(--lx-focus, #ffd700); outline-offset: 1px; }
-/* The flat table's shoe sits in the same corner; the switch moves it along. */
-.bj__table:not([data-render="3d"], [data-render="loading"]) .bj__shoe { right: 120px; }
+/* The flat table's shoe sits in the same corner; the switch, when there is one, moves it along. */
+.bj__table:not([data-render="3d"], [data-render="loading"]):has(> .bj__view:not([hidden])) .bj__shoe { right: 120px; }
 
 .bj__gl {
   position: absolute;
@@ -426,7 +558,7 @@
 @media (max-width: 560px) {
   .bj__table:is([data-render="3d"], [data-render="loading"]) { min-height: 460px; }
   /* No room beside the switch on a phone: the flat table's shoe goes under it. */
-  .bj__table:not([data-render="3d"], [data-render="loading"]) .bj__shoe { top: 56px; right: 14px; }
+  .bj__table:not([data-render="3d"], [data-render="loading"]):has(> .bj__view:not([hidden])) .bj__shoe { top: 56px; right: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bj__view button { transition: none; }

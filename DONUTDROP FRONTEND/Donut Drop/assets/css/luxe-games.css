@@ -230,7 +230,7 @@ body.lx .plinko__recent { border: 0; background: none; }
 body.lx .plinko__chip { border: 0; border-radius: var(--lx-r-s); font-family: var(--lx-ui); }
 
 /* ═════════ the other tables: one surface, flat ═════════ */
-body.lx :is(.roulette__stage, .roulette__board, .bj__table, .bj__felt, .mduel__panel, .mduel__main, .cfstage, .cfside, .ustage, .stakebox, .battles, .btlcard, .barena) {
+body.lx :is(.roulette__stage, .roulette__board, .bj__table, .mduel__panel, .mduel__main, .cfstage, .cfside, .ustage, .stakebox, .battles, .btlcard, .barena) {
   border-color: transparent;
   box-shadow: var(--lx-shade);
 }
@@ -286,10 +286,17 @@ body.lx .bj :is(.bj__deal, .bj__actions .btn):disabled { opacity: .45; cursor: n
 body.lx .bj :is(.bj__deal, .bj__actions .btn)[aria-busy="true"] { opacity: 1; cursor: progress; }
 body.lx .bj__actions .btn kbd { font-family: var(--lx-ui); border-color: currentColor; }
 body.lx .bj__hint { color: var(--lx-faint); font: 500 .75rem var(--lx-ui); }
-body.lx .bj__label { color: var(--lx-text); font: 700 .875rem var(--lx-ui); text-transform: none; letter-spacing: 0; }
 body.lx .bj__total { font-family: var(--lx-ui); }
 body.lx .bj__rules { font-family: var(--lx-ui); }
-body.lx .bj__result { border: 0; border-radius: var(--lx-r); background: var(--lx-1); box-shadow: 0 0 0 3px var(--lx-gold), var(--lx-shade-hi); }
+/* The table's own print, labels and result plate are drawn in blackjack.css (rewritten 2026-11-10). */
+/* A theme picked in Settings brings its own ladder: the table is drawn from it, so a Sculk page
+   does not wear a brown table. The lamp and the gold stay. */
+:root[data-lxtheme] .bj {
+  --bj-felt: var(--lx-1);
+  --bj-felt-hi: var(--lx-2);
+  --bj-felt-lo: var(--lx-0);
+  --bj-back: var(--lx-1);
+}
 
 /* ═════════ Roulette: the wheel on the dark, the board on the panel ═════════ */
 body.lx .roulette {

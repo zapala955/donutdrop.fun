@@ -97,14 +97,21 @@ function paintFace(card, face) {
   const suit = SUITS[Math.floor(face / 13)];
   const front = $('.bjcard__front', card);
   front.replaceChildren();
-  const corner = el('span', 'bjcard__corner');
-  corner.append(el('b'), el('i'));
-  corner.firstChild.textContent = RANKS[face % 13];
-  corner.lastChild.textContent = suit.glyph;
+  // The index in both corners, as a printed card has it: the second one reads upside down.
+  const corners = ['bjcard__corner', 'bjcard__corner bjcard__corner--end'].map((name) => {
+    const corner = el('span', name);
+    corner.append(el('b'), el('i'));
+    corner.firstChild.textContent = RANKS[face % 13];
+    corner.lastChild.textContent = suit.glyph;
+    return corner;
+  });
   const pip = el('span', 'bjcard__pip');
   pip.textContent = suit.glyph;
-  front.append(corner, pip);
+  front.append(...corners, pip);
   card.dataset.suit = suit.key;
+  // Jack, queen and king get the court card's frame around the pip (blackjack.css).
+  if (face % 13 >= 10) card.dataset.court = '1';
+  else delete card.dataset.court;
   card.setAttribute('aria-label', faceLabel(face));
 }
 
@@ -284,6 +291,8 @@ function paintResult(current, { animate }) {
     ? `+${money(Number(net))}`
     : net === 0n ? 'Stake returned' : `−${money(Number(-net))}`;
   box.dataset.tone = result.tone;
+  // A natural gets the gold lettering; every other win is plain gold.
+  box.dataset.outcome = current.outcome ?? '';
   box.hidden = false;
   $('.bj__seat--player', root).dataset.result = result.tone;
   $('.bj__table', root).dataset.result = result.tone;
@@ -555,8 +564,12 @@ function build() {
         <div class="bj__label"><span>Dealer</span><output class="bj__total" id="bjDealerTotal" hidden></output></div>
         <div class="bj__cards" id="bjDealerCards"></div>
       </section>
-      <svg class="bj__felt" viewBox="0 0 640 96" aria-hidden="true" focusable="false">
-        <path id="bjArc" d="M 40 24 Q 320 104 600 24" fill="none" />
+      <svg class="bj__felt" viewBox="0 0 640 100" aria-hidden="true" focusable="false">
+        <!-- The table's print: a band between two gold lines, all three arcs about one centre
+             (320, -880), so the lines stay parallel and the lettering sits square in the band. -->
+        <path class="bj__inlay" d="M 20 10.8 A 940 940 0 0 0 620 10.8" />
+        <path id="bjArc" d="M 30 35.2 A 960 960 0 0 0 610 35.2" fill="none" />
+        <path class="bj__inlay" d="M 10 39.1 A 970 970 0 0 0 630 39.1" />
         <text><textPath href="#bjArc" startOffset="50%" text-anchor="middle">WINS PAY 1.8× · BLACKJACK PAYS 2.5×</textPath></text>
       </svg>
       <p class="bj__rules"><span class="bj__rules-tie">Wins pay 1.8× · Blackjack pays 2.5× · </span>Ties push · Dealer hits soft 17 · Double on any first two cards</p>
