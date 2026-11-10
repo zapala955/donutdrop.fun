@@ -1,7 +1,5 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
-import {
-  RARITY, IMG, SPOTLIGHT_GAMES, isNewGame,
-} from './data.js';
+import { RARITY, IMG } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
   startLogin, loginStatus, completeLogin, logout,
@@ -97,11 +95,6 @@ function mountHome(view) {
   const slotsRow = $('#slotsRow', view);
   const slotsTrack = $('#slotsTrack', view);
   let category = 'all';
-
-  for (const card of cards) {
-    const game = SPOTLIGHT_GAMES.find((entry) => entry.route === card.getAttribute('href'));
-    $('.gcard__badge', card).hidden = !(game && isNewGame(game));
-  }
 
   const filterLobby = () => {
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);

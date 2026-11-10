@@ -153,10 +153,13 @@ describe('the pop-ups', () => {
     assert.match(popups, /write\(NUDGE_KEY/);
   });
 
-  it('offer register-now when signed out and the newest game, Discord and invites when signed in', async () => {
+  it('offer register-now when signed out, Discord and invites when signed in, and never a new game', async () => {
     const popups = await front('assets/js/popups.js');
     assert.match(popups, /cta: 'Register now'/);
-    assert.match(popups, /SPOTLIGHT_GAMES\.filter\(isNewGame\)/);
+    // The new-game pop-ups went on 2026-11-10, at the owner's word: neither card suggests a game.
+    assert.doesNotMatch(popups, /SPOTLIGHT_GAMES|isNewGame|New game mode/);
+    const nudge = await front('assets/js/nudge.js');
+    assert.doesNotMatch(nudge, /pickSpotlight|isNewGame|kind: 'game'/);
     assert.match(popups, /href: '\/discord'/);
     assert.match(popups, /href: '\/referrals'/);
     // every figure is the server's

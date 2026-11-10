@@ -15,12 +15,9 @@
  * wallet and a short gold ring on it, when a round of yours paid back more than it cost. */
 
 :root {
-  /* The controls' steps of the luxe ladder (luxe.css --lx-3..5), warmed a few degrees so a button
-     on a warm panel reads as the same material rather than a grey patch. The page, the rail and
-     the wells (--lx-0..2) keep their obsidian, as the crates page does. */
-  --lx-3: #27231b;
-  --lx-4: #322c21;
-  --lx-5: #3e3729;
+  /* The controls' steps (--lx-3..5) are luxe.css's own obsidian again (2026-11-10). They were warmed
+     to match the brown panels below; with the panels back on obsidian, a brown button on them read
+     as a patch from another site. */
 
   /* The calmer palette. Pure #ffaa00 on near-black, with #ffd700 for hover and #fff for titles,
      glared: every button, the deposit, the active rail icon and each figure shouted at the same
@@ -34,22 +31,25 @@
   --lx-focus: #f0c35a;
   --lx-ink: #f2eee6;
 
-  /* the crate card's body, and its lit variant for a pointer */
-  --dd-panel: linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9));
-  --dd-panel-hi: linear-gradient(180deg, rgba(40, 33, 19, .78), rgba(14, 12, 8, .92));
-  /* the crate rail's body, for the larger frames a game sits in */
-  --dd-frame: linear-gradient(180deg, rgba(34, 29, 18, .72), rgba(11, 10, 8, .92));
-  /* the gold hairline, drawn as an inset shadow so no box changes size */
-  --dd-edge: inset 0 0 0 1px rgba(227, 161, 58, .09);
-  --dd-edge-hi: inset 0 0 0 1px rgba(227, 161, 58, .32);
+  /* One material for every panel (2026-11-10): the obsidian card, flat, with a hairline edge and a
+     faint lit top, and the hairline turns gold under the pointer. It was a brown-to-black gradient,
+     which on the page's cool black read as a smudge: "doesnt fit the premium and its sloppy". Each
+     is drawn from the ladder, so a theme picked in Settings brings its own. */
+  --dd-panel: var(--lx-2);
+  --dd-panel-hi: var(--lx-3);
+  /* the frame a game sits in */
+  --dd-frame: var(--lx-2);
+  /* the edge, drawn as inset shadows so no box changes size */
+  --dd-edge: inset 0 1px 0 rgba(255, 255, 255, .04), inset 0 0 0 1px rgba(255, 255, 255, .06);
+  --dd-edge-hi: inset 0 1px 0 rgba(255, 255, 255, .04), inset 0 0 0 1px rgba(227, 161, 58, .55);
   --dd-glow: 0 0 22px -10px rgba(227, 161, 58, .4);
   /* the quantity button's gold ramp, for anything picked */
   --dd-ramp: linear-gradient(135deg, #8f5a17 0%, #e3a13a 50%, #f0c35a 100%);
   --dd-ramp-glow: 0 0 16px -7px rgba(227, 161, 58, .7);
   /* the account menu and toasts; the top of a modal or pop-up; the bar under a game */
-  --dd-pop: linear-gradient(180deg, #211c12, #131109);
-  --dd-sheet: #1c1810;
-  --dd-foot: linear-gradient(180deg, rgba(12, 11, 8, .92), #0a0a0c);
+  --dd-pop: var(--lx-2);
+  --dd-sheet: var(--lx-1);
+  --dd-foot: var(--lx-0);
   /* Mines and Tower tiles, at rest and pointed at (Tower: the floor being played) */
   --dd-tile: linear-gradient(180deg, #2e2819, #211c12);
   --dd-tile-hi: linear-gradient(180deg, #3b3320, #2a2416);
@@ -57,18 +57,10 @@
   --dd-ttile-now: linear-gradient(180deg, #3a3220, #2a2416);
 }
 
-/* A theme picked in Settings (prefs.css puts data-lxtheme on <html>). The warm obsidian above is
-   the default look, not a theme of its own: once the player picks one, every material here is
-   drawn from that theme's ladder instead, so a Sculk or a Cherry Grove page does not wear brown
-   panels. The ladder itself is the theme's (prefs.css wins on specificity), and the gold, the
-   hairlines and the motion stay. */
+/* A theme picked in Settings (prefs.css puts data-lxtheme on <html>). The panels above already
+   come from the ladder; the game tiles, which keep their warm bodies by default, are drawn from the
+   theme's ladder instead, so a Sculk or a Cherry Grove page does not wear brown tiles. */
 :root[data-lxtheme] {
-  --dd-panel: linear-gradient(180deg, var(--lx-3), var(--lx-1));
-  --dd-panel-hi: linear-gradient(180deg, var(--lx-4), var(--lx-2));
-  --dd-frame: linear-gradient(180deg, var(--lx-2), var(--lx-0));
-  --dd-pop: linear-gradient(180deg, var(--lx-3), var(--lx-1));
-  --dd-sheet: var(--lx-3);
-  --dd-foot: linear-gradient(180deg, var(--lx-1), var(--lx-0));
   --dd-tile: linear-gradient(180deg, var(--lx-4), var(--lx-3));
   --dd-tile-hi: linear-gradient(180deg, var(--lx-5), var(--lx-4));
   --dd-ttile: linear-gradient(180deg, var(--lx-4), var(--lx-2));
@@ -124,15 +116,24 @@ body.lx .mtile[data-kind="hidden"][aria-disabled="false"]:active { box-shadow: 0
 body.lx .ttile[data-kind="hidden"] { background: var(--dd-ttile); }
 body.lx .tfloor[data-state="now"] .ttile[data-kind="hidden"] { background: var(--dd-ttile-now); }
 
-/* ═════════ the lobby: game cards on the crate card's body ═════════
+/* ═════════ the lobby: game cards on the panel material ═════════
    No light behind the icon: retro.css stands the pixel icons on a hard drop shadow instead of a
-   bloom, and --card-glow is gone with it. (A var() that no longer exists would void the whole
-   background, leaving the card see-through.) */
+   bloom. Flat, edged, gold edge under the pointer: the same card as the offers above them. */
 body.lx .lxcard {
   background: var(--dd-panel);
   box-shadow: var(--dd-edge), var(--lx-shade);
 }
 body.lx .lxcard:hover { box-shadow: var(--dd-edge-hi), var(--dd-glow), var(--lx-shade-hi); }
+
+/* ═════════ the crates page and its kin: the same flat panel ═════════
+   platform.css and vault.css paint their own brown-to-black gradients, the look this sheet once lent
+   to every panel. Since 2026-11-10 they stand on the one flat panel too, with the same neutral edge;
+   a crate keeps its risk colour on the edge when pointed at or picked, a faction its team stripe. */
+body.lx :is(.rail, .range, .faction, .vaultcard) { background: var(--dd-panel); }
+body.lx :is(.rail, .cratecard) { border-color: rgba(255, 255, 255, .06); }
+body.lx .cratecard { background: var(--dd-panel); }
+body.lx .cratecard:hover { border-color: color-mix(in srgb, var(--risk) 45%, transparent); }
+body.lx .cratecard[data-on="1"] { border-color: var(--risk); }
 
 /* ═════════ picked: the gold ramp ═════════ */
 body.lx .chips .btn[aria-pressed="true"],
@@ -157,9 +158,6 @@ body.lx :is(
 /* The calmer palette, for Dice's own colours: its losing stretch takes the site's red instead of a
    signal red. */
 body.lx .dice { --dice-lose: rgba(192, 57, 43, .72); }
-/* The Discord banner's art is a full field of Discord blurple, the brightest thing on the home
-   page once the gold came down; it keeps its hue at a lower light. */
-body.lx .lxpromo__art img[src$="promo-discord.svg"] { filter: saturate(.72) brightness(.82); }
 
 /* ═════════ the live feed: a round that paid back exactly its stake is neither ═════════ */
 body.lx .feedrow__delta[data-up="even"] { color: var(--lx-faint); }

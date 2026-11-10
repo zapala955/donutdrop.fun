@@ -6,14 +6,18 @@
  */
 
 /* ═════════ the three offers ═════════
-   Art on the left, a tag, a title and one line on the right; the whole card is the link. */
+   Art on the left, a tag, a title and one line on the right; the whole card is the link.
+   2026-11-10: the art was three unrelated paintings (a glowing gold cube, a red gift in a grey
+   haze, a full field of Discord blurple) beside pixel-art game cards. Each offer now shows one
+   sprite in an inventory slot, the way the game cards show theirs: the donut, a gift, the Discord
+   mark. */
 .lxpromos {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s4);
   margin: 0 0 var(--lx-s6);
 }
 .lxpromo {
   position: relative;
-  display: grid; grid-template-columns: 146px minmax(0, 1fr);
+  display: grid; grid-template-columns: 132px minmax(0, 1fr);
   min-height: 146px;
   border-radius: var(--lx-r);
   background: var(--lx-2);
@@ -28,24 +32,42 @@ a.lxpromo:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2p
 .lxpromo__cover { position: absolute; inset: 0; z-index: 1; }
 /* app.css sets every img to display:block, which beats the hidden attribute. */
 .lxpromo > img[hidden] { display: none; }
-.lxpromo__art { display: block; overflow: hidden; }
-.lxpromo__art img {
-  display: block; width: 100%; height: 100%; object-fit: cover;
-  transition: transform var(--lx-slide) var(--lx-ease);
+/* the slot: a well in the card, the sprite standing in it on a hard one-pixel shadow */
+.lxpromo__art {
+  display: grid; place-items: center;
+  align-self: center; aspect-ratio: 1;
+  margin: var(--lx-s3) 0 var(--lx-s3) var(--lx-s3);
+  border-radius: 6px;
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04), inset 0 2px 8px rgba(0, 0, 0, .55);
+  overflow: hidden;
 }
-a.lxpromo:hover .lxpromo__art img, .lxpromo:has(.lxpromo__cover:hover) .lxpromo__art img { transform: scale(1.04); }
+/* A 16px sprite at a whole multiple of itself (80 = 5x), so every pixel is the same size. */
+.lxpromo__art img {
+  display: block; width: 80px; height: 80px; object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .45));
+  transition: transform var(--lx-quick) var(--lx-ease);
+}
+a.lxpromo:hover .lxpromo__art img, .lxpromo:has(.lxpromo__cover:hover) .lxpromo__art img { transform: translateY(-3px); }
 .lxpromo__copy {
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px;
   min-width: 0; padding: var(--lx-s4) var(--lx-s5);
 }
+/* The offers' tag: gold lettering on a gold wash, a gold hairline. It was a white slab on two
+   offers and a gold one on the third. (The game cards' "New" tags are gone: 2026-11-10.) */
 .lxtag {
   display: inline-block;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: var(--lx-ink); color: var(--lx-2);
-  font: 700 .75rem/1.3 var(--lx-ui);
+  padding: 4px 7px 3px;
+  border-radius: 4px;
+  background: var(--lx-gold-wash);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lx-gold) 38%, transparent);
+  color: var(--lx-gold-hi);
+  font: 800 .625rem/1 var(--lx-display);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.lxtag--gold { background: var(--lx-gold); color: var(--lx-on-gold); }
 .lxpromo__h {
   color: var(--lx-ink);
   font: 700 1.1875rem/1.25 var(--lx-ui);
@@ -207,15 +229,6 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
   letter-spacing: .14em;
   text-transform: uppercase;
 }
-.lxcard__badge {
-  position: absolute; top: 8px; left: 8px;
-  padding: 3px 7px;
-  border-radius: 3px;
-  background: var(--lx-ink); color: var(--lx-2);
-  font: 800 .6875rem/1.2 var(--lx-ui);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
-}
-.lxcard__badge[hidden] { display: none; }
 .lxcard:hover { transform: translateY(-6px); box-shadow: var(--lx-shade-hi); }
 .lxcard:active { transform: translateY(-3px); transition-duration: 60ms; }
 .lxcard:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
@@ -299,6 +312,10 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
 @media (max-width: 1023px) {
   .lxpromos { grid-template-columns: repeat(3, minmax(300px, 86%)); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
   .lxpromo { grid-template-columns: 120px minmax(0, 1fr); min-height: 120px; }
+  .lxpromo__art { margin: var(--lx-s2) 0 var(--lx-s2) var(--lx-s2); }
+  .lxpromo__copy { padding: var(--lx-s3) var(--lx-s4); }
+  .lxtag { font-size: .5625rem; letter-spacing: .08em; }
+  .lxpromo__art img { width: 64px; height: 64px; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .45)); }
   .lxrow { --lx-card-gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lxperks__row { grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
   .lxperk { height: 68px; }
@@ -314,8 +331,9 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   /* the offers: a strip of short cards, the next one peeking in */
   .lxpromos { grid-template-columns: repeat(3, 84%); gap: var(--lx-s2); margin-bottom: var(--lx-s4); }
   .lxpromo { grid-template-columns: 84px minmax(0, 1fr); min-height: 96px; }
+  .lxpromo__art img { width: 48px; height: 48px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .45)); }
   .lxpromo__copy { gap: 3px; padding: var(--lx-s2) var(--lx-s3); }
-  .lxtag { padding: 1px 5px; font-size: .625rem; }
+  .lxtag { padding: 3px 5px 2px; font-size: .5625rem; }
   .lxpromo__h { font-size: .9375rem; line-height: 1.2; }
   .lxpromo__p { font-size: .75rem; line-height: 1.35; -webkit-line-clamp: 1; }
   .lxpromo__go { font-size: .8125rem; }
@@ -339,7 +357,6 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   .lxrow > li { position: relative; }
   .lxslots { margin-top: var(--lx-s5); }
   .lxcard__name { font-size: min(12.5cqi, 1.5rem); }
-  .lxcard__badge { top: 6px; left: 6px; padding: 2px 5px; font-size: .625rem; }
   .lxcard__brand { display: none; }
   /* "N playing" becomes a dot and the number, on the card's top corner; nobody playing, nothing */
   .lxlive {

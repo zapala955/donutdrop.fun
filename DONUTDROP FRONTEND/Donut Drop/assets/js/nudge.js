@@ -6,7 +6,10 @@
  *
  *   signed out                      → the signup bonus, opening the login form
  *   signed in, Discord not linked   → the Discord page, where the link code is
- *   otherwise                       → the invite link, or a game to try (data.js SPOTLIGHT_GAMES)
+ *   otherwise                       → now and then, the invite link
+ *
+ * It suggested a game to try ("New game") too, until 2026-11-10, when the owner asked for the
+ * new-game pop-ups to go.
  *
  * It never blocks anything: no backdrop, focus is left where it was, and the × or Escape closes
  * it. It never lands on a game table either, where a card in the corner could sit over a board or
@@ -17,7 +20,7 @@
  * next visit, which is the harmless way for that to fail. Every figure is the server's. */
 import { api } from './api.js';
 import { bus, state } from './store.js';
-import { IMG, pickSpotlight, isNewGame } from './data.js';
+import { IMG } from './data.js';
 import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
 
@@ -109,6 +112,7 @@ async function pickOffer() {
     } catch { /* no answer: offer something else */ }
   }
 
+  // Half the time, as when it shared the corner with a game to try; otherwise nothing this time.
   const bonus = Number(state.promotions?.referral?.bonusMinor ?? 0);
   if (bonus > 0 && route !== 'referrals' && Math.random() < 0.5) {
     return {
@@ -122,16 +126,7 @@ async function pickOffer() {
     };
   }
 
-  const game = pickSpotlight(`/${route}`);
-  return {
-    kind: 'game',
-    eyebrow: isNewGame(game) ? 'New game' : 'Try a game',
-    title: [game.name],
-    line: game.line,
-    cta: `Play ${game.name}`,
-    href: game.route,
-    art: game.art,
-  };
+  return null;
 }
 
 function show(offer) {

@@ -22,10 +22,41 @@ describe('the lobby', () => {
     const css = await read('assets/css/luxe-home.css');
     assert.match(css, /\.lxrow \{\n\s*--lx-card-gap: 16px;\n\s*display: grid;\n\s*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
     assert.doesNotMatch(css, /grid-auto-flow: column|scroll-snap-type: x mandatory;\n\s*scrollbar-width: none;\n\}|data-all|\.lxmore|\.lxarrow/);
-    // Three to a row on a phone (four made the tiles too small), and the "New" tag clear of the icon.
+    // Three to a row on a phone (four made the tiles too small).
     const phone = css.slice(css.indexOf('@media (max-width: 599px) {'));
     assert.match(phone, /\.lxrow \{ --lx-card-gap: 8px; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); gap: var\(--lx-card-gap\); padding-top: 0; \}/);
-    assert.match(phone, /\.lxcard__badge \{ top: 6px; left: 6px; padding: 2px 5px; font-size: \.625rem; \}/);
+  });
+
+  /* 2026-11-10: "the gradient on the main menu tiles, the 3 banners on top etc doesnt fit the premium
+   * and its sloppy", then "remove the NEW text". Panels are one flat obsidian material with a hairline
+   * edge; the offers show one sprite each in an inventory slot, as the cards do; no card says "New". */
+  it('draws the cards and the offers on one flat material, sprites in slots, and no "New" tags', async () => {
+    const dopamine = await read('assets/css/dopamine.css');
+    const tokens = dopamine.slice(dopamine.indexOf(':root {'), dopamine.indexOf('\n}\n', dopamine.indexOf(':root {')));
+    for (const name of ['panel', 'panel-hi', 'frame', 'pop', 'sheet', 'foot']) {
+      assert.ok(new RegExp(`--dd-${name}: var\\(--lx-\\d\\);`).test(tokens), `--dd-${name} is a flat step of the ladder`);
+    }
+    assert.doesNotMatch(tokens, /--lx-[345]: #/, "the control steps are luxe.css's own, not warmed");
+    const retro = await read('assets/css/retro.css');
+    assert.match(retro, /body\.lx \.lxcard \{\n\s*background: var\(--lx-2\);/);
+    assert.doesNotMatch(retro, /\.lxcard::after/);
+
+    const html = await read('index.html');
+    const offers = html.slice(html.indexOf('<section class="lxpromos"'), html.indexOf('</section>', html.indexOf('<section class="lxpromos"')));
+    const art = [...offers.matchAll(/<span class="lxpromo__art"><img src="([^"]+)" alt="" width="80" height="80" \/><\/span>/g)].map((m) => m[1]);
+    assert.deepEqual(art, ['assets/img/brand/donut.svg', 'assets/img/luxe/promo-gift.svg', 'assets/img/luxe/discord-mark.svg']);
+    for (const file of art) await readFile(path.join(frontend, file!));
+    assert.doesNotMatch(offers, /lxtag--gold/);
+    const home = await read('assets/css/luxe-home.css');
+    assert.match(home, /\.lxpromo__art img \{\n\s*display: block; width: 80px; height: 80px; object-fit: contain;\n\s*image-rendering: pixelated;/);
+
+    assert.doesNotMatch(html, /gcard__badge|lxcard__badge/);
+    const cards = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
+    assert.doesNotMatch(cards, />New</);
+    assert.doesNotMatch(home, /lxcard__badge/);
+    // The "New" tab still knows which games are new: data.js says, not a tag on the card.
+    const luxe = await read('assets/js/luxe.js');
+    assert.match(luxe, /const isNew = Boolean\(game && isNewGame\(game\)\);/);
   });
 
   it('puts the games near the top of a phone: a short offer strip, slim search, every tab in sight', async () => {

@@ -4,7 +4,6 @@
  * one than the nudge, with its own art and a single button, for the moments that deserve more:
  *
  *   signed out                  → register now: the signup bonus, opening the login form
- *   signed in                   → a new game mode (data.js SPOTLIGHT_GAMES, while it is new)
  *   signed in, Discord unlinked → the Discord page, where the link code is
  *   signed in                   → invite & earn
  *   signed in, balance run out  → buy more for cheap in the Discord shop (see watchBalance)
@@ -27,7 +26,7 @@
  * again on the next visit, which is the harmless way for that to fail. Every figure is the server's. */
 import { api } from './api.js';
 import { bus, refreshBalance, state } from './store.js';
-import { IMG, SPOTLIGHT_GAMES, isNewGame } from './data.js';
+import { IMG } from './data.js';
 import { el, money } from './util.js';
 import { currentRouteName, onNavigate } from './routing.js';
 import { pendingReferralCode } from './referrals.js';
@@ -173,22 +172,7 @@ async function pick() {
     };
   }
 
-  // A game that is still new, once for each game; it stops being offered when it stops being new.
-  const fresh = SPOTLIGHT_GAMES.filter(isNewGame).find((game) => due(`game:${game.route}`));
-  if (fresh) {
-    return {
-      id: `game:${fresh.route}`,
-      eyebrow: 'New game mode',
-      title: [fresh.name],
-      line: fresh.line,
-      cta: `Try ${fresh.name}`,
-      href: fresh.route,
-      art: fresh.art,
-      later: 'Not now',
-      seenFor: 3 * DAY_MS,
-      usedFor: 30 * DAY_MS,
-    };
-  }
+  // No "new game mode" pop-up since 2026-11-10: the owner asked for them to go.
 
   if (due('discord')) {
     try {

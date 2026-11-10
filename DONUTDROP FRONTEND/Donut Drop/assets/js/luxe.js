@@ -9,6 +9,7 @@
  * site data), and the shell works the same without it.
  */
 import { api } from './api.js';
+import { SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { $, $$, reduceMotion } from './util.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
 
@@ -200,14 +201,16 @@ document.addEventListener('keydown', (event) => {
 /* ═════════ the lobby ═════════ */
 const lobby = $('#lobby');
 
-/* "New" is a category the markup cannot know: app.js decides which cards are new (data.js) and
- * shows their tag. Those cards join the category, and the tab goes when none is new. */
+/* "New" is a category the markup cannot know: data.js says which games are new. Those cards join
+ * the category, and the tab goes when none is new. The cards carry no "New" tag since 2026-11-10
+ * (the owner asked for the tags to go). */
 function syncNewTab() {
   const tab = $('#lxTabNew');
   if (!tab) return;
   let any = false;
   for (const card of $$('.gcard', lobby)) {
-    const isNew = !$('.gcard__badge', card).hidden;
+    const game = SPOTLIGHT_GAMES.find((entry) => entry.route === card.getAttribute('href'));
+    const isNew = Boolean(game && isNewGame(game));
     const cats = new Set(card.dataset.cat.split(' ').filter(Boolean));
     if (isNew) cats.add('new');
     else cats.delete('new');
