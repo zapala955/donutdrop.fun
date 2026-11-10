@@ -179,6 +179,18 @@ export const ROUND_SOURCES: readonly RoundSource[] = [
     where: 'b.user_id = $1',
   },
   {
+    game: 'limbo',
+    key: `'limbo'`,
+    time: 'b.created_at',
+    id: 'b.id',
+    wager: 'b.stake_minor',
+    payout: 'coalesce(b.payout_minor, 0)',
+    // Target and draw are kept in hundredths: 200 is 2.00x.
+    detail: `'Target ' || ${two('b.target_x100 / 100.0')} || 'x · drew ' || ${two('greatest(b.result_x100, 100) / 100.0')} || 'x'`,
+    from: 'limbo_bets b',
+    where: 'b.user_id = $1',
+  },
+  {
     game: null,
     key: 's.machine',
     time: 's.created_at',
@@ -225,6 +237,7 @@ export const ROUND_GAMES: Readonly<Record<string, string>> = {
   chicken: 'Chicken',
   plinko: 'Plinko',
   dice: 'Dice',
+  limbo: 'Limbo',
   blackjack: 'Blackjack',
   roulette: 'Roulette',
   upgrader: 'Upgrader',

@@ -91,6 +91,12 @@ export const ROUTE_META = {
       'Play dice with DonutSMP money on DonutLuxe: draw a line from 0 to 100, call over or under, ' +
       'and roll.',
   },
+  limbo: {
+    title: 'DonutLuxe Limbo — DonutSMP Limbo',
+    description:
+      'Play limbo with DonutSMP money on DonutLuxe: pick a target multiplier, and win your stake ' +
+      'times it if the draw gets there.',
+  },
   fishing: {
     title: 'DonutLuxe Fishing — DonutSMP Fishing',
     description:

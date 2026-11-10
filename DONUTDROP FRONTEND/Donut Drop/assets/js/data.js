@@ -167,6 +167,8 @@ export const UPGRADER = {
  * home lobby's "New" tags. `shipped` is the day a game went live: for thirty days after it the
  * label reads "New game", then "Try a game", so the word never outlives the fact. */
 export const SPOTLIGHT_GAMES = [
+  { route: '/limbo', name: 'Limbo', art: 'game-limbo.svg', shipped: '2026-11-10',
+    line: 'Pick a target. If the draw gets there, you win.' },
   { route: '/derby', name: 'Mob Derby', art: 'game-derby.svg', shipped: '2026-10-22',
     line: 'Back a pig, a cow or the black sheep. Six mobs, one finish line.' },
   { route: '/ice-fishing', name: 'Ice Fishing', art: 'game-ice-fishing.svg', shipped: '2026-10-22',

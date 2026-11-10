@@ -108,6 +108,9 @@ const ROUNDS_SQL = `
   SELECT b.id, 'Dice', b.user_id, b.stake_minor, b.payout_minor, b.created_at
     FROM dice_bets b WHERE b.created_at >= now() - make_interval(mins => $1)
   UNION ALL
+  SELECT b.id, 'Limbo', b.user_id, b.stake_minor, b.payout_minor, b.created_at
+    FROM limbo_bets b WHERE b.created_at >= now() - make_interval(mins => $1)
+  UNION ALL
   SELECT c.id, 'Fishing', c.user_id, c.stake_minor, c.payout_minor, c.settled_at
     FROM fishing_casts c
    WHERE c.status <> 'open' AND c.settled_at >= now() - make_interval(mins => $1)

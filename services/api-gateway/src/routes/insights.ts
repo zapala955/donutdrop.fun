@@ -364,6 +364,7 @@ const GAME_NAMES: Readonly<Record<string, string>> = {
   plinko: 'Plinko',
   coinflip: 'Coinflip',
   dice: 'Dice',
+  limbo: 'Limbo',
   fishing: 'Fishing',
   ice_fishing: 'Ice Fishing',
   derby: 'Mob Derby',
@@ -434,6 +435,8 @@ async function playerCard(db: Database, config: AppConfig, userId: string): Prom
          SELECT 'Slots', stake_minor, payout_minor FROM slots_spins WHERE user_id = $1
          UNION ALL
          SELECT 'Dice', stake_minor, payout_minor FROM dice_bets WHERE user_id = $1
+         UNION ALL
+         SELECT 'Limbo', stake_minor, payout_minor FROM limbo_bets WHERE user_id = $1
          UNION ALL
          SELECT 'Fishing', stake_minor, payout_minor FROM fishing_casts WHERE user_id = $1 AND status <> 'open'
          UNION ALL

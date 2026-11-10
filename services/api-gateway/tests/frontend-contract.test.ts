@@ -194,7 +194,7 @@ describe('frontend/backend contract', () => {
     const art = [...html.matchAll(/<img class="lxcard__art retroart" src="assets\/img\/items\/([a-z-]+\.svg)" alt="" width="96" height="96"/g)];
     // Every card in the lobby, the slot machines' row included (2026-10-19: they wore item textures until then).
     assert.equal(art.length, html.match(/<a class="gcard lxcard"/g)?.length);
-    assert.equal(art.length, 18);
+    assert.equal(art.length, 19);
     for (const [, file] of art) {
       assert.match(await source(`assets/img/items/${file}`), /viewBox="0 0 16 16" shape-rendering="crispEdges"/, file);
     }
@@ -464,7 +464,7 @@ describe('frontend/backend contract', () => {
     assert.match(html, /data-view="mines-duel"/);
     assert.match(app, /'mines-duel': mountMinesDuel/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
-    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|fishing\|ice-fishing\|derby\|mines-duel\|coinflip\|ore-rush\|/);
+    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|limbo\|fishing\|ice-fishing\|derby\|mines-duel\|coinflip\|ore-rush\|/);
     assert.match(html, /data-view="dice"/);
     assert.match(app, /dice: mountDice/);
   });
@@ -540,7 +540,7 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(crash, /id="crashBig"[^>]*aria-live/);
     // Table games are item-less rows in the feed, not phantom drops.
     const store = await source('assets/js/store.js');
-    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'fishing' \|\| raw\.kind === 'icefishing' \|\| raw\.kind === 'derby' \|\| raw\.kind === 'slots' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
+    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'limbo' \|\| raw\.kind === 'fishing' \|\| raw\.kind === 'icefishing' \|\| raw\.kind === 'derby' \|\| raw\.kind === 'slots' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
   });
 
   it('puts a hand in play back on the table after a refresh', async () => {

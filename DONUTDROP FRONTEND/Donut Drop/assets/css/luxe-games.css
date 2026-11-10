@@ -16,12 +16,12 @@
 /* ═════════ the frame ═════════ */
 /* Only a single table gets the bar under it. A lobby (Coinflip, Mines Duel, Cases, Case Battles)
    is a list of tables, and its name goes on top like any page's. */
-body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
+body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) { display: flex; flex-direction: column; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > * { order: 1; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game { order: 2; }
 
 /* the bar under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game {
   display: flex; align-items: center; gap: var(--lx-s3);
   height: 56px; margin: 0; padding: 0 var(--lx-s2) 0 var(--lx-s5);
   border: 0; border-top: 2px solid var(--lx-2);
@@ -52,16 +52,16 @@ body.lx .phead--game .phead__how {
 body.lx .phead--game .phead__how:hover { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .phead--game .phead__how[aria-expanded="true"] { color: var(--lx-gold); }
 /* the bubble opens upward when the bar is under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how::after {
   top: auto; bottom: calc(100% + 10px); left: auto; right: 0;
   width: min(360px, 80vw);
   transform: translateY(3px);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:hover::after,
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
 
 /* ═════════ the single-player tables: Crash · Mines · Plinko ═════════ */
-body.lx :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko) {
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko) {
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
   grid-template-areas: "panel stage";
   gap: 0;
@@ -256,7 +256,7 @@ body.lx .roulette__stage { background: var(--lx-0); }
 
 /* a lobby's title reads as a page title */
 body.lx .phead--game h1 { font-size: 1.375rem; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg)) > .phead--game h1 { font-size: 1.0625rem; }
 
 /* ═════════ Blackjack: controls left, the felt right ═════════ */
 body.lx .bj {
@@ -374,7 +374,7 @@ body.lx .feedrow__mult { text-shadow: none; }
 
 /* ═════════ phones ═════════ */
 @media (max-width: 1023px) {
-  body.lx :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .slots, .plinko) {
+  body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "stage" "panel";
   }

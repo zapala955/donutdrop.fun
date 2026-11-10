@@ -61,6 +61,7 @@ const TABLE_GAMES = new Map([
   ['tower', 'Tower'],
   ['chicken', 'Chicken'],
   ['dice', 'Dice'],
+  ['limbo', 'Limbo'],
   ['fishing', 'Fishing'],
   ['icefishing', 'Ice Fishing'],
   ['derby', 'Mob Derby'],

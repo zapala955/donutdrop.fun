@@ -1,0 +1,244 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: limbo table · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; the win and loss colours lifted into tokens below
+ * layout: the site's game frame (2026-11-10): the panel on the left (stake with ½ 2× Max, profit
+ *         on win, the one button), the stage on the right (the strip of recent draws, the big
+ *         multiplier, the target and the chance). On a phone, the stage first, the panel under it.
+ * states: the number -- at rest (neutral), rolling (climbing), won (green), lost (red), landing (a
+ *         pop); the recent strip -- won, lost, fresh; the fields -- default, hover, :focus-within,
+ *         disabled (a bet in the air); the one button -- default, hover, :focus-visible, :active
+ *         (pressed into its lip), disabled, busy (a sheen runs across it).
+ * contrast: the number white, green or red at 4.5:1 or better on --lx-0; quiet words 4.6:1.
+ * signature: one number, as big as the stage allows, climbing to the draw.
+ * motion: the number climbing on an exponential curve and popping as it lands (limbo.js), the newest
+ *         draw sliding into the strip, the button pressing in. Flat, no glow. Reduced motion: none.
+ */
+
+.limbo {
+  --limbo-win: oklch(0.77 0.17 152);
+  --limbo-lose: #ff4d5e;
+  --limbo-win-wash: color-mix(in oklab, var(--limbo-win) 16%, transparent);
+  --limbo-lose-wash: color-mix(in oklab, var(--limbo-lose) 14%, transparent);
+  --limbo-go-lip: var(--lx-gold-lo);
+  --limbo-go-sheen: rgba(255, 255, 255, .38);
+  --limbo-ease: cubic-bezier(.16, 1, .3, 1);
+
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+
+/* ─────────── the stage ─────────── */
+.limbo__stage {
+  grid-area: stage;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--lx-s5);
+  min-width: 0;
+  padding: var(--lx-s6) 28px 28px;
+}
+body.lx .limbo .limbo__stage {
+  min-height: 600px;
+  border-radius: 0 var(--lx-r) 0 0;
+  background: var(--lx-0);
+}
+
+.limbo__top { display: flex; justify-content: flex-end; min-height: 29px; min-width: 0; }
+/* The last draws, newest first. Right-aligned by its margin, so the oldest is cut, never the newest. */
+.limbo__recent {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.limbo__chip {
+  flex: none;
+  min-width: 62px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--limbo-lose-wash);
+  color: var(--limbo-lose);
+  font: 700 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.limbo__chip[data-tone="won"] { background: var(--limbo-win-wash); color: var(--limbo-win); }
+.limbo__chip:nth-child(n + 6) { opacity: .7; }
+.limbo__chip:nth-child(n + 8) { opacity: .45; }
+.limbo__chip[data-fresh="1"] { animation: limbo-chip-in var(--lx-slide) var(--limbo-ease) both; }
+@keyframes limbo-chip-in {
+  from { opacity: 0; transform: translateX(-10px) scale(.92); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The number. */
+.limbo__show { display: grid; place-items: center; min-width: 0; }
+.limbo__num {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--lx-ink);
+  font: 800 clamp(3.5rem, 9vw, 7rem)/1 var(--lx-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 140ms var(--limbo-ease);
+}
+.limbo__num[data-tone="won"] { color: var(--limbo-win); }
+.limbo__num[data-tone="lost"] { color: var(--limbo-lose); }
+
+/* The target and the chance, together in one panel. */
+.limbo__dials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lx-s3);
+  padding: 14px var(--lx-s4) var(--lx-s4);
+  border-radius: 10px;
+  background: var(--lx-2);
+  min-width: 0;
+}
+.limbo__dial { display: grid; gap: 6px; min-width: 0; }
+
+/* ─────────── the panel ─────────── */
+.limbo__panel { grid-area: panel; min-width: 0; padding: var(--lx-s3) var(--lx-s3) var(--lx-s4); }
+.limbo__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.limbo__label { margin-top: var(--lx-s2); color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+.limbo__dial .limbo__label { margin: 0; }
+.limbo__label--row { display: flex; justify-content: space-between; gap: var(--lx-s2); }
+.limbo__profitx { color: var(--lx-faint); font-variant-numeric: tabular-nums; }
+
+/* A field: a dark well, its buttons bolted to its right edge, as in every game. */
+.limbo__field {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  min-width: 0;
+  padding: 0 0 0 var(--lx-s3);
+  overflow: hidden;
+  border: 2px solid var(--lx-4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+}
+.limbo__field:hover { border-color: var(--lx-5); }
+.limbo__field:focus-within { border-color: var(--lx-gold); }
+.limbo__field span { padding-right: var(--lx-s2); color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); }
+.limbo__field--dial { padding-right: 0; }
+.limbo__field--dial span { padding: 0 var(--lx-s3) 0 var(--lx-s2); }
+.limbo__field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--lx-ink);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+.limbo__field input:focus { outline: none; }
+.limbo__field input:disabled { color: var(--lx-mute); cursor: progress; }
+.limbo__adj {
+  align-self: stretch;
+  min-width: 46px;
+  border: 0;
+  border-left: 2px solid var(--lx-2);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .875rem var(--lx-ui);
+  cursor: pointer;
+}
+.limbo__adj:hover:not(:disabled) { background: var(--lx-5); }
+.limbo__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+.limbo__adj:disabled { cursor: progress; opacity: .5; }
+
+/* What a win would add; not a field anybody types in. */
+.limbo__field--read { background: var(--lx-1); }
+.limbo__field--read:hover { border-color: var(--lx-4); }
+.limbo__field--read output {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--lx-s3);
+  overflow: hidden;
+  color: var(--lx-gold-hi);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one button: gold, with a lip it presses into, as every game's. */
+.limbo .limbo__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+body.lx #limboGo {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--limbo-go-lip);
+  filter: none;
+  transition: background-color var(--lx-quick) var(--limbo-ease), transform 120ms var(--limbo-ease);
+}
+body.lx #limboGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--limbo-go-lip); }
+body.lx #limboGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--limbo-go-lip); }
+body.lx #limboGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #limboGo:disabled { cursor: not-allowed; opacity: .5; filter: none; }
+body.lx #limboGo[aria-busy="true"] { cursor: progress; opacity: 1; }
+body.lx #limboGo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, var(--limbo-go-sheen) 50%, transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+body.lx #limboGo[aria-busy="true"]::after { opacity: 1; animation: limbo-sheen 900ms linear infinite; }
+@keyframes limbo-sheen { to { transform: translateX(100%); } }
+
+.limbo__hint { min-height: 1.1em; margin: 0; color: var(--lx-faint); font: 500 .75rem var(--lx-ui); text-align: center; }
+
+.limbo__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .limbo { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  body.lx .limbo .limbo__stage { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  .limbo__stage { gap: var(--lx-s4); padding: var(--lx-s4) var(--lx-s3); }
+  .limbo__show { min-height: 220px; }
+}
+@media (max-width: 560px) {
+  .limbo__chip { flex: 1 1 0; min-width: 0; padding: 8px 4px; }
+  .limbo__chip:nth-child(n + 5) { display: none; }
+  .limbo__show { min-height: 180px; }
+  .limbo__dials { padding: var(--lx-s3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .limbo__chip[data-fresh="1"] { animation: none; }
+  .limbo__num,
+  body.lx #limboGo { transition: none; }
+  body.lx #limboGo[aria-busy="true"]::after { animation: none; opacity: 0; }
+}

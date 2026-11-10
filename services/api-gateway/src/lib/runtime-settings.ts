@@ -20,6 +20,7 @@ type SettingGroup =
   | 'plinko'
   | 'slots'
   | 'dice'
+  | 'limbo'
   | 'fishing'
   | 'icefishing'
   | 'derby'
@@ -560,6 +561,30 @@ export const runtimeSettingDefinitions = {
     kind: 'bigint',
     group: 'dice',
     label: 'Dice maximum payout per roll (a stake whose win would pay more is refused)',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+
+  /* ── limbo ── The edge is fixed in lib/limbo.ts; these are the limits. */
+  limboEnabled: { kind: 'boolean', group: 'limbo', label: 'Limbo open' },
+  limboMinStakeMinor: {
+    kind: 'bigint',
+    group: 'limbo',
+    label: 'Limbo minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  limboMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'limbo',
+    label: 'Limbo maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  limboMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'limbo',
+    label: 'Limbo maximum payout per bet (a stake whose win would pay more is refused)',
     min: 1n,
     max: BIGINT_MAX,
   },
@@ -1363,6 +1388,8 @@ function assertInvariants(view: AppConfig): void {
     ['Slots maximum stake', view.slotsMaxStakeMinor, 'the maximum payout', view.slotsMaxPayoutMinor],
     ['Dice minimum stake', view.diceMinStakeMinor, 'the maximum', view.diceMaxStakeMinor],
     ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
+    ['Limbo minimum stake', view.limboMinStakeMinor, 'the maximum', view.limboMaxStakeMinor],
+    ['Limbo maximum stake', view.limboMaxStakeMinor, 'the maximum payout', view.limboMaxPayoutMinor],
     ['Fishing minimum stake', view.fishingMinStakeMinor, 'the maximum', view.fishingMaxStakeMinor],
     ['Fishing maximum stake', view.fishingMaxStakeMinor, 'the maximum payout', view.fishingMaxPayoutMinor],
     ['Ice Fishing minimum stake', view.iceFishingMinStakeMinor, 'the maximum', view.iceFishingMaxStakeMinor],

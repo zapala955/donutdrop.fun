@@ -315,8 +315,8 @@ describe('fishing: the page and the dive', () => {
     assert.match(seo, /fishing: \{\n\s*title: 'DonutLuxe Fishing — DonutSMP Fishing',/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/fishing<\/loc>/);
     for (const map of ['"DonutLuxe Fishing — DonutSMP Fishing"', '"https://donutluxe.com/fishing"']) assert.ok(nginx.includes(`/fishing ${map}`), map);
-    assert.match(nginx, /\|dice\|fishing\|/);
-    for (const list of [nudge, popups]) assert.match(list, /'dice', 'fishing', 'ice-fishing', 'derby', 'ore-rush'/);
+    assert.match(nginx, /\|dice\|limbo\|fishing\|/);
+    for (const list of [nudge, popups]) assert.match(list, /'dice', 'limbo', 'fishing', 'ice-fishing', 'derby', 'ore-rush'/);
     // Its icon is the game's rod, pixel for pixel, on the lobby's 16-pixel grid.
     assert.match(await front('assets/img/items/game-fishing.svg'), /viewBox="0 0 16 16" shape-rendering="crispEdges"/);
     for (const cue of ['cast', 'splash', 'thunder']) assert.ok(audio.includes(`\n  ${cue}(ctx) {`), cue);
@@ -413,7 +413,7 @@ describe('fishing: the page and the dive', () => {
 
   it('draws the sea’s page in its own tokens, in the shared frame, with reduced motion honoured', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/fishing.css')]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.limbo, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
     const rules = css.slice(css.indexOf('/* ─────────── the lake'));
     assert.ok(rules.length > 1000);
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');

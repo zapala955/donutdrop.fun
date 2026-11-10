@@ -581,6 +581,16 @@ const environmentSchema = z
     DICE_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     DICE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     DICE_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Limbo. The edge is fixed in lib/limbo.ts. A bet whose win would pay more than the ceiling is
+     * refused, so the ceiling sets the largest stake at each target. No minimum to speak of: the
+     * operator took every game's minimum bet off on 2026-11-09. */
+    LIMBO_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    LIMBO_MIN_STAKE_MINOR: positiveBigintString.default('1'),
+    LIMBO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    LIMBO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
     /* Fishing. The edge is fixed in lib/fishing.ts. A cast whose best catch would pay more than the
      * ceiling is refused, so the ceiling sets the largest stake in each weather. */
     FISHING_ENABLED: z
@@ -1223,6 +1233,20 @@ const environmentSchema = z
         message: 'must be at least DICE_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.LIMBO_MIN_STAKE_MINOR) > BigInt(env.LIMBO_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LIMBO_MAX_STAKE_MINOR'],
+        message: 'must be at least LIMBO_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.LIMBO_MAX_PAYOUT_MINOR) < BigInt(env.LIMBO_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LIMBO_MAX_PAYOUT_MINOR'],
+        message: 'must be at least LIMBO_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.FISHING_MIN_STAKE_MINOR) > BigInt(env.FISHING_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1804,6 +1828,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     diceMinStakeMinor: BigInt(env.DICE_MIN_STAKE_MINOR),
     diceMaxStakeMinor: BigInt(env.DICE_MAX_STAKE_MINOR),
     diceMaxPayoutMinor: BigInt(env.DICE_MAX_PAYOUT_MINOR),
+    limboEnabled: env.LIMBO_ENABLED,
+    limboMinStakeMinor: BigInt(env.LIMBO_MIN_STAKE_MINOR),
+    limboMaxStakeMinor: BigInt(env.LIMBO_MAX_STAKE_MINOR),
+    limboMaxPayoutMinor: BigInt(env.LIMBO_MAX_PAYOUT_MINOR),
     fishingEnabled: env.FISHING_ENABLED,
     fishingMinStakeMinor: BigInt(env.FISHING_MIN_STAKE_MINOR),
     fishingMaxStakeMinor: BigInt(env.FISHING_MAX_STAKE_MINOR),

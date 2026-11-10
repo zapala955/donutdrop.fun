@@ -103,11 +103,11 @@ body.lx .lxpromo:has(.lxpromo__cover:hover) {
 }
 
 /* ═════════ the game frames: the crate rail's body around every game ═════════ */
-body.lx :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .plinko, .bj, .roulette) {
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .plinko, .bj, .roulette) {
   background: var(--dd-frame);
   box-shadow: var(--dd-edge);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .fishing, .icefish, .derby, .plinko, .bj, .roulette, .upg)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .plinko, .bj, .roulette, .upg)) > .phead--game {
   background: var(--dd-foot);
 }
 

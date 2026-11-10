@@ -94,6 +94,9 @@ export type WalletKind =
    * afternoon on 2026-10-04, was retired, and came back on 2026-10-17; the kind never left the
    * ledger. The stake itself is a debit, written by the route. */
   | 'dice_payout'
+  /* Limbo: a bet whose draw reached its target, stake included. Referenced by the bet's id; the
+   * stake itself is a debit, written by the route. */
+  | 'limbo_payout'
   /* Fishing: what a cast caught, stake included when it paid more. Referenced by the cast's id; the
    * stake itself is a debit, written by the route. */
   | 'fishing_payout'

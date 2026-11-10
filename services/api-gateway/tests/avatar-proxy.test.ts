@@ -101,7 +101,7 @@ describe('activity avatars', () => {
     const apiSource = await activity();
     // case, upgrade, roulette, blackjack, crash, mines, tower, chicken, plinko, dice, fishing, ice fishing,
     // mob derby, coinflip, mines duel and faction in the feed, and the same games (no faction) in today's biggest wins.
-    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 33);
+    assert.equal(apiSource.match(/u\.id AS player_id/g)?.length, 35);
     const storeSource = await store();
     assert.match(storeSource, /playerId: raw\.player_id \?\? raw\.playerId \?\? null/);
   });

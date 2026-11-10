@@ -79,6 +79,8 @@ const KIND_LABEL = {
   mines_duel_refund: 'Mines Duel refund',
   dice_stake: 'Dice roll',
   dice_payout: 'Dice win',
+  limbo_stake: 'Limbo bet',
+  limbo_payout: 'Limbo win',
   fishing_stake: 'Fishing cast',
   fishing_payout: 'Fishing catch',
   ice_fishing_stake: 'Ice Fishing game',

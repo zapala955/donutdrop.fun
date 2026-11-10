@@ -24,6 +24,7 @@ import { mountCrash } from './crash.js';
 import { mountMines } from './mines.js';
 import { mountPlinko } from './plinko.js';
 import { mountDice } from './dice.js';
+import { mountLimbo } from './limbo.js';
 import { mountFishing } from './fishing.js';
 import { mountIceFishing } from './icefishing.js';
 import { mountDerby } from './derby.js';
@@ -296,6 +297,7 @@ function mountHome(view) {
     chicken: { name: 'Chicken', art: 'assets/img/items/chicken.svg' },
     plinko: { name: 'Plinko', art: 'assets/img/items/game-plinko.svg' },
     dice: { name: 'Dice', art: 'assets/img/items/dice.svg' },
+    limbo: { name: 'Limbo', art: 'assets/img/items/game-limbo.svg' },
     fishing: { name: 'Fishing', art: 'assets/img/items/game-fishing.svg' },
     icefishing: { name: 'Ice Fishing', art: 'assets/img/items/game-ice-fishing.svg' },
     derby: { name: 'Mob Derby', art: 'assets/img/items/game-derby.svg' },
@@ -1153,6 +1155,7 @@ const VIEWS = {
   chicken: mountChicken,
   plinko: mountPlinko,
   dice: mountDice,
+  limbo: mountLimbo,
   fishing: mountFishing,
   'ice-fishing': mountIceFishing,
   derby: mountDerby,
@@ -1347,7 +1350,7 @@ function route() {
    * Roulette today; a game that ships adds its route here and becomes a link in the menu. */
   const DROP_ROUTES = [
     ['casesBtn', ['crates', 'battles', 'studio']],
-    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip']],
+    ['casinoBtn', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'limbo', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip']],
   ];
   for (const [id, routes] of DROP_ROUTES) {
     const btn = $(`#${id}`);

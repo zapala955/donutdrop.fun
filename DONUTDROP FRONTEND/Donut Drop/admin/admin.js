@@ -3848,6 +3848,7 @@ const GROUP_LABELS = {
   plinko: 'Plinko',
   slots: 'Slots',
   dice: 'Dice',
+  limbo: 'Limbo',
   fishing: 'Fishing',
   icefishing: 'Ice Fishing',
   derby: 'Mob Derby',

@@ -63,6 +63,7 @@ import { registerChickenRoutes } from './routes/chicken.js';
 import { registerPlinkoRoutes } from './routes/plinko.js';
 import { registerSlotsRoutes } from './routes/slots.js';
 import { registerDiceRoutes } from './routes/dice.js';
+import { registerLimboRoutes } from './routes/limbo.js';
 import { registerFishingRoutes } from './routes/fishing.js';
 import { registerIceFishingRoutes } from './routes/ice-fishing.js';
 import { registerDerbyRoutes } from './routes/derby.js';
@@ -274,6 +275,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerPlinkoRoutes(app, db, config);
   await registerSlotsRoutes(app, db, config);
   await registerDiceRoutes(app, db, config);
+  await registerLimboRoutes(app, db, config);
   await registerFishingRoutes(app, db, config);
   await registerIceFishingRoutes(app, db, config);
   await registerDerbyRoutes(app, db, config);

@@ -546,6 +546,20 @@ const CUES = {
   },
   /** A win on the table: a bright run of notes. */
   rouWin(ctx) { CUES.upgWin(ctx); },
+
+  /* ── Limbo ──
+   * A rise as the number climbs (the caller fits its pitch to how far it goes), and the landing in
+   * Dice's language: two notes for a win, a run of notes from 10x up, a soft knock for a miss.
+   */
+  /** The number climbing: a sweep up with a glint at the top. */
+  limboRise(ctx) {
+    tone(ctx, { freq: 220, type: 'sine', duration: 0.5, gain: 0.07, sweepTo: 880 });
+    tone(ctx, { freq: 440, type: 'triangle', start: 0.05, duration: 0.42, gain: 0.03, sweepTo: 1320 });
+    noise(ctx, { duration: 0.18, gain: 0.025, frequency: 3600, q: 0.8 });
+  },
+  limboWin(ctx) { CUES.diceWin(ctx); },
+  limboBig(ctx) { CUES.diceBig(ctx); },
+  limboLose(ctx) { CUES.diceLose(ctx); },
 };
 
 /**
