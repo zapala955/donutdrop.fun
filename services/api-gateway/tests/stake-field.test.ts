@@ -49,6 +49,31 @@ describe('the stake field', () => {
     assert.equal(adjustStake('double', 3_000_000n, '0', 0n), 6_000_000n);
   });
 
+  /* 2026-11-10: halving 15.6k put "7812" in the box. What a button writes is cut to three figures in
+   * its unit, always down, and the box shows it with the unit -- and bets exactly what it shows. */
+  it('writes three figures with a unit, and bets exactly what the box says', async () => {
+    const { adjustStake, parseAmount, formatAmountInput } = await util() as Util & { formatAmountInput: (n: number) => string };
+    const box = (value: bigint) => formatAmountInput(Number(value));
+    assert.equal(box(adjustStake('half', 15_625n, '0', 0n)), '7.81k');
+    assert.equal(box(adjustStake('half', 15_600n, '0', 0n)), '7.8k');
+    assert.equal(box(adjustStake('double', 7_810n, '0', 0n)), '15.6k');
+    assert.equal(box(adjustStake('half', 125_000n, '0', 0n)), '62.5k');
+    // Max goes down, never up: never more than the balance or the ceiling.
+    assert.equal(adjustStake('max', 0n, '2512345678', 0n), 2_510_000_000n);
+    assert.equal(box(adjustStake('max', 0n, '2512345678', 0n)), '2.51b');
+    assert.equal(box(adjustStake('max', 0n, '100101500', 0n)), '100m');
+    assert.equal(adjustStake('max', 0n, '2512345678', '1000000000'), 1_000_000_000n);
+    // Under a thousand nothing is cut.
+    assert.equal(adjustStake('half', 999n, '0', 0n), 499n);
+    // What the box shows is what is bet.
+    for (const stake of [7_810n, 15_600n, 2_510_000_000n, 62_500n, 499n]) {
+      assert.equal(parseAmount(box(stake)), Number(stake));
+    }
+    // A figure typed by hand is shown as typed: 7812 is not quietly made 7.81k.
+    assert.equal(formatAmountInput(7_812), '7812');
+    assert.equal(formatAmountInput(1_234), '1234');
+  });
+
   it('every game has ½, 2× and Max, all through the one rule', async () => {
     for (const [file, , cls, ceiling] of GAMES) {
       const code = await source(file);

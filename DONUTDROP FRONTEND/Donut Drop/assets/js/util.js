@@ -77,11 +77,27 @@ const whole = (value) => {
 
 export function adjustStake(adj, current, balance, ceiling) {
   const now = whole(current);
-  if (adj === 'half') return now / 2n;
-  if (adj === 'double') return now * 2n;
+  if (adj === 'half') return roundStake(now / 2n);
+  if (adj === 'double') return roundStake(now * 2n);
   const have = whole(balance);
   const most = whole(ceiling);
-  return most > 0n && most < have ? most : have > 0n ? have : 0n;
+  return roundStake(most > 0n && most < have ? most : have > 0n ? have : 0n);
+}
+
+/* A stake the buttons wrote, cut to three figures in its own unit -- 7.81k, 15.6k, 2.51b -- the way
+ * money() shows every figure on the site (2026-11-10: halving 15.6k put "7812" in the box). Always
+ * DOWN, so Max can never ask for more than the balance or the game's ceiling, and the box then
+ * holds exactly what is bet: formatAmountInput writes it back as "7.81k" with nothing hidden.
+ * Below a thousand nothing is cut. A figure the player TYPES is never touched. */
+export function roundStake(value) {
+  const n = whole(value);
+  if (n < 1000n) return n < 0n ? 0n : n;
+  let scale = 1000n;
+  for (const next of [1_000_000n, 1_000_000_000n, 1_000_000_000_000n]) if (n >= next) scale = next;
+  // Whole units of the scale: 1-9 keep two decimals, 10-99 one, 100 and up none.
+  const units = n / scale;
+  const step = units >= 100n ? scale : units >= 10n ? scale / 10n : scale / 100n;
+  return (n / step) * step;
 }
 
 /* The inverse: the shortest string that parseAmount turns back into this exact number, so a field
@@ -97,8 +113,9 @@ export function adjustStake(adj, current, balance, ceiling) {
  *
  * The decimal limit is gone with it. parseAmount takes any number of decimal places, so
  * "100.1015m" survives the trip exactly, and the round trip is asserted here rather than assumed.
- * Shortest still wins on a tie-break against the plain digits, so 1234 stays 1234 rather than
- * becoming a longer "1.234k". */
+ * A figure of three digits or fewer in its unit is written with the unit, as money() writes it:
+ * 7810 is "7.81k", not "7810" (2026-11-10). Past three, the shorter wins, so 1234 stays 1234 rather
+ * than becoming a longer "1.234k". */
 export function formatAmountInput(value) {
   const n = Math.trunc(Number(value) || 0);
   if (n <= 0) return '0';
@@ -109,7 +126,8 @@ export function formatAmountInput(value) {
     /* Verified, not trusted: dividing and re-multiplying by a power of ten is exact for every
      * value this field can hold, but the check costs nothing and a stake that drifted by a unit
      * between the box and the button is not a bug anybody would enjoy finding later. */
-    return parseAmount(candidate) === n && candidate.length <= plain.length ? candidate : plain;
+    const figures = candidate.slice(0, -1).replace('.', '').replace(/^0+/, '').length;
+    return parseAmount(candidate) === n && (figures <= 3 || candidate.length <= plain.length) ? candidate : plain;
   }
   return plain;
 }
