@@ -69,18 +69,74 @@ export async function addWagerRequirement(
   );
 }
 
-/** Adds the requirement a deposit carries, at the configured multiplier. */
+/**
+ * Adds the requirement a deposit carries, at the configured multiplier. Called after the deposit's
+ * credit, in the same transaction.
+ *
+ * A REQUIREMENT DIES WITH THE MONEY IT WAS FOR (the owner, 2026-11-11: "when someone loses their
+ * money if they all in and then deposit again the old deposits counts too"). Only wagers count a
+ * requirement down, never losses: $10M from a code owes $30M, an all-in $10M loss leaves $20M owed
+ * on a $0 balance, and the next deposit used to stack on top of it. So when the balance before this
+ * deposit was all but nothing AND nothing is still in play, what was left is forgiven before the
+ * deposit adds its own. "Nothing in play" is the guard: a stake still riding (an open mines game, a
+ * coinflip waiting for an opponent, a crash bet in the air) or items still held could come back
+ * after the forgiveness and be withdrawn having skipped the wagering.
+ */
 export async function addDepositRequirement(
   client: DbClient,
   config: AppConfig,
   userId: string,
   depositMinor: bigint,
 ): Promise<void> {
+  await forgiveSpentRequirement(client, userId, depositMinor);
   await addWagerRequirement(
     client,
     userId,
     requirementFor(depositMinor, config.depositWagerMultiplier),
   );
+}
+
+/** Below this, a balance is spent: less than any game takes as a stake. */
+export const SPENT_BALANCE_MINOR = 1_000n;
+
+/**
+ * Clears what is owed when the player's balance before `justCreditedMinor` was under
+ * SPENT_BALANCE_MINOR and they have no stake still unsettled and no items held. Returns what was
+ * forgiven (0 when nothing was). The wallet row is already locked by the credit before it.
+ */
+export async function forgiveSpentRequirement(
+  client: DbClient,
+  userId: string,
+  justCreditedMinor: bigint,
+): Promise<bigint> {
+  const result = await client.query<{ forgiven: string }>(
+    `UPDATE user_wager_requirements r
+        SET remaining_minor = 0, updated_at = now()
+       FROM (SELECT remaining_minor AS before FROM user_wager_requirements WHERE user_id = $1) old
+      WHERE r.user_id = $1 AND r.remaining_minor > 0
+        AND (SELECT w.balance_minor FROM user_wallets w WHERE w.user_id = $1) - $2::bigint < $3::bigint
+        AND NOT EXISTS (SELECT 1 FROM mines_games g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM tower_games g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM chicken_games g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM blackjack_hands g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM ice_fishing_games g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM fishing_casts g WHERE g.user_id = $1 AND g.status = 'open')
+        AND NOT EXISTS (SELECT 1 FROM crash_bets g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM roulette_bets g WHERE g.user_id = $1 AND g.settled_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM side_bets g WHERE g.user_id = $1 AND g.settled_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM coinflip_games g
+                         WHERE (g.host_user_id = $1 OR g.opponent_user_id = $1) AND g.status = 'open')
+        AND NOT EXISTS (SELECT 1 FROM mines_duel_games g
+                         WHERE (g.host_user_id = $1 OR g.opponent_user_id = $1) AND g.status IN ('open', 'playing'))
+        AND NOT EXISTS (SELECT 1 FROM duel_lobbies g
+                         WHERE (g.host_user_id = $1 OR g.opponent_user_id = $1) AND g.status IN ('lobby', 'running'))
+        AND NOT EXISTS (SELECT 1 FROM battle_players p JOIN battles b ON b.id = p.battle_id
+                         WHERE p.user_id = $1 AND b.status IN ('lobby', 'running'))
+        AND NOT EXISTS (SELECT 1 FROM inventory_lots l WHERE l.owner_user_id = $1 AND l.state = 'available')
+      RETURNING old.before AS forgiven`,
+    [userId, justCreditedMinor.toString(), SPENT_BALANCE_MINOR.toString()],
+  );
+  return BigInt(result.rows[0]?.forgiven ?? '0');
 }
 
 /** Counts a settled wager against whatever the player owes. A no-op for everybody who owes nothing. */

@@ -278,3 +278,29 @@ describe('the wager requirement against PostgreSQL', { skip: !requirementDatabas
     }
   });
 });
+
+/* The owner, 2026-11-11: "when someone loses their money if they all in and then deposit again the
+ * old deposits counts too". Losses never counted a requirement down, so a busted player's leftover
+ * stacked onto their next deposit. The behaviour was run against a real database before shipping;
+ * these pin the guards that keep the forgiveness from being a way round the wagering. */
+describe('a requirement dies with the money it was for', () => {
+  it('forgives the leftover on a deposit made from a spent balance, before adding the deposit\u2019s own', async () => {
+    const source = await read('services/api-gateway/src/lib/wager-requirements.ts');
+    const deposit = source.slice(source.indexOf('export async function addDepositRequirement'));
+    assert.match(deposit, /await forgiveSpentRequirement\(client, userId, depositMinor\);\s+await addWagerRequirement\(/);
+    assert.match(source, /export const SPENT_BALANCE_MINOR = 1_000n;/);
+    assert.match(source, /balance_minor FROM user_wallets w WHERE w\.user_id = \$1\) - \$2::bigint < \$3::bigint/);
+  });
+
+  it('forgives nothing while a stake is still in play or items are still held', async () => {
+    const source = await read('services/api-gateway/src/lib/wager-requirements.ts');
+    const query = source.slice(source.indexOf('export async function forgiveSpentRequirement'));
+    for (const table of [
+      'mines_games', 'tower_games', 'chicken_games', 'blackjack_hands', 'ice_fishing_games',
+      'fishing_casts', 'crash_bets', 'roulette_bets', 'side_bets', 'coinflip_games',
+      'mines_duel_games', 'duel_lobbies', 'battle_players', 'inventory_lots',
+    ]) {
+      assert.ok(query.includes(`NOT EXISTS (SELECT 1 FROM ${table} `), table);
+    }
+  });
+});
