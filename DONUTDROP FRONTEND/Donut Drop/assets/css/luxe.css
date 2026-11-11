@@ -613,7 +613,6 @@ body.lx .modal .auth__field {
 body.lx .modal .auth__field:hover { border-color: var(--lx-5); }
 body.lx .modal .auth__field:focus-within { border-color: var(--lx-gold); box-shadow: none; }
 body.lx .modal .auth__field.is-error { border-color: var(--lx-loss); }
-body.lx .modal .auth__bonus { border: 0; border-radius: var(--lx-r); background: var(--lx-2); box-shadow: inset 3px 0 0 var(--lx-gold); }
 body.lx .modal .auth__go { border-radius: var(--lx-r-s); background: var(--lx-gold); color: var(--lx-on-gold); font-family: var(--lx-ui); box-shadow: var(--lx-shade); }
 body.lx .modal .auth__go:hover:not(:disabled) { background: var(--lx-gold-hi); }
 body.lx .modal .auth__go:disabled { background: var(--lx-4); color: var(--lx-mute); opacity: 1; }

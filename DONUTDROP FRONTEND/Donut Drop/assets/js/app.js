@@ -353,9 +353,14 @@ const MINECRAFT_NAME = /^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/;
 const REFERRAL_CODE = /^[A-Z0-9]{6,16}$/;
 
 const PERSON_ICON =
-  '<svg class="auth__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"' +
-  ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  '<svg class="auth__icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">' +
+  '<path d="M234.38,210a123.36,123.36,0,0,0-60.78-53.23,76,76,0,1,0-91.2,0A123.36,123.36,0,0,0,21.62,210a12,12,0,1,0,20.77,12c18.12-31.32,50.12-50,85.61-50s67.49,18.69,85.61,50a12,12,0,0,0,20.77-12ZM76,96a52,52,0,1,1,52,52A52.06,52.06,0,0,1,76,96Z"/></svg>';
+const SHIELD_ICON =
+  '<svg class="signin__howicon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">' +
+  '<path d="M208,36H48A20,20,0,0,0,28,56v56c0,54.29,26.32,87.22,48.4,105.29,23.71,19.39,47.44,26,48.44,26.29a12.1,12.1,0,0,0,6.32,0c1-.28,24.73-6.9,48.44-26.29,22.08-18.07,48.4-51,48.4-105.29V56A20,20,0,0,0,208,36Zm-4,76c0,35.71-13.09,64.69-38.91,86.15A126.28,126.28,0,0,1,128,219.38a126.14,126.14,0,0,1-37.09-21.23C65.09,176.69,52,147.71,52,112V60H204ZM79.51,144.49a12,12,0,1,1,17-17L112,143l47.51-47.52a12,12,0,0,1,17,17l-56,56a12,12,0,0,1-17,0Z"/></svg>';
+const CARET_ICON =
+  '<svg class="auth__refcaret" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">' +
+  '<path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg>';
 
 /**
  * Loads Cloudflare's Turnstile script, once per page.
@@ -389,35 +394,46 @@ function openLoginModal() {
     return;
   }
   openModal('Sign In or Sign Up', (body) => {
-    body.innerHTML = `<h3 class="auth__title" aria-hidden="true">Sign In or Sign Up</h3>
-      <p class="auth__lede">Log in with your Minecraft username, then verify your account by
-        paying the bot an exact amount in game. The payment lands in your balance.</p>
-      <div class="auth__bonus" id="linkBonus" hidden>
-        <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> <span id="linkBonusWhat">free for new players</span></p>
-        <p class="auth__bonusfine" id="linkBonusFine"></p>
+    /* The owner (2026-11-11): the card "doesnt rlly fit the new redesign". It is built from the
+     * redesign's own parts now: the donut in a slot like the home banners, the offer as a flat
+     * panel with its sprite and tag, quiet grey for the second ways round, gold only on Continue,
+     * and the paying explained once, under the button it follows. */
+    body.innerHTML = `<div class="signin__head">
+        <span class="signin__slot"><img src="assets/img/brand/donut.svg" alt="" width="48" height="48"></span>
+        <div class="signin__titles">
+          <h3 class="auth__title signin__title" aria-hidden="true">Sign in or sign up</h3>
+          <p class="signin__sub">With your Minecraft name. No password.</p>
+        </div>
       </div>
-      <hr class="auth__rule">
+      <div class="auth__bonus" id="linkBonus" hidden>
+        <span class="auth__bonusslot"><img src="assets/img/items/gold_ingot.png" alt="" width="32" height="32"></span>
+        <div class="auth__bonuscopy">
+          <span class="lxtag" id="linkBonusTag">New players</span>
+          <p class="auth__bonushead"><b class="auth__bonusamt" id="linkBonusAmt"></b> <span id="linkBonusWhat">free</span></p>
+          <p class="auth__bonusfine" id="linkBonusFine"></p>
+        </div>
+      </div>
       <form id="linkForm" novalidate>
         <label class="auth__label" for="linkUsername">Minecraft username</label>
         <div class="auth__field" id="linkField">
           ${PERSON_ICON}
           <input id="linkUsername" class="auth__input" type="text" maxlength="16" required
                  autocomplete="username" autocapitalize="none" spellcheck="false"
-                 placeholder="Enter your minecraft username…">
+                 placeholder="Your Minecraft username">
         </div>
         <p class="auth__err" id="linkError" role="alert" hidden></p>
-        <p class="auth__note">On Bedrock? Your name works with or without the dot.</p>
+        <p class="auth__note">Java or Bedrock. Bedrock names work with or without the dot.</p>
 
         <div class="auth__checks">
           <label class="auth__check">
             <input type="checkbox" id="linkTerms">
             <span class="auth__box" aria-hidden="true"></span>
-            <span class="auth__txt">I agree to all <a href="/terms">Terms &amp; Conditions</a>.</span>
+            <span class="auth__txt">I agree to the <a href="/terms">Terms &amp; Conditions</a>.</span>
           </label>
         </div>
 
         <details class="auth__ref">
-          <summary>Have a referral code?</summary>
+          <summary>${CARET_ICON}Have a referral code?</summary>
           <div class="auth__refbody">
             <div class="auth__field">
               <input id="linkRef" class="auth__input" type="text" maxlength="16"
@@ -432,6 +448,8 @@ function openLoginModal() {
         <div class="auth__foot">
           <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
         </div>
+        <p class="signin__how">${SHIELD_ICON}<span>Next you prove the name is yours: a small, exact
+          <span class="mono">/pay</span> to our bot in game, which lands in your balance.</span></p>
       </form>
       <div id="linkProgress" role="status"></div>`;
 
@@ -459,8 +477,9 @@ function openLoginModal() {
       if (invite && code && REFERRAL_CODE.test(code.toUpperCase())) {
         box.hidden = false;
         box.dataset.kind = 'invite';
+        $('#linkBonusTag', box).textContent = 'Invite code';
         $('#linkBonusAmt', box).textContent = money(Number(invite.amountMinor));
-        $('#linkBonusWhat', box).textContent = 'signup bonus with this invite code';
+        $('#linkBonusWhat', box).textContent = 'signup bonus';
         $('#linkBonusFine', box).textContent =
           'Added when your account is created. Play with it straight away'
           + (invite.wagerMultiplier > 0 ? `; wager it ${invite.wagerMultiplier}× before withdrawing.` : '.');
@@ -471,8 +490,9 @@ function openLoginModal() {
       box.hidden = !(amount > 0);
       delete box.dataset.kind;
       if (box.hidden) return;
+      $('#linkBonusTag', box).textContent = 'New players';
       $('#linkBonusAmt', box).textContent = money(amount);
-      $('#linkBonusWhat', box).textContent = 'free for new players';
+      $('#linkBonusWhat', box).textContent = 'free';
       $('#linkBonusFine', box).textContent =
         'Added when your account is created. Play with it straight away.';
     };
@@ -579,14 +599,10 @@ function openLoginModal() {
     referral.addEventListener('input', sync);
     sync();
 
-    /* What sits above the form: the lede about paying and the new-player offer. A returning
-     * player choosing how to log in needs neither, so they step aside for the choice. Inline
-     * display, so the offer's own `hidden` (bonus switched off) still governs when they return. */
-    const introParts = [
-      body.querySelector(':scope > .auth__lede'),
-      $('#linkBonus', body),
-      body.querySelector(':scope > .auth__rule'),
-    ].filter(Boolean);
+    /* What sits between the header and the form: the new-player offer. A returning player
+     * choosing how to log in has no use for it, so it steps aside for the choice. Inline display,
+     * so the offer's own `hidden` (bonus switched off) still governs when it comes back. */
+    const introParts = [$('#linkBonus', body)].filter(Boolean);
     const showIntro = (on) => introParts.forEach((part) => { part.style.display = on ? '' : 'none'; });
     const progress = $('#linkProgress', body);
 
@@ -642,17 +658,21 @@ function openLoginModal() {
        *
        * There is no Finish button. The poll signs the player in the moment the payment confirms
        * — see pollLink. The block below stays hidden until something actually fails. */
-      $('#linkProgress', body).innerHTML = `<p class="auth__lede">Run this exact command in game:</p>
+      $('#linkProgress', body).innerHTML = `<p class="auth__lede">Log in to DonutSMP as
+          <b class="signin__name"></b> and run this exact command:</p>
         <div class="auth__field auth__field--static">
           <span class="auth__value auth__value--lg mono">${escapeText(challenge.instruction)}</span>
         </div>
         <button class="btn btn--go auth__go" type="button" id="linkCopy">Copy command</button>
-        <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
-        <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
+        <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))}. The amount is what identifies you, so a different amount will not sign you in. It is added to your balance.</p>
+        <div class="relink__status" id="linkStatus" data-state="waiting">
+          <i aria-hidden="true"></i><span id="linkState">${PAY_STATE_TEXT.waiting}</span>
+        </div>
         <div id="linkFinish" hidden>
-          <p class="card__p" id="linkCompleteError" role="alert"></p>
-          <button class="btn btn--go" type="button" id="linkComplete">Try again</button>
+          <p class="auth__err" id="linkCompleteError" role="alert"></p>
+          <button class="btn btn--go auth__go" type="button" id="linkComplete">Try again</button>
         </div>`;
+      $('.signin__name', body).textContent = username;
 
       $('#linkCopy', body).addEventListener('click', async (event) => {
         const button = event.currentTarget;
@@ -1119,20 +1139,28 @@ async function pollWithdrawal(id, host) {
 }
 
 const PAY_STATE_TEXT = {
-  waiting: 'waiting for your payment',
-  verifying: 'payment seen, confirming it arrived',
-  confirmed: 'payment confirmed',
-  completed: 'already used',
-  expired: 'expired, start again',
+  waiting: 'Waiting for your payment…',
+  verifying: 'Payment seen, confirming it arrived…',
+  confirmed: 'Payment confirmed',
+  completed: 'Already used',
+  expired: 'The ten minutes ran out. Close this and start again.',
 };
+
+/* The payment step's status pill (the account-change window's): a pulsing dot while it waits, red
+ * once it has stopped for good. */
+function paintLinkState(body, text, stopped = false) {
+  const status = $('#linkState', body);
+  if (status) status.textContent = text;
+  const pill = $('#linkStatus', body);
+  if (pill) pill.dataset.state = stopped ? 'stopped' : 'waiting';
+}
 
 async function pollLink(challengeId, body) {
   if (!body.isConnected || !$('#modal').open) return;
   try {
     const result = await loginStatus(challengeId);
     const state = result.state || result.status;
-    const status = $('#linkState', body);
-    if (status) status.textContent = PAY_STATE_TEXT[state] || state;
+    paintLinkState(body, PAY_STATE_TEXT[state] || state, ['expired', 'locked'].includes(state));
     if (state === 'confirmed') {
       /* Confirmed means the bot has seen the payment, so there is nothing left to decide and
        * nothing left to press. The button that stood here asked a player to agree to something
@@ -1148,8 +1176,7 @@ async function pollLink(challengeId, body) {
      * payment" with nothing left watching for it. Only an answer about the challenge itself — not
      * found, not yours — is worth stopping on. */
     if (isTransient(error)) {
-      const status = $('#linkState', body);
-      if (status) status.textContent = 'connection hiccup, still checking';
+      paintLinkState(body, 'Connection hiccup, still checking…');
       setTimeout(() => pollLink(challengeId, body), 4000);
       return;
     }
@@ -1176,8 +1203,7 @@ async function finishLogin(challengeId, body) {
   const finish = $('#linkFinish', body);
   const inlineError = $('#linkCompleteError', body);
   const button = $('#linkComplete', body);
-  const status = $('#linkState', body);
-  if (status) status.textContent = 'signing you in';
+  paintLinkState(body, 'Signing you in…');
 
   try {
     const user = await completeLogin(challengeId);
@@ -1194,7 +1220,7 @@ async function finishLogin(challengeId, body) {
     if (signInOpen()) closeModal();
   } catch (error) {
     if (!body.isConnected) return;
-    if (status) status.textContent = 'payment received, sign-in failed';
+    paintLinkState(body, 'Payment received, but signing in failed', true);
     if (inlineError) inlineError.textContent = error?.message || 'The server rejected the request.';
     if (finish) finish.hidden = false;
     showApiError(error);

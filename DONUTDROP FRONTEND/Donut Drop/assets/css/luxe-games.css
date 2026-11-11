@@ -854,6 +854,86 @@ body.lx .modal .auth__link:focus-visible { outline: 2px solid var(--lx-focus); o
 /* errors in the sign-in card read red, as they do on the profile */
 body.lx .modal .auth__err { color: var(--lx-loss-text); font: 600 .8125rem/1.4 var(--lx-ui); }
 
+/* ═════════ the sign-in card (app.js openLoginModal) ═════════
+ * Hallmark · component: sign-in card · genre: atmospheric · theme: site tokens (obsidian + gold)
+ * states: field default · hover · focus · error (luxe.css); terms box default · hover · focus ·
+ * pressed · checked; referral row closed · hover · focus · open; Continue disabled · enabled ·
+ * hover · loading (auth.css).
+ *
+ * The owner, 2026-11-11: the card "doesnt rlly fit the new redesign". It now uses the redesign's
+ * own parts: the donut standing in a slot like the home banners, the offer as a flat panel with
+ * its sprite and tag, grey for the second ways round, gold kept for Continue and the amount. */
+body.lx .modal .signin__head {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: var(--lx-s4);
+  padding-right: var(--lx-s8);
+}
+body.lx .modal .signin__slot {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 6px; background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+/* A 16px sprite at three times itself, so every pixel is the same size. */
+body.lx .modal .signin__slot img { display: block; width: 48px; height: 48px; image-rendering: pixelated; }
+body.lx .modal .signin__titles { min-width: 0; }
+body.lx .modal .signin__title {
+  margin: 0; color: var(--lx-ink);
+  font: 800 1.625rem/1.15 var(--lx-ui); letter-spacing: -.01em; overflow-wrap: anywhere;
+}
+body.lx .modal .signin__sub { margin: 4px 0 0; color: var(--lx-mute); font: 500 .875rem/1.4 var(--lx-ui); }
+
+/* The offer: a flat panel with its sprite in a slot and the home banners' tag. */
+body.lx .modal .auth__bonus {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: var(--lx-s3);
+  margin: var(--lx-s5) 0 0; padding: var(--lx-s3);
+  border: 0; border-radius: var(--lx-r);
+  background: var(--dd-panel); box-shadow: var(--dd-edge);
+}
+body.lx .modal .auth__bonus[hidden] { display: none; }
+body.lx .modal .auth__bonusslot {
+  display: grid; place-items: center; width: 48px; height: 48px;
+  border-radius: 6px; background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .modal .auth__bonusslot img { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+body.lx .modal .auth__bonuscopy { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+body.lx .modal .auth__bonushead { margin: 0; color: var(--lx-ink); font: 700 1rem/1.25 var(--lx-ui); }
+body.lx .modal .auth__bonusamt { color: var(--lx-gold); font: inherit; }
+body.lx .modal .auth__bonusfine { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.4 var(--lx-ui); }
+
+/* No rule between the offer and the form: room does that job, and the same room above whatever
+ * step replaces the form (the choice, the code, the payment). */
+body.lx .modal #linkForm,
+body.lx .modal #linkProgress:not(:empty) { margin-top: var(--lx-s5); }
+
+/* The agreement: a well like the fields, gold once ticked; the link reads as a link, not an offer. */
+body.lx .modal .auth__box { border-color: var(--lx-5); border-radius: 4px; background: var(--lx-0); }
+body.lx .modal .auth__check:hover .auth__box { border-color: var(--lx-gold); }
+body.lx .modal .auth__check input:checked + .auth__box { background: var(--lx-gold); border-color: var(--lx-gold); }
+body.lx .modal .auth__check input:focus-visible + .auth__box { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .modal .auth__txt { color: var(--lx-text); }
+body.lx .modal .auth__txt a {
+  color: var(--lx-ink); font-weight: 600;
+  text-decoration: underline; text-decoration-color: var(--lx-5); text-underline-offset: 3px;
+}
+body.lx .modal .auth__txt a:hover { color: var(--lx-gold-hi); text-decoration-color: currentColor; }
+
+/* "Have a referral code?": a quiet row with a caret that turns when it opens. */
+body.lx .modal .auth__ref > summary { gap: 6px; color: var(--lx-mute); font: 600 .875rem/1.3 var(--lx-ui); }
+body.lx .modal .auth__ref > summary::before { content: none; }
+body.lx .modal .auth__ref > summary:hover { color: var(--lx-ink); }
+body.lx .modal .auth__ref > summary:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; border-radius: 3px; }
+body.lx .modal .auth__refcaret { flex: none; width: 12px; height: 12px; transition: transform 140ms var(--lx-ease); }
+body.lx .modal .auth__ref[open] .auth__refcaret { transform: rotate(90deg); }
+
+/* How the sign-in goes on, said once, under the button it follows. */
+body.lx .modal .signin__how {
+  display: flex; align-items: flex-start; gap: var(--lx-s2);
+  margin: var(--lx-s4) 0 0; color: var(--lx-faint); font: 500 .8125rem/1.45 var(--lx-ui);
+}
+body.lx .modal .signin__howicon { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--lx-mute); }
+body.lx .modal .signin__how .mono { color: var(--lx-text); }
+@media (prefers-reduced-motion: reduce) {
+  body.lx .modal .auth__refcaret { transition: none; }
+}
+
 /* The sign-in card for a name with an email linked: two ways in, as two rows (email.js
  * paintLoginChoice). Flat panels with a hairline, gold only on the edge pointed at and on the
  * code's icon, the way in that costs nothing. Each row is one button: icon, words, caret. */
