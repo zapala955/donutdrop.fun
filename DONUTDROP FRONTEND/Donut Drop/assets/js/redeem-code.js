@@ -11,14 +11,15 @@
  * so the code reaches no server log; it is read once and cleared from the address bar), the account
  * menu's "Redeem code" row, and the Discord page.
  *
- * It is the site's own window (#modal), built like the sign-in card: the sprite in a slot, what a
- * drop pays, then the code. Every state says what to do next:
+ * It is the site's own window (#modal), built like the sign-in card: the sprite in a slot, then the
+ * code. No countdown to the next drop and no claim counts: the owner (2026-11-11) "its not needed".
+ * Every state says what to do next:
  *   signed out   → log in (the window comes back, code kept, once they have)
  *   not linked   → the Discord page, where the link code is
  *   switched off → that, plainly
  *   ready        → the field, which formats as it is typed (ABCD-2345) and takes a paste
  *   refused      → the server's own words, under the field
- *   paid         → the prize, what to wager before withdrawing it, and how many claims are left
+ *   paid         → the prize, and what to wager before withdrawing it
  */
 import { api } from './api.js';
 import { bus, refreshBalance } from './store.js';
@@ -58,15 +59,6 @@ function clearFragment() {
   } catch {
     /* an address bar that keeps the fragment is not a problem, only untidy */
   }
-}
-
-/** "1h 12m", "8m", "now": how long until `iso`. */
-function until(iso) {
-  const left = Date.parse(iso) - Date.now();
-  if (!Number.isFinite(left) || left <= 0) return 'now';
-  const minutes = Math.max(1, Math.round(left / 60_000));
-  const hours = Math.floor(minutes / 60);
-  return hours ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
 export function initRedeemCode(options = {}) {
@@ -139,23 +131,8 @@ function paintHead(body, sub) {
   $('.signin__sub', body).textContent = sub;
 }
 
-/* What a drop pays, the way the Discord post says it: three figures in one strip. */
-function facts(drops) {
-  const current = drops.current;
-  const claims = current
-    ? `<span>Left on this code</span><b>${current.claimsLeft} of ${current.maxClaims}</b>`
-    : `<span>Claims per code</span><b>${drops.maxClaims}</b>`;
-  return `<div class="rdm__facts">
-      <div><span>Each claim</span><b class="rdm__gold">${escapeText(money(Number(drops.prizeMinor)))}</b></div>
-      <div>${claims}</div>
-      <div><span>Next drop</span><b>${escapeText(until(drops.nextAt))}</b></div>
-    </div>`;
-}
-
 function paint(host, status) {
   const drops = status?.codeDrops;
-  const every = drops?.everyMinutes ?? 120;
-  const cadence = every === 60 ? 'every hour' : every % 60 === 0 ? `every ${every / 60} hours` : `every ${every} minutes`;
 
   if (!status) {
     paintHead(host, 'The site could not be reached.');
@@ -170,8 +147,7 @@ function paint(host, status) {
     return;
   }
 
-  paintHead(host, `Codes drop in the Discord ${cadence}. First come, first served.`);
-  host.insertAdjacentHTML('beforeend', facts(drops));
+  paintHead(host, 'Enter a code from the DonutLuxe Discord.');
 
   // The server's own answer, read with the session cookie: right even before the page has started.
   const signedIn = Boolean(status.signedIn);
@@ -205,13 +181,13 @@ function paintForm(host, drops) {
       <div class="auth__field auth__field--code" id="rdmField">
         <input id="rdmCode" class="auth__input auth__input--code" type="text" inputmode="text"
                autocomplete="off" autocapitalize="characters" spellcheck="false"
-               maxlength="${CODE_LENGTH + 1}" placeholder="ABCD-2345">
+               maxlength="${CODE_LENGTH + 1}" placeholder="ABCD-2345" aria-describedby="rdmError rdmNote">
       </div>
       <p class="auth__err" id="rdmError" role="alert" hidden></p>
       <button class="btn btn--go auth__go" type="submit" id="rdmGo" disabled>Redeem</button>
-      <p class="auth__note">${drops.wagerMultiplier > 0
+      <p class="auth__note" id="rdmNote">${drops.wagerMultiplier > 0
         ? `Wager it ${escapeText(String(drops.wagerMultiplier))}× (${escapeText(money(wager))}) before withdrawing it.`
-        : 'Withdrawable at once.'} One claim per player on each code.</p>
+        : 'Withdrawable at once.'}</p>
     </form>`);
 
   const input = $('#rdmCode', host);
@@ -276,11 +252,9 @@ function paintPaid(host, result) {
       <p class="auth__lede rdm__paidtext"></p>
     </div>
     <button class="btn btn--go auth__go" type="button" id="rdmDone">Done</button>`;
-  $('.rdm__paidtext', host).textContent =
-    `Added to your balance, ${result.username}. It is playable now; wager ${money(Number(result.wagerMinor))} ` +
-    `before withdrawing it. ${result.claimsLeft > 0
-      ? `${result.claimsLeft} of ${result.maxClaims} claims left on this code.`
-      : 'You took the last claim on this code.'}`;
+  $('.rdm__paidtext', host).textContent = Number(result.wagerMinor) > 0
+    ? `Added to your balance. Wager ${money(Number(result.wagerMinor))} before withdrawing it.`
+    : 'Added to your balance.';
   $('#rdmDone', host).addEventListener('click', () => closeModal());
   $('#rdmDone', host).focus();
 }

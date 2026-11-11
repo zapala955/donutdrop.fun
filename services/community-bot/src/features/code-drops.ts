@@ -59,8 +59,6 @@ export function buildDropMessage(facts: DropFacts): MessageCreateOptions & { con
   const prize = formatMoney(BigInt(drop.prizeMinor));
   const left = Math.max(0, drop.maxClaims - drop.claims);
   const done = facts.over === true || left === 0;
-  const wager =
-    drop.wagerMultiplier > 0 ? formatMoney(BigInt(drop.prizeMinor) * BigInt(drop.wagerMultiplier)) : null;
   const code = formatCode(drop.code);
 
   const message = done
@@ -81,12 +79,12 @@ export function buildDropMessage(facts: DropFacts): MessageCreateOptions & { con
         { name: 'Code', value: `\`\`\`${code}\`\`\`` },
         { name: 'Claims left', value: `**${left}** of ${drop.maxClaims}`, inline: true },
         { name: 'Expires', value: relative(new Date(drop.expiresAt)), inline: true },
+        // The owner (2026-11-11): no wager line in the post. The site says it when the code is redeemed.
         {
           name: 'How to claim',
           value:
             'Tap **Redeem on DonutLuxe**: the code is filled in for you. Your Discord has to be ' +
-            'linked to your site account (`/link`).' +
-            (wager ? ` Wager it ${drop.wagerMultiplier}× (**${wager}**) before withdrawing it.` : ''),
+            'linked to your site account (`/link`).',
         },
       );
   message.setFooter({

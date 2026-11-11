@@ -55,7 +55,7 @@ const read = (built: ReturnType<typeof buildDropMessage>) => ({
 });
 
 describe('the drop post', () => {
-  it('pings the role, shows the code, the prize, who can claim and the wager, with both buttons', () => {
+  it('pings the role, shows the code, the prize and who can claim, with both buttons, and no wager line', () => {
     const post = read(buildDropMessage(facts()));
     assert.equal(post.content, `<@&${ROLE}> a new code just dropped`);
     assert.deepEqual(post.roles, [ROLE], 'only the code-pings role is ever pinged');
@@ -64,7 +64,7 @@ describe('the drop post', () => {
     const field = (name: string) => post.embed.fields?.find((entry) => entry.name === name)?.value ?? '';
     assert.equal(field('Code'), '```ABCD-2345```');
     assert.equal(field('Claims left'), '**5** of 5');
-    assert.match(field('How to claim'), /Wager it 3× \(\*\*\$30m\*\*\) before withdrawing it/);
+    assert.doesNotMatch(JSON.stringify(post.embed), /[Ww]ager|\$30m/, 'the owner asked for no wager line in the post');
     assert.match(field('How to claim'), /`\/link`/);
     assert.match(post.embed.footer?.text ?? '', /every 2 hours/);
     assert.deepEqual(

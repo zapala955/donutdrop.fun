@@ -1025,17 +1025,9 @@ body.lx .dsc__linkedtext small { color: var(--lx-mute); font: 500 .875rem/1.3 va
 /* ═════════ the redeem window (assets/js/redeem-code.js) ═════════
  * Hallmark · component: modal · genre: atmospheric · theme: site tokens
  * states: field default · hover · focus · error (the sign-in card's); Redeem disabled · enabled ·
- * hover · busy; paid. Built from the sign-in card's parts (header, field, button), plus a strip of
- * what a drop pays and the paid screen. The owner, 2026-11-11: "remake the page on the screenshot". */
-body.lx .modal .rdm__facts {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px;
-  margin: var(--lx-s5) 0 0; overflow: hidden;
-  border-radius: var(--lx-r); background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-3);
-}
-body.lx .modal .rdm__facts > div { display: grid; gap: 4px; padding: var(--lx-s3); background: var(--dd-panel); min-width: 0; }
-body.lx .modal .rdm__facts span { color: var(--lx-mute); font: 600 .75rem/1.2 var(--lx-ui); }
-body.lx .modal .rdm__facts b { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-body.lx .modal .rdm__facts .rdm__gold { color: var(--lx-gold); }
+ * hover · busy; paid. Built from the sign-in card's parts (header, field, button) and the paid
+ * screen. The owner, 2026-11-11: "remake the page on the screenshot"; later the strip of figures
+ * (prize, claims left, next drop) went: "its not needed". */
 body.lx .modal .rdm__form { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: var(--lx-s5); }
 /* Nine characters with the dash: spaced a little tighter than a six-digit code, so a phone fits it. */
 body.lx .modal .rdm__form .auth__input--code { min-width: 0; letter-spacing: .3em; padding-left: .3em; }
@@ -1047,9 +1039,6 @@ body.lx .modal .rdm__paidslot { box-shadow: inset 0 0 0 1px var(--lx-gold); }
 body.lx .modal .rdm__amount { margin: var(--lx-s2) 0 0; color: var(--lx-gold); font: 800 2.25rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
 body.lx .modal .rdm__paidtitle { margin: 0; font-size: 1.375rem; }
 body.lx .modal .rdm__paidtext { max-width: 36ch; }
-@media (max-width: 420px) {
-  body.lx .modal .rdm__facts b { font-size: .875rem; }
-}
 
 /* ═════════ the sign-in card (app.js openLoginModal) ═════════
  * Hallmark · component: sign-in card · genre: atmospheric · theme: site tokens (obsidian + gold)
