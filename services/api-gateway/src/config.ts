@@ -970,6 +970,10 @@ const environmentSchema = z
      * that sends everything above the float across in one transfer. */
     TELLER_SWEEP_THRESHOLD_MINOR: nonNegativeBigintString.default('50000000'),
     WITHDRAWAL_HOP_DELAY_SECONDS: z.coerce.number().int().min(0).max(300).default(3),
+    /* DonutSMP's tax on /pay, in basis points (200 = 2%), which a player's withdrawal pays: the
+     * bot sends what is left once the tax fits (lib/pay-tax.ts). 0 pays the whole withdrawal, for
+     * if the server drops the tax again. */
+    PAY_TAX_BPS: z.coerce.number().int().min(0).max(2000).default(200),
     /* ── the node pool (lib/bot-nodes.ts) ──
      *
      * Bots with role 'node' share the float equally instead of a teller and a vault. Deposits go
@@ -1803,6 +1807,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     tellerFloatTargetMinor: BigInt(env.TELLER_FLOAT_TARGET_MINOR),
     tellerSweepThresholdMinor: BigInt(env.TELLER_SWEEP_THRESHOLD_MINOR),
     withdrawalHopDelaySeconds: env.WITHDRAWAL_HOP_DELAY_SECONDS,
+    payTaxBps: env.PAY_TAX_BPS,
     nodeRebalanceSkewBps: env.NODE_REBALANCE_SKEW_BPS,
     nodeRebalanceHoldMinutes: env.NODE_REBALANCE_HOLD_MINUTES,
     nodeRebalanceCooldownMinutes: env.NODE_REBALANCE_COOLDOWN_MINUTES,

@@ -875,6 +875,14 @@ body.lx .modal .auth__altbtn svg { width: 20px; height: 20px; fill: currentColor
 body.lx .modal .auth__altbtn:hover { background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-gold); }
 body.lx .modal .auth__altbtn:active { transform: translateY(1px); }
 body.lx .modal .auth__altbtn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+
+/* Withdraw with DonutSMP's /pay tax: what arrives in game is the figure that matters, so it takes
+ * the gold the first row of the read-out carries, and the amount withdrawn reads as a plain row. */
+body.lx .modal .auth__confirm:has(.auth__crow--total) .auth__crow:first-child b { color: var(--lx-ink); font-size: inherit; }
+body.lx .modal .auth__crow--total b { color: var(--lx-gold); font-size: 1.0625rem; }
+body.lx .modal .auth__net { color: var(--lx-mute); }
+body.lx .modal .auth__net b { color: var(--lx-gold); font-weight: 700; }
+body.lx .modal .auth__net[hidden] { display: none; }
 body.lx .modal .auth__foot--pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--lx-s2); align-items: end; }
 body.lx .modal .auth__ghost {
   height: 52px; margin-top: 22px; padding: 0 var(--lx-s4);

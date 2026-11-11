@@ -861,6 +861,7 @@ async function openWithdrawModal() {
         <button class="auth__max" type="button" id="wdMax">Max</button>
       </div>
       <p class="auth__err" id="wdError" role="alert" hidden></p>
+      <p class="auth__note auth__net" id="wdNet" hidden></p>
       <p class="auth__note" id="wdHint">Balance ${escapeText(money(state.balance))} ·
         minimum ${escapeText(money(minimum))}. Over ${escapeText(money(threshold))} an operator
         approves it first.</p>
@@ -885,9 +886,18 @@ async function openWithdrawModal() {
     inlineError.hidden = !message;
     field.classList.toggle('is-error', Boolean(message));
   };
+  const taxBps = Number(info.payTaxBps ?? 0);
+  const net = $('#wdNet', host);
   const sync = () => {
     const amount = amountOf();
     go.disabled = !(amount !== null && amount >= minimum && amount <= state.balance);
+    // What arrives in game, once the amount is one the form would send.
+    const shown = taxBps > 0 && amount !== null && amount >= minimum;
+    net.hidden = !shown;
+    if (shown) {
+      net.innerHTML = `You get <b class="mono">${escapeText(money(withdrawalSplit(amount, taxBps).receive))}</b>
+        in game. DonutSMP takes ${escapeText(String(taxBps / 100))}% tax on every /pay.`;
+    }
   };
 
   input.addEventListener('input', () => {
@@ -918,6 +928,23 @@ async function openWithdrawModal() {
   input.focus();
 }
 
+/**
+ * What a withdrawal turns into in game. DonutSMP taxes every /pay (2% since 2026-11-11) and the
+ * withdrawal pays it: the bot sends the most whose tax still fits inside the amount withdrawn,
+ * worked out exactly as the server does it (services/api-gateway/src/lib/pay-tax.ts). BigInt,
+ * because balances run past what a float multiplies exactly.
+ */
+function withdrawalSplit(amount, taxBps) {
+  const gross = BigInt(Math.max(0, Math.floor(Number(amount) || 0)));
+  const rate = BigInt(Math.max(0, Math.floor(Number(taxBps) || 0)));
+  if (rate === 0n) return { receive: Number(gross), tax: 0 };
+  const taxOn = (net) => (net * rate + 9999n) / 10000n;
+  let net = (gross * 10000n) / (10000n + rate);
+  while (net > 0n && net + taxOn(net) > gross) net -= 1n;
+  while (net + 1n + taxOn(net + 1n) <= gross) net += 1n;
+  return { receive: Number(net), tax: Number(gross - net) };
+}
+
 /** Keep the server-enforced minute visible instead of letting the next submit fail mysteriously. */
 function paintWithdrawCooldown(host, remainingSeconds) {
   const readyAt = Date.now() + Math.max(1, remainingSeconds) * 1000;
@@ -945,11 +972,17 @@ function paintWithdrawCooldown(host, remainingSeconds) {
 /** Step two: the exact figure and the exact name, with nothing else competing for attention. */
 function confirmWithdraw(host, amount, info, threshold) {
   const payee = info.payeeUsername || state.user?.minecraftUsername || '—';
+  const taxBps = Number(info.payTaxBps ?? 0);
+  const split = withdrawalSplit(amount, taxBps);
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Confirm</h3>
     <p class="auth__lede">This cannot be undone from the site once the bot has sent it.</p>
     <hr class="auth__rule">
     <div class="auth__confirm">
-      <div class="auth__crow"><span>Sending</span><b class="mono">${escapeText(money(amount))}</b></div>
+      <div class="auth__crow"><span>Withdrawing</span><b class="mono">${escapeText(money(amount))}</b></div>
+      ${taxBps > 0
+        ? `<div class="auth__crow"><span>DonutSMP /pay tax (${escapeText(String(taxBps / 100))}%)</span><b class="mono">−${escapeText(money(split.tax))}</b></div>
+           <div class="auth__crow auth__crow--total"><span>You get in game</span><b class="mono">${escapeText(money(split.receive))}</b></div>`
+        : ''}
       <div class="auth__crow"><span>To</span><b class="mono">${escapeText(payee)}</b></div>
       <div class="auth__crow"><span>Balance after</span><b class="mono">${escapeText(money(state.balance - amount))}</b></div>
     </div>
@@ -958,7 +991,7 @@ function confirmWithdraw(host, amount, info, threshold) {
          before the bot sends anything. Your balance is held until then.</p>`
       : ''}
     <p class="auth__err" id="wdcError" role="alert" hidden></p>
-    <button class="btn btn--go auth__go" type="button" id="wdcSend">Send ${escapeText(money(amount))}</button>
+    <button class="btn btn--go auth__go" type="button" id="wdcSend">Withdraw ${escapeText(money(amount))}</button>
     <button class="btn auth__back" type="button" id="wdcBack">Back</button>`;
 
   $('#wdcBack', host).addEventListener('click', () => openWithdrawModal());

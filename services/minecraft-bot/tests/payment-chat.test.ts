@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   describeSystemChat,
   looksLikePaymentReceipt,
+  parseOutgoingPayment,
   parsePaymentMessage,
   parsePaymentNotice,
   rawSystemChat,
@@ -812,4 +813,49 @@ test('reads its balance on join, after money moves and only now and then otherwi
   // Carried on the heartbeat, and dropped with the session it described.
   assert.match(source, /lowMinor: balance\.low\.toString\(\),/);
   assert.match(source, /this\.balanceTimer = undefined;\s+this\.balanceReplyUntil = 0;\s+this\.observedBalance = undefined;/);
+});
+
+/* DonutSMP taxes /pay since 2026-11-11 and names the tax after the amount. The bot read every such
+ * receipt as silence, so each payout went to an operator as PAYOUT_UNCONFIRMED although the
+ * money had left (Mond0o5 $6,230,900 and .babyknaylor14 $50,978,551, 08:01-08:02 UTC). */
+test('confirms a payout whose receipt names the /pay tax', () => {
+  const part = (text: string, color: string) => ({
+    type: 'compound',
+    value: { text: { type: 'string', value: text }, color: { type: 'string', value: color } },
+  });
+  const receipt = (parts: Array<[string, string]>) => ({
+    content: {
+      type: 'compound',
+      value: {
+        text: { type: 'string', value: '' },
+        extra: { type: 'list', value: { type: 'compound', value: parts.map(([t, c]) => part(t, c)) } },
+      },
+    },
+  });
+  const taxed = receipt([
+    ['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M ', 'white'],
+    ['(+', 'gray'], ['$ ', '#00ff00'], ['124K tax)', 'gray'],
+  ]);
+  assert.deepEqual(parseOutgoingPayment(taxed), { payee: 'Mond0o5', displayedAmount: '6.2M', displayedTax: '124K' });
+  assert.deepEqual(
+    parseOutgoingPayment(receipt([
+      ['You paid .babyknaylor14 ', 'white'], ['$ ', '#00ff00'], ['50.9M ', 'white'],
+      ['(+', 'gray'], ['$ ', '#00ff00'], ['1M tax)', 'gray'],
+    ])),
+    { payee: '.babyknaylor14', displayedAmount: '50.9M', displayedTax: '1M' },
+  );
+  // The old three-part receipt still reads.
+  assert.deepEqual(
+    parseOutgoingPayment(receipt([['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['3M', 'white']])),
+    { payee: 'Mond0o5', displayedAmount: '3M' },
+  );
+  // The tail is held to its exact shape: wrong colour, wrong words, a missing part, no space.
+  const bad: Array<Array<[string, string]>> = [
+    [['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M ', 'white'], ['(+', 'white'], ['$ ', '#00ff00'], ['124K tax)', 'gray']],
+    [['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M ', 'white'], ['(+', 'gray'], ['$ ', '#00ff00'], ['124K fee)', 'gray']],
+    [['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M ', 'white'], ['(+', 'gray'], ['$ ', 'gray'], ['124K tax)', 'gray']],
+    [['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M', 'white'], ['(+', 'gray'], ['$ ', '#00ff00'], ['124K tax)', 'gray']],
+    [['You paid Mond0o5 ', 'white'], ['$ ', '#00ff00'], ['6.2M ', 'white'], ['(+', 'gray'], ['$ ', '#00ff00']],
+  ];
+  for (const parts of bad) assert.equal(parseOutgoingPayment(receipt(parts)), undefined);
 });

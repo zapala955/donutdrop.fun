@@ -1876,6 +1876,10 @@ export class MinecraftWorker {
       });
       return;
     }
+    this.log.info(
+      { jobId: job.id, payee, amountMinor, displayed: receipt.displayedAmount, tax: receipt.displayedTax ?? null },
+      'cash payout confirmed',
+    );
 
     try {
       await this.api.completeJob(job, 'completed');

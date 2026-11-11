@@ -20,7 +20,18 @@ export interface ObservedPayment {
 export interface OutgoingPayment {
   readonly payee: string;
   readonly displayedAmount: string;
+  /** DonutSMP's /pay tax as the receipt shows it ("124K"), when the receipt names one. */
+  readonly displayedTax?: string;
 }
+
+/* DonutSMP taxes /pay since 2026-11-11 (first seen 04:33 UTC) and says so after the amount, in
+ * three more parts, captured from the live server:
+ *   white:"You paid Mond0o5 " | #00ff00:"$ " | white:"6.2M " | gray:"(+" | #00ff00:"$ " | gray:"124K tax)"
+ * The amount part gained a trailing space with it. A receipt still in the old three-part shape is
+ * read as before. */
+const TAX_COLOR = 'gray';
+const TAX_OPEN_TEXT = '(+';
+const TAX_CLOSE_PATTERN = /^([1-9]\d*(?:\.\d+)?[KMBT]?) tax\)$/;
 
 export interface PaymentNotice {
   readonly payer: string;
@@ -80,7 +91,8 @@ export function parseOutgoingPayment(packet: unknown): OutgoingPayment | undefin
   if (unwrap(record['isActionBar']) === true) return undefined;
 
   const segments = componentSegments(record['content'] ?? record['message']);
-  if (!segments || segments.length !== 3) return undefined;
+  // Three parts, or six with the tax DonutSMP has added since 2026-11-11 (TAX_CLOSE_PATTERN).
+  if (!segments || (segments.length !== 3 && segments.length !== 6)) return undefined;
 
   const [lead, currency, amount] = segments;
   if (!lead || !currency || !amount) return undefined;
@@ -89,14 +101,31 @@ export function parseOutgoingPayment(packet: unknown): OutgoingPayment | undefin
   if (textOf(currency) !== CURRENCY_TEXT) return undefined;
 
   const leadText = textOf(lead);
-  const amountText = textOf(amount);
-  if (leadText === undefined || amountText === undefined) return undefined;
+  const rawAmount = textOf(amount);
+  if (leadText === undefined || rawAmount === undefined) return undefined;
+
+  let displayedTax: string | undefined;
+  let amountText = rawAmount;
+  if (segments.length === 6) {
+    /* The tax tail is matched as strictly as the rest: its own grey, the server's green currency
+     * mark, and nothing else. Only the single space the amount gained in front of it is let go. */
+    const [open, taxCurrency, close] = segments.slice(3);
+    if (colorOf(open) !== TAX_COLOR || textOf(open) !== TAX_OPEN_TEXT) return undefined;
+    if (colorOf(taxCurrency) !== CURRENCY_COLOR || textOf(taxCurrency) !== CURRENCY_TEXT) return undefined;
+    const closeText = textOf(close);
+    if (colorOf(close) !== TAX_COLOR || closeText === undefined) return undefined;
+    displayedTax = TAX_CLOSE_PATTERN.exec(closeText)?.[1];
+    if (!displayedTax || !rawAmount.endsWith(' ')) return undefined;
+    amountText = rawAmount.slice(0, -1);
+  }
 
   const payee = YOU_PAID_PATTERN.exec(leadText)?.[1];
   if (!payee || !USERNAME_PATTERN.test(payee)) return undefined;
   if (!/^[1-9]\d*(?:\.\d+)?[KMBT]?$/.test(amountText)) return undefined;
 
-  return { payee, displayedAmount: amountText };
+  return displayedTax === undefined
+    ? { payee, displayedAmount: amountText }
+    : { payee, displayedAmount: amountText, displayedTax };
 }
 
 /* What DonutSMP answers, in red, when a /pay asks for more than the payer holds. Captured from the

@@ -12,6 +12,7 @@ import {
 } from '../lib/anti-drain.js';
 import { choosePayingNode, lockPool, pickReceivingBot, readPool } from '../lib/bot-nodes.js';
 import { findVaultBot } from '../lib/bots.js';
+import { payoutAfterTax } from '../lib/pay-tax.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { isDepositEligible, type DepositEligibilityState } from '../lib/eligibility.js';
@@ -84,6 +85,23 @@ function view(row: WithdrawalRow, queuePosition: number | null = null) {
     paidAt: row.paid_at,
     queuePosition,
   };
+}
+
+/**
+ * The bot's job for paying a withdrawal: /pay the player what is left of it once DonutSMP's /pay
+ * tax fits inside (lib/pay-tax.ts). The withdrawal row keeps the amount debited; only the figure
+ * sent to the server is net. The payload keeps its three fields exactly: the bot refuses a job
+ * with any other (cashPayoutPayloadSchema is strict).
+ */
+function payoutJobPayload(
+  config: AppConfig,
+  withdrawal: { id: string; payee_username: string; amount_minor: string },
+): string {
+  return JSON.stringify({
+    withdrawalId: withdrawal.id,
+    payee: withdrawal.payee_username,
+    amountMinor: payoutAfterTax(BigInt(withdrawal.amount_minor), config.payTaxBps).toString(),
+  });
 }
 
 /* Every stage that still owes the player. One per player (cash_withdrawals_one_live_idx). */
@@ -184,17 +202,7 @@ export async function queueWithdrawalJob(
       `INSERT INTO bot_jobs(id, bot_id, kind, reference_id, payload, available_at)
        VALUES ($1, $2, 'cash_payout', $3, $4, now() + ($5::integer * interval '1 second'))
        ${RELEASE_HELD_JOB_SQL}`,
-      [
-        randomUUID(),
-        botId,
-        withdrawal.id,
-        JSON.stringify({
-          withdrawalId: withdrawal.id,
-          payee: withdrawal.payee_username,
-          amountMinor: withdrawal.amount_minor,
-        }),
-        availableIn,
-      ],
+      [randomUUID(), botId, withdrawal.id, payoutJobPayload(config, withdrawal), availableIn],
     );
   };
 
@@ -353,11 +361,7 @@ export async function queueWithdrawalPayoutAfterRelease(
       randomUUID(),
       withdrawal.bot_id,
       withdrawal.id,
-      JSON.stringify({
-        withdrawalId: withdrawal.id,
-        payee: withdrawal.payee_username,
-        amountMinor: withdrawal.amount_minor,
-      }),
+      payoutJobPayload(config, withdrawal),
       config.withdrawalHopDelaySeconds,
     ],
   );
@@ -402,6 +406,8 @@ export async function registerCashWithdrawalRoutes(
         payeeUsername: request.authUser?.minecraftUsername ?? null,
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
         approvalThresholdMinor: config.cashApprovalThresholdMinor.toString(),
+        // DonutSMP's /pay tax, which the withdrawal pays: the form shows what arrives in game.
+        payTaxBps: config.payTaxBps,
         cooldownSeconds: WITHDRAWAL_COOLDOWN_SECONDS,
         cooldownRemainingSeconds: live.rows[0]?.cooldown_seconds ?? 0,
         pending: pending ? view(pending, pendingPosition) : null,
