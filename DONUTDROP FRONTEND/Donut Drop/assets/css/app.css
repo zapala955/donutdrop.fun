@@ -1074,6 +1074,16 @@ canvas.play {
 /* A row the page switches off (Switch account, without Discord sign-in). luxe.css sets the row's
    display from five selectors deep, which an attribute alone would lose to. */
 .menu__row[hidden] { display: none !important; }
+/* "Redeem code" is a <button> (it opens a window, it does not go anywhere), dressed as its sibling
+   links. This lived in daily-code.css until that file went (2026-11-11), and the row showed the
+   browser's own button border until it came back here. */
+button.menu__row {
+  width: 100%;
+  border: 0; background: none;
+  font: inherit; font-size: .875rem; text-align: left;
+  cursor: pointer;
+}
+button.menu__row:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
 .menu__ico { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--green); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .menu__ico--brand { fill: var(--green); stroke: none; }
 .menu__row--hi { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
