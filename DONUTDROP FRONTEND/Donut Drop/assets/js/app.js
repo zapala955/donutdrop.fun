@@ -895,7 +895,7 @@ async function openWithdrawModal() {
     const shown = taxBps > 0 && amount !== null && amount >= minimum;
     net.hidden = !shown;
     if (shown) {
-      net.innerHTML = `You get <b class="mono">${escapeText(money(withdrawalSplit(amount, taxBps).receive))}</b>
+      net.innerHTML = `You get <b class="mono">${escapeText(exactMoney(withdrawalSplit(amount, taxBps).receive))}</b>
         in game. DonutSMP takes ${escapeText(String(taxBps / 100))}% tax on every /pay.`;
     }
   };
@@ -934,6 +934,10 @@ async function openWithdrawModal() {
  * worked out exactly as the server does it (services/api-gateway/src/lib/pay-tax.ts). BigInt,
  * because balances run past what a float multiplies exactly.
  */
+/* To the dollar, where the tax is shown: abbreviated, "$100M" less "$1.96M" reading as "$98M"
+ * does not add up on screen. */
+const exactMoney = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+
 function withdrawalSplit(amount, taxBps) {
   const gross = BigInt(Math.max(0, Math.floor(Number(amount) || 0)));
   const rate = BigInt(Math.max(0, Math.floor(Number(taxBps) || 0)));
@@ -978,10 +982,10 @@ function confirmWithdraw(host, amount, info, threshold) {
     <p class="auth__lede">This cannot be undone from the site once the bot has sent it.</p>
     <hr class="auth__rule">
     <div class="auth__confirm">
-      <div class="auth__crow"><span>Withdrawing</span><b class="mono">${escapeText(money(amount))}</b></div>
+      <div class="auth__crow"><span>Withdrawing</span><b class="mono">${escapeText(taxBps > 0 ? exactMoney(amount) : money(amount))}</b></div>
       ${taxBps > 0
-        ? `<div class="auth__crow"><span>DonutSMP /pay tax (${escapeText(String(taxBps / 100))}%)</span><b class="mono">−${escapeText(money(split.tax))}</b></div>
-           <div class="auth__crow auth__crow--total"><span>You get in game</span><b class="mono">${escapeText(money(split.receive))}</b></div>`
+        ? `<div class="auth__crow"><span>DonutSMP /pay tax (${escapeText(String(taxBps / 100))}%)</span><b class="mono">−${escapeText(exactMoney(split.tax))}</b></div>
+           <div class="auth__crow auth__crow--total"><span>You get in game</span><b class="mono">${escapeText(exactMoney(split.receive))}</b></div>`
         : ''}
       <div class="auth__crow"><span>To</span><b class="mono">${escapeText(payee)}</b></div>
       <div class="auth__crow"><span>Balance after</span><b class="mono">${escapeText(money(state.balance - amount))}</b></div>
