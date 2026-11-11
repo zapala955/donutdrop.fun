@@ -76,7 +76,9 @@ describe('the level pill keeps up with the wagers that move it', () => {
 
   it('leaves the VIP page standing up when only the merged half has arrived', async () => {
     const page = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/vip.js');
-    assert.match(page, /if \(data\.levels\) root\.appendChild\(matrix\(data\)\)/);
+    // Rebuilt 2026-11-11: without `levels` the page falls back to the public ladder.
+    assert.match(page, /const levels = data\?\.levels \?\? \(ladder \? ladder\.levels : null\);/);
+    assert.match(page, /if \(levels\) root\.appendChild\(tiers\(levels, data\)\);/);
     assert.match(page, /data\.rakeback \? money\(Number\(data\.rakeback\.claimableMinor\)\) : '—'/);
   });
 });

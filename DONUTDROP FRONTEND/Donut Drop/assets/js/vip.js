@@ -1,4 +1,4 @@
-/* vip.js — the VIP dashboard, the navbar level widget, and the level-up reveal.
+/* vip.js — the VIP page, the navbar level widget, and the level-up reveal.
  *
  * Three surfaces, one module, because all three read the same snapshot off /v1/vip and splitting
  * them would mean three copies of the tier palette and the rate formatter.
@@ -8,6 +8,7 @@
  * in the navbar and the rate the last wager was actually paid at cannot disagree. The client's
  * only arithmetic is turning a ratio into a bar width.
  */
+import { api } from './api.js';
 import { state, bus, refreshVip } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
@@ -34,7 +35,31 @@ function ratePct(value) {
   return `${exact.toFixed(decimals)}%`;
 }
 
-// ─────────── /vip dashboard ───────────
+// ─────────── /vip page ───────────
+
+/* The VIP page (rebuilt 2026-11-11, the owner: "remake the vip page"). Three parts, top to bottom:
+ * where you stand (your level, its rate, the bar to the next one and what is ready to claim), how
+ * the club works in three lines, and the ladder as six tier tiles; a tile opens its five levels.
+ *
+ * Signed out it is the same page without the standing: the ladder is public (/v1/vip/ladder), so
+ * somebody deciding whether to play here sees what volume buys what rate before signing up.
+ *
+ * state.vip can be half there: the balance refresh merges in the standing without `levels` or
+ * `rakeback`, which only the page's own /v1/vip fetch carries. The ladder then comes from the
+ * public copy, and a rakeback figure not yet known shows as a dash, never a zero. */
+
+const TIER_ICON = {
+  bronze: 'gold_nugget',
+  silver: 'iron_ingot',
+  gold: 'gold_ingot',
+  platinum: 'prismarine_crystals',
+  diamond: 'diamond',
+  high_roller: 'netherite_ingot',
+};
+const icon = (tier) => `assets/img/items/${TIER_ICON[tier] ?? 'gold_nugget'}.png`;
+
+let ladder = null; // the public ladder: { maxRatePercent, levels }, or false when VIP is off
+let picked = null; // the tier whose levels are open; null = the player's own (or the first)
 
 export function mountVip(view) {
   root = $('#vipRoot', view);
@@ -43,157 +68,237 @@ export function mountVip(view) {
     root.dataset.built = '1';
     bus.addEventListener('change', (event) => {
       if (!root.isConnected) return;
+      /* Opened straight from an address, the page mounts before the session is known, so the
+       * standing is fetched again once it is: otherwise a signed-in player sees the invitation. */
+      if (['login', 'ready'].includes(event.detail) && state.authenticated) {
+        refreshVip(false).then(paint).catch(() => undefined);
+      }
       if (['vip', 'login', 'logout', 'ready', 'private'].includes(event.detail)) paint();
     });
   }
   if (state.authenticated) refreshVip(false).then(paint).catch(() => undefined);
+  if (ladder === null) {
+    api.get('/v1/vip/ladder')
+      .then((result) => { ladder = result; })
+      .catch(() => { ladder = false; })
+      .finally(paint);
+  }
   paint();
 }
 
 function paint() {
   if (!root?.isConnected) return;
   root.innerHTML = '';
+  root.classList.add('vp');
 
-  if (!state.authenticated) {
-    root.appendChild(notice('Log in to see your VIP standing.'));
+  const data = state.authenticated ? state.vip : null;
+  const levels = data?.levels ?? (ladder ? ladder.levels : null);
+  if (!data && ladder === false) {
+    root.appendChild(notice('VIP is switched off right now.'));
     return;
   }
-  const data = state.vip;
-  if (!data) {
-    root.appendChild(notice('VIP levels are not switched on yet.'));
-    return;
-  }
+  if (!data && !levels) return; // the ladder is on its way
 
-  root.appendChild(headline(data));
-  root.appendChild(statCards(data));
-  // Same reason: the ladder only arrives with the page's own fetch, which is already in flight.
-  if (data.levels) root.appendChild(matrix(data));
+  root.appendChild(data ? standing(data) : invitation(levels));
+  root.appendChild(howItWorks());
+  if (levels) root.appendChild(tiers(levels, data));
 }
 
 function notice(message) {
-  const card = el('div', 'vip__notice');
-  const line = el('p');
-  line.textContent = message;
-  card.appendChild(line);
+  const card = el('div', 'vp__notice');
+  card.textContent = message;
   return card;
 }
 
-/* The badge, the bar, and the one number the bar is moving toward. No prose: the pill says the
- * rank, the chip says the rate, the fraction under the bar says what is left. */
-function headline(data) {
-  const wrap = el('section', 'vip__hero');
-  wrap.dataset.tier = data.current.tier;
+function slot(tier, size) {
+  const box = el('span', 'vp__slot');
+  box.dataset.tier = tier;
+  box.innerHTML = `<img src="${icon(tier)}" alt="" width="${size}" height="${size}">`;
+  return box;
+}
 
-  const top = el('div', 'vip__herotop');
-  const badge = el('span', 'vip__badge');
-  badge.dataset.tier = data.current.tier;
-  badge.textContent = data.current.label.toUpperCase();
+/* Signed in: the level, its rate, the bar and the three figures that matter. */
+function standing(data) {
+  const card = el('section', 'vp__hero');
+  card.dataset.tier = data.current.tier;
 
-  const rate = el('span', 'vip__rate mono');
-  rate.textContent = `${ratePct(data.current.ratePercent)} RAKEBACK`;
-  top.append(badge, rate);
-  wrap.appendChild(top);
+  const head = el('div', 'vp__herohead');
+  const text = el('div', 'vp__herotext');
+  const eyebrow = el('span', 'vp__eyebrow');
+  eyebrow.textContent = 'Your level';
+  const title = el('h2', 'vp__level');
+  title.textContent = data.current.label;
+  const line = el('p', 'vp__line');
+  line.textContent = `${ratePct(data.current.ratePercent)} back on every bet you place, win or lose.`;
+  text.append(eyebrow, title, line);
+  const rate = el('div', 'vp__rate');
+  rate.innerHTML = `<b></b><span>rakeback</span>`;
+  $('b', rate).textContent = ratePct(data.current.ratePercent);
+  head.append(slot(data.current.tier, 48), text, rate);
+  card.appendChild(head);
 
-  const track = el('div', 'vip__track');
-  const fill = el('div', 'vip__fill');
-  fill.style.transform = `scaleX(${Math.min(1, Math.max(0, data.progress.ratio))})`;
-  track.appendChild(fill);
-  wrap.appendChild(track);
+  const bar = el('div', 'vp__bar');
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  const ratio = Math.min(1, Math.max(0, Number(data.progress?.ratio ?? 1)));
+  bar.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+  const fill = el('div', 'vp__fill');
+  fill.style.transform = `scaleX(${ratio})`;
+  bar.appendChild(fill);
+  card.appendChild(bar);
 
-  const foot = el('div', 'vip__herofoot');
-  const progress = el('span', 'vip__frac mono');
+  const foot = el('div', 'vp__barfoot');
+  const left = el('span');
+  left.textContent = `${money(Number(data.wageredMinor))} wagered`;
+  const right = el('span', 'vp__next');
   if (data.next) {
-    progress.textContent = `${money(Number(data.wageredMinor))} / ${money(Number(data.next.thresholdMinor))}`;
-    const target = el('span', 'vip__target mono');
-    target.textContent = `→ ${data.next.label.toUpperCase()} · ${ratePct(data.next.ratePercent)}`;
-    foot.append(progress, target);
+    right.textContent = `${money(Number(data.progress.remainingMinor))} more to ${data.next.label} · ${ratePct(data.next.ratePercent)}`;
+    bar.setAttribute('aria-label', `${data.current.label}: ${right.textContent}`);
   } else {
-    // Top of the ladder. There is no next threshold, so the bar is full and says why.
-    progress.textContent = money(Number(data.wageredMinor));
-    const target = el('span', 'vip__target mono');
-    target.textContent = `MAX ${ratePct(data.maxRatePercent)}`;
-    foot.append(progress, target);
+    right.textContent = `Top level · ${ratePct(data.maxRatePercent)}`;
+    bar.setAttribute('aria-label', 'Top level reached');
   }
-  wrap.appendChild(foot);
+  foot.append(left, right);
+  card.appendChild(foot);
+
+  const stats = el('div', 'vp__stats');
+  const stat = (label, value, extra) => {
+    const cell = el('div', 'vp__stat');
+    const k = el('span', 'vp__k');
+    k.textContent = label;
+    const v = el('b', 'vp__v');
+    v.textContent = value;
+    cell.append(k, v);
+    if (extra) cell.appendChild(extra);
+    stats.appendChild(cell);
+  };
+  stat('Lifetime wagered', money(Number(data.wageredMinor)));
+  const claim = el('a', 'vp__claim');
+  claim.href = '/rewards';
+  claim.textContent = 'Claim on Rewards →';
+  stat('Rakeback ready', data.rakeback ? money(Number(data.rakeback.claimableMinor)) : '—', claim);
+  stat('Level', `${data.current.level} of ${data.levels?.length ?? ladder?.levels?.length ?? 30}`);
+  card.appendChild(stats);
+  return card;
+}
+
+/* Signed out: what the club is, and the way in. */
+function invitation(levels) {
+  const card = el('section', 'vp__hero vp__hero--out');
+  card.dataset.tier = 'gold';
+  const head = el('div', 'vp__herohead');
+  const text = el('div', 'vp__herotext');
+  const eyebrow = el('span', 'vp__eyebrow');
+  eyebrow.textContent = 'VIP club';
+  const title = el('h2', 'vp__level');
+  const top = levels[levels.length - 1];
+  title.textContent = `Up to ${ratePct(top.ratePercent)} back on every bet`;
+  const line = el('p', 'vp__line');
+  line.textContent = `${levels.length} levels across six tiers. Every bet you place moves you up, and you start earning rakeback from the first one.`;
+  text.append(eyebrow, title, line);
+  head.append(slot('high_roller', 48), text);
+  card.appendChild(head);
+  const go = el('button', 'btn btn--go vp__join');
+  go.type = 'button';
+  go.textContent = 'Log in to start climbing';
+  go.addEventListener('click', () => $('#loginBtn')?.click());
+  card.appendChild(go);
+  return card;
+}
+
+function howItWorks() {
+  const wrap = el('section', 'vp__how');
+  for (const [sprite, title, body] of [
+    ['xp_bottle', 'Every bet counts', 'Your level is everything you have ever wagered, in every game. It only goes up.'],
+    ['gold_ingot', 'Rakeback on every bet', 'Each level pays back a share of every bet you place, win or lose. Higher levels pay more.'],
+    ['chest', 'Claim it any time', 'Rakeback builds up as you play. Claim it on the Rewards page whenever you like.'],
+  ]) {
+    const card = el('div', 'vp__howcard');
+    card.innerHTML = `<span class="vp__slot vp__slot--sm"><img src="assets/img/items/${sprite}.png" alt="" width="24" height="24"></span>`;
+    const copy = el('div', 'vp__howcopy');
+    const h = el('h3', 'vp__howtitle');
+    h.textContent = title;
+    const p = el('p', 'vp__howtext');
+    p.textContent = body;
+    copy.append(h, p);
+    card.appendChild(copy);
+    wrap.appendChild(card);
+  }
   return wrap;
 }
 
-function statCards(data) {
-  const grid = el('div', 'vip__grid');
-  const cells = [
-    ['Lifetime wagered', money(Number(data.wageredMinor)), null],
-    ['Active rakeback', ratePct(data.current.ratePercent), 'gold'],
-    [
-      'To next unlock',
-      data.next ? money(Number(data.progress.remainingMinor)) : '—',
-      null,
-    ],
-    /* The balance response carries the standing but not the accrual, so between a wager and this
-     * page's own fetch `rakeback` is simply not there yet. An em dash says "not known" where a
-     * zero would say "nothing owed", and those are very different sentences about money. */
-    [
-      'VIP rakeback ready',
-      data.rakeback ? money(Number(data.rakeback.claimableMinor)) : '—',
-      'gold',
-    ],
-  ];
-  for (const [label, value, tone] of cells) {
-    const cell = el('div', 'vip__stat');
-    if (tone) cell.dataset.tone = tone;
-    const key = el('span', 'vip__k');
-    key.textContent = label;
-    const figure = el('b', 'vip__v');
-    figure.textContent = value;
-    cell.append(key, figure);
-    grid.appendChild(cell);
-  }
-  return grid;
-}
+/* Six tier tiles; the open one lists its five levels underneath. */
+function tiers(levels, data) {
+  const wrap = el('section', 'vp__ladder');
+  const heading = el('h2', 'vp__h');
+  heading.textContent = 'The ladder';
+  wrap.appendChild(heading);
 
-/* All thirty levels, grouped by tier. Each row is a rank, a threshold and a rate — three figures
- * and a state badge, no descriptions. */
-function matrix(data) {
-  const wrap = el('section', 'vip__matrix');
+  const mine = data?.current?.tier ?? null;
+  const open = picked ?? mine ?? TIER_ORDER[0];
+  const myLevel = data?.current?.level ?? 0;
 
+  const grid = el('div', 'vp__tiers');
+  grid.setAttribute('role', 'group');
+  grid.setAttribute('aria-label', 'VIP tiers');
   for (const tier of TIER_ORDER) {
-    const levels = data.levels.filter((entry) => entry.tier === tier);
-    if (!levels.length) continue;
-
-    const group = el('div', 'vip__tier');
-    group.dataset.tier = tier;
-
-    const head = el('div', 'vip__tierhead');
-    const name = el('span', 'vip__tiername');
-    name.textContent = levels[0].tierLabel;
-    const span = el('span', 'vip__tierspan mono');
-    span.textContent = `${ratePct(levels[0].ratePercent)} – ${ratePct(levels[levels.length - 1].ratePercent)}`;
-    head.append(name, span);
-    group.appendChild(head);
-
-    const rows = el('div', 'vip__rows');
-    for (const level of levels) {
-      const row = el('div', 'vip__row');
-      row.dataset.state = level.state;
-
-      const sub = el('span', 'vip__sub mono');
-      sub.textContent = level.sub;
-
-      const threshold = el('span', 'vip__threshold mono');
-      threshold.textContent = money(Number(level.thresholdMinor));
-
-      const chip = el('span', 'vip__chip mono');
-      chip.textContent = ratePct(level.ratePercent);
-
-      const badge = el('span', 'vip__state');
-      badge.textContent =
-        level.state === 'complete' ? '✓' : level.state === 'active' ? 'ACTIVE' : 'LOCKED';
-
-      row.append(sub, threshold, chip, badge);
-      rows.appendChild(row);
+    const rows = levels.filter((entry) => entry.tier === tier);
+    if (!rows.length) continue;
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const state = !data ? 'open' : last.level < myLevel ? 'done' : tier === mine ? 'here' : first.level > myLevel ? 'locked' : 'done';
+    const tile = el('button', 'vp__tier');
+    tile.type = 'button';
+    tile.dataset.tier = tier;
+    tile.dataset.state = state;
+    tile.setAttribute('aria-pressed', String(tier === open));
+    tile.appendChild(slot(tier, 28));
+    const copy = el('span', 'vp__tiercopy');
+    const name = el('span', 'vp__tiername');
+    name.textContent = first.tierLabel;
+    const from = el('span', 'vp__tierfrom');
+    from.textContent = Number(first.thresholdMinor) === 0 ? 'From your first bet' : `From ${money(Number(first.thresholdMinor))}`;
+    const rate = el('span', 'vp__tierrate');
+    rate.textContent = `${ratePct(first.ratePercent)} – ${ratePct(last.ratePercent)}`;
+    copy.append(name, from, rate);
+    tile.appendChild(copy);
+    if (state === 'here' || state === 'done') {
+      const mark = el('span', 'vp__tiermark');
+      mark.textContent = state === 'here' ? 'You are here' : 'Reached';
+      tile.appendChild(mark);
     }
-    group.appendChild(rows);
-    wrap.appendChild(group);
+    tile.addEventListener('click', () => {
+      picked = tier;
+      paint();
+      $(`.vp__tier[data-tier="${tier}"]`, root)?.focus();
+    });
+    grid.appendChild(tile);
   }
+  wrap.appendChild(grid);
+
+  const rows = levels.filter((entry) => entry.tier === open);
+  const table = el('div', 'vp__levels');
+  table.dataset.tier = open;
+  const head = el('div', 'vp__lrow vp__lrow--head');
+  head.innerHTML = '<span>Level</span><span>Wager to reach</span><span>Rakeback</span><span></span>';
+  table.appendChild(head);
+  for (const level of rows) {
+    const row = el('div', 'vp__lrow');
+    const state = !data ? '' : level.level < myLevel ? 'done' : level.level === myLevel ? 'here' : 'locked';
+    if (state) row.dataset.state = state;
+    const name = el('span', 'vp__lname');
+    name.textContent = level.label;
+    const need = el('span', 'vp__lneed');
+    need.textContent = Number(level.thresholdMinor) === 0 ? 'Start' : money(Number(level.thresholdMinor));
+    const rate = el('span', 'vp__lrate');
+    rate.textContent = ratePct(level.ratePercent);
+    const badge = el('span', 'vp__lstate');
+    badge.textContent = state === 'here' ? 'You are here' : state === 'done' ? '✓' : '';
+    row.append(name, need, rate, badge);
+    table.appendChild(row);
+  }
+  wrap.appendChild(table);
   return wrap;
 }
 
