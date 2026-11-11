@@ -147,9 +147,12 @@ describe('email on accounts', () => {
     assert.match(script, /set_env EMAIL_ENABLED true/);
   });
 
-  it('offers an email after a first sign-up, signs in by code, and draws the profile cards', async () => {
+  it('asks nothing after a first sign-up, signs in by code, and draws the profile cards', async () => {
     const app = await front('app.js');
-    assert.match(app, /if \(user\.created && signInOpen\(\)\) \{\n\s*await offerEmailLink\(body, \{/);
+    /* The owner (2026-11-11): "remove the popup asking for an email linking after a new player
+     * signs up". A new player's card closes like a returning one's; the profile still links one. */
+    assert.doesNotMatch(app, /offerEmailLink/);
+    assert.match(app, /toast\(\{ kind: 'win', title: 'Account linked', body: user\.minecraftUsername \}\);[\s\S]{0,300}?if \(signInOpen\(\)\) closeModal\(\);/);
     /* The owner (2026-11-11): "remove the login with email button", and a player whose account
      * has an email gets the choice after typing their name: a code, or the payment. */
     assert.doesNotMatch(app, /linkByEmail|Log in with email/);
@@ -160,8 +163,7 @@ describe('email on accounts', () => {
     const store = await front('store.js');
     assert.match(store, /return \{ \.\.\.result\.user, created: Boolean\(result\.created\) \};/);
     const email = await front('email.js');
-    assert.match(email, /export async function offerEmailLink\(body, \{ username, onDone \}\)/);
-    assert.match(email, /<button class="btn auth__ghost" type="button" id="elSkip">Skip for now<\/button>/);
+    assert.doesNotMatch(email, /offerEmailLink|Skip for now/);
     assert.match(email, /export function paintLoginChoice\(slot, \{ username, onCode, onPay, onBack \}\)/);
     assert.match(email, /<b>Email me a code<\/b>/);
     assert.match(email, /<b>Pay the bot<\/b>/);

@@ -48,7 +48,7 @@ import { applyRouteMeta, liveRouteMeta } from './seo.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
 import { mountProfile, mountHistory, mountSettings } from './account.js';
-import { offerEmailLink, paintLoginChoice, paintLoginCode } from './email.js';
+import { paintLoginChoice, paintLoginCode } from './email.js';
 import { mountSupport, mountTerms } from './info.js';
 import { mountStudio } from './studio.js';
 import { mountQuests } from './quests.js';
@@ -1207,15 +1207,8 @@ async function finishLogin(challengeId, body) {
   try {
     const user = await completeLogin(challengeId);
     toast({ kind: 'win', title: 'Account linked', body: user.minecraftUsername });
-    /* A first sign-up: the card stays open one more step to offer an email (skippable; the profile
-     * offers it again). A returning player's card closes as before. */
-    if (user.created && signInOpen()) {
-      await offerEmailLink(body, {
-        username: user.minecraftUsername,
-        onDone: () => { if ($('#modal').open) closeModal(); },
-      });
-      return;
-    }
+    /* A new player's card closes like a returning one's: no email offer after sign-up (the owner,
+     * 2026-11-11). Linking an email is on the profile. */
     if (signInOpen()) closeModal();
   } catch (error) {
     if (!body.isConnected) return;
