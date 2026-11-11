@@ -1,7 +1,9 @@
 /* email.js — an email on the account (2026-11-10).
  *
  *   offerEmailLink     the sign-in card's last step after a FIRST sign-up: link an email, or skip
- *   renderEmailSignIn  "Log in with email" on the sign-in card: a code instead of paying the bot
+ *   paintLoginChoice   the sign-in card, for a name whose account has an email linked: a code to it,
+ *                      or paying the bot (2026-11-11; it replaced a separate "Log in with email")
+ *   paintLoginCode     the code that signs that account in
  *   emailCard          the profile's Email card: link, change (a code from the old address and one
  *                      from the new), remove (a code from it)
  *   minecraftCard      the profile's Minecraft card: with an email linked, move the account to another
@@ -18,12 +20,10 @@ import {
   emailLinkStart,
   emailLinkVerify,
   emailLoginComplete,
-  emailLoginStart,
   emailRemove,
   loginStatus,
   relinkComplete,
   relinkStart,
-  turnstileConfig,
 } from './store.js';
 import { $ } from './util.js';
 import { closeModal, openModal, toast } from './ui.js';
@@ -189,115 +189,87 @@ function verifyStep(body, { masked, onDone, onBack, resend }) {
   input.focus();
 }
 
+const MAIL_BOLD = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,44H32A12,12,0,0,0,20,56V192a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A12,12,0,0,0,224,44ZM193.15,68,128,127.72,62.85,68ZM44,188V83.28l75.89,69.57a12,12,0,0,0,16.22,0L212,83.28V188Z"/></svg>';
+const COINS_BOLD = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M188,86.11V84c0-14.62-10.83-27.55-30.51-36.4C140.87,40.12,119,36,96,36S51.13,40.12,34.51,47.6C14.83,56.45,4,69.38,4,84v40c0,14.62,10.83,27.55,30.51,36.4A131.67,131.67,0,0,0,68,169.88V172c0,14.62,10.83,27.55,30.51,36.4C115.13,215.88,137,220,160,220s44.87-4.12,61.49-11.6C241.17,199.55,252,186.62,252,172V132C252,109.86,226.71,92.08,188,86.11ZM228,132c0,7.75-21.77,22.48-61.81,23.88C180.33,147.4,188,136.3,188,124V110.44C213.88,115.15,228,125.48,228,132ZM107.37,147.63c-3.63.24-7.42.37-11.37.37-5.08,0-9.89-.22-14.43-.61a10.94,10.94,0,0,0-1.14-.09c-1.51-.14-3-.3-4.43-.48V130.93A187,187,0,0,0,96,132a187,187,0,0,0,20-1.07v15.89c-2.49.3-5.07.56-7.75.75C108,147.58,107.66,147.6,107.37,147.63ZM164,117.14V124c0,4.78-8.28,12.21-24,17.54v-15a115.32,115.32,0,0,0,17.49-6.13Q160.93,118.86,164,117.14ZM96,60c44,0,68,15.85,68,24s-24,24-68,24S28,92.15,28,84,52,60,96,60ZM28,124v-6.86q3.08,1.71,6.51,3.26A115.32,115.32,0,0,0,52,126.53v15C36.28,136.21,28,128.78,28,124Zm64,48v0c1.33,0,2.66,0,4,0q5.44,0,10.77-.32,4.45,1.57,9.23,2.86v15C100.28,184.21,92,176.78,92,172Zm48,22.82V178.94A186.45,186.45,0,0,0,160,180a187,187,0,0,0,20-1.07v15.89a170.08,170.08,0,0,1-40,0Zm64-5.28v-15a115.32,115.32,0,0,0,17.49-6.13q3.44-1.54,6.51-3.26V172C228,176.78,219.72,184.21,204,189.54Z"/></svg>';
+const CARET_BOLD = '<svg class="lpick__chev" viewBox="0 0 256 256" aria-hidden="true"><path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg>';
+
 /**
- * "Log in with email" on the sign-in card. Turnstile, when the site uses it, guards sending the
- * code exactly as it guards the pay-login (`loadTurnstile` is the sign-in card's own loader).
+ * The sign-in card, once the name typed belongs to an account with an email linked: two ways in,
+ * a code to that email or the payment as always. Painted into `slot`, the card's own progress area,
+ * while the card keeps its form (hidden), because the payment path signs in from that same card.
+ *
+ * `onCode` and `onPay` belong to the card (app.js), which holds the one-use Turnstile token both
+ * spend; each paints whatever comes next, or puts the form back with the reason if it fails.
  */
-export function renderEmailSignIn(body, { loadTurnstile, onBack, onDone }) {
-  body.innerHTML = `
-    <h3 class="auth__title">Log in with email</h3>
-    <p class="auth__lede">Enter the email linked to your account and we'll send you a 6-digit code.</p>
-    <form id="eiForm" novalidate>
-      <label class="auth__label" for="eiEmail">Email</label>
-      ${emailField('eiEmail')}
-      <p class="auth__err" id="eiError" role="alert" hidden></p>
-      <div class="auth__challenge" id="eiChallenge" hidden></div>
-      <div class="auth__foot">
-        <button class="btn btn--go auth__go" type="submit" id="eiSend" disabled>Send code</button>
+export function paintLoginChoice(slot, { username, onCode, onPay, onBack }) {
+  slot.innerHTML = `
+    <div class="lpick">
+      <p class="auth__lede">Welcome back, <b class="lpick__name"></b>. How do you want to log in?</p>
+      <div class="lpick__list">
+        <button class="lpick__opt lpick__opt--main" type="button" data-pick="code">
+          <span class="lpick__icon">${MAIL_BOLD}</span>
+          <span class="lpick__words"><b>Email me a code</b><small>To the email on your account. Nothing to pay.</small></span>
+          ${CARET_BOLD}
+        </button>
+        <button class="lpick__opt" type="button" data-pick="pay">
+          <span class="lpick__icon">${COINS_BOLD}</span>
+          <span class="lpick__words"><b>Pay the bot</b><small>/pay a small amount in game. It lands in your balance.</small></span>
+          ${CARET_BOLD}
+        </button>
       </div>
-      <button class="auth__link" type="button" id="eiBack">Log in with Minecraft instead</button>
-    </form>`;
-  const input = $('#eiEmail', body);
-  const send = $('#eiSend', body);
-  const error = $('#eiError', body);
-  const slot = $('#eiChallenge', body);
-  const setError = (text) => { error.textContent = text; error.hidden = !text; };
-  let needChallenge = false;
-  let token = '';
-  let widget;
-  const sync = () => { send.disabled = !(EMAIL.test(input.value.trim()) && (!needChallenge || token)); };
-  input.addEventListener('input', () => { setError(''); sync(); });
-  $('#eiBack', body).addEventListener('click', onBack);
-
-  void (async () => {
-    try {
-      const settings = await turnstileConfig();
-      if (!settings?.enabled || !settings.siteKey || !slot.isConnected) return;
-      needChallenge = true;
-      sync();
-      const turnstile = await loadTurnstile();
-      slot.hidden = false;
-      widget = turnstile.render(slot, {
-        sitekey: settings.siteKey,
-        theme: 'dark',
-        callback: (value) => { token = value; sync(); },
-        'expired-callback': () => { token = ''; sync(); },
-        'error-callback': () => { token = ''; sync(); },
-      });
-    } catch {
-      /* Submitting says what is wrong if the server wanted a challenge it did not get. */
-    }
-  })();
-
-  $('#eiForm', body).addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (send.disabled) return;
-    const email = input.value.trim();
-    try {
-      const sent = await busy(send, 'Sending…', () => emailLoginStart(email, token || undefined));
-      codeSignInStep(body, { email, masked: sent.email, onBack: () => renderEmailSignIn(body, { loadTurnstile, onBack, onDone }), onDone });
-    } catch (failure) {
-      setError(messageOf(failure, 'The code could not be sent.'));
-      token = '';
-      if (widget !== undefined) { try { window.turnstile?.reset(widget); } catch { /* stays disabled */ } }
-      sync();
-    }
+      <button class="auth__link" type="button" data-pick="back">Use a different username</button>
+    </div>`;
+  $('.lpick__name', slot).textContent = username;
+  const options = [...slot.querySelectorAll('.lpick__opt')];
+  const choose = async (button, label, work) => {
+    options.forEach((option) => { option.disabled = true; });
+    button.setAttribute('aria-busy', 'true');
+    $('small', button).textContent = label;
+    await work();
+  };
+  slot.querySelector('[data-pick="code"]').addEventListener('click', (event) => {
+    void choose(event.currentTarget, 'Sending your code…', onCode);
   });
-  input.focus();
+  slot.querySelector('[data-pick="pay"]').addEventListener('click', (event) => {
+    void choose(event.currentTarget, 'Getting your payment ready…', onPay);
+  });
+  slot.querySelector('[data-pick="back"]').addEventListener('click', onBack);
+  options[0].focus();
 }
 
-function codeSignInStep(body, { email, masked, onBack, onDone }) {
-  body.innerHTML = `
-    <h3 class="auth__title">Check your email</h3>
-    <p class="auth__lede">If <b>${escapeText(masked)}</b> is linked to an account, a 6-digit code is on
-      its way. It works for 10 minutes.</p>
-    <form id="ecForm" novalidate>
-      <label class="auth__label" for="ecCode">Code</label>
-      ${codeField('ecCode')}
-      <p class="auth__err" id="ecError" role="alert" hidden></p>
+/** The code sent to the account's email, which signs it in. */
+export function paintLoginCode(slot, { username, masked, onPay, onDone }) {
+  slot.innerHTML = `
+    <p class="auth__lede">We sent a 6-digit code to <b class="lpick__mail"></b>. It works for 10 minutes.</p>
+    <form id="lcForm" novalidate>
+      <label class="auth__label" for="lcCode">Code</label>
+      ${codeField('lcCode')}
+      <p class="auth__err" id="lcError" role="alert" hidden></p>
       <div class="auth__foot">
-        <button class="btn btn--go auth__go" type="submit" id="ecGo" disabled>Log in</button>
+        <button class="btn btn--go auth__go" type="submit" id="lcGo" disabled>Log in</button>
       </div>
-      <button class="auth__link" type="button" id="ecBack">Use a different email</button>
-    </form>`;
-  const input = $('#ecCode', body);
-  const go = $('#ecGo', body);
-  const error = $('#ecError', body);
+    </form>
+    <p class="auth__note lpick__hint">Not there? Check your spam folder; it can take a minute.</p>
+    <button class="auth__link" type="button" id="lcPay">Pay the bot instead</button>`;
+  $('.lpick__mail', slot).textContent = masked || 'your email';
+  const input = $('#lcCode', slot);
+  const go = $('#lcGo', slot);
+  const error = $('#lcError', slot);
   const setError = (text) => { error.textContent = text; error.hidden = !text; };
   digitsOnly(input);
   input.addEventListener('input', () => { setError(''); go.disabled = !CODE.test(input.value); });
-  $('#ecBack', body).addEventListener('click', onBack);
-  $('#ecForm', body).addEventListener('submit', async (event) => {
+  $('#lcPay', slot).addEventListener('click', onPay);
+  $('#lcForm', slot).addEventListener('submit', async (event) => {
     event.preventDefault();
     if (go.disabled) return;
     try {
-      const user = await busy(go, 'Logging in…', () => emailLoginComplete(email, input.value));
+      const user = await busy(go, 'Logging in…', () => emailLoginComplete(username, input.value));
       onDone(user);
     } catch (failure) {
       setError(messageOf(failure, 'That code did not work.'));
     }
   });
   input.focus();
-}
-
-/** Whether to offer "Log in with email" at all: on, and today's allowance not spent. */
-export async function emailSignInOffered() {
-  try {
-    const config = await emailConfig();
-    return Boolean(config?.enabled && config.available);
-  } catch {
-    return false;
-  }
 }
 
 /* ═════════════════════════ the profile ═════════════════════════ */

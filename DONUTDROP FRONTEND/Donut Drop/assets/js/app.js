@@ -2,7 +2,7 @@
 import { RARITY, IMG } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
-  startLogin, loginStatus, completeLogin, logout,
+  startLogin, loginStatus, completeLogin, logout, emailLoginOffered, emailLoginStart,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
   refreshUpgradeConfig, refreshPromotions,
@@ -49,7 +49,7 @@ import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
 import { mountProfile, mountWallet, mountHistory, mountSettings } from './account.js';
-import { MAIL_ICON, emailSignInOffered, offerEmailLink, renderEmailSignIn } from './email.js';
+import { offerEmailLink, paintLoginChoice, paintLoginCode } from './email.js';
 import { mountSupport, mountTerms } from './info.js';
 import { mountStudio } from './studio.js';
 import { mountQuests } from './quests.js';
@@ -432,11 +432,6 @@ function openLoginModal() {
         <div class="auth__foot">
           <button class="btn btn--go auth__go" type="submit" id="linkGo" disabled>Continue</button>
         </div>
-        <!-- Shown only while email sign-in is on and today's email allowance is not spent (email.js). -->
-        <div class="auth__alt" id="linkByEmailRow" hidden>
-          <p class="auth__or">or</p>
-          <button class="btn auth__altbtn" type="button" id="linkByEmail">${MAIL_ICON}<span>Log in with email</span></button>
-        </div>
       </form>
       <div id="linkProgress" role="status"></div>`;
 
@@ -448,23 +443,6 @@ function openLoginModal() {
     const go = $('#linkGo', body);
     const slot = $('#linkChallenge', body);
     const inlineError = $('#linkError', body);
-
-    /* Log in with email: a code to the linked address instead of a payment. Offered only once the
-     * server says email is on and has allowance left today; back returns to this card. */
-    const byEmailRow = $('#linkByEmailRow', body);
-    void emailSignInOffered().then((offered) => {
-      if (offered && byEmailRow.isConnected) byEmailRow.hidden = false;
-    });
-    $('#linkByEmail', body).addEventListener('click', () => {
-      renderEmailSignIn(body, {
-        loadTurnstile,
-        onBack: () => openLoginModal(),
-        onDone: (user) => {
-          closeModal();
-          toast({ kind: 'win', title: 'Welcome back', body: user.minecraftUsername });
-        },
-      });
-    });
 
     /* The signup offer, from the server's own settings. Hidden until they answer and hidden if the
      * bonus is switched off: a figure this screen cannot confirm is not one it should promise. The
@@ -601,6 +579,100 @@ function openLoginModal() {
     referral.addEventListener('input', sync);
     sync();
 
+    /* What sits above the form: the lede about paying and the new-player offer. A returning
+     * player choosing how to log in needs neither, so they step aside for the choice. Inline
+     * display, so the offer's own `hidden` (bonus switched off) still governs when they return. */
+    const introParts = [
+      body.querySelector(':scope > .auth__lede'),
+      $('#linkBonus', body),
+      body.querySelector(':scope > .auth__rule'),
+    ].filter(Boolean);
+    const showIntro = (on) => introParts.forEach((part) => { part.style.display = on ? '' : 'none'; });
+    const progress = $('#linkProgress', body);
+
+    /* A Turnstile token is single-use. Whatever spent one, kept or failed, needs the widget to
+     * issue the next; without this a second attempt sends a used token and fails for a reason
+     * that has nothing to do with the first. */
+    const spendChallenge = () => {
+      challengeToken = '';
+      if (challengeWidget !== undefined) {
+        try {
+          window.turnstile?.reset(challengeWidget);
+        } catch {
+          /* A widget that will not reset still leaves the button correctly disabled. */
+        }
+      }
+    };
+
+    /* Back to the form, with the reason if there is one. */
+    const backToForm = (message = '', { spent = true } = {}) => {
+      progress.innerHTML = '';
+      showIntro(true);
+      form.hidden = false;
+      go.dataset.state = '';
+      go.textContent = 'Continue';
+      if (spent) spendChallenge();
+      sync();
+      setError(message);
+      input.focus();
+    };
+
+    /* Once a code has gone out, its token is spent: "Pay the bot instead" brings the form back for
+     * a fresh challenge, and that next Continue goes straight to the payment. */
+    let payNext = false;
+
+    /* The payment: the command, the amount, and one button that copies it. */
+    const payLogin = async (username, code) => {
+      /* The code goes WITH the login, not after it.
+       *
+       * It used to be held in sessionStorage and attached once a session existed, which meant
+       * any logged-in account could spend one — including accounts that had been playing for
+       * months. It is now recorded on the challenge and redeemed inside the transaction that
+       * creates the account, so a code can only ever be spent by somebody signing up. There is
+       * no endpoint left that could attach one afterwards. */
+      const challenge = await startLogin(username, challengeToken, code || undefined);
+      go.dataset.state = 'success';
+      form.hidden = true;
+      showIntro(true);
+      /* The command, the amount, and one button that copies it.
+       *
+       * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
+       * is what identifies the payment, so one wrong digit is a login that never completes and a
+       * payment somebody then has to ask about. It is on the clipboard now.
+       *
+       * There is no Finish button. The poll signs the player in the moment the payment confirms
+       * — see pollLink. The block below stays hidden until something actually fails. */
+      $('#linkProgress', body).innerHTML = `<p class="auth__lede">Run this exact command in game:</p>
+        <div class="auth__field auth__field--static">
+          <span class="auth__value auth__value--lg mono">${escapeText(challenge.instruction)}</span>
+        </div>
+        <button class="btn btn--go auth__go" type="button" id="linkCopy">Copy command</button>
+        <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
+        <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
+        <div id="linkFinish" hidden>
+          <p class="card__p" id="linkCompleteError" role="alert"></p>
+          <button class="btn btn--go" type="button" id="linkComplete">Try again</button>
+        </div>`;
+
+      $('#linkCopy', body).addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        try {
+          await navigator.clipboard.writeText(challenge.instruction);
+          button.textContent = 'Copied';
+          button.dataset.state = 'success';
+        } catch {
+          // Refused in plenty of ordinary situations. The command is on screen right above it.
+          button.textContent = 'Select it above';
+        }
+        setTimeout(() => {
+          if (!button.isConnected) return;
+          button.textContent = 'Copy command';
+          button.dataset.state = '';
+        }, 1800);
+      });
+      pollLink(challenge.challengeId, body);
+    };
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (go.disabled) return;
@@ -610,67 +682,53 @@ function openLoginModal() {
       go.dataset.state = 'loading';
       go.textContent = 'Checking…';
       try {
-        /* The code goes WITH the login, not after it.
-         *
-         * It used to be held in sessionStorage and attached once a session existed, which meant
-         * any logged-in account could spend one — including accounts that had been playing for
-         * months. It is now recorded on the challenge and redeemed inside the transaction that
-         * creates the account, so a code can only ever be spent by somebody signing up. There is
-         * no endpoint left that could attach one afterwards. */
-        const challenge = await startLogin(username, challengeToken, code || undefined);
-        go.dataset.state = 'success';
-        form.hidden = true;
-        /* The command, the amount, and one button that copies it.
-         *
-         * Retyping `/pay DonutBot 4127` by hand is the step this flow loses people at: the amount
-         * is what identifies the payment, so one wrong digit is a login that never completes and a
-         * payment somebody then has to ask about. It is on the clipboard now.
-         *
-         * There is no Finish button. The poll signs the player in the moment the payment confirms
-         * — see pollLink. The block below stays hidden until something actually fails. */
-        $('#linkProgress', body).innerHTML = `<p class="auth__lede">Run this exact command in game:</p>
-          <div class="auth__field auth__field--static">
-            <span class="auth__value auth__value--lg mono">${escapeText(challenge.instruction)}</span>
-          </div>
-          <button class="btn btn--go auth__go" type="button" id="linkCopy">Copy command</button>
-          <p class="auth__note">Pay exactly $${escapeText(String(challenge.payAmount))} — the amount is what identifies you, so a different amount will not sign you in.</p>
-          <div class="kv"><span>status</span><span id="linkState">waiting for your payment</span></div>
-          <div id="linkFinish" hidden>
-            <p class="card__p" id="linkCompleteError" role="alert"></p>
-            <button class="btn btn--go" type="button" id="linkComplete">Try again</button>
-          </div>`;
-
-        $('#linkCopy', body).addEventListener('click', async (event) => {
-          const button = event.currentTarget;
-          try {
-            await navigator.clipboard.writeText(challenge.instruction);
-            button.textContent = 'Copied';
-            button.dataset.state = 'success';
-          } catch {
-            // Refused in plenty of ordinary situations. The command is on screen right above it.
-            button.textContent = 'Select it above';
-          }
-          setTimeout(() => {
-            if (!button.isConnected) return;
-            button.textContent = 'Copy command';
-            button.dataset.state = '';
-          }, 1800);
-        });
-        pollLink(challenge.challengeId, body);
+        /* An account with an email linked gets the choice: a code to it, or the payment. A name
+         * with none -- every new player among them -- goes on to the payment as it always has.
+         * The owner (2026-11-11) had this replace a separate email button under Continue. */
+        if (!payNext && await emailLoginOffered(username)) {
+          go.dataset.state = '';
+          go.textContent = 'Continue';
+          form.hidden = true;
+          showIntro(false);
+          paintLoginChoice(progress, {
+            username,
+            onBack: () => backToForm('', { spent: false }),
+            onPay: async () => {
+              try {
+                await payLogin(username, code);
+              } catch (error) {
+                backToForm(error?.message || 'Could not start the login.');
+              }
+            },
+            onCode: async () => {
+              try {
+                const sent = await emailLoginStart(username, challengeToken || undefined);
+                challengeToken = '';
+                paintLoginCode(progress, {
+                  username,
+                  masked: sent.email,
+                  onPay: () => {
+                    payNext = true;
+                    backToForm();
+                  },
+                  onDone: (user) => {
+                    closeModal();
+                    toast({ kind: 'win', title: 'Welcome back', body: user.minecraftUsername });
+                  },
+                });
+              } catch (error) {
+                backToForm(error?.message || 'The code could not be sent.');
+              }
+            },
+          });
+          return;
+        }
+        payNext = false;
+        await payLogin(username, code);
       } catch (error) {
         go.dataset.state = '';
         go.textContent = 'Continue';
-        /* The token was spent on the attempt that failed, so a retry needs a new one. Resetting
-         * the widget is what asks for it; without this the second attempt sends a used token and
-         * fails for a reason that has nothing to do with the first. */
-        challengeToken = '';
-        if (challengeWidget !== undefined) {
-          try {
-            window.turnstile?.reset(challengeWidget);
-          } catch {
-            /* A widget that will not reset still leaves the button correctly disabled. */
-          }
-        }
+        spendChallenge();
         go.disabled = false;
         sync();
         setError(error?.message || 'Could not start the login.');
@@ -1012,7 +1070,7 @@ function confirmWithdraw(host, amount, info, threshold) {
       pollWithdrawal(result.withdrawal.id, host);
     } catch (failure) {
       button.dataset.state = '';
-      button.textContent = `Send ${money(amount)}`;
+      button.textContent = `Withdraw ${money(amount)}`;
       button.disabled = false;
       error.textContent = failure?.message || 'The server refused the withdrawal.';
       error.hidden = false;

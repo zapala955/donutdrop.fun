@@ -506,10 +506,19 @@ async function adoptSession(result) {
  * Minecraft account once one is linked. Every figure and every rule is the server's (routes/email.ts);
  * these only carry the requests. */
 export const emailConfig = () => api.get('/v1/auth/email/config');
-export const emailLoginStart = (email, turnstileToken) =>
-  api.post('/v1/auth/email/start', turnstileToken ? { email, turnstileToken } : { email });
-export async function emailLoginComplete(email, code) {
-  const result = await api.post('/v1/auth/email/complete', { email, code });
+/* Signing in with a code to the email linked to a Minecraft name: whether the name has one, the
+ * code (spending the card's Turnstile token), and the code back. */
+export async function emailLoginOffered(minecraftUsername) {
+  try {
+    return Boolean((await api.post('/v1/auth/email/options', { minecraftUsername })).emailCode);
+  } catch {
+    return false; // Not asked, not offered: the payment is always there.
+  }
+}
+export const emailLoginStart = (minecraftUsername, turnstileToken) =>
+  api.post('/v1/auth/email/start', turnstileToken ? { minecraftUsername, turnstileToken } : { minecraftUsername });
+export async function emailLoginComplete(minecraftUsername, code) {
+  const result = await api.post('/v1/auth/email/complete', { minecraftUsername, code });
   await adoptSession(result);
   return result.user;
 }

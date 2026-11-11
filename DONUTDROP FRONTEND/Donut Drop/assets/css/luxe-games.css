@@ -854,27 +854,39 @@ body.lx .modal .auth__link:focus-visible { outline: 2px solid var(--lx-focus); o
 /* errors in the sign-in card read red, as they do on the profile */
 body.lx .modal .auth__err { color: var(--lx-loss-text); font: 600 .8125rem/1.4 var(--lx-ui); }
 
-/* "or", then "Log in with email": a real second button under the sign-in, not a line of link text.
- * Outlined, so it never reads as the greyed-out Continue above it. */
-body.lx .modal .auth__alt { margin-top: var(--lx-s4); }
-body.lx .modal .auth__alt[hidden] { display: none; }
-body.lx .modal .auth__or {
-  display: flex; align-items: center; gap: var(--lx-s3); margin: 0 0 var(--lx-s4);
-  color: var(--lx-faint); font: 600 .8125rem/1 var(--lx-ui);
+/* The sign-in card for a name with an email linked: two ways in, as two rows (email.js
+ * paintLoginChoice). Flat panels with a hairline, gold only on the edge pointed at and on the
+ * code's icon, the way in that costs nothing. Each row is one button: icon, words, caret. */
+body.lx .modal .lpick__list { display: grid; gap: var(--lx-s2); margin-top: var(--lx-s4); }
+body.lx .modal .lpick__opt {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 16px; align-items: center; gap: var(--lx-s3);
+  width: 100%; min-height: 68px; padding: var(--lx-s3) var(--lx-s4);
+  border: 0; border-radius: var(--lx-r); text-align: left; cursor: pointer;
+  background: var(--lx-2); box-shadow: inset 0 0 0 1px var(--lx-4); color: var(--lx-ink);
+  transition: box-shadow 120ms var(--lx-ease), background-color 120ms var(--lx-ease);
 }
-body.lx .modal .auth__or::before,
-body.lx .modal .auth__or::after { content: ''; flex: 1; height: 1px; background: var(--lx-4); }
-body.lx .modal .auth__altbtn {
-  display: flex; align-items: center; justify-content: center; gap: var(--lx-s2);
-  width: 100%; height: 52px; padding: 0 var(--lx-s4);
-  border: 0; border-radius: var(--lx-r-s);
-  background: transparent; box-shadow: inset 0 0 0 1px var(--lx-5); color: var(--lx-ink);
-  font: 700 .9375rem/1 var(--lx-ui); cursor: pointer;
+body.lx .modal .lpick__opt:hover:not(:disabled) { background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-gold); }
+body.lx .modal .lpick__opt:active:not(:disabled) { transform: translateY(1px); }
+body.lx .modal .lpick__opt:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .modal .lpick__opt:disabled { cursor: default; opacity: .55; }
+body.lx .modal .lpick__opt[aria-busy="true"] { opacity: 1; box-shadow: inset 0 0 0 1px var(--lx-gold); }
+body.lx .modal .lpick__icon {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: var(--lx-r-s); background: var(--lx-0); color: var(--lx-mute);
 }
-body.lx .modal .auth__altbtn svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
-body.lx .modal .auth__altbtn:hover { background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-gold); }
-body.lx .modal .auth__altbtn:active { transform: translateY(1px); }
-body.lx .modal .auth__altbtn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .modal .lpick__opt--main .lpick__icon { color: var(--lx-gold); }
+body.lx .modal .lpick__icon svg { width: 20px; height: 20px; fill: currentColor; }
+body.lx .modal .lpick__words { display: grid; gap: 2px; min-width: 0; }
+body.lx .modal .lpick__words b { font: 700 .9375rem/1.25 var(--lx-ui); color: var(--lx-ink); }
+body.lx .modal .lpick__words small { font: 500 .8125rem/1.35 var(--lx-ui); color: var(--lx-mute); }
+body.lx .modal .lpick__chev { width: 16px; height: 16px; fill: var(--lx-faint); }
+body.lx .modal .lpick__opt:hover:not(:disabled) .lpick__chev { fill: var(--lx-gold); }
+body.lx .modal .lpick .auth__link { margin-top: var(--lx-s4); }
+body.lx .modal .lpick__hint { margin-top: var(--lx-s3); color: var(--lx-faint); }
+@media (prefers-reduced-motion: reduce) {
+  body.lx .modal .lpick__opt { transition: none; }
+  body.lx .modal .lpick__opt:active:not(:disabled) { transform: none; }
+}
 
 /* Withdraw with DonutSMP's /pay tax: what arrives in game is the figure that matters, so it takes
  * the gold the first row of the read-out carries, and the amount withdrawn reads as a plain row. */

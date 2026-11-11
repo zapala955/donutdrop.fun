@@ -109,9 +109,17 @@ describe('email on accounts', () => {
     // Staff and admin identities never move this way; the payment is still credited.
     assert.match(routes, /if \(config\.adminMinecraftIds\.has\(identity\)\) \{/);
     assert.match(routes, /await creditWallet\(client, userId, BigInt\(challenge\.pay_amount!\), 'pay_login_deposit', challenge\.id\);/);
-    // Sign-in by email: players only, the same answer whether or not the address has an account.
-    assert.match(routes, /WHERE email = \$1 AND status = 'active' AND role = 'player' AND demo_of IS NULL`/);
-    assert.match(routes, /return reply\.code\(202\)\.send\(\{ sent: true, email: maskEmail\(body\.email\) \}\);/);
+    /* Sign-in by a code, asked for by Minecraft name (the owner, 2026-11-11): an active player's
+     * account with an address linked, found with or without a Bedrock dot. */
+    assert.match(routes, /WHERE normalized_username = ANY\(\$1::text\[\]\) AND email IS NOT NULL\s+AND status = 'active' AND role = 'player' AND demo_of IS NULL/);
+    assert.match(routes, /\[\[bare, `\.\$\{bare\}`\]\]/);
+    // The card asks first; the answer is only whether a code is on offer, never the address.
+    assert.match(routes, /'\/v1\/auth\/email\/options'/);
+    assert.match(routes, /return \{ emailCode: Boolean\(await emailLoginAccount\(db, body\.minecraftUsername\)\) \};/);
+    // The code, behind the same Turnstile as the payment, to the address the account has.
+    assert.match(routes, /const user = await emailLoginAccount\(db, body\.minecraftUsername\);\s+if \(!user\?\.email\) \{\s+throw new AppError\(409, 'EMAIL_LOGIN_UNAVAILABLE'/);
+    assert.match(routes, /return reply\.code\(202\)\.send\(\{ sent: true, email: maskEmail\(email\) \}\);/);
+    assert.match(routes, /const user = await emailLoginAccount\(client, body\.minecraftUsername, true\);/);
     // A change of address takes a code from the old one first.
     assert.match(routes, /'CONFIRM_CODE_REQUIRED'/);
   });
@@ -142,15 +150,23 @@ describe('email on accounts', () => {
   it('offers an email after a first sign-up, signs in by code, and draws the profile cards', async () => {
     const app = await front('app.js');
     assert.match(app, /if \(user\.created && signInOpen\(\)\) \{\n\s*await offerEmailLink\(body, \{/);
-    // "or", then a real "Log in with email" button, shown only once the server says email is on.
-    assert.match(app, /<div class="auth__alt" id="linkByEmailRow" hidden>/);
-    assert.match(app, /<button class="btn auth__altbtn" type="button" id="linkByEmail">\$\{MAIL_ICON\}<span>Log in with email<\/span><\/button>/);
+    /* The owner (2026-11-11): "remove the login with email button", and a player whose account
+     * has an email gets the choice after typing their name: a code, or the payment. */
+    assert.doesNotMatch(app, /linkByEmail|Log in with email/);
+    assert.match(app, /if \(!payNext && await emailLoginOffered\(username\)\) \{/);
+    assert.match(app, /const sent = await emailLoginStart\(username, challengeToken \|\| undefined\);/);
+    // A name with no email, every new player among them, goes on to the payment as before.
+    assert.match(app, /payNext = false;\s+await payLogin\(username, code\);/);
     const store = await front('store.js');
     assert.match(store, /return \{ \.\.\.result\.user, created: Boolean\(result\.created\) \};/);
     const email = await front('email.js');
     assert.match(email, /export async function offerEmailLink\(body, \{ username, onDone \}\)/);
     assert.match(email, /<button class="btn auth__ghost" type="button" id="elSkip">Skip for now<\/button>/);
-    assert.match(email, /export function renderEmailSignIn\(/);
+    assert.match(email, /export function paintLoginChoice\(slot, \{ username, onCode, onPay, onBack \}\)/);
+    assert.match(email, /<b>Email me a code<\/b>/);
+    assert.match(email, /<b>Pay the bot<\/b>/);
+    assert.match(email, /export function paintLoginCode\(slot, \{ username, masked, onPay, onDone \}\)/);
+    assert.doesNotMatch(email, /renderEmailSignIn|emailSignInOffered/);
     const account = await front('account.js');
     assert.match(account, /\[emailCard\(info, reloadCards\), minecraftCard\(info, reloadCards, avatarOf\(user, 40\)\)\]/);
     /* The owner: "make it so theres a button to change ur linked account not just the ign and code

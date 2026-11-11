@@ -46,8 +46,11 @@ import { unusedRelinkPlaceholder } from './auth.js';
  *   CHANGE    a linked address is replaced only with a code from it (confirm) AND one from the new
  *             address (link); the old address is told.
  *   REMOVE    with a code from it.
- *   SIGN IN   by a code sent to a linked address, instead of paying the bot. Players only: an
- *             administrator signs in with Minecraft and their authenticator, as before.
+ *   SIGN IN   by a code sent to a linked address, instead of paying the bot. The player types their
+ *             Minecraft name as always; when that account has an address, the card asks which they
+ *             want, a code or the payment (2026-11-11: the owner had the separate "Log in with
+ *             email" button removed for this). Players only: an administrator signs in with
+ *             Minecraft and their authenticator, as before.
  *   MOVE      with a linked address, an account can move to another Minecraft account: a code from the
  *             address, then the new Minecraft account pays the bot exactly as at sign-up. The balance,
  *             history, VIP and everything else stay with the account; the new name is where withdrawals
@@ -64,10 +67,15 @@ const emailField = z
   .refine((value) => EMAIL_PATTERN.test(value), { message: 'Enter a valid email address' });
 const codeField = z.string().regex(/^\d{6}$/);
 
+const minecraftNameField = z.string().regex(MINECRAFT_USERNAME_PATTERN);
+const loginOptionsSchema = z.object({ minecraftUsername: minecraftNameField }).strict();
 const loginStartSchema = z
-  .object({ email: emailField, turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional() })
+  .object({
+    minecraftUsername: minecraftNameField,
+    turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional(),
+  })
   .strict();
-const loginCompleteSchema = z.object({ email: emailField, code: codeField }).strict();
+const loginCompleteSchema = z.object({ minecraftUsername: minecraftNameField, code: codeField }).strict();
 const linkStartSchema = z.object({ email: emailField, confirmCode: codeField.optional() }).strict();
 const codeOnlySchema = z.object({ code: codeField }).strict();
 const confirmCodeSchema = z
@@ -139,6 +147,23 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
     return row;
   };
 
+  /**
+   * The account a typed Minecraft name signs in to with an email code: an active player's with an
+   * address linked. Read the way the pay login reads a payer, with or without a Bedrock dot; when
+   * the two spellings are two accounts, only the exact one counts.
+   */
+  const emailLoginAccount = async (client: DbClient, typed: string, lock = false): Promise<AccountRow | undefined> => {
+    const bare = typed.toLowerCase().replace(/^\./, '');
+    const found = await client.query<AccountRow>(
+      `SELECT ${ACCOUNT_COLUMNS} FROM users
+        WHERE normalized_username = ANY($1::text[]) AND email IS NOT NULL
+          AND status = 'active' AND role = 'player' AND demo_of IS NULL${lock ? ' FOR UPDATE' : ''}`,
+      [[bare, `.${bare}`]],
+    );
+    if (found.rows.length === 1) return found.rows[0];
+    return found.rows.find((row) => row.normalized_username === typed.toLowerCase());
+  };
+
   const realAccountId = (request: FastifyRequest): string => {
     const id = accountId(request.authUser);
     if (!id) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
@@ -165,6 +190,20 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
 
   /* ═════════════════════════ sign in by email ═════════════════════════ */
 
+  /* Whether the sign-in card should offer a code for this name: email is on with today's
+   * allowance left, and the name is an active player's with an address linked. It says no more
+   * than the card then shows -- which of the two ways in the account has -- and never the address. */
+  app.post(
+    '/v1/auth/email/options',
+    { preHandler: requireWebsiteOrigin, config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } },
+    async (request) => {
+      const body = parseWith(loginOptionsSchema, request.body);
+      const availability = await emailAvailability(db, config);
+      if (!availability.enabled || !availability.available) return { emailCode: false };
+      return { emailCode: Boolean(await emailLoginAccount(db, body.minecraftUsername)) };
+    },
+  );
+
   app.post(
     '/v1/auth/email/start',
     { preHandler: requireWebsiteOrigin, config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
@@ -175,34 +214,30 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
         if (!body.turnstileToken) throw new AppError(400, 'CHALLENGE_REQUIRED', 'Complete the challenge and try again');
         await verifyTurnstile(config, body.turnstileToken, request.ip);
       }
-      /* The same answer whether or not the address belongs to anyone, so this cannot be used to
-       * find out which addresses have accounts. A code is only made and sent when it does, for an
-       * active player; a second request inside the minute is answered the same and sends nothing. */
-      const owner = await db.query<{ id: string; minecraft_username: string }>(
-        `SELECT id, minecraft_username FROM users
-          WHERE email = $1 AND status = 'active' AND role = 'player' AND demo_of IS NULL`,
-        [body.email],
-      );
-      const user = owner.rows[0];
-      if (user) {
-        let code: string | null = null;
-        try {
-          code = await db.transaction(async (client) =>
-            (await createCode(client, config, { purpose: 'login', email: body.email, userId: user.id, ipHash: ipHash(request) })).code,
-          );
-        } catch (error) {
-          if (!(error instanceof AppError) || !error.code.startsWith('EMAIL_CODE_')) throw error;
-        }
-        if (code) {
-          await sendEmail(db, config, {
-            to: body.email,
-            userId: user.id,
-            purpose: 'login',
-            ...codeEmail('login', code, user.minecraft_username),
-          });
-        }
+      const user = await emailLoginAccount(db, body.minecraftUsername);
+      if (!user?.email) {
+        throw new AppError(409, 'EMAIL_LOGIN_UNAVAILABLE', 'This account has no email linked. Pay the bot to log in instead.');
       }
-      return reply.code(202).send({ sent: true, email: maskEmail(body.email) });
+      const email = user.email;
+      let code: string | null = null;
+      try {
+        code = await db.transaction(async (client) =>
+          (await createCode(client, config, { purpose: 'login', email, userId: user.id, ipHash: ipHash(request) })).code,
+        );
+      } catch (error) {
+        /* Asked again inside the minute: the code already sent still works, so the answer is the
+         * same and nothing more is sent. Too many in the hour is said, so the player pays instead. */
+        if (!(error instanceof AppError) || error.code !== 'EMAIL_CODE_COOLDOWN') throw error;
+      }
+      if (code) {
+        await sendEmail(db, config, {
+          to: email,
+          userId: user.id,
+          purpose: 'login',
+          ...codeEmail('login', code, user.minecraft_username),
+        });
+      }
+      return reply.code(202).send({ sent: true, email: maskEmail(email) });
     },
   );
 
@@ -216,14 +251,9 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
       const sessionId = randomUUID();
 
       const outcome = await db.transaction<Outcome<AccountRow>>(async (client) => {
-        const owner = await client.query<AccountRow>(
-          `SELECT ${ACCOUNT_COLUMNS} FROM users
-            WHERE email = $1 AND status = 'active' AND role = 'player' AND demo_of IS NULL FOR UPDATE`,
-          [body.email],
-        );
-        const user = owner.rows[0];
-        if (!user) return { ok: false, error: invalidCode() };
-        const check = await checkCode(client, config, { purpose: 'login', email: body.email, userId: user.id, code: body.code });
+        const user = await emailLoginAccount(client, body.minecraftUsername, true);
+        if (!user?.email) return { ok: false, error: invalidCode() };
+        const check = await checkCode(client, config, { purpose: 'login', email: user.email, userId: user.id, code: body.code });
         if (!check.ok) return failed(check);
 
         await recordNetwork(client, config, user.id, request.ip);
