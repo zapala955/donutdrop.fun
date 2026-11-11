@@ -75,8 +75,8 @@ describe('the lobby', () => {
     // The player count rides on the card's corner, and takes no room when nobody is playing.
     assert.match(phone, /\.lxlive \{\n\s*position: absolute; top: 6px; right: 6px; z-index: 2;/);
     assert.match(phone, /\.lxlive\[hidden\] \{ display: none; \}/);
-    // The rewards: three tiles in a row, the icon over the name.
-    assert.match(phone, /\.lxperks__row \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+    // The rewards: two tiles in a row (the Wager Race tile came off on 2026-11-11), the icon over the name.
+    assert.match(phone, /\.lxperks__row \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
     assert.match(phone, /\.lxperk \{ flex-direction: column;/);
     assert.match(phone, /\.lxperk__copy span \{ display: none; \}/);
   });

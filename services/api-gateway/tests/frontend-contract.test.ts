@@ -226,7 +226,6 @@ describe('frontend/backend contract', () => {
     for (const [file, call] of [
       ['assets/js/ticker.js', 'linkPlayer(playerId, name, head, label);'],
       ['assets/js/board.js', 'linkPlayer(entry.playerId, entry.username, avatar, name);'],
-      ['assets/js/race.js', 'linkPlayer(entry.playerId, entry.username, avatar, name);'],
       ['assets/js/roulette.js', 'linkPlayer(bet.playerId, bet.player, head, name);'],
       ['assets/js/crash.js', 'linkPlayer(bet.playerId, bet.player, head, name);'],
       ['assets/js/chat.js', 'linkPlayer(activity.playerId, activity.player, hitHead, who);'],
@@ -310,7 +309,7 @@ describe('frontend/backend contract', () => {
   it('keeps the profile focused on identity, balance and wallet actions', async () => {
     const account = await source('assets/js/account.js');
     const start = account.indexOf('function paintProfile()');
-    const end = account.indexOf('let walletRoot', start);
+    const end = account.indexOf('// ─────────── /history', start);
     const profile = account.slice(start, end);
     assert.doesNotMatch(profile, /\['Status'/);
     assert.doesNotMatch(profile, /\['Role'/);

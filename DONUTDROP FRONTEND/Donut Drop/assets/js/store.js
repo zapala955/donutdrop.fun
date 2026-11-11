@@ -35,13 +35,10 @@ export const state = {
   war: null,
   referrals: null,
   rakeback: null,
-  races: null,
   creator: null,
   leaderboard: null,
   statistics: null,
   account: null,
-  transactions: [],
-  walletSummary: null,
   vip: null,
   lastError: null,
 
@@ -574,8 +571,6 @@ function forgetSession() {
   state.inventory = [];
   state.catalog = [];
   state.fairness = null;
-  /* Somebody else's deposit total must not survive into the next session on a shared machine. */
-  state.walletSummary = null;
   emit('logout');
 }
 
@@ -1216,11 +1211,6 @@ export function refreshRakeback(notify = true) {
   return loadOptional('/v1/rakeback', 'rakeback', notify);
 }
 
-/* Public: a race leaderboard is worth showing to somebody who has not signed up yet. */
-export function refreshRaces(notify = true) {
-  return loadOptional('/v1/races', 'races', notify);
-}
-
 export function refreshCreator(notify = true) {
   if (!state.authenticated) { state.creator = null; return Promise.resolve(null); }
   return loadOptional('/v1/creators/me', 'creator', notify);
@@ -1241,13 +1231,6 @@ export async function claimRakeback(tier) {
   state.balance = toSafeNumber(state.balanceMinor);
   await refreshRakeback(false);
   emit('rakeback');
-  return result;
-}
-
-export async function settleRaces() {
-  const result = await api.post('/v1/races/settle', {});
-  await refreshRaces(false);
-  emit('races');
   return result;
 }
 
@@ -1281,34 +1264,6 @@ export async function refreshAccount(notify = true) {
   state.account = result.account ?? null;
   if (notify) emit('account');
   return state.account;
-}
-
-export async function refreshTransactions(limit = 50, notify = true) {
-  if (!state.authenticated) {
-    state.transactions = [];
-    return [];
-  }
-  const result = await api.get('/v1/balance/transactions?limit=' + Number(limit));
-  state.transactions = result.transactions || [];
-  if (notify) emit('transactions');
-  return state.transactions;
-}
-
-/* Lifetime deposited and withdrawn, for the wallet page's own tiles.
- *
- * A separate request from the ledger because it answers a different question: the ledger is the
- * most recent rows, this is every row that ever moved real money. Fetched when the wallet page is
- * opened rather than on the balance refresh, so a figure only that page shows is not summed on
- * every settlement. */
-export async function refreshWalletSummary(notify = true) {
-  if (!state.authenticated) {
-    state.walletSummary = null;
-    return null;
-  }
-  const result = await api.get('/v1/balance/summary');
-  state.walletSummary = result;
-  if (notify) emit('wallet');
-  return result;
 }
 
 export const canAfford = (amount) => state.authenticated && state.balance >= amount;

@@ -255,7 +255,7 @@ body.lx .lxpromo__go:is(.btn--go, .pban__more) {
 
 /* ═════════ rewards ═════════ */
 .lxperks { margin-top: var(--lx-s8); }
-.lxperks__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s4); margin: 0; padding: 0; list-style: none; }
+.lxperks__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s4); margin: 0; padding: 0; list-style: none; }
 .lxperk {
   display: flex; align-items: center; gap: var(--lx-s4);
   height: 76px; padding: 0 var(--lx-s5);
@@ -372,7 +372,7 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
 
   /* rewards: three tiles in a row, the icon over the name */
   .lxperks, .lxpulls { margin-top: var(--lx-s6); }
-  .lxperks__row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); }
+  .lxperks__row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
   .lxperk { flex-direction: column; justify-content: center; gap: var(--lx-s2); height: auto; min-height: 92px; padding: var(--lx-s3) var(--lx-s1); text-align: center; }
   .lxperk__ico { width: 36px; height: 36px; padding: 8px; }
   .lxperk__copy b { font-size: .8125rem; }

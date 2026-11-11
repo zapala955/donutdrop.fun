@@ -18,7 +18,6 @@ const store = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/store
 const ticker = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/ticker.js');
 const app = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
 const board = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/board.js');
-const race = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/race.js');
 const tableAvatar = () => read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/table-avatar.js');
 const insights = () => read('../src/routes/insights.ts');
 const rewards = () => read('../src/routes/rewards.ts');
@@ -133,7 +132,8 @@ describe('leaderboard avatars', () => {
   });
 
   it('shares the proxied head renderer instead of drawing name initials', async () => {
-    for (const source of [await board(), await race()]) {
+    // The race page drew the same heads until it came off the site (2026-11-11).
+    for (const source of [await board()]) {
       assert.match(source, /tableAvatar\(entry\.playerId\)/);
       assert.doesNotMatch(source, /avatar\.textContent = entry\.username/);
       assert.doesNotMatch(source, /entry\.username\.slice/);

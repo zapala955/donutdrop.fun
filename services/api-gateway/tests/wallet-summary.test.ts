@@ -59,66 +59,42 @@ describe('what the wallet says a player has put in and taken out', () => {
   });
 });
 
-describe('the wallet page', () => {
-  const page = () => read('DONUTDROP FRONTEND/Donut Drop/assets/js/account.js');
+/* The owner (2026-11-11): "remove https://donutluxe.com/race and https://donutluxe.com/wallet".
+ * The summary above stays in the API (the admin player view runs the same query); the page that
+ * showed it to players, and the race page, are gone from every way in. */
+describe('the wallet and race pages', () => {
+  const front = (relative: string) => read(`DONUTDROP FRONTEND/Donut Drop/${relative}`);
 
-  it('labels the tiles by what they are, not by the window they came from', async () => {
-    const code = await page();
-    const wallet = code.slice(code.indexOf('function paintWallet'));
-    assert.match(wallet, /\['Deposited', deposited, 'up'\]/);
-    assert.match(wallet, /\['Withdrawn', withdrawn, 'down'\]/);
-    /* The CODE, not the prose. The comment above those tiles explains what they replaced and
-     * says "last 25" in doing so; a grep over the whole function fails on its own tombstone. */
-    assert.ok(!wallet.includes("'In (last 25)'"), 'the windowed tile is still rendered');
-    assert.ok(!wallet.includes("'Out (last 25)'"), 'the windowed tile is still rendered');
+  it('are not in the router, the markup, the menus or the home page', async () => {
+    const [html, app] = await Promise.all([front('index.html'), front('assets/js/app.js')]);
+    const views = app.slice(app.indexOf('const VIEWS = {'), app.indexOf('};', app.indexOf('const VIEWS = {')));
+    assert.doesNotMatch(views, /^\s+'?(?:race|wallet)'?: mount/m);
+    assert.doesNotMatch(app, /from '\.\/race\.js'|mountWallet|mountRace/);
+    assert.doesNotMatch(html, /data-view="(?:race|wallet)"|href="\/(?:race|wallet)"|assets\/js\/race\.js/);
+    await assert.rejects(front('assets/js/race.js'));
   });
 
-  it('renames the ledger to something a player would say', async () => {
-    const code = await page();
-    assert.ok(code.includes("panel('Recent transactions')"));
-    assert.ok(!code.includes("panel('Recent ledger')"));
-  });
-
-  /* "$0 deposited" is a claim about somebody's money. A request that has not come back is not
-   * entitled to make it. */
-  it('shows an em dash rather than a zero before the figures arrive', async () => {
-    const code = await page();
-    const wallet = code.slice(code.indexOf('function paintWallet'));
-    assert.match(wallet, /summary \? money\(Number\(summary\.depositedMinor\)\) : '—'/);
-    assert.match(wallet, /summary \? money\(Number\(summary\.withdrawnMinor\)\) : '—'/);
-  });
-
-  /* Two tiles must not be able to hold the whole page on its loading state. */
-  it('renders the ledger even if the summary request fails', async () => {
-    const code = await page();
-    const mount = code.slice(code.indexOf('export function mountWallet'));
-    assert.match(mount.slice(0, 900), /Promise\.allSettled\(/);
-  });
-
-  /* The page somebody opens to MOVE money, not only to read about it. Both actions previously
-   * lived on the profile and in the header, and neither is where anybody looks for them. */
-  it('offers deposit and withdraw on the page itself', async () => {
-    const code = await page();
-    const wallet = code.slice(code.indexOf('function paintWallet'));
-    assert.match(wallet.slice(0, wallet.indexOf('// ─')), /root\.appendChild\(moneyActions\(\)\)/);
-  });
-
-  /* One deposit flow and one withdrawal flow on this site, not one per page that offers the
-   * button. The state those modals need -- bot availability, the cooldown, the pending payout,
-   * Turnstile -- lives in app.js and none of it is reachable from here. */
-  it('drives the one real flow rather than a second copy of it', async () => {
-    const code = await page();
+  it('leave Deposit and Withdraw on the profile, through the header’s own flow', async () => {
+    const code = await front('assets/js/account.js');
+    assert.doesNotMatch(code, /function paintWallet|ledgerTable|walletSummary/);
     const actions = code.slice(code.indexOf('function moneyActions'));
     const body = actions.slice(0, actions.indexOf('\n}'));
     assert.match(body, /\$\('#depositBtn'\)\?\.click\(\)/);
     assert.match(body, /\$\('#withdrawBtn'\)\?\.click\(\)/);
-    // And the profile uses the same helper, so the two cannot drift apart.
-    assert.equal(code.split('moneyActions()').length - 1, 3);
+    // The definition and the profile's one use.
+    assert.equal(code.split('moneyActions()').length - 1, 2);
   });
 
-  it('forgets the totals on sign-out', async () => {
-    const store = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/store.js');
-    const logout = store.slice(store.indexOf('export async function logout'));
-    assert.match(logout.slice(0, 700), /state\.walletSummary = null;/);
+  it('are out of the sitemap and the SEO table, and nginx sends an old link home', async () => {
+    const [sitemap, seo, nginx] = await Promise.all([
+      front('sitemap.xml'),
+      front('assets/js/seo.js'),
+      read('infra/nginx/nginx.conf'),
+    ]);
+    assert.doesNotMatch(sitemap, /donutluxe\.com\/(?:race|wallet)</);
+    assert.doesNotMatch(seo, /^\s+(?:race|wallet): \{/m);
+    assert.match(nginx, /location ~ \^\/\(\?:race\|wallet\)\/\?\$ \{\s+include \/etc\/nginx\/security-headers\.conf;\s+return 302 \/;/);
+    const served = nginx.slice(nginx.indexOf('location ~ ^/(?:home|crates'));
+    assert.doesNotMatch(served.slice(0, served.indexOf('{')), /\|(?:race|wallet)\|/);
   });
 });

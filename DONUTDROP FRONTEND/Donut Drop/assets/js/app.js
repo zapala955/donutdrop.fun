@@ -45,10 +45,9 @@ import { mountRewards } from './rakeback.js';
 import { mountDaily } from './daily.js';
 import { mountDiscord } from './discord.js';
 import { applyRouteMeta, liveRouteMeta } from './seo.js';
-import { mountRace } from './race.js';
 import { mountCreators } from './creators.js';
 import { mountLeaderboard, mountStatistics } from './board.js';
-import { mountProfile, mountWallet, mountHistory, mountSettings } from './account.js';
+import { mountProfile, mountHistory, mountSettings } from './account.js';
 import { offerEmailLink, paintLoginChoice, paintLoginCode } from './email.js';
 import { mountSupport, mountTerms } from './info.js';
 import { mountStudio } from './studio.js';
@@ -1283,12 +1282,12 @@ const VIEWS = {
   rewards: mountRewards,
   'daily-rewards': mountDaily,
   discord: mountDiscord,
-  race: mountRace,
+  /* /race and /wallet came off the site (2026-11-11, the owner): an old link lands on the home
+   * page like any address the router does not know. */
   'creator-media': mountCreators,
   leaderboard: mountLeaderboard,
   statistics: mountStatistics,
   profile: mountProfile,
-  wallet: mountWallet,
   history: mountHistory,
   settings: mountSettings,
   support: mountSupport,

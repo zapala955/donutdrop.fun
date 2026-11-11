@@ -1,7 +1,8 @@
-/* account.js — profile, wallet, history and settings.
+/* account.js — profile, history and settings.
  *
- * Four routes, one module. They are four views of the same two things — who the account is, and
- * what its money has done — and splitting them would mean four copies of the same ledger table.
+ * Three routes, one module: who the account is, and what it has played. The /wallet page (balance,
+ * lifetime totals and the recent transactions) came off the site on 2026-11-11 at the owner's ask;
+ * Deposit and Withdraw stay in the header and on the profile.
  *
  * Everything is server state. Nothing here caches a balance or a status between navigations: both
  * change from outside this page (a round settles, an operator suspends an account), and a figure
@@ -11,9 +12,7 @@ import {
   state,
   bus,
   refreshAccount,
-  refreshTransactions,
   refreshBalance,
-  refreshWalletSummary,
   refreshReferrals,
   attachReferralCode,
   roundHistory,
@@ -97,7 +96,9 @@ const KIND_LABEL = {
   race_payout: 'Race prize',
 };
 
-const kindLabel = (kind) => KIND_LABEL[kind] ?? String(kind ?? '').replaceAll('_', ' ');
+/* The transaction list these named went with /wallet (2026-11-11). The names stay, so a list of
+ * payments can come back without anyone re-deriving them. */
+export const kindLabel = (kind) => KIND_LABEL[kind] ?? String(kind ?? '').replaceAll('_', ' ');
 
 // ─────────── shared pieces ───────────
 
@@ -107,21 +108,6 @@ function notice(message) {
   line.textContent = message;
   card.appendChild(line);
   return card;
-}
-
-function statGrid(cells) {
-  const grid = el('div', 'acct__grid');
-  for (const [label, value, tone] of cells) {
-    const cell = el('div', 'acct__stat');
-    if (tone) cell.dataset.tone = tone;
-    const key = el('span', 'acct__k');
-    key.textContent = label;
-    const figure = el('b', 'acct__v');
-    figure.textContent = value;
-    cell.append(key, figure);
-    grid.appendChild(cell);
-  }
-  return grid;
 }
 
 function panel(title) {
@@ -145,61 +131,6 @@ function facts(rows) {
     list.appendChild(group);
   }
   return list;
-}
-
-/** A signed money cell: the sign is the whole point, so it is never dropped. */
-function amountCell(minor) {
-  const value = Number(minor);
-  const cell = el('td', 'dtable__num mono');
-  cell.dataset.dir = value >= 0 ? 'up' : 'down';
-  cell.textContent = (value >= 0 ? '+' : '−') + money(Math.abs(value));
-  return cell;
-}
-
-function ledgerTable(rows) {
-  const wrap = el('div', 'acct__tablewrap');
-  const table = el('table', 'dtable');
-
-  const head = el('thead');
-  const headRow = el('tr');
-  for (const [text, cls] of [
-    ['Event', ''],
-    ['Amount', 'dtable__num'],
-    ['Balance', 'dtable__num'],
-    ['When', 'dtable__num'],
-  ]) {
-    const cell = el('th', cls);
-    cell.textContent = text;
-    headRow.appendChild(cell);
-  }
-  head.appendChild(headRow);
-
-  const body = el('tbody');
-  if (!rows.length) {
-    const row = el('tr');
-    const cell = el('td');
-    cell.colSpan = 4;
-    cell.className = 'dtable__empty';
-    cell.textContent = 'No transactions yet.';
-    row.appendChild(cell);
-    body.appendChild(row);
-  }
-
-  for (const entry of rows) {
-    const row = el('tr');
-    const kind = el('td');
-    kind.textContent = kindLabel(entry.kind);
-    const after = el('td', 'dtable__num mono dtable__dim');
-    after.textContent = money(Number(entry.balance_after_minor));
-    const when = el('td', 'dtable__num mono dtable__dim');
-    when.textContent = new Date(entry.created_at).toLocaleString();
-    row.append(kind, amountCell(entry.amount_minor), after, when);
-    body.appendChild(row);
-  }
-
-  table.append(head, body);
-  wrap.appendChild(table);
-  return wrap;
 }
 
 // ─────────── /profile ───────────
@@ -326,7 +257,7 @@ function securityCard() {
 }
 
 /**
- * Deposit and Withdraw, as they appear on both the profile and the wallet.
+ * Deposit and Withdraw, as they appear on the profile.
  *
  * The click is forwarded to the header's own buttons rather than calling the modals directly.
  * Those two live in app.js together with every piece of state they depend on -- the bot's
@@ -349,73 +280,6 @@ function moneyActions() {
 
   actions.append(deposit, withdraw);
   return actions;
-}
-
-// ─────────── /wallet ───────────
-
-let walletRoot = null;
-
-export function mountWallet(view) {
-  walletRoot = view;
-  bindOnce(view, 'wallet', () => paintWallet());
-  if (state.authenticated) {
-    /* allSettled, not all: the summary is two tiles and the ledger is the page. If the summary
-     * request fails the rest still renders, and the tiles say so rather than the whole page
-     * staying on its loading state because one of three calls did not come back. */
-    Promise.allSettled([
-      refreshBalance(false),
-      refreshTransactions(25, false),
-      refreshWalletSummary(false),
-    ])
-      .then(paintWallet)
-      .catch(() => undefined);
-  }
-  paintWallet();
-}
-
-function paintWallet() {
-  if (!walletRoot?.isConnected) return;
-  const root = ensureShell(walletRoot, 'Wallet', 'walletRoot');
-  root.innerHTML = '';
-
-  if (!state.authenticated) {
-    root.appendChild(notice('Log in to see your wallet.'));
-    return;
-  }
-
-  const rows = state.transactions;
-
-  /* Deposits and withdrawals over ALL time, from the server.
-   *
-   * These tiles used to sum the loaded rows and were labelled "in (last 25)" and "out (last 25)"
-   * for exactly that reason -- an arbitrary window is not a total, and the honest label made the
-   * figures useless rather than wrong. Real money in and real money out is the question somebody
-   * opens this page to answer.
-   *
-   * Withdrawals are net of refunds: a payout that was refunded never left, and counting it would
-   * tell somebody they had taken out twice what they really did.
-   *
-   * An em dash while the figure is unknown, never a zero. "$0 deposited" is a claim about
-   * somebody's money, and a request that has not come back yet is not entitled to make it. */
-  const summary = state.walletSummary;
-  const deposited = summary ? money(Number(summary.depositedMinor)) : '—';
-  const withdrawn = summary ? money(Number(summary.withdrawnMinor)) : '—';
-
-  root.appendChild(
-    statGrid([
-      ['Balance', money(state.balance), 'gold'],
-      ['Deposited', deposited, 'up'],
-      ['Withdrawn', withdrawn, 'down'],
-    ]),
-  );
-
-  /* Directly under the figures, above the history. This is the page somebody opens to move money
-   * rather than to read about it, and the two actions were previously only on the profile. */
-  root.appendChild(moneyActions());
-
-  const ledger = panel('Recent transactions');
-  ledger.appendChild(ledgerTable(rows));
-  root.appendChild(ledger);
 }
 
 // ─────────── /history ───────────
@@ -847,7 +711,7 @@ function bindOnce(view, key, paint) {
   view.dataset.bound = key;
   bus.addEventListener('change', (event) => {
     if (!view.isConnected) return;
-    if (['login', 'logout', 'ready', 'private', 'account', 'transactions', 'wallet', 'sync', 'referrals'].includes(event.detail)) {
+    if (['login', 'logout', 'ready', 'private', 'account', 'sync', 'referrals'].includes(event.detail)) {
       paint();
     }
   });

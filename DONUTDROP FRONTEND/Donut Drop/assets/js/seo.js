@@ -165,12 +165,6 @@ export const ROUTE_META = {
     title: 'DonutLuxe Daily Rewards',
     description: 'Claim a free DonutSMP money reward on DonutLuxe every day; keep a streak for more.',
   },
-  race: {
-    title: 'DonutLuxe Wager Race',
-    description:
-      'The DonutLuxe wager race: every wager on the site counts, and the top of the board wins ' +
-      'the prize pool.',
-  },
   leaderboard: {
     title: 'DonutLuxe Leaderboard',
     description: 'The top DonutLuxe players.',
@@ -195,10 +189,6 @@ export const ROUTE_META = {
 
   /* ── account pages: a title for the tab, never indexed ── */
   profile: { title: 'DonutLuxe Profile', description: 'Your DonutLuxe profile.' },
-  wallet: {
-    title: 'DonutLuxe Wallet',
-    description: 'Your DonutLuxe balance, deposits and withdrawals.',
-  },
   history: { title: 'DonutLuxe History', description: 'Your DonutLuxe game and payment history.' },
   settings: { title: 'DonutLuxe Settings', description: 'Your DonutLuxe account settings.' },
   statistics: { title: 'DonutLuxe Statistics', description: 'Your DonutLuxe statistics.' },
@@ -217,7 +207,6 @@ export const ROUTE_META = {
 /** Pages for one signed-in player, and retired ones. Rendered for nobody else, so never indexed. */
 export const PRIVATE_ROUTES = new Set([
   'profile',
-  'wallet',
   'history',
   'settings',
   'statistics',

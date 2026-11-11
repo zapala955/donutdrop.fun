@@ -142,7 +142,7 @@ describe('what search engines are given', () => {
     assert.match(served, /<meta property="og:title" content="DonutLuxe Discord — /);
     assert.match(served, /<meta name="twitter:description" content="Join the DonutLuxe Discord/);
     assert.match(served, /<link rel="canonical" href="https:\/\/donutluxe\.com\/discord" \/>/);
-    assert.match(conf, /map \$seo_path \$seo_robots \{[\s\S]*?\/wallet "noindex, follow";/);
+    assert.match(conf, /map \$seo_path \$seo_robots \{[\s\S]*?\/profile "noindex, follow";/);
     /* Keyed on the path captured before try_files, never on $uri: try_files rewrites $uri to
      * /index.html, and the first deploy of this served every route the home page's values. */
     assert.doesNotMatch(conf, /map \$uri \$seo_/);
@@ -198,7 +198,7 @@ describe('what search engines are given', () => {
       applyRouteMeta('home');
       assert.equal(nodes.get('link[rel="canonical"]')!['href'], 'https://donutluxe.com/');
 
-      applyRouteMeta('wallet');
+      applyRouteMeta('profile');
       assert.equal(nodes.get('meta[name="robots"]')!['content'], 'noindex, follow');
     } finally {
       (globalThis as { document?: unknown }).document = previous;
