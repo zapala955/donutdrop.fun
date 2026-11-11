@@ -1585,3 +1585,91 @@ body.lx .st__cratespent { color: var(--lx-ink); min-width: 72px; text-align: rig
   body.lx .st__crate { grid-template-columns: auto minmax(0, 1fr) auto; }
   body.lx .st__crateopens { display: none; }
 }
+
+/* ═════════ the invite page (assets/js/referrals.js, /referrals) ═════════
+ * Hallmark · component: invite page (offer + link panel, terms strip, earnings, invite rows)
+ * genre: atmospheric · theme: site tokens, flat obsidian
+ * states: signed out (log in panel) · blocked · no invites · invites in progress · bonus paid;
+ * the link and code fields keep referrals.css's own states. The owner, 2026-11-11. */
+body.lx .rf { display: grid; gap: var(--lx-s4); width: 100%; max-width: 1040px; margin: 0; min-width: 0; }
+/* The page root still carries the old .refer class (index.html), which capped it at 560px and centred it. */
+body.lx #referRoot { display: block; width: 100%; max-width: none; margin: 0; }
+body.lx .rf__share .refer__label { margin: 0; color: var(--lx-ink); font: 800 .9375rem var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .rf__share .refer__field { width: 100%; min-width: 0; box-sizing: border-box; }
+body.lx .rf__share .refer__input { flex: 1; width: auto; min-width: 0; }
+body.lx .rf__hero, body.lx .rf__terms, body.lx .rf__stat, body.lx .rf__list, body.lx .rf__gate {
+  border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .rf__hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--lx-s5); padding: var(--lx-s5); }
+body.lx .rf__pitch { display: grid; align-content: start; gap: var(--lx-s3); min-width: 0; }
+body.lx .rf__eyebrow { color: var(--lx-mute); font: 700 .75rem var(--lx-ui); }
+body.lx .rf__offer { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--lx-s2); }
+body.lx .rf__figure { color: var(--lx-gold); font: 800 2.75rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+body.lx .rf__per { color: var(--lx-ink); font: 700 1rem var(--lx-ui); }
+body.lx .rf__steps { display: grid; gap: var(--lx-s3); margin: var(--lx-s2) 0 0; padding: 0; list-style: none; counter-reset: rfstep; }
+body.lx .rf__step { position: relative; display: grid; gap: 2px; padding-left: 40px; counter-increment: rfstep; }
+body.lx .rf__step::before {
+  content: counter(rfstep); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: var(--lx-r-pill); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); color: var(--lx-gold); font: 800 .8125rem var(--lx-ui);
+}
+body.lx .rf__steptitle { color: var(--lx-ink); font: 800 .9375rem var(--lx-ui); }
+body.lx .rf__steptext { color: var(--lx-mute); font: 500 .875rem/1.5 var(--lx-ui); }
+
+body.lx .rf__share { display: grid; align-content: start; gap: var(--lx-s2); min-width: 0; padding: var(--lx-s4); border-radius: var(--lx-r); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); }
+body.lx .rf__sharetitle { margin: 0 0 var(--lx-s1); color: var(--lx-ink); font: 800 1.0625rem var(--lx-display); }
+body.lx .rf__shareline { margin: 0; color: var(--lx-mute); font: 500 .875rem/1.5 var(--lx-ui); }
+body.lx .rf__share--out .lxgate { justify-self: start; margin-top: var(--lx-s2); }
+body.lx .rf__share .refer__rule { margin: var(--lx-s2) 0; border: 0; border-top: 1px solid var(--lx-3); }
+
+body.lx .rf__terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0; overflow: hidden; }
+body.lx .rf__term { display: grid; gap: 4px; padding: var(--lx-s3) var(--lx-s4); }
+body.lx .rf__term + .rf__term { box-shadow: inset 1px 0 0 var(--lx-3); }
+body.lx .rf__k { color: var(--lx-mute); font: 700 .75rem var(--lx-ui); }
+body.lx .rf__v { margin: 0; color: var(--lx-ink); font: 800 .9375rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+
+body.lx .rf__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); }
+body.lx .rf__stat { display: grid; gap: 4px; padding: var(--lx-s4); min-width: 0; }
+body.lx .rf__statv { color: var(--lx-ink); font: 800 1.5rem var(--lx-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+body.lx .rf__statv--gold { color: var(--lx-gold); }
+
+body.lx .rf__list { display: grid; overflow: hidden; }
+body.lx .rf__listhead { display: flex; align-items: baseline; gap: var(--lx-s2); padding: var(--lx-s4) var(--lx-s4) var(--lx-s2); }
+body.lx .rf__h { margin: 0; color: var(--lx-ink); font: 800 1.0625rem var(--lx-display); }
+body.lx .rf__count { color: var(--lx-mute); font: 700 .8125rem var(--lx-ui); }
+body.lx .rf__empty { display: flex; align-items: center; gap: var(--lx-s3); padding: 0 var(--lx-s4) var(--lx-s4); color: var(--lx-mute); font: 500 .875rem/1.5 var(--lx-ui); }
+body.lx .rf__empty p { margin: 0; }
+body.lx .rf__slot { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); }
+body.lx .rf__slot img { image-rendering: pixelated; }
+body.lx .rf__rows { display: grid; }
+body.lx .rf__invite {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: var(--lx-s4); align-items: center;
+  padding: var(--lx-s3) var(--lx-s4); box-shadow: inset 0 1px 0 var(--lx-3);
+}
+body.lx .rf__who { display: grid; gap: 2px; min-width: 0; }
+body.lx .rf__name { color: var(--lx-ink); font: 800 .9375rem var(--lx-ui); overflow-wrap: anywhere; }
+body.lx .rf__status { color: var(--lx-mute); font: 700 .75rem var(--lx-ui); }
+body.lx .rf__invite[data-unlocked="1"] .rf__status { color: var(--lx-gold); }
+body.lx .rf__bar { display: grid; gap: 6px; min-width: 0; }
+body.lx .rf__track { height: 8px; overflow: hidden; border-radius: var(--lx-r-pill); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); }
+body.lx .rf__fill { height: 100%; border-radius: inherit; background: var(--lx-mute); transform-origin: left; }
+body.lx .rf__invite[data-unlocked="1"] .rf__fill { background: var(--lx-gold); }
+body.lx .rf__frac { color: var(--lx-mute); font: 600 .75rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .rf__pays { color: var(--lx-gold); font: 800 1rem var(--lx-ui); font-variant-numeric: tabular-nums; text-align: right; min-width: 80px; }
+
+body.lx .rf__gate { display: grid; gap: var(--lx-s2); padding: var(--lx-s5); }
+body.lx .rf__gatetitle { margin: 0; color: var(--lx-ink); font: 800 1.25rem var(--lx-display); }
+
+@media (max-width: 900px) {
+  body.lx .rf__hero { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  body.lx .rf__hero { padding: var(--lx-s4); gap: var(--lx-s4); }
+  body.lx .rf__figure { font-size: 2.25rem; }
+  body.lx .rf__terms { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  body.lx .rf__term + .rf__term { box-shadow: none; }
+  body.lx .rf__term:nth-child(n + 3) { box-shadow: inset 0 1px 0 var(--lx-3); }
+  body.lx .rf__stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  body.lx .rf__stats .rf__stat:first-child { grid-column: 1 / -1; }
+  body.lx .rf__invite { grid-template-columns: minmax(0, 1fr) auto; gap: var(--lx-s2) var(--lx-s3); }
+  body.lx .rf__bar { grid-column: 1 / -1; grid-row: 2; }
+}

@@ -189,15 +189,9 @@ function paint() {
 
   const data = state.referrals;
 
-  /* Both empty states are the same card with one sentence in it, rather than a headline wrapped
-   * around a dash. A large filled figure rendered around nothing reads as a component that failed
-   * to load, which is the wrong impression on the one page that asks a player for their trust. */
   if (!state.authenticated) {
-    /* Signed out: the offer itself, from GET /v1/promotions, and the one button that takes it.
-     * This used to be the single line below, which was all a visitor -- or a search engine --
-     * ever learned about the programme here; asked which DonutSMP site pays per referral, an
-     * assistant had nothing from this page to quote (2026-10-25). The line stays for the moment
-     * before the terms arrive, or if they never do. */
+    /* Signed out: the offer itself, from GET /v1/promotions, and the one button that takes it. The
+     * line below stays for the moment before the terms arrive, or if they never do. */
     const terms = state.promotions?.referral;
     root.appendChild(terms ? publicOffer(terms) : gate('Log in to get your invite link.'));
     return;
@@ -213,13 +207,124 @@ function paint() {
     return;
   }
 
-  const wrap = el('div', 'refer');
-  /* "You were invited by ..." stood first here; it came off at the operator's request
-   * (2026-10-14). The code itself is still entered, once, in Settings. */
-  wrap.appendChild(offerCard(data));
+  /* Rebuilt 2026-11-11 (the owner: "https://donutluxe.com/referrals now", after the VIP and
+   * statistics pages): the offer and the link side by side, the terms as a strip, what the player
+   * has earned, then every invite with its progress. */
+  const wrap = el('div', 'refer rf');
+  const hero = el('section', 'rf__hero');
+  hero.appendChild(pitch(data.terms));
+  hero.appendChild(sharePanel(data));
+  wrap.appendChild(hero);
+  wrap.appendChild(termsStrip(data.terms));
   wrap.appendChild(statGrid(data));
   wrap.appendChild(inviteList(data));
   root.appendChild(wrap);
+}
+
+/** ", after the $100M that clears their own signup bonus": the invite bonus's wagering does not count. */
+function notCounted() {
+  const invite = state.promotions?.referralSignupBonus;
+  return invite ? `, after the ${money(Number(invite.wagerMinor))} that clears their own signup bonus` : '';
+}
+
+const sharePercentOf = (terms) => (terms.revshareWagerBps / 100).toFixed(1);
+
+/** The offer: the figure, then how it works in three steps. Every amount is the server's. */
+function pitch(terms) {
+  const box = el('div', 'rf__pitch');
+  const eyebrow = el('span', 'rf__eyebrow');
+  eyebrow.textContent = 'Invite & earn';
+  const figure = el('div', 'rf__offer');
+  const big = el('span', 'rf__figure');
+  big.textContent = money(Number(terms.bonusMinor));
+  const per = el('span', 'rf__per');
+  per.textContent = 'per friend you invite';
+  figure.append(big, per);
+  box.append(eyebrow, figure);
+
+  const invite = state.promotions?.referralSignupBonus;
+  const steps = el('ol', 'rf__steps');
+  for (const [title, text] of [
+    ['Share your link', 'Send it to someone who has not played on DonutLuxe yet.'],
+    [
+      'They join and play',
+      invite
+        ? `They sign up on your link and get a ${money(Number(invite.amountMinor))} signup bonus.`
+        : 'They sign up on your link and start playing.',
+    ],
+    [
+      'You get paid',
+      `${money(Number(terms.bonusMinor))} once they have wagered ${money(Number(terms.bonusWagerMinor))}${notCounted()}, plus ${sharePercentOf(terms)}% of everything they wager, for life.`,
+    ],
+  ]) {
+    const step = el('li', 'rf__step');
+    const h = el('b', 'rf__steptitle');
+    h.textContent = title;
+    const p = el('span', 'rf__steptext');
+    p.textContent = text;
+    step.append(h, p);
+    steps.appendChild(step);
+  }
+  box.appendChild(steps);
+  return box;
+}
+
+/** The link to copy, and the code behind it, in their own panel beside the offer. */
+function sharePanel(data) {
+  // The fields' own labels head the panel: 'Your invite link', then 'Your code'.
+  const panel = el('div', 'rf__share');
+  panel.appendChild(linkField(data));
+  panel.appendChild(el('hr', 'refer__rule'));
+  panel.appendChild(codeField(data));
+  return panel;
+}
+
+/** The deal as four figures, signed in or not. */
+function termsStrip(terms) {
+  const strip = el('dl', 'rf__terms');
+  const invite = state.promotions?.referralSignupBonus;
+  for (const [label, value] of [
+    ['Bonus', `${money(Number(terms.bonusMinor))} per invite`],
+    ['Unlocks at', `${money(Number(terms.bonusWagerMinor))} wagered`],
+    ['Revenue share', `${sharePercentOf(terms)}% of wagers, for life`],
+    ...(invite ? [['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`]] : []),
+  ]) {
+    const cell = el('div', 'rf__term');
+    const k = el('dt', 'rf__k');
+    k.textContent = label;
+    const v = el('dd', 'rf__v');
+    v.textContent = value;
+    cell.append(k, v);
+    strip.appendChild(cell);
+  }
+  return strip;
+}
+
+/**
+ * The same page for somebody not signed in: the deal, then the button that gets them a link.
+ * Every figure is the server's: `terms` is GET /v1/promotions' referral block.
+ */
+function publicOffer(terms) {
+  const wrap = el('div', 'refer rf');
+  const hero = el('section', 'rf__hero');
+  hero.appendChild(pitch(terms));
+  const panel = el('div', 'rf__share rf__share--out');
+  const title = el('h2', 'rf__sharetitle');
+  title.textContent = 'Get your link';
+  const line = el('p', 'rf__shareline');
+  line.textContent = 'Log in with your Minecraft name and your personal invite link is ready straight away.';
+  /* The luxe shell's gate button (luxe.js armGates), named for what it gets you. `lxgate` also
+   * tells that function this card already has its button. */
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.className = 'lxbtn lxbtn--gold lxgate';
+  go.textContent = 'Log in to get your link';
+  go.addEventListener('click', () => $('#loginBtn')?.click());
+  panel.append(title, line, go);
+  hero.appendChild(panel);
+  wrap.appendChild(hero);
+  wrap.appendChild(termsStrip(terms));
+  return wrap;
 }
 
 /** One icon from path data. SVG needs createElementNS; createElement puts it in the wrong namespace. */
@@ -237,120 +342,6 @@ function icon(...paths) {
     svg.append(node);
   }
   return svg;
-}
-
-/**
- * The card: the offer, the terms, and the link.
- *
- * In that order, deliberately. It is the order of a decision — what is on the table, what it
- * costs, how to take it, what is blocking it — and it is the same order the sign-in card walks:
- * say what this is, then show the one field, then the one button.
- */
-function offerCard(data) {
-  const card = el('div', 'refer__card');
-  const sharePercent = (data.terms.revshareWagerBps / 100).toFixed(1);
-  appendDeal(
-    card,
-    data.terms,
-    'Send your link to someone who has not played here yet. Once they have wagered the amount'
-    + ` below, the bonus lands in your wallet — and ${sharePercent}% of everything they wager keeps building`
-    + ' in Rewards for you to claim.',
-  );
-
-  card.appendChild(el('hr', 'refer__rule'));
-  card.appendChild(codeField(data));
-  card.appendChild(linkField(data));
-  /* The Discord block stood here. It was on this page because verification was half the gate; the
-   * gate is the wager alone now, so a verification card would be asking for a step that buys the
-   * player nothing. Discord verification still exists on the account — it is simply not part of
-   * this deal any more, and a page that kept advertising it would be selling a condition it does
-   * not have. */
-  return card;
-}
-
-/**
- * The same card for somebody not signed in: the deal, then the button that gets them a link.
- *
- * The lede names the figures in words as well as in the headline, so the sentence a search result
- * or an assistant lifts from this page carries the offer whole. Every figure is still the
- * server's: `terms` is GET /v1/promotions' referral block.
- */
-/** ", after the $100M that clears their own signup bonus": the invite bonus's wagering does not count. */
-function notCounted() {
-  const invite = state.promotions?.referralSignupBonus;
-  return invite ? `, after the ${money(Number(invite.wagerMinor))} that clears their own signup bonus` : '';
-}
-
-function publicOffer(terms) {
-  const wrap = el('div', 'refer');
-  const card = el('div', 'refer__card');
-  const bonus = money(Number(terms.bonusMinor));
-  const sharePercent = (terms.revshareWagerBps / 100).toFixed(1);
-  appendDeal(
-    card,
-    terms,
-    `Earn ${bonus} for every player you refer to DonutLuxe. Once they have wagered`
-    + ` ${money(Number(terms.bonusWagerMinor))}${notCounted()}, the bonus lands in your wallet — and ${sharePercent}%`
-    + ' of everything they wager keeps building for you, for life.',
-  );
-  card.appendChild(el('hr', 'refer__rule'));
-  /* The luxe shell's gate button (luxe.js armGates), named for what it gets you. `lxgate` also
-   * tells that function this card already has its button. */
-  const go = document.createElement('button');
-  go.type = 'button';
-  go.className = 'lxbtn lxbtn--gold lxgate';
-  go.textContent = 'Log in to get your link';
-  go.addEventListener('click', () => $('#loginBtn')?.click());
-  card.appendChild(go);
-  wrap.appendChild(card);
-  return wrap;
-}
-
-/** The title, the lede, the headline figure and the ruled terms: the deal, signed in or not. */
-function appendDeal(card, terms, ledeText) {
-  const sharePercent = (terms.revshareWagerBps / 100).toFixed(1);
-
-  const title = el('h2', 'refer__title');
-  title.textContent = 'Invite \u0026 earn';
-  const lede = el('p', 'refer__lede');
-  lede.textContent = ledeText;
-  card.append(title, lede);
-
-  /* The headline figure, and nothing beside it. */
-  const offer = el('div', 'refer__offer');
-  const figure = el('span', 'refer__figure');
-  figure.textContent = money(Number(terms.bonusMinor));
-  const caption = el('span', 'refer__caption');
-  caption.textContent = 'per invite';
-  offer.append(figure, caption);
-  card.appendChild(offer);
-
-  /* The deal as a ruled list. Every figure is the server\u0027s \u2014 there is no amount written into
-   * this file, because the last invite figure that was hardcoded went stale and the site
-   * advertised a bonus it had stopped paying. */
-  const list = el('dl', 'refer__terms');
-  /* What the friend gets for joining on the link: the invite signup bonus, in place of the
-   * ordinary one, at signup (GET /v1/promotions referralSignupBonus). */
-  const invite = state.promotions?.referralSignupBonus;
-  /* Wagering that clears that bonus is still not counted toward yours (lib/referrals.ts), but the
-   * owner took the "Not counted" row off the terms (2026-11-10): each invite's own progress line
-   * ("Clearing their bonus: … left") already says it where it applies. */
-  const friend = invite
-    ? [['Your friend gets', `${money(Number(invite.amountMinor))} signup bonus`]]
-    : [];
-  for (const [label, value] of [
-    ['Bonus', `${money(Number(terms.bonusMinor))}, once per invite`],
-    ['Unlocks at', `${money(Number(terms.bonusWagerMinor))} wagered`],
-    ['Revenue share', `${sharePercent}% of wagers for life`],
-    ...friend,
-  ]) {
-    const key = el('dt', 'refer__termk');
-    key.textContent = label;
-    const val = el('dd', 'refer__termv');
-    val.textContent = value;
-    list.append(key, val);
-  }
-  card.appendChild(list);
 }
 
 /**
@@ -497,15 +488,15 @@ function blockedNotice() {
   support.href = '/support';
   support.textContent = 'contact support';
   line.append(support, ' and we will look at it.');
-  wrap.querySelector('.refer__card')?.append(line);
+  wrap.querySelector('.rf__gate')?.append(line);
   return wrap;
 }
 
 function gate(message) {
-  const wrap = el('div', 'refer');
-  const card = el('div', 'refer__card');
-  const title = el('h2', 'refer__title');
-  title.textContent = 'Invite \u0026 earn';
+  const wrap = el('div', 'refer rf');
+  const card = el('div', 'rf__gate');
+  const title = el('h2', 'rf__gatetitle');
+  title.textContent = 'Invite & earn';
   const line = el('p', 'refer__gate');
   line.textContent = message;
   card.append(title, line);
@@ -514,25 +505,20 @@ function gate(message) {
 }
 
 function statGrid(data) {
-  const grid = el('div', 'refer__grid');
+  const grid = el('div', 'rf__stats');
   const totals = data.totals;
   /* Earned is first and gold, because it is the only figure here somebody came to see. The two
-   * counts after it are the pipeline that produced it, in the order an invite moves through.
-   *
-   * "Verified" used to sit between them, counting referees who had linked Discord. It was there
-   * because verification gated the bonus; it does not any more, so the column was measuring
-   * something that no longer decides anything — which on a page about getting paid is just a
-   * number to misread. */
+   * counts after it are the pipeline that produced it, in the order an invite moves through. */
   const cells = [
-    ['Earned', money(Number(totals.earnedMinor)), true],
-    ['Invites', String(totals.invites), false],
-    ['Unlocked', String(totals.unlocked), false],
+    ['Earned from invites', money(Number(totals.earnedMinor)), true],
+    ['Friends invited', String(totals.invites), false],
+    ['Bonuses unlocked', String(totals.unlocked), false],
   ];
   for (const [key, value, gold] of cells) {
-    const cell = el('div', 'refer__stat');
-    const label = el('span', 'refer__statk');
+    const cell = el('div', 'rf__stat');
+    const label = el('span', 'rf__k');
     label.textContent = key;
-    const figure = el('span', `refer__statv${gold ? ' refer__statv--gold' : ''}`);
+    const figure = el('span', `rf__statv${gold ? ' rf__statv--gold' : ''}`);
     figure.textContent = value;
     cell.append(label, figure);
     grid.appendChild(cell);
@@ -541,43 +527,52 @@ function statGrid(data) {
 }
 
 function inviteList(data) {
-  const wrap = el('div', 'refer__invites');
+  const wrap = el('section', 'rf__list');
+  const head = el('div', 'rf__listhead');
+  const title = el('h2', 'rf__h');
+  title.textContent = 'Your invites';
+  const count = el('span', 'rf__count');
+  count.textContent = data.invites.length ? `${data.invites.length}` : '';
+  head.append(title, count);
+  wrap.appendChild(head);
+
   if (!data.invites.length) {
-    const empty = el('p', 'refer__empty');
-    empty.textContent = 'No invites yet. Anyone who signs up on your link shows up here.';
+    const empty = el('div', 'rf__empty');
+    empty.innerHTML = '<span class="rf__slot"><img src="assets/img/items/name_tag.png" alt="" width="28" height="28"></span>';
+    const text = el('p');
+    text.textContent = 'No invites yet. Anyone who signs up on your link shows up here, with how close they are to unlocking your bonus.';
+    empty.appendChild(text);
     wrap.appendChild(empty);
     return wrap;
   }
 
   const milestone = Number(data.terms.bonusWagerMinor);
-  for (const invite of data.invites) {
-    wrap.appendChild(inviteRow(invite, milestone));
-  }
+  const rows = el('div', 'rf__rows');
+  for (const invite of data.invites) rows.appendChild(inviteRow(invite, milestone));
+  wrap.appendChild(rows);
   return wrap;
 }
 
 function inviteRow(invite, milestone) {
-  const row = el('div', 'refer__invite');
+  const row = el('div', 'rf__invite');
   row.dataset.unlocked = invite.bonusUnlocked ? '1' : '0';
 
-  const who = el('div', 'refer__who');
-  const name = el('span', 'refer__name');
+  const who = el('div', 'rf__who');
+  const name = el('span', 'rf__name');
   name.textContent = invite.username;
-  /* A Discord pill sat beside the name. With the gate down to one condition the row already says
-   * everything there is to say about this invite: how far along the bar is, and whether the left
-   * edge has gone gold. */
-  who.append(name);
+  const status = el('span', 'rf__status');
+  status.textContent = invite.bonusUnlocked ? 'Bonus paid' : 'In progress';
+  who.append(name, status);
 
-  /* One figure, and it is everything this invite has earned \u2014 claimed and waiting revenue share
-   * plus the bonus if it landed. Splitting them into two columns made the row read as a
-   * statement; a referrer wants the total. */
+  /* One figure, and it is everything this invite has earned: revenue share plus the bonus if it
+   * landed. A referrer wants the total. */
   const paid = Number(invite.revshareEarnedMinor) + Number(invite.bonusPaidMinor ?? 0);
-  const pays = el('span', 'refer__pays');
+  const pays = el('span', 'rf__pays');
   pays.textContent = money(paid);
 
-  const bar = el('div', 'refer__bar');
-  const track = el('div', 'refer__track');
-  const fill = el('div', 'refer__fill');
+  const bar = el('div', 'rf__bar');
+  const track = el('div', 'rf__track');
+  const fill = el('div', 'rf__fill');
   const ratio = Math.min(1, Math.max(0, invite.wagerRatio));
   /* scaleX rather than width, so the animation runs on the compositor and the row cannot reflow
    * the rest of the list while it moves. */
@@ -587,14 +582,14 @@ function inviteRow(invite, milestone) {
   /* Until the invitee has wagered off their own signup bonus, none of it counts toward this
    * bonus (GET /v1/referrals bonusWagerLeftMinor), so the bar says what is left of that instead. */
   const clearing = !invite.bonusUnlocked && Number(invite.bonusWagerLeftMinor ?? 0) > 0;
-  const fraction = el('span', 'refer__frac');
+  const fraction = el('span', 'rf__frac');
   fraction.textContent = invite.bonusUnlocked
-    ? 'Bonus paid'
+    ? 'Bonus paid · now earning revenue share'
     : clearing
       ? `Clearing their bonus: ${money(Number(invite.bonusWagerLeftMinor))} left`
-      : `${money(Number(invite.wageredMinor))} / ${money(milestone)}`;
+      : `${money(Number(invite.wageredMinor))} / ${money(milestone)} wagered`;
   bar.append(track, fraction);
 
-  row.append(who, pays, bar);
+  row.append(who, bar, pays);
   return row;
 }
