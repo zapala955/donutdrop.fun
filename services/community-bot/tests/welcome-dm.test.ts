@@ -11,6 +11,7 @@ import type { Database } from '../src/db.js';
 import {
   applicationOwnerIds,
   buildWelcomeDm,
+  dropOffer,
   parseOwnerIds,
   resolveOwners,
   sendWelcomeDm,
@@ -478,5 +479,30 @@ describe('its settings', () => {
     });
     assert.equal(config.welcomeDmEnabled, false);
     assert.equal(config.siteUrl, 'https://example.test');
+  });
+});
+
+/* Code drops replaced the daily codes (2026-11-11): the welcome message tells of them, with the
+ * button that turns their pings on, only while the platform says they are on. */
+describe('the welcome message and code drops', () => {
+  const drops = { enabled: true, prizeMinor: '10000000', maxClaims: 5, wagerMultiplier: 3, everyMinutes: 120, nextAt: '2026-11-11T14:00:00.000Z' };
+
+  it('tells of them with the platform’s figures, and puts Code pings first among the buttons', () => {
+    const built = buildWelcomeDm(facts({ codeDrops: dropOffer({ ...rewards, codeDrops: drops }) }));
+    const field = (built.embeds[0]!.toJSON().fields ?? []).find((entry) => /Code drops/.test(entry.name));
+    assert.ok(field, 'a Code drops section');
+    assert.match(field!.value, /every 2 hours: the first \*\*5\*\* to redeem it on the site get \*\*\$10m\*\* each/);
+    assert.match(field!.value, /Code pings/);
+    const buttons = built.components[0]!.toJSON().components as { custom_id?: string; label: string }[];
+    assert.equal(buttons[0]!.custom_id, 'drops:ping');
+    assert.deepEqual(buttons.slice(1).map((button) => button.label), ['Play now', 'Discord rewards', 'Invite & earn']);
+  });
+
+  it('says nothing of them while they are off, or when the platform cannot be asked', () => {
+    assert.equal(dropOffer({ ...rewards, codeDrops: { ...drops, enabled: false } }), null);
+    assert.equal(dropOffer(rewards), null);
+    assert.equal(dropOffer(null), null);
+    const built = buildWelcomeDm(facts());
+    assert.ok(!(built.embeds[0]!.toJSON().fields ?? []).some((entry) => /Code drops|Daily codes/.test(entry.name)));
   });
 });

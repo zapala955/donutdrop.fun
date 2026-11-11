@@ -8,15 +8,16 @@ import {
   type GuildMember,
 } from 'discord.js';
 import type { PlatformApi, Promotions, RewardStatus } from '../api-client.js';
-import { guildSettings, type Database, type GuildSettings } from '../db.js';
+import { guildSettings, type Database } from '../db.js';
 import { bad, clip, embed, formatMoney, ok } from '../ui.js';
-import { dailyOnButton, dailyPitch } from './daily-codes.js';
+import { cadence, dropPingButton } from './code-drops.js';
 
 /**
  * welcome-dm.ts — the one message a new member gets in their DMs.
  *
- * It says four things and stops: where the games are, how to link a Discord account, how to use the
- * server tag, and how to bring friends. Every figure in it is the platform's own (the signup bonus,
+ * It says five things and stops: where the games are, how to link a Discord account, how to use the
+ * server tag, how to bring friends, and (while they are on) the code drops, with the button that
+ * turns their pings on. Every figure in it is the platform's own (the signup bonus,
  * the join and tag rewards, the invite bonus), read when the message is built; a figure that cannot
  * be read is left out rather than guessed, so the message degrades to the same sentence without a
  * number instead of quoting one that went stale.
@@ -38,32 +39,24 @@ export interface WelcomeFacts {
   readonly siteUrl: string;
   readonly rewards: RewardStatus | null;
   readonly promotions: Promotions | null;
-  /** Present when daily codes are on: the message then offers them, with a button. */
-  readonly dailyCodes?: {
-    readonly maxPrizeMinor: string | null;
-    readonly minWagerMinor?: string | null | undefined;
-    readonly firstPrizeMinor?: string | null | undefined;
-  } | null;
+  /** Present when code drops are on: the message then tells of them, with the Code pings button. */
+  readonly codeDrops?: DropOffer | null;
+}
+
+export interface DropOffer {
+  readonly prizeMinor: string;
+  readonly maxClaims: number;
+  readonly everyMinutes: number;
 }
 
 /**
- * Whether the welcome message should offer daily codes: the dashboard's switch is on, and the
- * platform has not said it is turned off on its side. The ceiling is the platform's own figure.
+ * What the welcome message says of code drops: the platform's own figures while they are on, and
+ * nothing at all when they are off or the platform cannot be asked (a figure is never guessed).
  */
-export function dailyOffer(
-  settings: Pick<GuildSettings, 'daily_codes_enabled'>,
-  rewards: RewardStatus | null,
-): {
-  readonly maxPrizeMinor: string | null;
-  readonly minWagerMinor: string | null;
-  readonly firstPrizeMinor: string | null;
-} | null {
-  if (!settings.daily_codes_enabled || rewards?.dailyCodes?.enabled === false) return null;
-  return {
-    maxPrizeMinor: rewards?.dailyCodes?.maxPrizeMinor ?? null,
-    minWagerMinor: rewards?.dailyCodes?.minWagerMinor ?? null,
-    firstPrizeMinor: rewards?.dailyCodes?.firstPrizeMinor ?? null,
-  };
+export function dropOffer(rewards: RewardStatus | null): DropOffer | null {
+  const drops = rewards?.codeDrops;
+  if (!drops?.enabled) return null;
+  return { prizeMinor: drops.prizeMinor, maxClaims: drops.maxClaims, everyMinutes: drops.everyMinutes };
 }
 
 /** A whole-dollar amount as the site writes it, or null for anything missing, zero or unreadable. */
@@ -118,6 +111,14 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
     ` — your link is on [Invite & Earn](${site}/referrals). Here, \`/invites\` shows who you` +
     ' brought and `/invite-leaderboard` ranks everyone.';
 
+  const dropPrize = facts.codeDrops ? amount(facts.codeDrops.prizeMinor) : null;
+  const drops = facts.codeDrops
+    ? `A code drops here ${cadence(facts.codeDrops.everyMinutes)}: the first ` +
+      `**${facts.codeDrops.maxClaims}** to redeem it on the site get ` +
+      (dropPrize ? `**${dropPrize}**` : 'the prize') +
+      ' each. Tap **Code pings** to be pinged every time one drops.'
+    : null;
+
   const message = embed(
     `Welcome to ${clip(facts.guildName, 200)}`,
     `Hey ${clip(facts.displayName, 64)}, glad you are here. This is everything you need to get going.`,
@@ -127,21 +128,7 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
       { name: '🔗 Link your account', value: clip(link, 1000) },
       { name: '🏷️ Use the server tag', value: clip(tagLine, 1000) },
       { name: '🤝 Invite friends', value: clip(friends, 1000) },
-      ...(facts.dailyCodes
-        ? [
-            {
-              name: '🎁 Daily codes',
-              value: clip(
-                dailyPitch(
-                  facts.dailyCodes.maxPrizeMinor,
-                  facts.dailyCodes.minWagerMinor,
-                  facts.dailyCodes.firstPrizeMinor,
-                ),
-                1000,
-              ),
-            },
-          ]
-        : []),
+      ...(drops ? [{ name: '🎁 Code drops', value: clip(drops, 1000) }] : []),
       {
         name: 'ℹ️ Handy',
         value:
@@ -152,7 +139,7 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
     .setFooter({ text: 'Automatic message — replies here are not read.' });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    ...(facts.dailyCodes ? [dailyOnButton()] : []),
+    ...(facts.codeDrops ? [dropPingButton()] : []),
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Play now').setURL(site),
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
@@ -213,7 +200,6 @@ export async function sendWelcomeDm(
   if (claimed.rowCount === 0) return 'skipped';
 
   const { rewards, promotions } = await lookups(api, member.id);
-  const dailyCodes = dailyOffer(settings, rewards);
   try {
     await member.send(
       buildWelcomeDm({
@@ -222,38 +208,14 @@ export async function sendWelcomeDm(
         siteUrl: options.siteUrl,
         rewards,
         promotions,
-        dailyCodes,
+        codeDrops: dropOffer(rewards),
       }),
     );
-    if (dailyCodes) await markInvited(db, member.guild.id, member.id, 'sent');
     return 'sent';
   } catch (error) {
-    if (dmClosed(error)) {
-      if (dailyCodes) await markInvited(db, member.guild.id, member.id, 'closed');
-      return 'closed';
-    }
+    if (dmClosed(error)) return 'closed';
     throw error;
   }
-}
-
-/**
- * Notes that a member has been offered daily codes (the welcome DM did it), so a later
- * `/daily-invite send` skips them. Best effort: a failure here must never turn a delivered welcome
- * into an error.
- */
-async function markInvited(
-  db: Database,
-  guildId: string,
-  memberId: string,
-  outcome: 'sent' | 'closed',
-): Promise<void> {
-  await db
-    .query(
-      `INSERT INTO discord_daily_invites (guild_id, discord_user_id, outcome) VALUES ($1, $2, $3)
-       ON CONFLICT (guild_id, discord_user_id) DO NOTHING`,
-      [guildId, memberId, outcome],
-    )
-    .catch(() => undefined);
 }
 
 /**
@@ -334,7 +296,6 @@ export async function testWelcomeDm(
     await interaction.editReply({ embeds: [bad('Server only', 'Run this inside the server.')] });
     return;
   }
-  const settings = await guildSettings(db, guild.id);
   const owners = await currentOwners(db, interaction, options.extraOwnerIds);
   if (!owners.includes(interaction.user.id)) {
     await interaction.editReply({
@@ -350,7 +311,7 @@ export async function testWelcomeDm(
     siteUrl: options.siteUrl,
     rewards,
     promotions,
-    dailyCodes: dailyOffer(settings, rewards),
+    codeDrops: dropOffer(rewards),
   });
 
   const reached: string[] = [];

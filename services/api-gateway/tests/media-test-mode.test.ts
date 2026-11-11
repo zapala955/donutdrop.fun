@@ -101,7 +101,7 @@ describe('media test mode', () => {
       'POST /v1/vault/yield/claim',
       'POST /v1/community/cases',
       'POST /v1/chat',
-      'POST /v1/discord/daily-code/redeem',
+      'POST /v1/discord/codes/redeem',
       'PATCH /v1/admin/runtime-settings',
     ]) {
       const [method, url] = route.split(' ');

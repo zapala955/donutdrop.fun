@@ -17,7 +17,7 @@ import { api } from './api.js';
 import { bus, state } from './store.js';
 import { $, el, money } from './util.js';
 import { toast } from './ui.js';
-import { openDailyCode } from './daily-code.js';
+import { openRedeemCode } from './redeem-code.js';
 
 /**
  * The server invite.
@@ -207,20 +207,30 @@ function paintRewards() {
       chip: signedIn ? tagState(status.tag) : null,
     }));
   }
-  /* Codes from the server are redeemed here (the owner, 2026-11-11: "replace the daily code with
-   * redeem code"; the community bot is to give out a code every hour, details to come). The window
-   * is the one the daily code has always used. No figure on the row: what a code is worth is the
-   * code's own. */
-  if (status.dailyCodes?.enabled) {
-    const redeem = el('button', 'dsc__btn dsc__redeem', 'Redeem');
-    redeem.type = 'button';
-    redeem.addEventListener('click', () => openDailyCode());
-    list.appendChild(rewardRow({
+  /* Code drops (2026-11-11, replacing the daily codes): a code in the Discord every two hours, for
+   * the first few to redeem it. The figures are the site's; the code itself only the post gives. */
+  const drops = status.codeDrops;
+  if (drops?.enabled) {
+    const every = drops.everyMinutes === 60 ? 'every hour' : drops.everyMinutes % 60 === 0
+      ? `every ${drops.everyMinutes / 60} hours` : `every ${drops.everyMinutes} minutes`;
+    const left = Date.parse(drops.nextAt) - Date.now();
+    const minutes = Math.max(1, Math.round(left / 60_000));
+    const nextIn = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+    const row = rewardRow({
       sprite: 'enchanted_book.png',
-      title: 'Redeem a code',
-      detail: 'Got a code from the Discord? Redeem it here.',
-      action: redeem,
-    }));
+      title: 'Code drops',
+      detail: `A code drops in the Discord ${every}. The first ${drops.maxClaims} to redeem it get ` +
+        `${money(Number(drops.prizeMinor))} each.`,
+      amount: money(Number(drops.prizeMinor)),
+      chip: drops.current && drops.current.claimsLeft > 0
+        ? { kind: 'ready', text: `${drops.current.claimsLeft} of ${drops.current.maxClaims} left on the current code` }
+        : { kind: 'wait', text: `Next drop in ${nextIn}` },
+    });
+    const redeem = el('button', 'dsc__btn dsc__redeem', 'Redeem a code');
+    redeem.type = 'button';
+    redeem.addEventListener('click', () => openRedeemCode());
+    $('.dsc__rtext', row).appendChild(redeem);
+    list.appendChild(row);
   }
   rewardsHost.appendChild(list);
 

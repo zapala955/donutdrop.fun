@@ -955,8 +955,8 @@ body.lx .dsc__btn--go:hover:not(:disabled) { background: var(--lx-gold-hi); }
 body.lx .dsc__btn--quiet { justify-self: start; background: transparent; box-shadow: inset 0 0 0 1px var(--lx-4); color: var(--lx-mute); }
 body.lx .dsc__btn--quiet:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .dsc__btn--quiet[data-armed] { box-shadow: inset 0 0 0 1px var(--lx-loss); color: var(--lx-loss-text); }
-/* The redeem row's own button, where the other rows have their amount. */
-body.lx .dsc__redeem { justify-self: end; min-width: 96px; }
+/* The code-drop row's button, under its words. */
+body.lx .dsc__redeem { justify-self: start; margin-top: var(--lx-s1); min-height: 34px; padding: 0 var(--lx-s3); font-size: .8125rem; }
 
 /* Linking: three numbered steps, ticked as they are done. */
 body.lx .dsc__steps { display: grid; gap: var(--lx-s3); margin: 0; padding: 0; list-style: none; }
@@ -1015,12 +1015,40 @@ body.lx .dsc__linkedtext small { color: var(--lx-mute); font: 500 .875rem/1.3 va
   body.lx .dsc__reward { grid-template-columns: 48px minmax(0, 1fr); gap: var(--lx-s3); padding: var(--lx-s3); }
   body.lx .dsc__sprite { width: 48px; height: 48px; }
   body.lx .dsc__ramount { grid-column: 2; justify-items: start; text-align: left; grid-row: 2; display: flex; gap: var(--lx-s2); align-items: baseline; }
-  body.lx .dsc__redeem { grid-column: 2; grid-row: 2; justify-self: start; }
 }
 @media (prefers-reduced-motion: reduce) {
   body.lx .dsc__join, body.lx .dsc__btn { transition: none; }
   body.lx .dsc__join:active, body.lx .dsc__btn:active:not(:disabled) { transform: none; }
   body.lx .dsc__wait i { animation: none; }
+}
+
+/* ═════════ the redeem window (assets/js/redeem-code.js) ═════════
+ * Hallmark · component: modal · genre: atmospheric · theme: site tokens
+ * states: field default · hover · focus · error (the sign-in card's); Redeem disabled · enabled ·
+ * hover · busy; paid. Built from the sign-in card's parts (header, field, button), plus a strip of
+ * what a drop pays and the paid screen. The owner, 2026-11-11: "remake the page on the screenshot". */
+body.lx .modal .rdm__facts {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px;
+  margin: var(--lx-s5) 0 0; overflow: hidden;
+  border-radius: var(--lx-r); background: var(--lx-3); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .modal .rdm__facts > div { display: grid; gap: 4px; padding: var(--lx-s3); background: var(--dd-panel); min-width: 0; }
+body.lx .modal .rdm__facts span { color: var(--lx-mute); font: 600 .75rem/1.2 var(--lx-ui); }
+body.lx .modal .rdm__facts b { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+body.lx .modal .rdm__facts .rdm__gold { color: var(--lx-gold); }
+body.lx .modal .rdm__form { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: var(--lx-s5); }
+/* Nine characters with the dash: spaced a little tighter than a six-digit code, so a phone fits it. */
+body.lx .modal .rdm__form .auth__input--code { min-width: 0; letter-spacing: .3em; padding-left: .3em; }
+body.lx .modal .rdm__form .auth__note { margin-top: var(--lx-s3); color: var(--lx-faint); }
+body.lx .modal .rdm__p { margin-top: var(--lx-s4); max-width: none; }
+body.lx .modal .rdm__link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+body.lx .modal .rdm__paid { display: grid; justify-items: center; gap: var(--lx-s2); text-align: center; padding-top: var(--lx-s2); }
+body.lx .modal .rdm__paidslot { box-shadow: inset 0 0 0 1px var(--lx-gold); }
+body.lx .modal .rdm__amount { margin: var(--lx-s2) 0 0; color: var(--lx-gold); font: 800 2.25rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+body.lx .modal .rdm__paidtitle { margin: 0; font-size: 1.375rem; }
+body.lx .modal .rdm__paidtext { max-width: 36ch; }
+@media (max-width: 420px) {
+  body.lx .modal .rdm__facts b { font-size: .875rem; }
 }
 
 /* ═════════ the sign-in card (app.js openLoginModal) ═════════

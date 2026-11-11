@@ -1,13 +1,11 @@
-/* popups.css — the offer pop-up (assets/js/popups.js), and the modal base that the daily-code
- * window (assets/js/daily-code.js) is built on.
+/* popups.css — the offer pop-up (assets/js/popups.js), and its modal base.
  *
  * Hallmark · component: dialog offer · genre: atmospheric · theme: house (obsidian and lava gold)
  * states: default · hover · focus · active · entering · leaving
  *
  * The base .popup is a real <dialog> opened with showModal(): the page behind it is inert, Escape
- * closes it and focus is trapped inside. daily-code.js still opens its window that way. The offer,
- * though, now opens non-modally as a corner card — see .popup--corner at the foot of this file —
- * so the page stays live under it and nobody has to close it to keep playing. House tokens only;
+ * closes it and focus is trapped inside. The offer, though, now opens non-modally as a corner
+ * card — see .popup--corner at the foot of this file — so the page stays live under it and nobody has to close it to keep playing. House tokens only;
  * the one value named below is the house gold at low alpha. On a phone the modal base is a sheet
  * from the bottom edge, clear of the tab bar. */
 
@@ -134,7 +132,7 @@
    That turns the full-screen modal grid into a card parked where the nudge sits — bottom corner,
    above the phone tab bar, below the header and its menus. No backdrop, nothing inert, focus left
    where it was: the card can be read or ignored without being closed, which is the whole point.
-   Only the offer takes this variant; the daily-code window keeps the modal base above.
+   Only the offer takes this variant.
    ────────────────────────────────────────────────────────────────────────────────────────────── */
 .popup.popup--corner {
   inset: auto; right: 20px; bottom: 20px;

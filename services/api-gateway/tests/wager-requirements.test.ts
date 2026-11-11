@@ -128,11 +128,11 @@ describe('the wager requirement', () => {
      * credit must be followed, before the next statement that could commit, by its lock: at the
      * signup bonus's multiplier, but a quest reward at the quests' own and the referral milestone at
      * the referral bonus's. */
-    const [engagement, social, admin, daily, discord, crowns] = await Promise.all([
+    const [engagement, social, admin, drops, discord, crowns] = await Promise.all([
       read('services/api-gateway/src/routes/engagement.ts'),
       read('services/api-gateway/src/routes/social.ts'),
       read('services/api-gateway/src/routes/admin.ts'),
-      read('services/api-gateway/src/lib/daily-codes.ts'),
+      read('services/api-gateway/src/lib/code-drops.ts'),
       read('services/api-gateway/src/lib/discord-rewards.ts'),
       read('services/api-gateway/src/lib/crowns.ts'),
     ]);
@@ -155,7 +155,9 @@ describe('the wager requirement', () => {
     lockedAfter(engagement, "'streak_reward',", 'reward', 'engagement.ts');
     lockedAfter(social, "'rain_claim',\n", 'each', 'social.ts');
     lockedAfter(admin, "$4, 'admin_adjustment', $5)", 'delta', 'admin.ts');
-    lockedAfter(daily, "'daily_code_reward', row.id)", 'prize', 'daily-codes.ts');
+    // A code drop carries its own multiple, copied onto it when it was minted (3x by default).
+    assert.match(drops, /const owed = requirementFor\(prize, Number\(drop\.wager_multiplier\)\);/);
+    assert.match(drops, /await creditWallet\(client, user\.id, prize, 'daily_code_reward', claimId\);\s+await addWagerRequirement\(client, user\.id, owed\);/);
     lockedAfter(crowns, "'bounty_reward', bounty.id)", 'prize', 'crowns.ts');
     assert.match(discord, /creditWallet\(client, userId, amount, kind, rewardId\);\s+await addWagerRequirement\(/);
     // A giveaway locks unless the operator says it is a refund; a debit never adds anything.

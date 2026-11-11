@@ -101,6 +101,8 @@ export interface RewardStatus {
     /** What a player's first code pays at least ('0' = off). Absent on an older gateway. */
     readonly firstPrizeMinor?: string;
   };
+  /** What a code drop pays and how often (they replaced the daily codes). Absent on an older gateway. */
+  readonly codeDrops?: CodeDropFigures;
   readonly minAccountAgeDays: number;
   readonly join: { claimed: boolean } | null;
   readonly tag: {
@@ -109,6 +111,38 @@ export interface RewardStatus {
     /** When the next tag reward opens, while the tag is seen on after a first reward. Absent on an older gateway. */
     nextAt?: string | null;
   } | null;
+}
+
+/** The figures the next code drop carries, as the site states them. */
+export interface CodeDropFigures {
+  readonly enabled: boolean;
+  readonly prizeMinor: string;
+  readonly maxClaims: number;
+  readonly wagerMultiplier: number;
+  readonly everyMinutes: number;
+  readonly nextAt: string;
+}
+
+/** One code drop, as the site minted it. */
+export interface CodeDrop {
+  readonly id: string;
+  readonly code: string;
+  readonly prizeMinor: string;
+  readonly maxClaims: number;
+  readonly claims: number;
+  readonly wagerMultiplier: number;
+  readonly slotStart: string;
+  readonly expiresAt: string;
+  readonly channelId: string | null;
+  readonly messageId: string | null;
+}
+
+/** The answer to the bot's minute: the current drop, and whether this ask is the one to post it. */
+export interface CodeDropTick {
+  readonly enabled: boolean;
+  readonly drop: CodeDrop | null;
+  readonly announce: boolean;
+  readonly nextAt: string;
 }
 
 export interface TagSighting {
@@ -218,6 +252,18 @@ export class PlatformApi {
     username: string,
   ): Promise<{ unlinked: string; newMain: string | null }> {
     return this.post('/internal/v1/community/accounts/unlink', { discordUserId, username });
+  }
+
+  /** The bot's minute for code drops: mints the current one if needed (the site decides). */
+  async codeDropTick(): Promise<CodeDropTick> {
+    return this.post<CodeDropTick>('/internal/v1/community/code-drops/tick', {});
+  }
+
+  /** Where a drop was posted, or that the post failed (so a later minute tries again). */
+  async codeDropMessage(
+    body: { dropId: string; channelId: string; messageId: string } | { dropId: string; failed: true },
+  ): Promise<void> {
+    await this.post<{ recorded: boolean }>('/internal/v1/community/code-drops/message', body);
   }
 
   async rewardStatus(discordUserId: string): Promise<RewardStatus> {

@@ -65,7 +65,7 @@ import { initDevMenu } from './devmenu.js';
 import { initLiveEvents } from './live.js';
 import { initNudge } from './nudge.js';
 import { initPopups } from './popups.js';
-import { initDailyCode } from './daily-code.js';
+import { initRedeemCode } from './redeem-code.js';
 import { initTestMode } from './testmode.js';
 import { initNotices } from './notices.js';
 import { initWinFx } from './winfx.js';
@@ -1637,7 +1637,7 @@ bus.addEventListener('change', (event) => {
 initLiveEvents();
 initNudge({ openLogin: openLoginModal });
 initPopups({ openLogin: openLoginModal });
-initDailyCode({ openLogin: openLoginModal });
+initRedeemCode({ openLogin: openLoginModal });
 initTestMode();
 initNotices();
 bootstrap().catch(showApiError);

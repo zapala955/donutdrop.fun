@@ -112,7 +112,7 @@ describe('several accounts on one Discord: the rules', () => {
     );
   });
 
-  it("pays the bot's rewards to the main account, and a daily code to whoever redeems it", async () => {
+  it("pays the bot's rewards to the main account, and a code drop to whoever redeems it", async () => {
     const rewards = await read('services/api-gateway/src/lib/discord-rewards.ts');
     assert.match(rewards, /const user = await mainAccount\(client, input\.discordUserId\);/);
     // The site's status counts the Discord's rewards too, so an alt is not told a claimed one waits.
@@ -120,11 +120,10 @@ describe('several accounts on one Discord: the rules', () => {
       rewards,
       /FROM discord_rewards WHERE user_id = \$1 OR discord_user_id = \$2 GROUP BY kind/,
     );
-    const codes = await read('services/api-gateway/src/lib/daily-codes.ts');
-    assert.match(
-      codes,
-      /WHERE id = \$1 AND discord_user_id = \$2',\n      \[input\.userId, input\.discordUserId\]/,
-    );
+    // The signed-in account itself, never "the main account of that Discord"; one claim per Discord.
+    const codes = await read('services/api-gateway/src/lib/code-drops.ts');
+    assert.match(codes, /FROM users WHERE id = \$1',\s+\[input\.userId\]/);
+    assert.match(codes, /WHERE drop_id = \$1 AND \(user_id = \$2 OR discord_user_id = \$3\)/);
     assert.doesNotMatch(codes, /FROM users WHERE discord_user_id = \$1'/);
   });
 

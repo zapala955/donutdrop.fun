@@ -118,8 +118,6 @@
 <link rel="stylesheet" href="assets/css/nudge.css" />
 <!-- the pop-up dialog with one button (assets/js/popups.js) -->
 <link rel="stylesheet" href="assets/css/popups.css" />
-<!-- the window where a daily code is redeemed (assets/js/daily-code.js) -->
-<link rel="stylesheet" href="assets/css/daily-code.css" />
 <!-- the media test-mode switch in the header (assets/js/testmode.js) -->
 <link rel="stylesheet" href="assets/css/testmode.css" />
 <!-- the notification bell in the top bar (assets/js/notices.js); its rules are scoped to .notif
@@ -211,7 +209,7 @@
 <link rel="modulepreload" href="assets/js/live.js" />
 <link rel="modulepreload" href="assets/js/nudge.js" />
 <link rel="modulepreload" href="assets/js/popups.js" />
-<link rel="modulepreload" href="assets/js/daily-code.js" />
+<link rel="modulepreload" href="assets/js/redeem-code.js" />
 <link rel="modulepreload" href="assets/js/testmode.js" />
 <link rel="modulepreload" href="assets/js/notices.js" />
 <link rel="modulepreload" href="assets/js/winfx.js" />
@@ -460,7 +458,7 @@
         <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="m3.5 6.5 1.6 1.6L8 5.2M3.5 12l1.6 1.6L8 10.7M3.5 17.5l1.6 1.6L8 16.2"/></svg>
         <span>Quests</span>
       </a>
-      <!-- Codes from the Discord bot. They are redeemed HERE, in a window (daily-code.js), never in Discord. -->
+      <!-- Codes from the Discord bot. They are redeemed HERE, in a window (redeem-code.js), never in Discord. -->
       <button class="menu__row" id="dailyCodeBtn" type="button" role="menuitem" data-closes-menu>
         <svg class="menu__ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/><path d="M13 5v3M13 11v2M13 16v3"/></svg>
         <span>Redeem code</span>

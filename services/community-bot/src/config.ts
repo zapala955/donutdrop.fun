@@ -94,6 +94,11 @@ const schema = z.object({
           .every((id) => /^[0-9]{5,32}$/.test(id)),
       'must be comma-separated Discord user ids',
     ),
+  /* Code drops (features/code-drops.ts): the channel the codes are posted in, and the role their
+   * "Code pings" button hands out and every new code pings. The owner's own, 2026-11-11. An empty
+   * role turns the ping and the button off; the codes still post. */
+  COMMUNITY_CODE_DROP_CHANNEL_ID: snowflake.default('1570039925661892608'),
+  COMMUNITY_CODE_DROP_ROLE_ID: z.union([snowflake, z.literal('')]).default('1570041127393042573'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -108,6 +113,8 @@ export interface CommunityConfig {
   readonly welcomeDmEnabled: boolean;
   readonly siteUrl: string;
   readonly ownerIds: readonly string[];
+  readonly codeDropChannelId: string;
+  readonly codeDropRoleId: string | null;
   readonly logLevel: string;
 }
 
@@ -146,6 +153,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Commun
     ownerIds: env.COMMUNITY_OWNER_IDS.split(',')
       .map((id) => id.trim())
       .filter(Boolean),
+    codeDropChannelId: env.COMMUNITY_CODE_DROP_CHANNEL_ID,
+    codeDropRoleId: env.COMMUNITY_CODE_DROP_ROLE_ID || null,
     logLevel: env.LOG_LEVEL,
   });
 }

@@ -3,7 +3,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { z } from 'zod';
-import { dailyCodeProgress, redeemDailyCode, type RedeemResult } from '../lib/daily-codes.js';
+import { codeDropStatus, redeemCodeDrop, type DropRedeemResult } from '../lib/code-drops.js';
 import { unlinkAccount } from '../lib/discord-accounts.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
@@ -63,15 +63,6 @@ export async function registerDiscordRewardRoutes(
     }
   };
 
-  /* What a daily code can be worth, for the redeem window. Public: it is the same figure the DM
-   * quotes, and the window says it to a signed-out visitor before asking them to log in. */
-  const dailyCodes = {
-    enabled: config.dailyCodesEnabled,
-    maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
-    minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
-    firstPrizeMinor: config.dailyCodeFirstPrizeMinor.toString(),
-  };
-
   /* Public: the Discord page says how big the server is before anybody logs in. */
   app.get(
     '/v1/discord/server',
@@ -90,57 +81,30 @@ export async function registerDiscordRewardRoutes(
           joinMinor: config.discordJoinRewardMinor.toString(),
           tagMinor: config.discordTagRewardMinor.toString(),
         },
-        dailyCodes,
+        // Public: what a drop pays, when the next one comes and how many claims the current has left.
+        codeDrops: await codeDropStatus(db, config),
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
       };
     }
-    const linkedTo = await db.query<{ discord_user_id: string | null }>(
-      'SELECT discord_user_id FROM users WHERE id = $1',
-      [userId],
-    );
     return {
       signedIn: true,
       ...(await rewardStatus(db, config, userId)),
-      // How far this player is towards the day's wagering bar, so the window can show it.
-      dailyCodes: {
-        ...dailyCodes,
-        progress: await dailyCodeProgress(
-          db,
-          config,
-          userId,
-          linkedTo.rows[0]?.discord_user_id ?? null,
-        ),
-      },
+      codeDrops: await codeDropStatus(db, config),
     };
   });
 
-  /* Redeeming a daily code. It happens HERE, by a signed-in player, and nowhere else: the bot only
-   * delivers codes. The Discord account is the one linked to this session, never something the
-   * request names, so a code can be spent only by the site account whose Discord it was sent to
-   * (and every other code gets the same "not valid for you" as one that does not exist). The
-   * gateway validates it, draws the prize and pays it within the day's budget (lib/daily-codes.ts).
-   * A refusal is an ordinary answer, not an error: the window shows its words as they are. */
+  /* Redeeming a code drop's code (lib/code-drops.ts). It happens HERE, by a signed-in player, and
+   * nowhere else: the bot only posts codes. The Discord account is the one linked to this session,
+   * never something the request names. A refusal is an ordinary answer, not an error: the window
+   * shows its words as they are. */
   app.post(
-    '/v1/discord/daily-code/redeem',
+    '/v1/discord/codes/redeem',
     { preHandler: guards.requireCsrf, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
-    async (request): Promise<RedeemResult> => {
+    async (request): Promise<DropRedeemResult> => {
       const userId = request.authUser?.id;
       if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
       const body = parseWith(redeemSchema, request.body);
-      const linked = await db.query<{ discord_user_id: string | null }>(
-        'SELECT discord_user_id FROM users WHERE id = $1',
-        [userId],
-      );
-      const discordUserId = linked.rows[0]?.discord_user_id;
-      if (!discordUserId) {
-        return {
-          status: 'refused',
-          reason:
-            'Link your Discord account first: open the Discord page, copy your code and run /link in the server. Your daily code is kept',
-          keepCode: true,
-        };
-      }
-      return redeemDailyCode(db, config, { discordUserId, userId, code: body.code });
+      return redeemCodeDrop(db, config, { userId, code: body.code });
     },
   );
 

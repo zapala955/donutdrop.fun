@@ -152,7 +152,8 @@ export const PROMO_KINDS: Readonly<Record<string, string>> = Object.freeze({
   discord_join_reward: 'Discord join',
   discord_tag_reward: 'Discord tag',
   discord_invite_reward: 'Discord invites',
-  daily_code_reward: 'Daily codes',
+  // The daily codes' kind, which code drops pay through since 2026-11-11.
+  daily_code_reward: 'Discord codes',
   bounty_reward: 'Bounties',
   staking_reward: 'House pool',
   weekly_quest_reward: 'Weekly quests',

@@ -485,46 +485,8 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
       .setDefaultMemberPermissions(ADMINISTRATOR),
   );
 
-  add(
-    new SlashCommandBuilder()
-      .setName('daily')
-      .setDescription(
-        'A personal code in your DMs every day, for a prize from nothing up to a jackpot',
-      )
-      .addSubcommand((sub) => sub.setName('on').setDescription('Send me a daily code in my DMs'))
-      .addSubcommand((sub) => sub.setName('off').setDescription('Stop sending me daily codes'))
-      .addSubcommand((sub) =>
-        sub.setName('status').setDescription('Am I subscribed, and is today\u2019s code used?'),
-      ) as SlashCommandBuilder,
-  );
-
-  add(
-    new SlashCommandBuilder()
-      .setName('daily-invite')
-      .setDescription('Owners only: send every member a first message about daily codes')
-      .setDefaultMemberPermissions(ADMINISTRATOR)
-      .addSubcommand((sub) =>
-        sub
-          .setName('preview')
-          .setDescription('DM the owners the message members get, and nobody else'),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName('send')
-          .setDescription('Send it to every member who has not had it, slowly, in the background')
-          .addIntegerOption((option) =>
-            option
-              .setName('count')
-              .setDescription('Only this many this time (default: everybody left)')
-              .setMinValue(1)
-              .setMaxValue(20000),
-          ),
-      )
-      .addSubcommand((sub) => sub.setName('status').setDescription('How far it has got'))
-      .addSubcommand((sub) =>
-        sub.setName('stop').setDescription('Stop sending before the next message'),
-      ) as SlashCommandBuilder,
-  );
+  /* `/daily` and `/daily-invite` are gone: code drops replaced the daily codes (2026-11-11). A
+   * member who still has them from an older registration is told where codes are now. */
 
   add(
     new SlashCommandBuilder()

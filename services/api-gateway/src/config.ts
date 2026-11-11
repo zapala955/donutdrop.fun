@@ -741,6 +741,19 @@ const environmentSchema = z
      * is worth something on day one. It still waits for the day's bar and counts against the
      * budget like any prize. 0 turns it off and the first code is an ordinary draw. */
     DAILY_CODE_FIRST_PRIZE_MINOR: nonNegativeBigintString.default('5000000'),
+    /* Code drops (lib/code-drops.ts), which replaced the daily codes on 2026-11-11. Every
+     * CODE_DROP_EVERY_MINUTES the community bot posts one code in the drop channel; the first
+     * CODE_DROP_MAX_CLAIMS players to redeem it on the site get CODE_DROP_PRIZE_MINOR each, which
+     * they wager CODE_DROP_WAGER_MULTIPLIER times over before it can be withdrawn. Nothing has to be
+     * wagered to claim one. All four are copied onto a drop when it is minted. */
+    CODE_DROPS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    CODE_DROP_PRIZE_MINOR: positiveBigintString.default('10000000'),
+    CODE_DROP_MAX_CLAIMS: z.coerce.number().int().min(1).max(1000).default(5),
+    CODE_DROP_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(3),
+    CODE_DROP_EVERY_MINUTES: z.coerce.number().int().min(10).max(1440).default(120),
     /* Media test mode: approved creators and staff play the house games with play money on a
      * separate test account, for clips (lib/media-test.ts). The balance is what the account is
      * filled back up to; it is play money and never leaves that account. */
@@ -1728,6 +1741,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     dailyCodeBudgetMinor: BigInt(env.DAILY_CODE_DAILY_BUDGET_MINOR),
     dailyCodeMinWagerMinor: BigInt(env.DAILY_CODE_MIN_WAGER_MINOR),
     dailyCodeFirstPrizeMinor: BigInt(env.DAILY_CODE_FIRST_PRIZE_MINOR),
+    codeDropsEnabled: env.CODE_DROPS_ENABLED,
+    codeDropPrizeMinor: BigInt(env.CODE_DROP_PRIZE_MINOR),
+    codeDropMaxClaims: env.CODE_DROP_MAX_CLAIMS,
+    codeDropWagerMultiplier: env.CODE_DROP_WAGER_MULTIPLIER,
+    codeDropEveryMinutes: env.CODE_DROP_EVERY_MINUTES,
     mediaTestModeEnabled: env.MEDIA_TEST_MODE_ENABLED,
     mediaTestBalanceMinor: BigInt(env.MEDIA_TEST_BALANCE_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,

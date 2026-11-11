@@ -70,7 +70,7 @@ const KIND_LABEL = {
   plinko_payout: 'Plinko payout',
   slots_stake: 'Slots spin',
   slots_payout: 'Slots payout',
-  daily_code_reward: 'Daily code',
+  daily_code_reward: 'Discord code',
   bounty_reward: 'Bounty',
   staking_stake: 'House pool stake',
   staking_release: 'House pool payback',

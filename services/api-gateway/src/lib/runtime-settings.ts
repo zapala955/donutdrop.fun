@@ -31,6 +31,7 @@ type SettingGroup =
   | 'minesduel'
   | 'payouts'
   | 'dailycodes'
+  | 'codedrops'
   | 'crowns'
   | 'staking'
   | 'weeklyQuests'
@@ -862,6 +863,44 @@ export const runtimeSettingDefinitions = {
     label: 'A player’s first daily code pays at least this (0 = ordinary draw)',
     min: 0n,
     max: BIGINT_MAX,
+  },
+
+  /* ── code drops ──
+   *
+   * Read when a drop is minted (every two hours by default) and copied onto it, so a change applies
+   * from the next drop and never to a code already posted. */
+  codeDropsEnabled: {
+    kind: 'boolean',
+    group: 'codedrops',
+    label: 'Code drops: the bot posts codes and the site pays them',
+  },
+  codeDropPrizeMinor: {
+    kind: 'bigint',
+    group: 'codedrops',
+    label: 'What one claim of a code pays',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  codeDropMaxClaims: {
+    kind: 'integer',
+    group: 'codedrops',
+    label: 'How many players can claim each code',
+    min: 1n,
+    max: 1_000n,
+  },
+  codeDropWagerMultiplier: {
+    kind: 'integer',
+    group: 'codedrops',
+    label: 'Times the prize is wagered before it can be withdrawn',
+    min: 0n,
+    max: 100n,
+  },
+  codeDropEveryMinutes: {
+    kind: 'integer',
+    group: 'codedrops',
+    label: 'Minutes between code drops',
+    min: 10n,
+    max: 1_440n,
   },
 
   /* ── crowns ──

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
+import { codeDropStatus, codeDropTick, recordDropMessage } from '../lib/code-drops.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
 import {
   linkedAccounts,
@@ -102,6 +103,12 @@ const accountChoiceSchema = z
   .strict();
 
 const watchSchema = z.object({}).strict();
+
+/* The bot's report on a code drop it took to post: where the message is, or that the post failed. */
+const dropMessageSchema = z.union([
+  z.object({ dropId: z.uuid(), channelId: snowflake, messageId: snowflake }).strict(),
+  z.object({ dropId: z.uuid(), failed: z.literal(true) }).strict(),
+]);
 
 const sightingsSchema = z
   .object({
@@ -242,16 +249,36 @@ export async function registerCommunityBotRoutes(
           joinMinor: config.discordJoinRewardMinor.toString(),
           tagMinor: config.discordTagRewardMinor.toString(),
         },
-        dailyCodes: {
-          enabled: config.dailyCodesEnabled,
-          maxPrizeMinor: config.dailyCodeMaxPrizeMinor.toString(),
-          minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
-          firstPrizeMinor: config.dailyCodeFirstPrizeMinor.toString(),
-        },
+        // What a code drop pays and how often (the daily codes it replaced are gone, 2026-11-11).
+        codeDrops: await codeDropStatus(db, config),
         minAccountAgeDays: config.discordRewardMinAccountAgeDays,
         join: status?.join ?? null,
         tag: status?.tag ?? null,
       };
+    },
+  );
+
+  /* Code drops (lib/code-drops.ts). Every minute the bot asks for the current drop: the first ask
+   * in a slot mints it, and the one that finds it unannounced is told to post it. The bot then
+   * reports the message, or that posting failed so a later minute tries again. The bot can mint and
+   * post; it cannot claim, and the figures on a drop are the site's. */
+  app.post(
+    '/internal/v1/community/code-drops/tick',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      parseWith(watchSchema, request.body);
+      return codeDropTick(db, config);
+    },
+  );
+  app.post(
+    '/internal/v1/community/code-drops/message',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(dropMessageSchema, request.body);
+      await recordDropMessage(db, body);
+      return { recorded: true };
     },
   );
 

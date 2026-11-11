@@ -67,14 +67,13 @@ import { handleAccounts } from './features/accounts.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
+import { LEGACY_DAILY_BUTTON, onDirectMessage } from './features/redeem.js';
 import {
-  DAILY_ON_BUTTON,
-  dailyCommand,
-  onDailyButton,
-  onDirectMessage,
-  startDailySender,
-} from './features/daily-codes.js';
-import { dailyInviteCommand } from './features/daily-invite.js';
+  DROP_PING_BUTTON,
+  dailyRetired,
+  onDropPingButton,
+  startCodeDrops,
+} from './features/code-drops.js';
 import {
   avatar,
   castPollVote,
@@ -125,7 +124,7 @@ async function main(): Promise<void> {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      // Not privileged. Needed so a daily code sent back to the bot in a DM is seen.
+      // Not privileged. Needed so a code sent to the bot in a DM is seen (and pointed to the site).
       GatewayIntentBits.DirectMessages,
       // Invite tracking: inviteCreate/inviteDelete keep the counter snapshot current between
       // joins. Not a privileged intent -- it needs the Manage Server PERMISSION instead.
@@ -138,6 +137,7 @@ async function main(): Promise<void> {
 
   const wrongGuild = (guildId: string | null): boolean => guildId !== config.guildId;
   let stopTagWatch: () => void = () => undefined;
+  let stopCodeDrops: () => void = () => undefined;
 
   client.once(Events.ClientReady, (ready) => {
     log.info({ tag: ready.user.tag, guilds: ready.guilds.cache.size }, 'connected');
@@ -162,10 +162,16 @@ async function main(): Promise<void> {
         log.error({ error }, message),
       );
     }
-    // The daily codes go out from here, once a minute checking who is due.
-    startDailySender(db, ready, api, config.siteUrl, config.guildId, (error) =>
-      log.error({ error }, 'daily code sender failed'),
-    );
+    /* Code drops (2026-11-11, replacing the daily codes): once a minute the site is asked for the
+     * current drop, which this posts in the drop channel and keeps up to date. */
+    if (api) {
+      stopCodeDrops = startCodeDrops(ready, api, {
+        siteUrl: config.siteUrl,
+        channelId: config.codeDropChannelId,
+        roleId: config.codeDropRoleId,
+        onError: (error, message) => log.error({ error }, message),
+      });
+    }
     for (const guild of ready.guilds.cache.values()) {
       if (guild.id === config.guildId) continue;
       log.warn({ guildId: guild.id, name: guild.name }, 'leaving an unrecognised guild');
@@ -246,7 +252,7 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, (message) => {
-    // A direct message: somebody sending back a daily code, who is pointed to the site.
+    // A direct message: somebody sending the bot a code, who is pointed to the site.
     if (!message.guildId) {
       void onDirectMessage(message, config.siteUrl).catch((error) =>
         log.error({ error }, 'direct message failed'),
@@ -277,10 +283,11 @@ async function main(): Promise<void> {
       return;
     }
     if (interaction.isButton()) {
-      /* The "Get my daily code" button lives in a DM (the welcome message and the invitation), so
-       * it has no guild: it is answered before the guild check, against the bot's own server. */
-      if (interaction.customId === DAILY_ON_BUTTON) {
-        await onDailyButton(db, client, api, config.siteUrl, config.guildId, interaction);
+      /* "Code pings" lives on drop posts and in the welcome DM, so it may have no guild: it is
+       * answered before the guild check, against the bot's own server. The old "Get my daily code"
+       * button, still on welcome DMs already sent, now turns code pings on instead. */
+      if (interaction.customId === DROP_PING_BUTTON || interaction.customId === LEGACY_DAILY_BUTTON) {
+        await onDropPingButton(client, config.guildId, config.codeDropRoleId, interaction);
         return;
       }
       if (wrongGuild(interaction.guildId)) return;
@@ -355,12 +362,8 @@ async function main(): Promise<void> {
           extraOwnerIds: config.ownerIds,
         });
       case 'daily':
-        return dailyCommand(db, client, api, config.siteUrl, interaction);
       case 'daily-invite':
-        return dailyInviteCommand(db, api, interaction, {
-          siteUrl: config.siteUrl,
-          extraOwnerIds: config.ownerIds,
-        });
+        return dailyRetired(interaction, config.codeDropChannelId);
       case 'tag':
         return claimTag(api, interaction);
       case 'rewards':
@@ -476,6 +479,7 @@ async function main(): Promise<void> {
     stopGiveaways();
     stopAutomod();
     stopTagWatch();
+    stopCodeDrops();
     await client.destroy().catch(() => undefined);
     await db.close().catch(() => undefined);
     process.exit(0);
