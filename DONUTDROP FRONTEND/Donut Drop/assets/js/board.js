@@ -174,7 +174,29 @@ function boardTabs() {
 
 // ─────────── personal statistics ───────────
 
+/* The statistics page (rewritten 2026-11-11, the owner: "rewrite the statistics page"). Top to
+ * bottom: the result (net, signed, with what it came from), three highlights (biggest win, best
+ * multiplier, favourite game), every game as a row with its share of the wagering, then rewards
+ * and favourite crates. Every figure is GET /v1/statistics's; this page only lays them out.
+ *
+ * Net result is the games' own (paid minus wagered). Rewards are money the site gave, counted
+ * beside it and never inside it, and the page says so. */
+
 let statsLoading = false;
+
+/* Each game's own art, from the lobby. A game added later falls back to a chest. */
+const GAME_ART = {
+  cases: 'game-crates.svg',
+  chicken: 'chicken.svg',
+  dice: 'dice.svg',
+  slots: 'game-ore-rush.svg',
+};
+const KNOWN_ART = new Set([
+  'crash', 'mines', 'tower', 'plinko', 'limbo', 'blackjack', 'roulette', 'upgrader', 'coinflip',
+  'mines-duel', 'battles', 'derby', 'fishing', 'ice-fishing', 'monument', 'ore-rush',
+]);
+const gameArt = (key) =>
+  `assets/img/items/${GAME_ART[key] ?? (KNOWN_ART.has(key) ? `game-${key}.svg` : 'chest.png')}`;
 
 export function mountStatistics(view) {
   statsRoot = $('#statsRoot', view);
@@ -208,147 +230,234 @@ function loadStats() {
 function paintStats() {
   if (!statsRoot?.isConnected) return;
   statsRoot.innerHTML = '';
+  statsRoot.classList.add('st');
 
   if (!state.authenticated) {
-    statsRoot.appendChild(notice('stats', 'Log in to see your statistics.'));
+    statsRoot.appendChild(emptyCard('chest.png', 'Your numbers live here', 'Log in to see what you have wagered, won and played.', ['Log in', () => $('#loginBtn')?.click()]));
     return;
   }
   const data = state.statistics;
   if (!data) {
-    const message = notice('stats', statsLoading ? 'Loading your statistics.' : 'Statistics are unavailable.');
+    const message = notice('stats', statsLoading ? 'Loading your statistics…' : 'Statistics could not be loaded. Try again in a moment.');
     if (statsLoading) message.setAttribute('aria-busy', 'true');
     statsRoot.appendChild(message);
     return;
   }
 
-  /* Every game, from GET /v1/statistics. It counted the upgrader, crates and battles only, and its
-   * "net profit / loss" came off the whole wallet ledger, deposits and withdrawals included. The
-   * net is now the games' own result; rewards (rakeback, streaks, codes) are their own figure. */
   const totals = data.totals;
   if (!totals.rounds) {
-    statsRoot.appendChild(notice('stats', 'No rounds yet. Your numbers start with your first bet.'));
+    statsRoot.appendChild(emptyCard('xp_bottle.png', 'No rounds yet', 'Your numbers start with your first bet.', ['Pick a game', '/']));
     return;
   }
-  const net = Number(totals.netMinor);
-  const biggest = data.biggestWin;
-  statsRoot.appendChild(
-    statGrid([
-      ['Total wagered', money(Number(totals.wageredMinor)), null],
-      // The one figure on the page that is allowed to be red: a player's own result.
-      ['Net result', signedMoney(net), net > 0 ? 'up' : net < 0 ? 'down' : null],
-      ['Rounds played', totals.rounds.toLocaleString('en-US'), null],
-      ['Win rate', totals.winRate === null ? '—' : pct(totals.winRate, 1), null],
-      [
-        biggest ? `Biggest win · ${biggest.name}` : 'Biggest win',
-        biggest ? signedMoney(Number(biggest.payoutMinor) - Number(biggest.wagerMinor)) : '—',
-        'gold',
-      ],
-      ['Best multiplier', data.bestMultiplier === null ? '—' : `${data.bestMultiplier.toFixed(2)}×`, 'gold'],
-      ['Favourite game', data.favouriteGame?.name ?? '—', null],
-      ['Rewards claimed', money(Number(totals.rewardsMinor)), null],
-    ]),
-  );
 
+  statsRoot.appendChild(result(totals));
+  statsRoot.appendChild(highlights(data));
   statsRoot.appendChild(byGame(data.games));
-
-  if (data.favouriteCases.length) {
-    statsRoot.appendChild(favourites(data.favouriteCases));
-  }
+  statsRoot.appendChild(rewards(totals));
+  if (data.favouriteCases.length) statsRoot.appendChild(favourites(data.favouriteCases));
 }
 
 /** The sign written out, so a result reads the same to a colour-blind player and in greyscale. */
 function signedMoney(n) {
   return n > 0 ? '+' + money(n) : n < 0 ? '−' + money(-n) : '$0';
 }
+const tone = (n) => (n > 0 ? 'up' : n < 0 ? 'down' : '');
+const times = (x) => (x === null || x === undefined ? '—' : `${Number(x).toFixed(2)}×`);
 
-function statGrid(cells) {
-  const grid = el('div', 'stats__grid');
-  for (const [label, value, tone] of cells) {
-    const cell = el('div', 'stats__card');
-    if (tone) cell.dataset.tone = tone;
-    const key = el('span', 'stats__k');
-    key.textContent = label;
-    const figure = el('b', 'stats__v');
-    figure.textContent = value;
-    cell.append(key, figure);
-    grid.appendChild(cell);
-  }
-  return grid;
+function art(src, size) {
+  const slot = el('span', 'st__slot');
+  slot.innerHTML = `<img src="${src}" alt="" width="${size}" height="${size}">`;
+  return slot;
 }
 
-/** One row a game the player has played, most wagered first. */
-function byGame(games) {
-  const card = el('section', 'stats__panel');
-  const label = el('span', 'stats__label');
-  label.textContent = 'By game';
-  card.appendChild(label);
+function emptyCard(sprite, title, text, action) {
+  const card = el('section', 'st__empty');
+  card.appendChild(art(`assets/img/items/${sprite}`, 32));
+  const copy = el('div', 'st__emptycopy');
+  const h = el('h2', 'st__emptytitle');
+  h.textContent = title;
+  const p = el('p', 'st__emptytext');
+  p.textContent = text;
+  copy.append(h, p);
+  card.appendChild(copy);
+  if (action) {
+    const [label, target] = action;
+    const go = el(typeof target === 'string' ? 'a' : 'button', 'btn btn--go st__emptygo');
+    go.textContent = label;
+    if (typeof target === 'string') go.href = target;
+    else { go.type = 'button'; go.addEventListener('click', target); }
+    card.appendChild(go);
+  }
+  return card;
+}
 
-  const wrap = el('div', 'acct__tablewrap');
-  const table = el('table', 'dtable stats__bygame');
-  const head = el('thead');
-  const headRow = el('tr');
-  for (const [text, cls] of [
-    ['Game', ''],
-    ['Rounds', 'dtable__num'],
-    ['Win rate', 'dtable__num'],
-    ['Wagered', 'dtable__num'],
-    ['Net', 'dtable__num'],
-    ['Best', 'dtable__num'],
+/* The one figure the page is about, then what it came from. */
+function result(totals) {
+  const net = Number(totals.netMinor);
+  const card = el('section', 'st__hero');
+  const main = el('div', 'st__heromain');
+  const k = el('span', 'st__k');
+  k.textContent = 'Net result';
+  const v = el('b', 'st__net');
+  if (tone(net)) v.dataset.dir = tone(net);
+  v.textContent = signedMoney(net);
+  const line = el('p', 'st__line');
+  line.textContent = `From ${totals.rounds.toLocaleString('en-US')} rounds: ${money(Number(totals.wageredMinor))} wagered, ${money(Number(totals.paidMinor))} paid back.`;
+  main.append(k, v, line);
+
+  const figures = el('div', 'st__figures');
+  for (const [label, value] of [
+    ['Wagered', money(Number(totals.wageredMinor))],
+    ['Rounds', totals.rounds.toLocaleString('en-US')],
+    ['Win rate', totals.winRate === null ? '—' : pct(totals.winRate, 1)],
   ]) {
-    const cell = el('th', cls);
-    cell.textContent = text;
-    headRow.appendChild(cell);
+    const cell = el('div', 'st__fig');
+    const key = el('span', 'st__k');
+    key.textContent = label;
+    const figure = el('b', 'st__v');
+    figure.textContent = value;
+    cell.append(key, figure);
+    figures.appendChild(cell);
   }
-  head.appendChild(headRow);
+  card.append(main, figures);
+  return card;
+}
 
-  const body = el('tbody');
-  for (const game of games) {
-    const row = el('tr');
-    const name = el('td', 'dtable__name');
-    name.textContent = game.name;
-    const rounds = el('td', 'dtable__num mono');
-    rounds.textContent = game.rounds.toLocaleString('en-US');
-    const rate = el('td', 'dtable__num mono dtable__dim');
-    rate.textContent = pct(game.wins / game.rounds, 1);
-    const wagered = el('td', 'dtable__num mono');
-    wagered.textContent = money(Number(game.wageredMinor));
-    const netCell = el('td', 'dtable__num mono');
-    const net = Number(game.netMinor);
-    if (net > 0) netCell.dataset.dir = 'up';
-    if (net < 0) netCell.dataset.dir = 'down';
-    netCell.textContent = signedMoney(net);
-    const best = el('td', 'dtable__num mono dtable__dim');
-    best.textContent = game.bestMultiplier === null ? '—' : `${game.bestMultiplier.toFixed(2)}×`;
-    row.append(name, rounds, rate, wagered, netCell, best);
-    body.appendChild(row);
+function highlights(data) {
+  const row = el('section', 'st__highs');
+  const biggest = data.biggestWin;
+  const fav = data.favouriteGame;
+  const favRow = fav ? data.games.find((game) => game.game === fav.game) : null;
+  const cards = [
+    [
+      biggest ? gameArt(biggest.game) : 'assets/img/items/gold_ingot.png',
+      'Biggest win',
+      biggest ? signedMoney(Number(biggest.payoutMinor) - Number(biggest.wagerMinor)) : '—',
+      biggest ? `${money(Number(biggest.wagerMinor))} at ${times(biggest.multiplier)} on ${biggest.name}` : 'No win yet',
+      'gold',
+    ],
+    ['assets/img/items/nether_star.png', 'Best multiplier', times(data.bestMultiplier), 'Your highest, in any game', 'gold'],
+    [
+      fav ? gameArt(fav.game) : 'assets/img/items/chest.png',
+      'Favourite game',
+      fav?.name ?? '—',
+      favRow ? `${favRow.rounds.toLocaleString('en-US')} rounds` : '',
+      '',
+    ],
+  ];
+  for (const [src, label, value, sub, accent] of cards) {
+    const card = el('div', 'st__high');
+    card.appendChild(art(src, 32));
+    const copy = el('div', 'st__highcopy');
+    const k = el('span', 'st__k');
+    k.textContent = label;
+    const v = el('b', 'st__highv');
+    if (accent) v.dataset.tone = accent;
+    v.textContent = value;
+    const s = el('span', 'st__highsub');
+    s.textContent = sub;
+    copy.append(k, v, s);
+    card.appendChild(copy);
+    row.appendChild(card);
   }
-  table.append(head, body);
-  wrap.appendChild(table);
-  card.appendChild(wrap);
+  return row;
+}
+
+/** Every game the player has played, most wagered first, with its share of the wagering. */
+function byGame(games) {
+  const card = el('section', 'st__panel');
+  const head = el('div', 'st__panelhead');
+  const title = el('h2', 'st__h');
+  title.textContent = 'By game';
+  const note = el('span', 'st__hnote');
+  note.textContent = `${games.length} game${games.length === 1 ? '' : 's'}`;
+  head.append(title, note);
+  card.appendChild(head);
+
+  const sorted = [...games].sort((a, b) => Number(b.wageredMinor) - Number(a.wageredMinor));
+  const total = sorted.reduce((sum, game) => sum + Number(game.wageredMinor), 0) || 1;
+  const list = el('div', 'st__games');
+  const header = el('div', 'st__grow st__grow--head');
+  header.innerHTML = '<span>Game</span><span>Rounds</span><span>Win rate</span><span>Wagered</span><span>Net</span><span>Best</span>';
+  list.appendChild(header);
+  for (const game of sorted) {
+    const row = el('div', 'st__grow');
+    const name = el('span', 'st__gname');
+    name.appendChild(art(gameArt(game.game), 24));
+    const label = el('span', 'st__gtext');
+    const n = el('b');
+    n.textContent = game.name;
+    const share = Number(game.wageredMinor) / total;
+    const bar = el('span', 'st__share');
+    bar.setAttribute('aria-hidden', 'true');
+    const fill = el('i');
+    fill.style.transform = `scaleX(${Math.max(0.02, Math.min(1, share))})`;
+    bar.appendChild(fill);
+    const shareText = el('span', 'st__sharetext');
+    shareText.textContent = `${pct(share, 0)} of your wagering`;
+    label.append(n, bar, shareText);
+    name.appendChild(label);
+
+    const cell = (text, cls, label) => {
+      const c = el('span', `st__gcell ${cls ?? ''}`.trim());
+      c.dataset.label = label;
+      c.textContent = text;
+      return c;
+    };
+    const net = Number(game.netMinor);
+    const netCell = cell(signedMoney(net), 'st__gnet', 'Net');
+    if (tone(net)) netCell.dataset.dir = tone(net);
+    row.append(
+      name,
+      cell(game.rounds.toLocaleString('en-US'), '', 'Rounds'),
+      cell(pct(game.wins / game.rounds, 1), 'st__dim', 'Win rate'),
+      cell(money(Number(game.wageredMinor)), '', 'Wagered'),
+      netCell,
+      cell(times(game.bestMultiplier), 'st__dim', 'Best'),
+    );
+    list.appendChild(row);
+  }
+  card.appendChild(list);
+  return card;
+}
+
+function rewards(totals) {
+  const card = el('section', 'st__reward');
+  card.appendChild(art('assets/img/items/chest.png', 28));
+  const copy = el('div', 'st__rewardcopy');
+  const k = el('span', 'st__k');
+  k.textContent = 'Rewards claimed';
+  const v = el('b', 'st__v');
+  v.dataset.tone = 'gold';
+  v.textContent = money(Number(totals.rewardsMinor));
+  const p = el('p', 'st__line');
+  p.textContent = 'Rakeback, daily rewards, codes and bonuses. Not counted in your net result.';
+  copy.append(k, v, p);
+  card.appendChild(copy);
   return card;
 }
 
 function favourites(cases) {
-  const card = el('section', 'stats__panel');
-  const label = el('span', 'stats__label');
-  label.textContent = 'Favourite crates';
-  card.appendChild(label);
-
-  const table = el('table', 'dtable');
-  const body = el('tbody');
+  const card = el('section', 'st__panel');
+  const head = el('div', 'st__panelhead');
+  const title = el('h2', 'st__h');
+  title.textContent = 'Favourite crates';
+  head.appendChild(title);
+  card.appendChild(head);
+  const list = el('div', 'st__crates');
   for (const entry of cases) {
-    const row = el('tr');
-    const name = el('td', 'dtable__name');
+    const row = el('div', 'st__crate');
+    row.appendChild(art('assets/img/items/game-crates.svg', 24));
+    const name = el('b', 'st__cratename');
     name.textContent = entry.name;
-    const opens = el('td', 'dtable__num mono');
-    opens.textContent = `${entry.opens}x`;
-    const spent = el('td', 'dtable__num mono dtable__dim');
+    const opens = el('span', 'st__crateopens');
+    opens.textContent = `${entry.opens.toLocaleString('en-US')} opened`;
+    const spent = el('span', 'st__cratespent');
     spent.textContent = money(Number(entry.spentMinor));
     row.append(name, opens, spent);
-    body.appendChild(row);
+    list.appendChild(row);
   }
-  table.appendChild(body);
-  card.appendChild(table);
+  card.appendChild(list);
   return card;
 }
 
