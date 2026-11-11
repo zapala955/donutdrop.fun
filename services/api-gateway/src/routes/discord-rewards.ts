@@ -13,6 +13,35 @@ import { parseWith } from '../lib/validation.js';
  * function rather than rejected here with a bare validation error. */
 const redeemSchema = z.object({ code: z.string().min(1).max(40) }).strict();
 
+/* The server's invite, the same one the Discord page's button opens (DONUTDROP FRONTEND
+ * assets/js/discord.js INVITE_URL). Its public endpoint carries the counts Discord itself shows on
+ * an invite: how many members, how many online. */
+const INVITE_CODE = 'aHfRsUaGgx';
+const SERVER_COUNTS_TTL_MS = 5 * 60_000;
+type ServerCounts = { members: number | null; online: number | null };
+let serverCounts: { at: number; body: ServerCounts } | null = null;
+
+/** The live member and online counts, at most one request to Discord every five minutes. */
+async function readServerCounts(): Promise<ServerCounts> {
+  if (serverCounts && Date.now() - serverCounts.at < SERVER_COUNTS_TTL_MS) return serverCounts.body;
+  let body: ServerCounts = { members: null, online: null };
+  try {
+    const response = await fetch(`https://discord.com/api/v10/invites/${INVITE_CODE}?with_counts=true`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { approximate_member_count?: unknown; approximate_presence_count?: unknown };
+      const count = (value: unknown) => (Number.isInteger(value) && (value as number) >= 0 ? (value as number) : null);
+      body = { members: count(data.approximate_member_count), online: count(data.approximate_presence_count) };
+    }
+  } catch {
+    /* Discord slow or down: the page leaves the counts out rather than waiting on them. */
+  }
+  serverCounts = { at: Date.now(), body };
+  return body;
+}
+
 /**
  * The site's half of the Discord rewards: a link code for the signed-in player to type into
  * `/link` in the server, what the rewards stand at, and the window where a daily code is redeemed.
@@ -42,6 +71,13 @@ export async function registerDiscordRewardRoutes(
     minWagerMinor: config.dailyCodeMinWagerMinor.toString(),
     firstPrizeMinor: config.dailyCodeFirstPrizeMinor.toString(),
   };
+
+  /* Public: the Discord page says how big the server is before anybody logs in. */
+  app.get(
+    '/v1/discord/server',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async () => readServerCounts(),
+  );
 
   app.get('/v1/discord/rewards', { preHandler: softAuth }, async (request) => {
     const userId = request.authUser?.id;

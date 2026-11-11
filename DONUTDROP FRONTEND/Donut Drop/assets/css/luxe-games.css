@@ -854,6 +854,173 @@ body.lx .modal .auth__link:focus-visible { outline: 2px solid var(--lx-focus); o
 /* errors in the sign-in card read red, as they do on the profile */
 body.lx .modal .auth__err { color: var(--lx-loss-text); font: 600 .8125rem/1.4 var(--lx-ui); }
 
+/* ═════════ the Discord page (assets/js/discord.js) ═════════
+ * Hallmark · component: page body · genre: atmospheric · theme: site tokens (obsidian + gold)
+ * states: join default · hover · focus · pressed; buttons default · hover · focus · pressed ·
+ *         disabled · busy; copy · copied; unlink · armed; reward chips done · wait · ready · idle
+ *
+ * The owner, 2026-11-11: the old page was "so shit" (two narrow cards, shouted buttons, a tinted
+ * panel, the invite address in plain text). Now the redesign's own parts: flat panels with a
+ * hairline, sprites in slots, the home banners' tag, Discord's blurple only on the button that
+ * opens Discord, gold only on the one account action. */
+body.lx .dsc { display: grid; gap: var(--lx-s4); min-width: 0; }
+body.lx .dsc__hero {
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: var(--lx-s5);
+  padding: var(--lx-s5);
+  border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: var(--dd-edge), var(--lx-shade);
+}
+body.lx .dsc__slot {
+  display: grid; place-items: center; width: 88px; height: 88px;
+  border-radius: 8px; background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .dsc__slot img { display: block; width: 56px; height: 56px; }
+body.lx .dsc__intro { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+body.lx .dsc__title { margin: 0; color: var(--lx-ink); font: 800 1.5rem/1.2 var(--lx-ui); overflow-wrap: anywhere; }
+body.lx .dsc__lede { margin: 0; max-width: 56ch; color: var(--lx-mute); font: 500 .9375rem/1.5 var(--lx-ui); }
+body.lx .dsc__live {
+  display: inline-flex; align-items: center; gap: var(--lx-s2); margin: 2px 0 0;
+  color: var(--lx-mute); font: 500 .875rem/1.3 var(--lx-ui);
+}
+body.lx .dsc__live[hidden] { display: none; }
+body.lx .dsc__live b { color: var(--lx-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+body.lx .dsc__live i { display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lx-online); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lx-online) 22%, transparent); }
+body.lx .dsc__live--online i { display: block; }
+body.lx .dsc__sep { margin: 0 var(--lx-s2); color: var(--lx-faint); }
+/* The one way into Discord, in Discord's own colour. */
+body.lx .dsc__join {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--lx-s2);
+  min-height: 52px; padding: 0 var(--lx-s6);
+  border-radius: var(--lx-r-s); background: var(--lx-discord); color: var(--lx-ink);
+  font: 700 1rem/1 var(--lx-ui); text-decoration: none; white-space: nowrap;
+  box-shadow: var(--lx-shade);
+  transition: background-color 120ms var(--lx-ease), transform 120ms var(--lx-ease);
+}
+body.lx .dsc__join svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+body.lx .dsc__join:hover { background: color-mix(in srgb, var(--lx-discord) 86%, var(--lx-ink)); }
+body.lx .dsc__join:active { transform: translateY(1px); }
+body.lx .dsc__join:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 3px; }
+
+body.lx .dsc__grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--lx-s4); align-items: start; }
+body.lx .dsc__panel {
+  display: grid; gap: var(--lx-s4); min-width: 0; padding: var(--lx-s5);
+  border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: var(--dd-edge), var(--lx-shade);
+}
+body.lx .dsc__h { margin: 0; color: var(--lx-ink); font: 700 1.125rem/1.25 var(--lx-ui); }
+body.lx .dsc__p { margin: 0; color: var(--lx-mute); font: 500 .9375rem/1.5 var(--lx-ui); }
+body.lx .dsc__fine { margin: 0; color: var(--lx-faint); font: 500 .8125rem/1.5 var(--lx-ui); }
+
+/* What it pays: a sprite in a slot, the words, the amount on the right. */
+body.lx .dsc__list { display: grid; gap: var(--lx-s2); margin: 0; padding: 0; list-style: none; }
+body.lx .dsc__reward {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: var(--lx-s4);
+  padding: var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r); background: var(--lx-1); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .dsc__sprite {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 6px; background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+/* 16px sprites at twice themselves, so every pixel is the same size. */
+body.lx .dsc__sprite img { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+body.lx .dsc__rtext { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+body.lx .dsc__rtext > b { color: var(--lx-ink); font: 700 .9375rem/1.3 var(--lx-ui); }
+body.lx .dsc__rtext > small { color: var(--lx-mute); font: 500 .8125rem/1.45 var(--lx-ui); }
+body.lx .dsc__ramount { display: grid; justify-items: end; gap: 2px; text-align: right; }
+body.lx .dsc__ramount b { color: var(--lx-gold); font: 800 1.125rem/1.1 var(--lx-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.lx .dsc__ramount small { color: var(--lx-faint); font: 600 .75rem/1.2 var(--lx-ui); white-space: nowrap; }
+body.lx .dsc__chip {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 3px 8px;
+  border-radius: 999px; background: var(--lx-3); color: var(--lx-mute);
+  font: 700 .75rem/1.2 var(--lx-ui);
+}
+body.lx .dsc__chip svg { width: 12px; height: 12px; fill: currentColor; }
+body.lx .dsc__chip--done { background: color-mix(in srgb, var(--lx-online) 16%, transparent); color: var(--lx-online); }
+body.lx .dsc__chip--ready { background: var(--lx-gold-wash); color: var(--lx-gold-hi); }
+
+/* Buttons: grey keys; the one account action gold; unlinking quiet until armed. */
+body.lx .dsc__btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--lx-s2);
+  min-height: 40px; padding: 0 var(--lx-s4);
+  border: 0; border-radius: var(--lx-r-s); background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .875rem/1 var(--lx-ui); cursor: pointer;
+  transition: background-color 120ms var(--lx-ease), transform 120ms var(--lx-ease);
+}
+body.lx .dsc__btn:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .dsc__btn:active:not(:disabled) { transform: translateY(1px); }
+body.lx .dsc__btn:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .dsc__btn:disabled { cursor: default; opacity: .55; }
+body.lx .dsc__btn svg { width: 16px; height: 16px; fill: currentColor; }
+body.lx .dsc__btn--go { width: 100%; min-height: 52px; background: var(--lx-gold); color: var(--lx-on-gold); font-size: 1rem; box-shadow: var(--lx-shade); }
+body.lx .dsc__btn--go:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .dsc__btn--quiet { justify-self: start; background: transparent; box-shadow: inset 0 0 0 1px var(--lx-4); color: var(--lx-mute); }
+body.lx .dsc__btn--quiet:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .dsc__btn--quiet[data-armed] { box-shadow: inset 0 0 0 1px var(--lx-loss); color: var(--lx-loss-text); }
+body.lx .dsc__redeem { margin-top: var(--lx-s1); min-height: 34px; padding: 0 var(--lx-s3); font-size: .8125rem; }
+
+/* Linking: three numbered steps, ticked as they are done. */
+body.lx .dsc__steps { display: grid; gap: var(--lx-s3); margin: 0; padding: 0; list-style: none; }
+body.lx .dsc__step { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: start; gap: var(--lx-s3); }
+body.lx .dsc__n {
+  display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 50%; background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-4);
+  color: var(--lx-mute); font: 800 .875rem/1 var(--lx-ui);
+}
+body.lx .dsc__n svg { width: 14px; height: 14px; fill: currentColor; }
+body.lx .dsc__step[data-done] .dsc__n { background: var(--lx-gold-wash); box-shadow: inset 0 0 0 1px var(--lx-gold); color: var(--lx-gold-hi); }
+body.lx .dsc__stext { display: grid; gap: 2px; padding-top: 5px; min-width: 0; }
+body.lx .dsc__stext b { color: var(--lx-ink); font: 700 .9375rem/1.3 var(--lx-ui); }
+body.lx .dsc__stext small { color: var(--lx-mute); font: 500 .8125rem/1.45 var(--lx-ui); }
+
+/* The code: large, in a well, with its copy key; then the wait for /link. */
+body.lx .dsc__code { display: grid; gap: var(--lx-s2); }
+body.lx .dsc__codelabel { color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+body.lx .dsc__coderow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--lx-s2); }
+body.lx .dsc__codevalue {
+  display: grid; place-items: center; min-height: 56px; padding: 0 var(--lx-s3);
+  border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-gold);
+  color: var(--lx-ink); font: 800 1.5rem/1 var(--lx-display); letter-spacing: .18em;
+  overflow-wrap: anywhere; user-select: all;
+}
+body.lx .dsc__copy { min-height: 56px; }
+body.lx .dsc__copy[data-state="done"] { color: var(--lx-online); }
+body.lx .dsc__wait {
+  display: flex; align-items: center; gap: var(--lx-s2); margin-top: var(--lx-s1); padding: var(--lx-s3);
+  border-radius: var(--lx-r); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3);
+  color: var(--lx-text); font: 600 .875rem/1.3 var(--lx-ui);
+}
+body.lx .dsc__wait i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--lx-gold); animation: relink-wait 1.2s var(--lx-ease) infinite; }
+
+/* Linked: a tick and who it is linked to. */
+body.lx .dsc__linked { display: flex; align-items: center; gap: var(--lx-s3); }
+body.lx .dsc__linkedicon {
+  display: grid; place-items: center; width: 44px; height: 44px; flex: none;
+  border-radius: 50%; background: color-mix(in srgb, var(--lx-online) 16%, transparent); color: var(--lx-online);
+}
+body.lx .dsc__linkedicon svg { width: 22px; height: 22px; fill: currentColor; }
+body.lx .dsc__linkedtext { display: grid; gap: 2px; min-width: 0; }
+body.lx .dsc__linkedtext b { color: var(--lx-ink); font: 700 1rem/1.25 var(--lx-ui); }
+body.lx .dsc__linkedtext small { color: var(--lx-mute); font: 500 .875rem/1.3 var(--lx-ui); overflow-wrap: anywhere; }
+
+@media (max-width: 899px) {
+  body.lx .dsc__grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 599px) {
+  body.lx .dsc__hero { grid-template-columns: 64px minmax(0, 1fr); gap: var(--lx-s4); padding: var(--lx-s4); }
+  body.lx .dsc__slot { width: 64px; height: 64px; align-self: start; }
+  body.lx .dsc__slot img { width: 40px; height: 40px; }
+  body.lx .dsc__title { font-size: 1.25rem; }
+  body.lx .dsc__join { grid-column: 1 / -1; width: 100%; }
+  body.lx .dsc__panel { padding: var(--lx-s4); }
+  body.lx .dsc__reward { grid-template-columns: 48px minmax(0, 1fr); gap: var(--lx-s3); padding: var(--lx-s3); }
+  body.lx .dsc__sprite { width: 48px; height: 48px; }
+  body.lx .dsc__ramount { grid-column: 2; justify-items: start; text-align: left; grid-row: 2; display: flex; gap: var(--lx-s2); align-items: baseline; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.lx .dsc__join, body.lx .dsc__btn { transition: none; }
+  body.lx .dsc__join:active, body.lx .dsc__btn:active:not(:disabled) { transform: none; }
+  body.lx .dsc__wait i { animation: none; }
+}
+
 /* ═════════ the sign-in card (app.js openLoginModal) ═════════
  * Hallmark · component: sign-in card · genre: atmospheric · theme: site tokens (obsidian + gold)
  * states: field default · hover · focus · error (luxe.css); terms box default · hover · focus ·

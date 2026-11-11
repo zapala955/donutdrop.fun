@@ -121,4 +121,23 @@ describe('lava rain', () => {
     );
     assert.match(auto.slice(0, 1500), /VALUES \(\$1, \$2, NULL,/);
   });
+
+  it('shows the server live and opens it from one button, with no invite address printed', async () => {
+    /* The owner (2026-11-11) on the Discord page: "its so shit"; "remove the discord invite in plain
+     * text and keep the button to join discord"; "make it $5m/day instead of the small every 24h
+     * text". The counts are Discord's own, fetched by the gateway at most every five minutes. */
+    const routes = await read('services/api-gateway/src/routes/discord-rewards.ts');
+    assert.match(routes, /'\/v1\/discord\/server'/);
+    assert.match(routes, /https:\/\/discord\.com\/api\/v10\/invites\/\$\{INVITE_CODE\}\?with_counts=true/);
+    assert.match(routes, /const SERVER_COUNTS_TTL_MS = 5 \* 60_000;/);
+    assert.match(routes, /signal: AbortSignal\.timeout\(4_000\)/);
+    const page = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/discord.js');
+    assert.match(page, /const INVITE_URL = 'https:\/\/discord\.gg\/aHfRsUaGgx';/);
+    assert.match(routes, /const INVITE_CODE = 'aHfRsUaGgx';/);
+    assert.match(page, /api\.get\('\/v1\/discord\/server'\)/);
+    assert.doesNotMatch(page, /INVITE_URL\.replace|inviteurl|discord\.gg\/aHfRsUaGgx<|textContent = INVITE_URL/);
+    assert.equal(page.match(/\.href = INVITE_URL;/g)?.length, 1);
+    assert.match(page, /amount: `\$\{money\(tag\)\}\/day`,/);
+    assert.doesNotMatch(page, /every 24h'/);
+  });
 });

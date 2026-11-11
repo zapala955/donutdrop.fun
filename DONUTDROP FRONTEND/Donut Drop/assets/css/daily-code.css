@@ -89,9 +89,6 @@ button.menu__row {
 }
 button.menu__row:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
 
-/* The Discord page's button for it. */
-.dsync__redeem { margin-top: 10px; }
-
 @media (prefers-reduced-motion: reduce) {
   .dcode__fill { transition: none; }
 }
