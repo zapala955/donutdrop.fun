@@ -32,8 +32,8 @@ describe('the menu icons', () => {
         assert.match(svg, /^<svg viewBox="0 0 256 256" aria-hidden="true"><path d="[^"]+"\/><\/svg>$/, svg.slice(0, 90));
       }
     }
-    // 31 in the rail, 5 in the bottom bar, 5 lobby tabs.
-    assert.equal(count, 41);
+    // 30 in the rail (Wager Race came off on 2026-11-11), 5 in the bottom bar, 5 lobby tabs.
+    assert.equal(count, 40);
   });
 
   it('fills them in the text colour, and gold when they are the page you are on', async () => {
