@@ -10,7 +10,7 @@
  *     (/#redeem=ABCD2345). A fragment never leaves the browser, so the code reaches neither the
  *     server's logs nor the CDN; it is read once, the window opens with the field filled, and the
  *     address bar is cleared;
- *   - the account menu's "Daily code" row;
+ *   - the account menu's "Redeem code" row;
  *   - the Discord page.
  *
  * What it says depends on who is looking, and every state says what to do next:
@@ -250,10 +250,10 @@ function paint() {
   card.appendChild(closeButton());
 
   if (phase === 'loading') {
-    card.append(art('ender_chest.png'), ...heading('Daily code', ['Redeem your code']));
+    card.append(art('ender_chest.png'), ...heading('Redeem code', ['Redeem your code']));
     card.appendChild(paragraph('Checking your account…'));
   } else if (phase === 'error') {
-    card.append(art('ender_chest.png'), ...heading('Daily code', ['Could not reach the site']));
+    card.append(art('ender_chest.png'), ...heading('Redeem code', ['Could not reach the site']));
     card.appendChild(paragraph('Check your connection and try again. Your code is not used up.'));
     const retry = primary('Try again', () => void load());
     card.appendChild(actions(retry, secondary('Close', close)));
@@ -261,13 +261,13 @@ function paint() {
   } else if (phase === 'result' && result) {
     focus = paintResult(card);
   } else if (!status?.dailyCodes?.enabled) {
-    card.append(art('ender_chest.png'), ...heading('Daily code', ['Switched off']));
-    card.appendChild(paragraph('Daily codes are switched off right now. Check back soon.'));
+    card.append(art('ender_chest.png'), ...heading('Redeem code', ['Switched off']));
+    card.appendChild(paragraph('Redeeming codes is switched off right now. Check back soon.'));
     const done = primary('Close', close);
     card.appendChild(actions(done));
     focus = done;
   } else if (!status.signedIn) {
-    card.append(art('ender_chest.png'), ...heading('Daily code', ['Log in to redeem']));
+    card.append(art('ender_chest.png'), ...heading('Redeem code', ['Log in to redeem']));
     card.appendChild(
       paragraph(
         `Your code is worth ${ceiling()}. Log in with your Minecraft name and it is waiting here.`,
@@ -281,10 +281,10 @@ function paint() {
     card.appendChild(actions(login, secondary('Not now', close)));
     focus = login;
   } else if (!status.linked) {
-    card.append(art('ender_chest.png'), ...heading('Daily code', ['Link Discord first']));
+    card.append(art('ender_chest.png'), ...heading('Redeem code', ['Link Discord first']));
     card.appendChild(
       paragraph(
-        'A daily code only works on the account linked to the Discord it was sent to. Get your ' +
+        'A code only works on the account linked to the Discord it was sent to. Get your ' +
           'link code on the Discord page and run /link in the server. Your code is kept for 24 hours.',
       ),
     );
@@ -303,9 +303,9 @@ function paint() {
 }
 
 function paintForm(card) {
-  card.append(art('ender_chest.png'), ...heading('Daily code', ['Redeem your code']));
+  card.append(art('ender_chest.png'), ...heading('Redeem code', ['Redeem your code']));
   card.appendChild(
-    paragraph(`Paste the code from your Discord DM. It can be worth anything from nothing ${ceiling()}.`),
+    paragraph(`Paste your code from Discord. It can be worth anything from nothing ${ceiling()}.`),
   );
 
   const form = el('form', 'dcode__form');
@@ -409,7 +409,7 @@ function paintLocked(card) {
   const have = Math.min(wagered(), need);
   card.append(
     art('ender_chest_shut.png'),
-    ...heading('Daily code', ['Wager ', money(need - have), ' to unlock']),
+    ...heading('Redeem code', ['Wager ', money(need - have), ' to unlock']),
   );
   card.appendChild(
     paragraph(
@@ -450,7 +450,7 @@ function paintResult(card) {
   if (result.status === 'paid') {
     card.append(
       art('ender_chest_open.png'),
-      ...heading(result.welcome ? 'Welcome prize' : 'Daily code redeemed', [
+      ...heading(result.welcome ? 'Welcome prize' : 'Code redeemed', [
         '+',
         money(Number(result.prizeMinor)),
         '',
@@ -471,7 +471,7 @@ function paintResult(card) {
     return done;
   }
   if (result.status === 'nothing') {
-    card.append(art('ender_chest_shut.png'), ...heading('Daily code redeemed', ['Nothing this time']));
+    card.append(art('ender_chest_shut.png'), ...heading('Code redeemed', ['Nothing this time']));
     card.appendChild(
       paragraph(
         `The code was valid, ${result.username}, but today’s draw came up empty. A new code ` +
@@ -484,7 +484,7 @@ function paintResult(card) {
     return done;
   }
   // Refused: the server's own words, and whether the code is still good for another go.
-  card.append(art('ender_chest_shut.png'), ...heading('Daily code', ['Not redeemed']));
+  card.append(art('ender_chest_shut.png'), ...heading('Redeem code', ['Not redeemed']));
   card.appendChild(paragraph(`${result.reason}.`.replace(/\.\.$/, '.')));
   if (result.keepCode) {
     // The code is kept, but nothing typed again today will change the answer: Close leads.

@@ -251,7 +251,8 @@ describe('how it is wired', () => {
       );
     }
     const js = await read('../../../DONUTDROP FRONTEND/Donut Drop/assets/js/daily-code.js');
-    assert.match(js, /result\.welcome \? 'Welcome prize' : 'Daily code redeemed'/);
+    // Shown as "Redeem code" since 2026-11-11 (the owner: "replace the daily code with redeem code").
+    assert.match(js, /result\.welcome \? 'Welcome prize' : 'Code redeemed'/);
   });
 
   it('gives the bot no way to redeem a code', async () => {

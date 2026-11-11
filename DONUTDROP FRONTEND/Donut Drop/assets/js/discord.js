@@ -79,8 +79,8 @@ function serverCard() {
     <div class="dsc__intro">
       <span class="lxtag">Community</span>
       <h2 class="dsc__title">Join the DonutLuxe Discord</h2>
-      <p class="dsc__lede">Giveaways, drops, support and the daily code, all in one server. Link your
-        account there and the server pays you too.</p>
+      <p class="dsc__lede">Giveaways, drops, codes and support, all in one server. Link your account
+        there and the server pays you too.</p>
       <p class="dsc__live" id="dscLive" hidden><i aria-hidden="true"></i><span></span></p>
     </div>`;
   /* An anchor, not a button with a click handler: middle-click, copy the address and a status bar
@@ -153,15 +153,17 @@ function tagState(tag) {
   return { kind: 'idle', text: 'Put the tag back on' };
 }
 
-function rewardRow({ sprite, title, detail, amount, chip }) {
+/* A row: the sprite, the words, and on the right the amount, or the row's own button. */
+function rewardRow({ sprite, title, detail, amount, action, chip }) {
   const row = el('li', 'dsc__reward');
   row.innerHTML = `
     <span class="dsc__sprite"><img src="assets/img/items/${sprite}" alt="" width="32" height="32"></span>
     <span class="dsc__rtext"><b></b><small></small></span>
-    <span class="dsc__ramount"><b></b></span>`;
+    ${action ? '' : '<span class="dsc__ramount"><b></b></span>'}`;
   $('.dsc__rtext b', row).textContent = title;
   $('.dsc__rtext small', row).textContent = detail;
-  $('.dsc__ramount b', row).textContent = amount;
+  if (action) row.appendChild(action);
+  else $('.dsc__ramount b', row).textContent = amount;
   if (chip) {
     const tag = el('span', `dsc__chip dsc__chip--${chip.kind}`, chip.kind === 'done' ? CHECK : chip.kind === 'wait' ? CLOCK : '');
     tag.appendChild(document.createTextNode(chip.text));
@@ -205,20 +207,20 @@ function paintRewards() {
       chip: signedIn ? tagState(status.tag) : null,
     }));
   }
-  const daily = status.dailyCodes;
-  const dailyMax = Number(daily?.maxPrizeMinor ?? 0);
-  if (daily?.enabled && dailyMax > 0) {
-    const row = rewardRow({
-      sprite: 'enchanted_book.png',
-      title: 'The daily code',
-      detail: 'Turn on /daily in Discord and a code lands in your DMs every day. Redeem it here.',
-      amount: `up to ${money(dailyMax)}`,
-    });
-    const redeem = el('button', 'dsc__btn dsc__redeem', 'Redeem a code');
+  /* Codes from the server are redeemed here (the owner, 2026-11-11: "replace the daily code with
+   * redeem code"; the community bot is to give out a code every hour, details to come). The window
+   * is the one the daily code has always used. No figure on the row: what a code is worth is the
+   * code's own. */
+  if (status.dailyCodes?.enabled) {
+    const redeem = el('button', 'dsc__btn dsc__redeem', 'Redeem');
     redeem.type = 'button';
     redeem.addEventListener('click', () => openDailyCode());
-    $('.dsc__rtext', row).appendChild(redeem);
-    list.appendChild(row);
+    list.appendChild(rewardRow({
+      sprite: 'enchanted_book.png',
+      title: 'Redeem a code',
+      detail: 'Got a code from the Discord? Redeem it here.',
+      action: redeem,
+    }));
   }
   rewardsHost.appendChild(list);
 

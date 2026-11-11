@@ -955,7 +955,8 @@ body.lx .dsc__btn--go:hover:not(:disabled) { background: var(--lx-gold-hi); }
 body.lx .dsc__btn--quiet { justify-self: start; background: transparent; box-shadow: inset 0 0 0 1px var(--lx-4); color: var(--lx-mute); }
 body.lx .dsc__btn--quiet:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .dsc__btn--quiet[data-armed] { box-shadow: inset 0 0 0 1px var(--lx-loss); color: var(--lx-loss-text); }
-body.lx .dsc__redeem { margin-top: var(--lx-s1); min-height: 34px; padding: 0 var(--lx-s3); font-size: .8125rem; }
+/* The redeem row's own button, where the other rows have their amount. */
+body.lx .dsc__redeem { justify-self: end; min-width: 96px; }
 
 /* Linking: three numbered steps, ticked as they are done. */
 body.lx .dsc__steps { display: grid; gap: var(--lx-s3); margin: 0; padding: 0; list-style: none; }
@@ -1014,6 +1015,7 @@ body.lx .dsc__linkedtext small { color: var(--lx-mute); font: 500 .875rem/1.3 va
   body.lx .dsc__reward { grid-template-columns: 48px minmax(0, 1fr); gap: var(--lx-s3); padding: var(--lx-s3); }
   body.lx .dsc__sprite { width: 48px; height: 48px; }
   body.lx .dsc__ramount { grid-column: 2; justify-items: start; text-align: left; grid-row: 2; display: flex; gap: var(--lx-s2); align-items: baseline; }
+  body.lx .dsc__redeem { grid-column: 2; grid-row: 2; justify-self: start; }
 }
 @media (prefers-reduced-motion: reduce) {
   body.lx .dsc__join, body.lx .dsc__btn { transition: none; }
