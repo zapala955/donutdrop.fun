@@ -170,24 +170,22 @@ function paint(host, status) {
     $('#rdmDiscord', host).addEventListener('click', () => closeModal());
     return;
   }
-  paintForm(host, drops);
+  paintForm(host);
 }
 
-function paintForm(host, drops) {
-  const wager = Number(drops.prizeMinor) * Number(drops.wagerMultiplier);
+/* No note under the button (the owner, 2026-11-12: "remove the text on the bottom"); what to wager
+ * is said on the paid screen, once the code has paid. */
+function paintForm(host) {
   host.insertAdjacentHTML('beforeend', `
     <form class="rdm__form" id="rdmForm" novalidate>
       <label class="auth__label" for="rdmCode">Your code</label>
       <div class="auth__field auth__field--code" id="rdmField">
         <input id="rdmCode" class="auth__input auth__input--code" type="text" inputmode="text"
                autocomplete="off" autocapitalize="characters" spellcheck="false"
-               maxlength="${CODE_LENGTH + 1}" placeholder="ABCD-2345" aria-describedby="rdmError rdmNote">
+               maxlength="${CODE_LENGTH + 1}" placeholder="ABCD-2345" aria-describedby="rdmError">
       </div>
       <p class="auth__err" id="rdmError" role="alert" hidden></p>
       <button class="btn btn--go auth__go" type="submit" id="rdmGo" disabled>Redeem</button>
-      <p class="auth__note" id="rdmNote">${drops.wagerMultiplier > 0
-        ? `Wager it ${escapeText(String(drops.wagerMultiplier))}× (${escapeText(money(wager))}) before withdrawing it.`
-        : 'Withdrawable at once.'}</p>
     </form>`);
 
   const input = $('#rdmCode', host);
