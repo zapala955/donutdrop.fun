@@ -100,6 +100,7 @@
 <link rel="stylesheet" href="assets/css/slots.css" />
 <link rel="stylesheet" href="assets/css/dice.css" />
 <link rel="stylesheet" href="assets/css/limbo.css" />
+<link rel="stylesheet" href="assets/css/stocks.css" />
 <link rel="stylesheet" href="assets/css/fishing.css" />
 <link rel="stylesheet" href="assets/css/icefishing.css" />
 <link rel="stylesheet" href="assets/css/derby.css" />
@@ -172,6 +173,7 @@
 <link rel="modulepreload" href="assets/js/plinko.js" />
 <link rel="modulepreload" href="assets/js/dice.js" />
 <link rel="modulepreload" href="assets/js/limbo.js" />
+<link rel="modulepreload" href="assets/js/stocks.js" />
 <link rel="modulepreload" href="assets/js/fishing.js" />
 <link rel="modulepreload" href="assets/js/icefishing.js" />
 <link rel="modulepreload" href="assets/js/derby.js" />
@@ -299,6 +301,8 @@
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M192,28H64A36,36,0,0,0,28,64V192a36,36,0,0,0,36,36H192a36,36,0,0,0,36-36V64A36,36,0,0,0,192,28Zm12,164a12,12,0,0,1-12,12H64a12,12,0,0,1-12-12V64A12,12,0,0,1,64,52H192a12,12,0,0,1,12,12ZM104,88A16,16,0,1,1,88,72,16,16,0,0,1,104,88Zm40,40a16,16,0,1,1-16-16A16,16,0,0,1,144,128Zm40-40a16,16,0,1,1-16-16A16,16,0,0,1,184,88Zm-80,80a16,16,0,1,1-16-16A16,16,0,0,1,104,168Zm80,0a16,16,0,1,1-16-16A16,16,0,0,1,184,168Z"/></svg><span>Dice</span></a></li>
       <li><a class="lxnav" href="/limbo" data-route="limbo" data-tip="Limbo">
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M244,56v64a12,12,0,0,1-24,0V85l-75.51,75.52a12,12,0,0,1-17,0L96,129,32.49,192.49a12,12,0,0,1-17-17l72-72a12,12,0,0,1,17,0L136,135l67-67H168a12,12,0,0,1,0-24h64A12,12,0,0,1,244,56Z"/></svg><span>Limbo</span></a></li>
+      <li><a class="lxnav" href="/stocks" data-route="stocks" data-tip="Stocks">
+        <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M52,40h8v48h12v88H60v40H52V176H40V88H52Zm72-16h8V56h12v80H132v64h-8V136H112V56h12Zm72,48h8v48h12v80H204v32h-8V200H184V120h12Z"/></svg><span>Stocks</span></a></li>
       <li><a class="lxnav" href="/fishing" data-route="fishing" data-tip="Fishing">
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M172,76a16,16,0,1,1-16-16A16,16,0,0,1,172,76Zm64,.66c.32,31.85-7.55,59.77-22.74,80.76-15.66,21.65-38.89,36.21-69,43.29-19.2,4.52-41.39,6-66.36,4.38q2.27,15.49,6,32.34a12,12,0,1,1-23.44,5.14q-4.58-20.85-7.08-39.91-19-2.5-39.87-7.07a12,12,0,0,1,5.14-23.44q16.83,3.67,32.31,6c-1.58-25-.13-47.12,4.38-66.3,7.08-30.14,21.64-53.36,43.27-69,21-15.21,48.92-23.1,80.78-22.77,21.79.21,42,4.42,45.8,6.64a12,12,0,0,1,4.24,4.23C231.57,34.64,235.78,54.87,236,76.66Zm-58.46,83.28A116.08,116.08,0,0,1,96.06,78.46c-9.21,12.16-15.56,27.57-18.93,46-3,16.39-3.66,35.25-2,56.39,21.16,1.65,40,1,56.42-2C150,175.49,165.37,169.14,177.53,159.94ZM209,47c-15.9-3-59.3-8.45-92.26,12.44a92,92,0,0,0,79.81,79.82C217.43,106.32,212,62.92,209,47Z"/></svg><span>Fishing</span></a></li>
       <li><a class="lxnav" href="/derby" data-route="derby" data-tip="Mob Derby">
@@ -659,6 +663,10 @@
             <img class="lxcard__art retroart" src="assets/img/items/game-limbo.svg" alt="" width="96" height="96" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Limbo</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
           </a><p class="lxlive" data-live="limbo" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/stocks" data-cat="casino" data-game="stocks" data-q="stocks trading chart long short leverage crypto market donut candle">
+            <img class="lxcard__art retroart" src="assets/img/items/game-stocks.svg" alt="" width="96" height="96" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Stocks</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="stocks" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
           <li><a class="gcard lxcard" href="/fishing" data-cat="casino" data-game="fishing" data-q="fishing fish rod cast catch dive deep sea ocean reef kelp shipwreck monument abyss ancient city warden treasure 3d">
             <img class="lxcard__art retroart" src="assets/img/items/game-fishing.svg" alt="" width="96" height="96" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Fishing</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
@@ -953,6 +961,20 @@
           data-tip="Pick a target multiplier. The server draws a multiplier for your bet; if it reaches your target, you win your stake times the target. The higher the target, the lower the chance: exactly 90% divided by the target."><span class="phead__howtxt">How it works</span></button>
       </header>
       <div class="limbo" id="limboRoot"></div>
+    </section>
+
+    <section class="view" data-view="stocks" hidden>
+      <header class="phead phead--game">
+        <span class="phead__ico" aria-hidden="true"><img src="assets/img/items/game-stocks.svg" alt="" width="32" height="32" /></span>
+        <div class="phead__txt">
+          <h1>Stocks</h1>
+          <span class="phead__tag">DonutLuxe Originals</span>
+        </div>
+        <button class="ihint phead__how" type="button"
+          aria-label="How it works: Trade the DONUT chart. Go long if you think the price will rise, short if you think it will fall, with up to 1000x leverage: your result is the price move times your leverage, and you can close any time. If the price moves against you far enough to lose your whole stake, the position is liquidated. Every position opens with a 10% fee on its stake. The chart is provably fair: each ten-minute stretch comes from a seed whose hash is published before it starts."
+          data-tip="Trade the DONUT chart. Go long if you think the price will rise, short if you think it will fall, with up to 1000x leverage: your result is the price move times your leverage, and you can close any time. If the price moves against you far enough to lose your whole stake, the position is liquidated. Every position opens with a 10% fee on its stake. The chart is provably fair: each ten-minute stretch comes from a seed whose hash is published before it starts."><span class="phead__howtxt">How it works</span></button>
+      </header>
+      <div class="stocks" id="stocksRoot"></div>
     </section>
 
     <!-- ─────── FISHING ─────── -->

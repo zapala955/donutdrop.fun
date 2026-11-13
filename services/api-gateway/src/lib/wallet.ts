@@ -97,6 +97,9 @@ export type WalletKind =
   /* Limbo: a bet whose draw reached its target, stake included. Referenced by the bet's id; the
    * stake itself is a debit, written by the route. */
   | 'limbo_payout'
+  /* Stocks: what a closed position paid, stake included; nothing when it was liquidated. Referenced by
+   * the position's id; the stake itself is a debit (stocks_stake), written by the route. */
+  | 'stocks_payout'
   /* Fishing: what a cast caught, stake included when it paid more. Referenced by the cast's id; the
    * stake itself is a debit, written by the route. */
   | 'fishing_payout'

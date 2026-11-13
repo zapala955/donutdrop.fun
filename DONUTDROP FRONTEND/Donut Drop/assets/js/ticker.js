@@ -208,6 +208,7 @@ function gameCell(play) {
                 : kind === 'plinko' ? '\u25CF'
                 : kind === 'dice' ? '\u2684'
                 : kind === 'limbo' ? '\u2197'
+                : kind === 'stocks' ? '\u2195'
                 : kind === 'fishing' ? '\u2693'
                 : kind === 'icefishing' ? '\u2744'
                 : kind === 'derby' ? '\u265e'
@@ -291,6 +292,7 @@ function gameLabel(play) {
   if (kind === 'plinko') return 'Plinko';
   if (kind === 'dice') return 'Dice';
   if (kind === 'limbo') return 'Limbo';
+  if (kind === 'stocks') return 'Stocks';
   if (kind === 'fishing') return 'Fishing';
   if (kind === 'icefishing') return 'Ice Fishing';
   if (kind === 'derby') return 'Mob Derby';

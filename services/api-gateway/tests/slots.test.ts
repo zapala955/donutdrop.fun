@@ -564,7 +564,7 @@ describe('the slots page', () => {
     }
     assert.match(app, /import \{ mountMonument, mountSlots \} from '\.\/slots\.js';/);
     assert.match(app, /monument: mountMonument,/);
-    assert.match(app, /'dice', 'limbo', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip'\]\]/);
+    assert.match(app, /'dice', 'limbo', 'stocks', 'fishing', 'ice-fishing', 'derby', 'ore-rush', 'monument', 'mines-duel', 'coinflip'\]\]/);
     assert.match(nginx, /\|coinflip\|ore-rush\|monument\|/);
     assert.match(nginx, /\/monument "https:\/\/donutluxe\.com\/monument";/);
     assert.match(nginx, /\/monument "index, follow";/);

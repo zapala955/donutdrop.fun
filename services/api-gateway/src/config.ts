@@ -595,6 +595,16 @@ const environmentSchema = z
     LIMBO_MIN_STAKE_MINOR: positiveBigintString.default('1'),
     LIMBO_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     LIMBO_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* Stocks (2026-11-13). The edge is fixed in lib/stocks.ts (10%, at every leverage). A position
+     * whose payout reaches the cap is closed at the cap; the cap is the same as the other games'. */
+    STOCKS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    STOCKS_MIN_STAKE_MINOR: positiveBigintString.default('1'),
+    STOCKS_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
+    STOCKS_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    STOCKS_MAX_LEVERAGE: z.coerce.number().int().min(1).max(1000).default(1000),
     /* Fishing. The edge is fixed in lib/fishing.ts. A cast whose best catch would pay more than the
      * ceiling is refused, so the ceiling sets the largest stake in each weather. */
     FISHING_ENABLED: z
@@ -1277,6 +1287,20 @@ const environmentSchema = z
         message: 'must be at least LIMBO_MAX_STAKE_MINOR',
       });
     }
+    if (BigInt(env.STOCKS_MIN_STAKE_MINOR) > BigInt(env.STOCKS_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['STOCKS_MAX_STAKE_MINOR'],
+        message: 'must be at least STOCKS_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.STOCKS_MAX_PAYOUT_MINOR) <= BigInt(env.STOCKS_MAX_STAKE_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['STOCKS_MAX_PAYOUT_MINOR'],
+        message: 'must be above STOCKS_MAX_STAKE_MINOR',
+      });
+    }
     if (BigInt(env.FISHING_MIN_STAKE_MINOR) > BigInt(env.FISHING_MAX_STAKE_MINOR)) {
       context.addIssue({
         code: 'custom',
@@ -1877,6 +1901,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     limboMinStakeMinor: BigInt(env.LIMBO_MIN_STAKE_MINOR),
     limboMaxStakeMinor: BigInt(env.LIMBO_MAX_STAKE_MINOR),
     limboMaxPayoutMinor: BigInt(env.LIMBO_MAX_PAYOUT_MINOR),
+    stocksEnabled: env.STOCKS_ENABLED,
+    stocksMinStakeMinor: BigInt(env.STOCKS_MIN_STAKE_MINOR),
+    stocksMaxStakeMinor: BigInt(env.STOCKS_MAX_STAKE_MINOR),
+    stocksMaxPayoutMinor: BigInt(env.STOCKS_MAX_PAYOUT_MINOR),
+    stocksMaxLeverage: env.STOCKS_MAX_LEVERAGE,
     fishingEnabled: env.FISHING_ENABLED,
     fishingMinStakeMinor: BigInt(env.FISHING_MIN_STAKE_MINOR),
     fishingMaxStakeMinor: BigInt(env.FISHING_MAX_STAKE_MINOR),

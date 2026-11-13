@@ -191,6 +191,18 @@ export const ROUND_SOURCES: readonly RoundSource[] = [
     where: 'b.user_id = $1',
   },
   {
+    game: 'stocks',
+    key: `'stocks'`,
+    // A position is a round once it has ended: closed, liquidated or capped.
+    time: 'p.settled_at',
+    id: 'p.id',
+    wager: 'p.stake_minor',
+    payout: 'coalesce(p.payout_minor, 0)',
+    detail: `initcap(p.side) || ' ' || p.leverage || 'x · ' || p.status`,
+    from: 'stocks_positions p',
+    where: "p.user_id = $1 AND p.status <> 'open'",
+  },
+  {
     game: null,
     key: 's.machine',
     time: 's.created_at',
@@ -238,6 +250,7 @@ export const ROUND_GAMES: Readonly<Record<string, string>> = {
   plinko: 'Plinko',
   dice: 'Dice',
   limbo: 'Limbo',
+  stocks: 'Stocks',
   blackjack: 'Blackjack',
   roulette: 'Roulette',
   upgrader: 'Upgrader',

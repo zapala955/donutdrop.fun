@@ -97,6 +97,12 @@ export const ROUTE_META = {
       'Play limbo with DonutSMP money on DonutLuxe: pick a target multiplier, and win your stake ' +
       'times it if the draw gets there.',
   },
+  stocks: {
+    title: 'DonutLuxe Stocks — Trade the DonutSMP Market',
+    description:
+      'Trade the DONUT chart with DonutSMP money on DonutLuxe: go long or short with up to 1000x ' +
+      'leverage and close whenever you like. Provably fair.',
+  },
   fishing: {
     title: 'DonutLuxe Fishing — DonutSMP Fishing',
     description:

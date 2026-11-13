@@ -300,6 +300,25 @@ export async function registerActivityRoutes(
            JOIN users u ON u.id = b.user_id
            LEFT JOIN user_wager_totals t ON t.user_id = b.user_id
          UNION ALL
+         /* A stocks position, once it has ended: the stake, and what it paid (nothing when it was
+            liquidated). Counted when it settles, which is when its result exists. */
+         SELECT p.id, 'stocks'::text AS kind, p.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                t.wagered_minor AS wagered_minor,
+                'Stocks'::text AS source_name,
+                NULL::char(7) AS accent,
+                p.stake_minor AS wager_minor,
+                p.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM (SELECT * FROM stocks_positions WHERE settled_at IS NOT NULL
+                  ORDER BY settled_at DESC LIMIT $1) p
+           JOIN users u ON u.id = p.user_id
+           LEFT JOIN user_wager_totals t ON t.user_id = p.user_id
+         UNION ALL
          /* A settled fishing cast: the stake, and what the landing paid (nothing when the line
             snapped). Casts come as fast as rolls, so this branch reads only the newest $1 too. */
          SELECT c.id, 'fishing'::text AS kind, c.settled_at AS created_at, u.id AS player_id,
@@ -654,6 +673,21 @@ export async function registerActivityRoutes(
           WHERE u.id = b.user_id AND b.created_at >= day.at
             AND b.payout_minor > b.stake_minor
          UNION ALL
+         SELECT p.id, 'stocks'::text AS kind, p.settled_at AS created_at, u.id AS player_id,
+                ${MASKED_NAME} AS player,
+                'Stocks'::text AS source_name,
+                NULL::char(7) AS accent,
+                p.stake_minor AS wager_minor,
+                p.payout_minor AS payout_minor,
+                NULL::uuid AS catalog_item_id, NULL::varchar AS minecraft_name,
+                NULL::varchar AS display_name, NULL::text AS image_url,
+                NULL::bigint AS unit_value_minor, NULL::jsonb AS metadata,
+                1 AS quantity, 0 AS chance_ppm,
+                NULL::smallint AS game_result
+           FROM stocks_positions p, day, users u
+          WHERE u.id = p.user_id AND p.settled_at >= day.at
+            AND p.payout_minor > p.stake_minor
+         UNION ALL
          SELECT c.id, 'fishing'::text AS kind, c.settled_at AS created_at, u.id AS player_id,
                 ${MASKED_NAME} AS player,
                 'Fishing'::text AS source_name,
@@ -779,6 +813,9 @@ export async function registerActivityRoutes(
          SELECT 'dice', b.user_id FROM dice_bets b, since WHERE b.created_at > since.at
          UNION ALL
          SELECT 'limbo', b.user_id FROM limbo_bets b, since WHERE b.created_at > since.at
+         UNION ALL
+         SELECT 'stocks', p.user_id FROM stocks_positions p, since
+          WHERE p.created_at > since.at OR p.settled_at > since.at
          UNION ALL
          SELECT 'fishing', c.user_id FROM fishing_casts c, since
           WHERE c.created_at > since.at OR c.settled_at > since.at

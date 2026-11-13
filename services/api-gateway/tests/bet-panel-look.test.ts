@@ -15,7 +15,7 @@ const block = async () => {
   const css = await read('assets/css/luxe-games.css');
   return css.slice(css.indexOf('/* ═════════ the betting panel (2026-11-10) ═════════'));
 };
-const PANELS = '.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls';
+const PANELS = '.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls';
 
 describe('the betting panel', () => {
   it('stands on the stages’ cool obsidian, and leaves a picked theme its own ladder', async () => {

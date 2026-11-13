@@ -315,7 +315,7 @@ describe('fishing: the page and the dive', () => {
     assert.match(seo, /fishing: \{\n\s*title: 'DonutLuxe Fishing — DonutSMP Fishing',/);
     assert.match(sitemap, /<loc>https:\/\/donutluxe\.com\/fishing<\/loc>/);
     for (const map of ['"DonutLuxe Fishing — DonutSMP Fishing"', '"https://donutluxe.com/fishing"']) assert.ok(nginx.includes(`/fishing ${map}`), map);
-    assert.match(nginx, /\|dice\|limbo\|fishing\|/);
+    assert.match(nginx, /\|dice\|limbo\|stocks\|fishing\|/);
     for (const list of [nudge, popups]) assert.match(list, /'dice', 'limbo', 'fishing', 'ice-fishing', 'derby', 'ore-rush'/);
     // Its icon is the game's rod, pixel for pixel, on the lobby's 16-pixel grid.
     assert.match(await front('assets/img/items/game-fishing.svg'), /viewBox="0 0 16 16" shape-rendering="crispEdges"/);

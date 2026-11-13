@@ -40,6 +40,13 @@
   --lx-red:   #c0392b;
   --lx-discord: #5865f2;
   --lx-online: #23a55a;   /* Discord's own "online" green, for the server's live count */
+  --lx-up:   #3fbf86;   /* a market moving up: Stocks' rising candles and profit */
+  --lx-down: #e5544b;   /* and moving down                                     */
+  /* the VIP tiers below gold (the VIP page) */
+  --lx-tier-bronze: #c08457;
+  --lx-tier-silver: #b6c2c9;
+  --lx-tier-platinum: #d8ecff;
+  --lx-tier-diamond: #7fd8ff;
   --lx-scrim: rgba(5, 5, 7, .72);
   --lx-shade: 0 4px 12px -2px rgba(0, 0, 0, .45);
   --lx-shade-hi: 0 10px 24px -6px rgba(0, 0, 0, .6);

@@ -24,6 +24,15 @@ export type LiveTopic =
   | 'minesduel'
   // A crown changed hands or fell, or a bounty was won or ran out (lib/crowns.ts).
   | 'crowns'
+  // Stocks, per player: one of your positions opened, closed, was liquidated or hit the payout cap.
+  // Your page re-reads your positions; nobody else's does.
+  | 'stocks'
+  // Stocks: positions that just settled, as the strip on the stage shows them (publishData). The same
+  // rows GET /v1/stocks lists for anyone, masked names included.
+  | 'stocks_feed'
+  // Stocks: the shared chart's newest prices, carried in the event itself (publishData). Public by
+  // design: every price is one that has already happened, never one still to come.
+  | 'stocks_tick'
   // Per player: something for the notification bell landed -- a deposit, a withdrawal paid or
   // refunded, a tip, a reward (lib/notifications.ts). The page re-reads the bell and the deposits.
   | 'notice';
@@ -53,8 +62,20 @@ export class LiveEventHub {
   }
 
   publish(topic: LiveTopic, userIds?: Iterable<string>): void {
+    this.#send(topic, { at: new Date().toISOString() }, userIds);
+  }
+
+  /**
+   * Sends a payload with the event, to everyone. Only for data that is public as it stands -- the
+   * stocks chart's past prices -- because every subscriber, signed in or not, receives it.
+   */
+  publishData(topic: LiveTopic, data: Record<string, unknown>): void {
+    this.#send(topic, { at: new Date().toISOString(), ...data });
+  }
+
+  #send(topic: LiveTopic, data: Record<string, unknown>, userIds?: Iterable<string>): void {
     const targets = userIds ? new Set(userIds) : null;
-    const frame = `event: ${topic}\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`;
+    const frame = `event: ${topic}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const subscriber of this.#subscribers) {
       if (targets && (!subscriber.userId || !targets.has(subscriber.userId))) continue;
       const socket = subscriber.response.socket;

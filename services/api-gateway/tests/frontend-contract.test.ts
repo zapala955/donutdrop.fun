@@ -194,7 +194,7 @@ describe('frontend/backend contract', () => {
     const art = [...html.matchAll(/<img class="lxcard__art retroart" src="assets\/img\/items\/([a-z-]+\.svg)" alt="" width="96" height="96"/g)];
     // Every card in the lobby, the slot machines' row included (2026-10-19: they wore item textures until then).
     assert.equal(art.length, html.match(/<a class="gcard lxcard"/g)?.length);
-    assert.equal(art.length, 16);
+    assert.equal(art.length, 17);
     for (const [, file] of art) {
       assert.match(await source(`assets/img/items/${file}`), /viewBox="0 0 16 16" shape-rendering="crispEdges"/, file);
     }
@@ -427,7 +427,7 @@ describe('frontend/backend contract', () => {
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
     const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
     // Coinflip and Mines Duel are hidden for now (2026-11-10): home-look.test.ts holds them out.
-    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'fishing', 'upgrader', 'battles']) {
+    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'stocks', 'fishing', 'upgrader', 'battles']) {
       assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
       assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
       assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);
@@ -464,7 +464,9 @@ describe('frontend/backend contract', () => {
     assert.match(html, /data-view="mines-duel"/);
     assert.match(app, /'mines-duel': mountMinesDuel/);
     const nginx = await readFile(path.resolve(frontend, '../../infra/nginx/nginx.conf'), 'utf8');
-    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|limbo\|fishing\|ice-fishing\|derby\|mines-duel\|coinflip\|ore-rush\|/);
+    assert.match(nginx, /\|blackjack\|crash\|mines\|tower\|chicken\|plinko\|dice\|limbo\|stocks\|fishing\|ice-fishing\|derby\|mines-duel\|coinflip\|ore-rush\|/);
+    assert.match(html, /data-view="stocks"/);
+    assert.match(app, /stocks: mountStocks/);
     assert.match(html, /data-view="dice"/);
     assert.match(app, /dice: mountDice/);
   });
@@ -540,7 +542,7 @@ describe('frontend/backend contract', () => {
     assert.doesNotMatch(crash, /id="crashBig"[^>]*aria-live/);
     // Table games are item-less rows in the feed, not phantom drops.
     const store = await source('assets/js/store.js');
-    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'limbo' \|\| raw\.kind === 'fishing' \|\| raw\.kind === 'icefishing' \|\| raw\.kind === 'derby' \|\| raw\.kind === 'slots' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
+    assert.match(store, /const isTable = isRoulette \|\| raw\.kind === 'blackjack' \|\| raw\.kind === 'crash' \|\| raw\.kind === 'mines'\s+\|\| raw\.kind === 'tower' \|\| raw\.kind === 'chicken' \|\| raw\.kind === 'plinko' \|\| raw\.kind === 'dice' \|\| raw\.kind === 'limbo' \|\| raw\.kind === 'stocks' \|\| raw\.kind === 'fishing' \|\| raw\.kind === 'icefishing' \|\| raw\.kind === 'derby' \|\| raw\.kind === 'slots' \|\| raw\.kind === 'coinflip' \|\| raw\.kind === 'minesduel';/);
   });
 
   it('puts a hand in play back on the table after a refresh', async () => {

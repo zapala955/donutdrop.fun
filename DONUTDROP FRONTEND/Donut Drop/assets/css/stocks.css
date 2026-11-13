@@ -1,0 +1,369 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4
+ * Hallmark · component: stocks table · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; up and down are luxe.css's --lx-up / --lx-down, lifted into tokens below
+ * layout: the site's game frame, as Limbo and Crash (2026-11-13, the owner: "remake the frontend
+ *         like u did with other games"): the panel on the left -- long or short on a sliding pill,
+ *         the stake with ½ 2× Max, the leverage with its picks, the liquidation price, the one gold
+ *         button, then your positions, as Crash lists the round's players -- and the stage on the
+ *         right: the strip of trades that just settled, the price, the chart. On a phone, the stage
+ *         first, the panel under it.
+ * states: the side pill -- long, short, hover, :focus-visible, :active (presses), disabled (an
+ *         order in the air); the fields -- default, hover, :focus-within, disabled; the picks --
+ *         default, hover, :active, chosen (flat gold on a lip), :focus-visible; the one button --
+ *         default, hover, :focus-visible, :active (pressed into its lip), disabled, busy (a sheen);
+ *         a position -- open (running result), closing (its key disabled), closed, liquidated,
+ *         capped, error (a toast, the key comes back); the strip -- won, lost, fresh.
+ * contrast: words on --lx-0/--lx-2 at 4.5:1 or better; up and down never by colour alone (an
+ *         arrow and a sign beside every one).
+ * signature: a 1-second candle chart drawn every frame, the newest candle growing in.
+ * motion: the chart (stocks.js, every frame), the pill sliding, a settled trade sliding into the
+ *         strip, keys pressing in. Flat, no glow. Reduced motion: the chart steps, nothing slides.
+ */
+
+.stocks {
+  --stocks-up: var(--lx-up);
+  --stocks-down: var(--lx-down);
+  --stocks-up-lip: color-mix(in oklab, var(--lx-up) 62%, black);
+  --stocks-down-lip: color-mix(in oklab, var(--lx-down) 62%, black);
+  --stocks-up-wash: color-mix(in oklab, var(--lx-up) 15%, transparent);
+  --stocks-down-wash: color-mix(in oklab, var(--lx-down) 14%, transparent);
+  --stocks-go-lip: var(--lx-gold-lo);
+  --stocks-go-sheen: color-mix(in oklab, white 38%, transparent);
+  --stocks-ease: cubic-bezier(.16, 1, .3, 1);
+
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
+  min-width: 0;
+}
+.stocks [data-dir="up"] { color: var(--stocks-up); }
+.stocks [data-dir="down"] { color: var(--stocks-down); }
+
+/* ─────────── the stage ─────────── */
+.stocks__stage {
+  grid-area: stage;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--lx-s3);
+  min-width: 0;
+  padding: var(--lx-s4) 20px 18px;
+}
+body.lx .stocks .stocks__stage {
+  min-height: 600px;
+  border-radius: 0 var(--lx-r) 0 0;
+  background: var(--lx-0);
+}
+
+/* Trades that just settled, newest first, as Crash's strip of rounds. */
+.stocks__top { display: flex; min-height: 29px; min-width: 0; }
+.stocks__recent {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.stocks__chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  min-width: 62px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--stocks-down-wash);
+  color: var(--stocks-down);
+  font: 700 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stocks__chip i { font-size: .5625rem; font-style: normal; }
+.stocks__chip[data-tone="won"] { background: var(--stocks-up-wash); color: var(--stocks-up); }
+.stocks__chip:nth-child(n + 9) { opacity: .7; }
+.stocks__chip:nth-child(n + 11) { opacity: .45; }
+.stocks__chip[data-fresh="1"] { animation: stocks-chip-in var(--lx-slide) var(--stocks-ease) both; }
+@keyframes stocks-chip-in {
+  from { opacity: 0; transform: translateX(-10px) scale(.92); }
+  to { opacity: 1; transform: none; }
+}
+.stocks__quiet { color: var(--lx-faint); font: 600 .8125rem/29px var(--lx-ui); }
+
+/* The price, and the candle size. */
+.stocks__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--lx-s3); min-width: 0; }
+.stocks__quote { display: grid; gap: 4px; min-width: 0; }
+.stocks__sym {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lx-mute);
+  font: 700 .8125rem/1 var(--lx-ui);
+  letter-spacing: .04em;
+}
+.stocks__sym img { image-rendering: pixelated; }
+.stocks__line { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.stocks__price {
+  overflow: hidden;
+  color: var(--lx-ink);
+  font: 800 clamp(2rem, 3.6vw, 2.75rem)/1 var(--lx-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stocks__change { color: var(--lx-mute); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stocks__frames { display: flex; flex: none; gap: 6px; }
+.stocks__frames .stocks__pick { height: 32px; min-width: 44px; padding: 0 12px; }
+
+.stocks__chart { position: relative; min-height: 360px; min-width: 0; }
+.stocks__chart canvas { position: absolute; inset: 0; display: block; }
+
+/* ─────────── the panel ─────────── */
+.stocks__panel { grid-area: panel; display: grid; align-content: start; gap: var(--lx-s4); min-width: 0; padding: var(--lx-s3) var(--lx-s3) var(--lx-s4); }
+.stocks__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.stocks__label { margin-top: var(--lx-s2); color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+.stocks__label--row { display: flex; justify-content: space-between; gap: var(--lx-s2); }
+.stocks__labelx { color: var(--lx-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Long or short: one dark well, a pill sliding under the choice, green for long and red for short
+   (a trade's direction, not a pick among equals, so it wears the market's colours, not gold). */
+.stocks__sides {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-4);
+}
+.stocks__sides::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 5px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border-radius: 4px;
+  background: var(--stocks-up);
+  box-shadow: 0 2px 0 var(--stocks-up-lip);
+  transition: transform 260ms var(--stocks-ease), background-color 160ms var(--stocks-ease), box-shadow 160ms var(--stocks-ease);
+}
+.stocks__sides[data-side="short"]::before {
+  background: var(--stocks-down);
+  box-shadow: 0 2px 0 var(--stocks-down-lip);
+  transform: translateX(100%);
+}
+.stocks__side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  min-width: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lx-mute);
+  font: 800 .9375rem/1 var(--lx-ui);
+  cursor: pointer;
+  transition: color 140ms var(--stocks-ease), transform 120ms var(--stocks-ease);
+}
+.stocks__side i { font-size: .625rem; font-style: normal; }
+.stocks__side:hover:not(:disabled) { color: var(--lx-ink); }
+.stocks__side:active:not(:disabled) { transform: scale(.96); }
+.stocks__side:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 1px; }
+.stocks__side[aria-checked="true"],
+.stocks__side[aria-checked="true"]:hover:not(:disabled) { color: var(--lx-on-gold); }
+.stocks__side:disabled { cursor: progress; }
+.stocks__sides:has(.stocks__side:disabled) { opacity: .7; }
+
+/* A field: a dark well, its keys set into its right edge, as in every game. */
+.stocks__field {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  min-width: 0;
+  padding: 0 0 0 var(--lx-s3);
+  overflow: hidden;
+  border: 2px solid var(--lx-4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+}
+.stocks__field:hover { border-color: var(--lx-5); }
+.stocks__field:focus-within { border-color: var(--lx-gold); }
+.stocks__field > span { padding-right: var(--lx-s2); color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); }
+.stocks__field--lev > span { padding: 0 var(--lx-s3) 0 var(--lx-s2); }
+.stocks__field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--lx-ink);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+.stocks__field input:focus { outline: none; }
+.stocks__field input:disabled { color: var(--lx-mute); cursor: progress; }
+.stocks__adj { cursor: pointer; }
+.stocks__adj:hover:not(:disabled) { background: var(--lx-5); }
+.stocks__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+.stocks__adj:disabled { cursor: progress; opacity: .5; }
+
+/* The leverage picks: keys on a lip; the chosen one flat gold (luxe-games.css, the betting panel). */
+.stocks__picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stocks__pick {
+  height: 34px;
+  min-width: 0;
+  padding: 0 2px;
+  color: var(--lx-ink);
+  font: 700 .75rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.stocks__pick:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.stocks__pick:disabled { cursor: progress; opacity: .5; }
+
+/* What the order will be: read-outs, not fields to type in. */
+.stocks__field--read { background: var(--lx-1); }
+.stocks__field--read:hover { border-color: var(--lx-4); }
+.stocks__field--read output {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--lx-s3);
+  overflow: hidden;
+  color: var(--lx-gold-hi);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one button: gold, with a lip it presses into, as every game's. */
+.stocks .stocks__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+body.lx #stocksGo {
+  position: relative;
+  overflow: hidden;
+  height: 52px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--stocks-go-lip);
+  filter: none;
+  transition: background-color var(--lx-quick) var(--stocks-ease), transform 120ms var(--stocks-ease);
+}
+body.lx #stocksGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--stocks-go-lip); }
+body.lx #stocksGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--stocks-go-lip); }
+body.lx #stocksGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #stocksGo:disabled { cursor: not-allowed; opacity: .5; filter: none; }
+body.lx #stocksGo[aria-busy="true"] { cursor: progress; opacity: 1; }
+body.lx #stocksGo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, var(--stocks-go-sheen) 50%, transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+body.lx #stocksGo[aria-busy="true"]::after { opacity: 1; animation: stocks-sheen 900ms linear infinite; }
+@keyframes stocks-sheen { to { transform: translateX(100%); } }
+
+.stocks__hint { min-height: 1.1em; margin: 0; color: var(--lx-faint); font: 500 .75rem var(--lx-ui); text-align: center; }
+
+/* Your positions, under the order, as Crash lists the round's players. */
+.stocks__book { display: grid; gap: var(--lx-s2); min-width: 0; padding-top: var(--lx-s3); box-shadow: inset 0 1px 0 var(--lx-3); }
+.stocks__bookhead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-s2); }
+.stocks__bookhead h2 { margin: 0; color: var(--lx-ink); font: 800 .875rem/1.2 var(--lx-ui); }
+.stocks__bookhead span { color: var(--lx-faint); font: 600 .75rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+.stocks__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+/* Beside the chart, a long book scrolls in its own place rather than stretching the chart past the fold. */
+@media (min-width: 1024px) {
+  .stocks__list { max-height: 272px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+}
+.stocks__empty { margin: 0; color: var(--lx-faint); font: 500 .8125rem/1.45 var(--lx-ui); }
+.stocks__pos {
+  display: grid;
+  gap: 6px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 6px;
+  background: var(--lx-1);
+  box-shadow: inset 2px 0 0 var(--stocks-up);
+}
+.stocks__pos[data-side="short"] { box-shadow: inset 2px 0 0 var(--stocks-down); }
+.stocks__pos[data-done="1"] { background: transparent; box-shadow: inset 0 0 0 1px var(--lx-3); }
+.stocks__posrow { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); min-width: 0; }
+.stocks__tag { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--lx-ink); font: 800 .8125rem/1 var(--lx-ui); white-space: nowrap; }
+.stocks__tag i { font-size: .5625rem; font-style: normal; }
+.stocks__tag[data-side="long"] i { color: var(--stocks-up); }
+.stocks__tag[data-side="short"] i { color: var(--stocks-down); }
+.stocks__pnl { overflow: hidden; color: var(--lx-text); font: 800 .8125rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.stocks__sub { overflow: hidden; color: var(--lx-faint); font: 600 .75rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.stocks__sub b { color: var(--lx-mute); font-weight: 700; }
+.stocks__state { flex: none; color: var(--lx-faint); font: 700 .75rem var(--lx-ui); }
+.stocks__close {
+  flex: none;
+  height: 28px;
+  padding: 0 var(--lx-s3);
+  border: 0;
+  border-radius: 4px;
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 800 .75rem/1 var(--lx-ui);
+  box-shadow: 0 2px 0 var(--bp-lip, var(--lx-0));
+  cursor: pointer;
+  transition: transform 80ms var(--stocks-ease), box-shadow 80ms var(--stocks-ease), background-color 120ms;
+}
+.stocks__close:hover:not(:disabled) { background: var(--lx-5); }
+.stocks__close:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 0 0 var(--bp-lip, var(--lx-0)); }
+.stocks__close:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.stocks__close:disabled { cursor: progress; opacity: .6; }
+
+.stocks__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .stocks { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  body.lx .stocks .stocks__stage { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  .stocks__stage { padding: var(--lx-s3); }
+  .stocks__chart { min-height: 300px; }
+}
+@media (max-width: 560px) {
+  .stocks__chip { flex: 1 1 0; justify-content: center; min-width: 0; padding: 8px 4px; }
+  .stocks__chip:nth-child(n + 5) { display: none; }
+  .stocks__chart { min-height: 260px; }
+  .stocks__price { font-size: 1.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stocks__chip[data-fresh="1"] { animation: none; }
+  .stocks__sides::before,
+  .stocks__side,
+  .stocks__close,
+  body.lx #stocksGo { transition: none; }
+  .stocks__side:active:not(:disabled),
+  .stocks__close:active:not(:disabled) { transform: none; }
+  body.lx #stocksGo[aria-busy="true"]::after { animation: none; opacity: 0; }
+}

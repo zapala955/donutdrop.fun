@@ -21,6 +21,7 @@ type SettingGroup =
   | 'slots'
   | 'dice'
   | 'limbo'
+  | 'stocks'
   | 'fishing'
   | 'icefishing'
   | 'derby'
@@ -588,6 +589,38 @@ export const runtimeSettingDefinitions = {
     label: 'Limbo maximum payout per bet (a stake whose win would pay more is refused)',
     min: 1n,
     max: BIGINT_MAX,
+  },
+
+  /* ── stocks ── The edge is fixed in lib/stocks.ts (10% at every leverage); these are the limits.
+   * A position that reaches the payout cap is closed at the cap. Read per request and per sweep. */
+  stocksEnabled: { kind: 'boolean', group: 'stocks', label: 'Stocks open (closing a position always works)' },
+  stocksMinStakeMinor: {
+    kind: 'bigint',
+    group: 'stocks',
+    label: 'Stocks minimum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  stocksMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'stocks',
+    label: 'Stocks maximum stake',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  stocksMaxPayoutMinor: {
+    kind: 'bigint',
+    group: 'stocks',
+    label: 'Stocks maximum payout per position (it closes at this)',
+    min: 2n,
+    max: BIGINT_MAX,
+  },
+  stocksMaxLeverage: {
+    kind: 'integer',
+    group: 'stocks',
+    label: 'Stocks maximum leverage',
+    min: 1n,
+    max: 1000n,
   },
 
   /* ── fishing ── The edge is fixed in lib/fishing.ts; these are the limits. */
@@ -1429,6 +1462,8 @@ function assertInvariants(view: AppConfig): void {
     ['Dice maximum stake', view.diceMaxStakeMinor, 'the maximum payout', view.diceMaxPayoutMinor],
     ['Limbo minimum stake', view.limboMinStakeMinor, 'the maximum', view.limboMaxStakeMinor],
     ['Limbo maximum stake', view.limboMaxStakeMinor, 'the maximum payout', view.limboMaxPayoutMinor],
+    ['Stocks minimum stake', view.stocksMinStakeMinor, 'the maximum', view.stocksMaxStakeMinor],
+    ['Stocks maximum stake', view.stocksMaxStakeMinor, 'the maximum payout', view.stocksMaxPayoutMinor],
     ['Fishing minimum stake', view.fishingMinStakeMinor, 'the maximum', view.fishingMaxStakeMinor],
     ['Fishing maximum stake', view.fishingMaxStakeMinor, 'the maximum payout', view.fishingMaxPayoutMinor],
     ['Ice Fishing minimum stake', view.iceFishingMinStakeMinor, 'the maximum', view.iceFishingMaxStakeMinor],

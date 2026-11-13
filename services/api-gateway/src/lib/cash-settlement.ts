@@ -60,6 +60,7 @@ export type ContributionSource =
   | 'plinko'
   | 'dice'
   | 'limbo'
+  | 'stocks'
   | 'slots'
   | 'fishing'
   | 'ice_fishing'

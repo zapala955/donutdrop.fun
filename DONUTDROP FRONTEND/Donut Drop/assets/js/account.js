@@ -83,6 +83,8 @@ const KIND_LABEL = {
   dice_payout: 'Dice win',
   limbo_stake: 'Limbo bet',
   limbo_payout: 'Limbo win',
+  stocks_stake: 'Stocks position',
+  stocks_payout: 'Stocks close',
   fishing_stake: 'Fishing cast',
   fishing_payout: 'Fishing catch',
   ice_fishing_stake: 'Ice Fishing game',

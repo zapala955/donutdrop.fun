@@ -81,11 +81,11 @@ describe('the lobby', () => {
     assert.match(phone, /\.lxperk__copy span \{ display: none; \}/);
   });
 
-  it('keeps fourteen Originals and two slot machines, Ice Fishing, Coinflip and Mines Duel out', async () => {
+  it('keeps fifteen Originals (Stocks joined 2026-11-13) and two slot machines, Ice Fishing, Coinflip and Mines Duel out', async () => {
     const html = await read('index.html');
     const main = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
     const slots = html.slice(html.indexOf('<ul class="lxrow" id="slotsTrack"'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
-    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 14);
+    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 15);
     assert.equal(slots.match(/<a class="gcard lxcard"/g)?.length, 2);
     assert.doesNotMatch(main + slots, /ice-fishing|coinflip|mines-duel/);
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
