@@ -236,7 +236,14 @@ export const runtimeSettingDefinitions = {
   signupBonusWagerMultiplier: {
     kind: 'integer',
     group: 'rewards',
-    label: 'Signup bonus wager before withdrawing (x bonus; also codes, rain, streak, Discord, bounties, giveaways)',
+    label: 'Signup bonus wager before withdrawing (x bonus; also codes, streak, Discord, bounties, giveaways)',
+    min: 0n,
+    max: 100n,
+  },
+  rainWagerMultiplier: {
+    kind: 'integer',
+    group: 'rain',
+    label: 'Lava Rain share wager before it can leave (x share; only the rain money is held)',
     min: 0n,
     max: 100n,
   },

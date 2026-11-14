@@ -903,6 +903,11 @@ async function openWithdrawModal() {
 
   const minimum = Number(info.minimumMinor);
   const threshold = Number(info.approvalThresholdMinor);
+  /* Lava Rain money stays in the balance until it has been wagered off; everything else may leave.
+   * So the most that can go is the rest, and the form says what is held and what frees it. */
+  const rainHeld = Number(info.rainHeldMinor ?? 0);
+  const rainOwed = Number(info.rainRemainingMinor ?? 0);
+  const most = Math.max(0, state.balance - rainHeld);
 
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
     <p class="auth__lede">The bot pays you in game with <span class="mono">/pay</span>. Your site
@@ -921,6 +926,9 @@ async function openWithdrawModal() {
       <p class="auth__note" id="wdHint">Balance ${escapeText(money(state.balance))} ·
         minimum ${escapeText(money(minimum))}. Over ${escapeText(money(threshold))} an operator
         approves it first.</p>
+      ${rainHeld > 0 ? `<p class="auth__note" id="wdRain">${escapeText(money(rainHeld))} of it is Lava Rain money:
+        wager ${escapeText(money(rainOwed))} more to free it. You can withdraw up to
+        <b class="mono">${escapeText(money(most))}</b> now.</p>` : ''}
 
       <span class="auth__label">Paying</span>
       <div class="auth__field auth__field--static">
@@ -946,7 +954,7 @@ async function openWithdrawModal() {
   const net = $('#wdNet', host);
   const sync = () => {
     const amount = amountOf();
-    go.disabled = !(amount !== null && amount >= minimum && amount <= state.balance);
+    go.disabled = !(amount !== null && amount >= minimum && amount <= most);
     // What arrives in game, once the amount is one the form would send.
     const shown = taxBps > 0 && amount !== null && amount >= minimum;
     net.hidden = !shown;
@@ -966,10 +974,11 @@ async function openWithdrawModal() {
     if (amount === null) return setError('Enter an amount, for example 1m or 500k.');
     if (amount < minimum) return setError(`The smallest withdrawal is ${money(minimum)}.`);
     if (amount > state.balance) return setError(`That is more than your ${money(state.balance)} balance.`);
+    if (amount > most) return setError(`${money(rainHeld)} is Lava Rain money still to wager off. You can withdraw up to ${money(most)}.`);
     setError('');
   });
   $('#wdMax', host).addEventListener('click', () => {
-    input.value = String(state.balance);
+    input.value = String(most);
     setError('');
     sync();
     input.focus();

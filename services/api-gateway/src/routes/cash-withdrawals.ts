@@ -21,6 +21,7 @@ import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import {
   assertWagerRequirementMet,
+  rainLock,
   wagerRequirementRemaining,
 } from '../lib/wager-requirements.js';
 
@@ -401,8 +402,12 @@ export async function registerCashWithdrawalRoutes(
       const pendingPosition = pending ? await queuePositionOf(db, pending) : null;
       // Stated up front, so the form can say "wager $X more" before anybody fills it in.
       const wagerRemaining = userId ? await wagerRequirementRemaining(db, userId) : 0n;
+      // Rain money still held in the balance, and the wagering that frees it (RAIN MONEY).
+      const rain = userId ? await rainLock(db, userId) : { heldMinor: 0n, remainingMinor: 0n };
       return {
         wagerRequirementRemainingMinor: wagerRemaining.toString(),
+        rainHeldMinor: rain.heldMinor.toString(),
+        rainRemainingMinor: rain.remainingMinor.toString(),
         payeeUsername: request.authUser?.minecraftUsername ?? null,
         minimumMinor: MIN_WITHDRAWAL_MINOR.toString(),
         approvalThresholdMinor: config.cashApprovalThresholdMinor.toString(),
@@ -502,7 +507,7 @@ export async function registerCashWithdrawalRoutes(
         }
 
         // Before the bot check: "wager $X more" is the answer the player can act on.
-        await assertWagerRequirementMet(client, userId, 'withdrawing');
+        await assertWagerRequirementMet(client, userId, 'withdrawing', amount);
 
         const bot = await onlineBot(client);
         if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');

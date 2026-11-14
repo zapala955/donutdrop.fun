@@ -137,7 +137,7 @@ describe('how it is kept', () => {
 
   it('refuses bonus money, and caps both the player and the pool', async () => {
     const source = await read('../src/lib/staking.ts');
-    assert.match(source, /assertWagerRequirementMet\(client, userId, 'staking'\)/);
+    assert.match(source, /assertWagerRequirementMet\(client, userId, 'staking', amount\)/);
     assert.match(source, /'STAKE_LIMIT'/);
     assert.match(source, /'STAKING_POOL_FULL'/);
     assert.match(source, /pg_advisory_xact_lock\(hashtextextended\('staking-pool', 0\)\)/);

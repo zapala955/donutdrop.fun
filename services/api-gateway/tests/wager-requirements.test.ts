@@ -88,8 +88,11 @@ describe('the wager requirement', () => {
     await reduceWagerRequirement(client, 'user-1', 500n);
     assert.match(statements[0] ?? '', /GREATEST\(remaining_minor - \$2::bigint, 0\)/);
     assert.match(statements[0] ?? '', /remaining_minor > 0/);
+    // The rain lock counts down with it (RAIN MONEY), and frees what it held at zero.
+    assert.match(statements[1] ?? '', /UPDATE user_rain_locks/);
+    assert.match(statements[1] ?? '', /held_minor = CASE WHEN remaining_minor <= \$2::bigint THEN 0 ELSE held_minor END/);
     await reduceWagerRequirement(client, 'user-1', 0n);
-    assert.equal(statements.length, 1);
+    assert.equal(statements.length, 2);
   });
 
   it('is added by every deposit and counted down by every wager', async () => {
@@ -113,10 +116,10 @@ describe('the wager requirement', () => {
       read('services/api-gateway/src/routes/social.ts'),
       read('services/api-gateway/src/routes/transfers.ts'),
     ]);
-    const cashGate = withdrawals.indexOf("assertWagerRequirementMet(client, userId, 'withdrawing')");
+    const cashGate = withdrawals.indexOf("assertWagerRequirementMet(client, userId, 'withdrawing', amount)");
     const cashDebit = withdrawals.indexOf('balance_minor = balance_minor - $2', cashGate);
     assert.ok(cashGate > 0 && cashDebit > cashGate, 'cash withdrawal is not gated before its debit');
-    const tipGate = social.indexOf("assertWagerRequirementMet(client, fromUserId, 'tipping')");
+    const tipGate = social.indexOf("assertWagerRequirementMet(client, fromUserId, 'tipping', amount)");
     const tipDebit = social.indexOf('balance_minor = balance_minor - $2', tipGate);
     assert.ok(tipGate > 0 && tipDebit > tipGate, 'tips are not gated before their debit');
     assert.match(transfers, /assertWagerRequirementMet\(client, userId, 'withdrawing'\)/);
@@ -153,7 +156,8 @@ describe('the wager requirement', () => {
     lockedAfter(board, "'quest_reward', claimId)", 'reward', 'quest-board.ts', 'questRewardWagerMultiplier', 1400);
     lockedAfter(referrals, "'referral_bonus', refereeId)", 'bonus', 'referrals.ts', 'referralBonusWagerMultiplier');
     lockedAfter(engagement, "'streak_reward',", 'reward', 'engagement.ts');
-    lockedAfter(social, "'rain_claim',\n", 'each', 'social.ts');
+    // A rain share is held on its own instead (RAIN MONEY): see rain-lock.test.ts.
+    assert.match(social, /'rain_claim',[\s\S]{0,600}await addRainLock\(client, config, claim\.user_id, each\);/);
     lockedAfter(admin, "$4, 'admin_adjustment', $5)", 'delta', 'admin.ts');
     // A code drop carries its own multiple, copied onto it when it was minted (3x by default).
     assert.match(drops, /const owed = requirementFor\(prize, Number\(drop\.wager_multiplier\)\);/);
@@ -294,7 +298,10 @@ describe('a requirement dies with the money it was for', () => {
 
   it('forgives nothing while a stake is still in play or items are still held', async () => {
     const source = await read('services/api-gateway/src/lib/wager-requirements.ts');
-    const query = source.slice(source.indexOf('export async function forgiveSpentRequirement'));
+    // The guard is one fragment, IDLE_SQL, and both forgiving queries (the figure and the rain lock) use it.
+    const query = source.slice(source.indexOf('const IDLE_SQL'), source.indexOf('export const SPENT_BALANCE_MINOR'));
+    const forgive = source.slice(source.indexOf('export async function forgiveSpentRequirement'), source.indexOf('export async function addRainLock'));
+    assert.equal(forgive.match(/\$\{IDLE_SQL\}/g)?.length, 2);
     for (const table of [
       'mines_games', 'tower_games', 'chicken_games', 'blackjack_hands', 'ice_fishing_games',
       'fishing_casts', 'crash_bets', 'roulette_bets', 'side_bets', 'coinflip_games',

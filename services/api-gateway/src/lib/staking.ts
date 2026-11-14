@@ -313,7 +313,7 @@ export async function stake(
   const done = await db.transaction(async (client) => {
     /* One stake at a time across the pool, so two can never both fit the last of the cap. */
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('staking-pool', 0))");
-    await assertWagerRequirementMet(client, userId, 'staking');
+    await assertWagerRequirementMet(client, userId, 'staking', amount);
     const totals = await client.query<{ mine: string; total: string }>(
       `SELECT COALESCE(sum(principal_minor) FILTER (WHERE user_id = $1), 0)::text AS mine,
               COALESCE(sum(principal_minor), 0)::text AS total

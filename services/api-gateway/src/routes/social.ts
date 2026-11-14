@@ -12,11 +12,7 @@ import { liveEvents } from '../lib/live-events.js';
 import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
-import {
-  addWagerRequirement,
-  assertWagerRequirementMet,
-  requirementFor,
-} from '../lib/wager-requirements.js';
+import { addRainLock, assertWagerRequirementMet } from '../lib/wager-requirements.js';
 
 /**
  * The social suite: the vault jackpot readout, lava rain, and player-to-player tips.
@@ -234,14 +230,10 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
                 'rain_claim',
                 deterministicUuid('rain_claim', event.id, claim.user_id),
               );
-              /* A share of the house's pool is free money like the signup bonus. The entry bar
-               * only asks for an hour's wagering, which an alt clears once and then collects every
-               * drop; this makes each share wagered before it can leave. */
-              await addWagerRequirement(
-                client,
-                claim.user_id,
-                requirementFor(each, config.signupBonusWagerMultiplier),
-              );
+              /* A share of the house's pool is held in the account on its own until it is wagered
+               * rainWagerMultiplier times (lib/wager-requirements.ts, RAIN MONEY): rains can be big
+               * without paying every alt that claims one, and nothing else of the balance is held. */
+              await addRainLock(client, config, claim.user_id, each);
             }
           }
           return true;
@@ -582,7 +574,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
         /* A tip is money leaving this account, exactly like a withdrawal. Without this, a bonus or a
          * deposit that may not be withdrawn yet could be tipped to a second account that owes
          * nothing and withdrawn from there. */
-        await assertWagerRequirementMet(client, fromUserId, 'tipping');
+        await assertWagerRequirementMet(client, fromUserId, 'tipping', amount);
         /* Nor while the account is on hold (lib/anti-drain.ts): a hold keeps the money where it is
          * until staff have looked, and a tip to a second account would walk straight around it. */
         const sender = await client.query<{ payout_hold_reason: string | null }>(
