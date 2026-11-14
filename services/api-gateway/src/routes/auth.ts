@@ -419,11 +419,11 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
           const bonusWager = requirementFor(config.referralSignupBonusMinor, config.referralSignupBonusWagerMultiplier);
           await creditWallet(client, row.id, config.referralSignupBonusMinor, 'signup_bonus', row.id);
           await addWagerRequirement(client, row.id, bonusWager);
-          /* And that wagering is the bonus's, not the inviter's: it does not count toward the
-           * inviter's milestone (lib/referrals.ts, accrueReferralWager). */
+          /* And that money is the bonus's, not the invitee's: the inviter's milestone counts only
+           * wagers made with the invitee's own deposited money (lib/referrals.ts, migration 095). */
           await client.query(
-            'UPDATE referrals SET signup_bonus_wager_left_minor = $2 WHERE referee_id = $1',
-            [row.id, bonusWager.toString()],
+            'UPDATE referrals SET signup_bonus_minor = $2 WHERE referee_id = $1',
+            [row.id, config.referralSignupBonusMinor.toString()],
           );
         } else if (rewardable && config.signupBonusMinor > 0n) {
           await creditWallet(client, row.id, config.signupBonusMinor, 'signup_bonus', row.id);

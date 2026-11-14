@@ -221,10 +221,11 @@ function paint() {
   root.appendChild(wrap);
 }
 
-/** ", after the $100M that clears their own signup bonus": the invite bonus's wagering does not count. */
-function notCounted() {
-  const invite = state.promotions?.referralSignupBonus;
-  return invite ? `, after the ${money(Number(invite.wagerMinor))} that clears their own signup bonus` : '';
+/* " of their own deposited money": the invite signup bonus is the house's money, so only bets made
+ * with what the invitee deposited count (lib/referrals.ts; the owner, 2026-11-14: "make sure they
+ * have to wager 100m with their own deposited money"). */
+function ownMoney() {
+  return state.promotions?.referralSignupBonus ? ' of their own deposited money' : '';
 }
 
 const sharePercentOf = (terms) => (terms.revshareWagerBps / 100).toFixed(1);
@@ -254,7 +255,7 @@ function pitch(terms) {
     ],
     [
       'You get paid',
-      `${money(Number(terms.bonusMinor))} once they have wagered ${money(Number(terms.bonusWagerMinor))}${notCounted()}, plus ${sharePercentOf(terms)}% of everything they wager, for life.`,
+      `${money(Number(terms.bonusMinor))} once they have wagered ${money(Number(terms.bonusWagerMinor))}${ownMoney()}, plus ${sharePercentOf(terms)}% of everything they wager, for life.`,
     ],
   ]) {
     const step = el('li', 'rf__step');
@@ -579,15 +580,12 @@ function inviteRow(invite, milestone) {
   fill.style.transform = `scaleX(${ratio})`;
   track.appendChild(fill);
 
-  /* Until the invitee has wagered off their own signup bonus, none of it counts toward this
-   * bonus (GET /v1/referrals bonusWagerLeftMinor), so the bar says what is left of that instead. */
-  const clearing = !invite.bonusUnlocked && Number(invite.bonusWagerLeftMinor ?? 0) > 0;
+  /* An invitee who joined with the invite signup bonus counts only bets made with their own
+   * deposited money (GET /v1/referrals ownMoneyOnly), and the line says so in as many words. */
   const fraction = el('span', 'rf__frac');
   fraction.textContent = invite.bonusUnlocked
     ? 'Bonus paid · now earning revenue share'
-    : clearing
-      ? `Clearing their bonus: ${money(Number(invite.bonusWagerLeftMinor))} left`
-      : `${money(Number(invite.wageredMinor))} / ${money(milestone)} wagered`;
+    : `${money(Number(invite.wageredMinor))} / ${money(milestone)} ${invite.ownMoneyOnly ? 'own money wagered' : 'wagered'}`;
   bar.append(track, fraction);
 
   row.append(who, bar, pays);

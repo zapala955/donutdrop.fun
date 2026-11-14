@@ -15,28 +15,37 @@ describe('the invite signup bonus', () => {
     // The invite bonus, at its own multiplier; else the ordinary one, unchanged.
     assert.match(
       auth,
-      /if \(rewardable && invited && config\.referralSignupBonusMinor > 0n\) \{[\s\S]{0,500}const bonusWager = requirementFor\(config\.referralSignupBonusMinor, config\.referralSignupBonusWagerMultiplier\);\s*await creditWallet\(client, row\.id, config\.referralSignupBonusMinor, 'signup_bonus', row\.id\);\s*await addWagerRequirement\(client, row\.id, bonusWager\);[\s\S]{0,300}'UPDATE referrals SET signup_bonus_wager_left_minor = \$2 WHERE referee_id = \$1',\s*\[row\.id, bonusWager\.toString\(\)\],\s*\);\s*\} else if \(rewardable && config\.signupBonusMinor > 0n\) \{\s*await creditWallet\(client, row\.id, config\.signupBonusMinor, 'signup_bonus', row\.id\);\s*await addWagerRequirement\(\s*client,\s*row\.id,\s*requirementFor\(config\.signupBonusMinor, config\.signupBonusWagerMultiplier\),/,
+      /if \(rewardable && invited && config\.referralSignupBonusMinor > 0n\) \{[\s\S]{0,500}const bonusWager = requirementFor\(config\.referralSignupBonusMinor, config\.referralSignupBonusWagerMultiplier\);\s*await creditWallet\(client, row\.id, config\.referralSignupBonusMinor, 'signup_bonus', row\.id\);\s*await addWagerRequirement\(client, row\.id, bonusWager\);[\s\S]{0,300}'UPDATE referrals SET signup_bonus_minor = \$2 WHERE referee_id = \$1',\s*\[row\.id, config\.referralSignupBonusMinor\.toString\(\)\],\s*\);\s*\} else if \(rewardable && config\.signupBonusMinor > 0n\) \{\s*await creditWallet\(client, row\.id, config\.signupBonusMinor, 'signup_bonus', row\.id\);\s*await addWagerRequirement\(\s*client,\s*row\.id,\s*requirementFor\(config\.signupBonusMinor, config\.signupBonusWagerMultiplier\),/,
     );
   });
 
-  it('is not counted toward the inviter\'s milestone: its wagering goes to the bonus first (2026-11-09)', async () => {
-    const [lib, migration, referrals] = await Promise.all([
+  /* Not counted toward the inviter's milestone since 2026-11-09. Until 11-14 by a fixed $100M bucket
+   * (migration 089); since then by the owner's rule "make sure they have to wager 100m with their
+   * own deposited money": each bet counts by the share of the balance that is the invitee's own. */
+  it('is not counted toward the inviter\'s milestone: only bets made with deposited money count (2026-11-14)', async () => {
+    const [lib, migration, routes, referrals] = await Promise.all([
       read('services/api-gateway/src/lib/referrals.ts'),
-      read('packages/db/migrations/089_referral_bonus_wager_excluded.sql'),
+      read('packages/db/migrations/095_referral_own_money.sql'),
+      read('services/api-gateway/src/routes/referrals.ts'),
       front('assets/js/referrals.js'),
     ]);
-    assert.match(migration, /ADD COLUMN signup_bonus_wager_left_minor bigint NOT NULL DEFAULT 0/);
-    assert.match(migration, /CHECK \(signup_bonus_wager_left_minor >= 0\)/);
-    // Invites already paid the bonus are caught up; a milestone already paid is left alone.
-    assert.match(migration, /WHERE r\.referee_id = b\.referee_id AND r\.bonus_unlocked_at IS NULL;/);
-    assert.match(migration, /CREATE FUNCTION donut_schema_ready_v89\(\) RETURNS boolean/);
-    // Every counted wager goes to what is left of the bonus's wagering first.
-    assert.match(lib, /const toBonus = counted < bonusLeft \? counted : bonusLeft;\s*const wageredAfter = BigInt\(referral\.wagered_minor\) \+ counted - toBonus;/);
-    assert.match(lib, /signup_bonus_wager_left_minor = \$4,/);
-    // The inviter sees what is left of it on each invite. The "Not counted" row in the terms came
-    // off at the owner's request (2026-11-10); the progress line says it where it applies.
-    assert.match(referrals, /`Clearing their bonus: \$\{money\(Number\(invite\.bonusWagerLeftMinor\)\)\} left`/);
-    assert.doesNotMatch(referrals, /'Not counted'/);
+    // The share: all bonus at the bonus; each later deposit leaves balance-before / balance-after of it.
+    assert.match(lib, /AND t\.seq > \(SELECT min\(b\.seq\) FROM wallet_transactions b WHERE b\.user_id = \$1 AND b\.kind = 'signup_bonus'\)/);
+    assert.match(lib, /share = \(share \* \(after - BigInt\(row\.amount_minor\)\)\) \/ after;/);
+    assert.match(lib, /own = \(counted \* \(PPM - bonusShare\)\) \/ PPM;\s*\}\s*const wageredAfter = BigInt\(referral\.wagered_minor\) \+ own;/);
+    assert.doesNotMatch(lib, /signup_bonus_wager_left_minor/);
+    // The migration marks the $10M invites, recounts those in progress without lowering anybody,
+    // and retires the bucket.
+    assert.match(migration, /ADD COLUMN signup_bonus_minor bigint NOT NULL DEFAULT 0/);
+    assert.match(migration, /WHERE t\.user_id = r\.referee_id AND t\.kind = 'signup_bonus' AND t\.amount_minor = 10000000/);
+    assert.match(migration, /WHERE r\.referee_id = c\.referee_id AND c\.own_minor > r\.wagered_minor;/);
+    assert.match(migration, /UPDATE referrals SET signup_bonus_wager_left_minor = 0/);
+    assert.match(migration, /CREATE FUNCTION donut_schema_ready_v95\(\) RETURNS boolean/);
+    // The inviter is told what counts, in as many words, on the page and on each invite.
+    assert.match(routes, /ownMoneyOnly: BigInt\(row\.signup_bonus_minor\) > 0n,/);
+    assert.match(referrals, /return state\.promotions\?\.referralSignupBonus \? ' of their own deposited money' : '';/);
+    assert.match(referrals, /\$\{invite\.ownMoneyOnly \? 'own money wagered' : 'wagered'\}/);
+    assert.doesNotMatch(referrals, /Clearing their bonus|'Not counted'/);
   });
 
   it('is a live setting, $10M at 10x by default, and public for a visitor', async () => {

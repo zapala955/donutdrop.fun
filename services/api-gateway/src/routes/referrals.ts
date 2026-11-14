@@ -116,7 +116,7 @@ interface InviteRow {
   wagered_minor: string;
   revshare_paid_minor: string;
   revshare_claimable_minor: string;
-  signup_bonus_wager_left_minor: string;
+  signup_bonus_minor: string;
   bonus_unlocked_at: Date | null;
   bonus_paid_minor: string | null;
   discord_verified_at: Date | null;
@@ -159,7 +159,7 @@ export async function registerReferralRoutes(
 
     const invites = await db.query<InviteRow>(
       `SELECT r.referee_id, u.minecraft_username, r.wagered_minor, r.revshare_paid_minor,
-              r.revshare_claimable_minor, r.signup_bonus_wager_left_minor,
+              r.revshare_claimable_minor, r.signup_bonus_minor,
               r.bonus_unlocked_at, r.bonus_paid_minor, u.discord_verified_at, r.created_at
          FROM referrals r JOIN users u ON u.id = r.referee_id
         WHERE r.referrer_id = $1
@@ -250,9 +250,9 @@ export async function registerReferralRoutes(
         username: row.minecraft_username,
         discordVerified: !!row.discord_verified_at,
         wageredMinor: row.wagered_minor,
-        /* What the invitee still has to wager to clear their invite signup bonus. That wagering is
-         * not counted toward the milestone, so the bar waits for it (lib/referrals.ts). */
-        bonusWagerLeftMinor: row.signup_bonus_wager_left_minor,
+        /* The invitee joined with the invite signup bonus, so only wagers made with their own
+         * deposited money count toward the milestone (lib/referrals.ts, migration 095). */
+        ownMoneyOnly: BigInt(row.signup_bonus_minor) > 0n,
         // Clamped, so a referee past the threshold cannot render a bar beyond full.
         wagerRatio: milestone > 0n ? Math.min(1, Number(wagered) / Number(milestone)) : 1,
         revsharePaidMinor: row.revshare_paid_minor,

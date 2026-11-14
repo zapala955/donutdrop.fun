@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
-import { staffPredicate } from './admin-stats.js';
+import { DEPOSIT_KINDS, staffPredicate } from './admin-stats.js';
 import { compactMinor, holdQueuedForUser } from './anti-drain.js';
 import { appendAudit } from './audit.js';
 import type { ContributionSource } from './cash-settlement.js';
@@ -52,8 +52,39 @@ interface ReferralRow {
   bonus_unlocked_at: Date | null;
   network_reviewed_at?: Date | null;
   revshare_bps?: number;
-  /** What is left of the invite signup bonus's own wagering, which the milestone does not count. */
-  signup_bonus_wager_left_minor?: string;
+  /** The invite signup bonus the referee was given (0: none). While it is above 0, the milestone
+   * counts only the share of each wager paid for with the referee's own deposited money. */
+  signup_bonus_minor?: string;
+}
+
+const PPM = 1_000_000n;
+
+/**
+ * How much of the referee's balance is still the invite signup bonus, in parts per million.
+ *
+ * At the bonus the balance is all bonus. Every deposit after it adds the player's own money, so the
+ * bonus's share falls to (balance before / balance after) of that deposit; wins and losses carry
+ * both parts alike, so nothing else moves it. A deposit landing on an empty balance leaves no bonus
+ * at all. Read from the ledger, which records the balance after every row. (The owner, 2026-11-14:
+ * "make sure they have to wager 100m with their own deposited money"; migration 095.)
+ */
+export async function signupBonusSharePpm(client: Pick<DbClient, 'query'>, refereeId: string): Promise<bigint> {
+  const deposits = await client.query<{ amount_minor: string; balance_after_minor: string }>(
+    `SELECT t.amount_minor, t.balance_after_minor
+       FROM wallet_transactions t
+      WHERE t.user_id = $1 AND t.kind = ANY($2::text[])
+        AND t.seq > (SELECT min(b.seq) FROM wallet_transactions b WHERE b.user_id = $1 AND b.kind = 'signup_bonus')
+      ORDER BY t.seq`,
+    [refereeId, [...DEPOSIT_KINDS]],
+  );
+  let share = PPM;
+  for (const row of deposits.rows) {
+    const after = BigInt(row.balance_after_minor);
+    if (after <= 0n) return 0n;
+    share = (share * (after - BigInt(row.amount_minor))) / after;
+    if (share <= 0n) return 0n;
+  }
+  return share;
 }
 
 interface ClaimableReferralRow {
@@ -93,7 +124,7 @@ export async function accrueReferralWager(
    * same running total, both decide the threshold was not crossed, and the milestone would never
    * fire. The lock also serializes the two writes to wagered_minor. */
   const existing = await client.query<ReferralRow>(
-    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at, r.signup_bonus_wager_left_minor,
+    `SELECT r.referrer_id, r.wagered_minor, r.bonus_unlocked_at, r.signup_bonus_minor,
             coalesce((
               SELECT a.granted_revshare_bps FROM creator_applications a
                WHERE a.user_id = r.referrer_id AND a.status = 'approved'
@@ -113,14 +144,18 @@ export async function accrueReferralWager(
    * referrer's own second account flip the gate open for 3% of it. See countedWagerMinor. So
    * `wagered_minor` is the counted wager from here on, which is also what the progress bar shows. */
   const counted = countedWagerMinor(config, wagerMinor, marginMinor);
-  /* The invite signup bonus's own wagering does not count toward the milestone (the operator's
-   * rule, 2026-11-09; migration 089). A player who joined on an invite was given $10M to wager 10x
-   * before it can leave (routes/auth.ts), and at a 10% edge that $10M is expected to turn over about
-   * $100M before it is gone: counted, it reached the milestone on the house's money alone. So each
-   * wager goes first to what is left of the bonus's wagering, and only the rest to the milestone. */
-  const bonusLeft = BigInt(referral.signup_bonus_wager_left_minor ?? '0');
-  const toBonus = counted < bonusLeft ? counted : bonusLeft;
-  const wageredAfter = BigInt(referral.wagered_minor) + counted - toBonus;
+  /* The invite signup bonus does not count toward the milestone (the operator's rule since
+   * 2026-11-09): only the invitee's own deposited money does. Migration 089 did that with a fixed
+   * $100M bucket every wager filled first, which assumed the bonus lasted exactly $100M of betting;
+   * the owner, 2026-11-14: "make sure they have to wager 100m with their own deposited money". So a
+   * wager counts by the share of the balance that is the player's own (signupBonusSharePpm), worked
+   * out only while the milestone is still to come. */
+  let own = counted;
+  if (!referral.bonus_unlocked_at && BigInt(referral.signup_bonus_minor ?? '0') > 0n) {
+    const bonusShare = await signupBonusSharePpm(client, refereeId);
+    own = (counted * (PPM - bonusShare)) / PPM;
+  }
+  const wageredAfter = BigInt(referral.wagered_minor) + own;
 
   if (commission > 0n) {
     /* The earnings row goes in FIRST, so its unique (kind, reference_id) index stops a replayed
@@ -141,10 +176,9 @@ export async function accrueReferralWager(
     `UPDATE referrals
         SET wagered_minor = $2,
             revshare_claimable_minor = revshare_claimable_minor + $3,
-            signup_bonus_wager_left_minor = $4,
             updated_at = now()
       WHERE referee_id = $1`,
-    [refereeId, wageredAfter.toString(), commission.toString(), (bonusLeft - toBonus).toString()],
+    [refereeId, wageredAfter.toString(), commission.toString()],
   );
 
   if (!referral.bonus_unlocked_at && wageredAfter >= config.referralBonusWagerMinor) {
