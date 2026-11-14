@@ -22,7 +22,8 @@
  *   paid         → the prize, and what to wager before withdrawing it
  */
 import { api } from './api.js';
-import { bus, refreshBalance } from './store.js';
+import { bus, refreshBalance, turnstileConfig } from './store.js';
+import { loadTurnstile } from './turnstile.js';
 import { $, money } from './util.js';
 import { closeModal, openModal } from './ui.js';
 
@@ -185,6 +186,7 @@ function paintForm(host) {
                maxlength="${CODE_LENGTH + 1}" placeholder="ABCD-2345" aria-describedby="rdmError">
       </div>
       <p class="auth__err" id="rdmError" role="alert" hidden></p>
+      <div class="auth__challenge" id="rdmChallenge" hidden></div>
       <button class="btn btn--go auth__go" type="submit" id="rdmGo" disabled>Redeem</button>
     </form>`);
 
@@ -192,35 +194,94 @@ function paintForm(host) {
   const field = $('#rdmField', host);
   const go = $('#rdmGo', host);
   const error = $('#rdmError', host);
+  const slot = $('#rdmChallenge', host);
   const setError = (text) => {
     error.textContent = text;
     error.hidden = !text;
     field.classList.toggle('is-error', Boolean(text));
   };
+
+  /* Cloudflare's challenge (the owner, 2026-11-13: "add turnstile"), as on the sign-in card: drawn
+   * as the form opens, so it is usually passed before the code is pasted. The server says whether it
+   * is on; Redeem waits for a passed one. A token is single-use, so every attempt asks for a new one. */
+  let challengeRequired = false;
+  let challengeToken = '';
+  let challengeWidget;
+  const ready = () => complete(typed) && (!challengeRequired || Boolean(challengeToken));
+  const sync = () => { go.disabled = !ready(); };
+  const spendChallenge = () => {
+    challengeToken = '';
+    if (challengeWidget !== undefined) {
+      try {
+        window.turnstile?.reset(challengeWidget);
+      } catch {
+        /* a widget that will not reset still leaves Redeem correctly disabled */
+      }
+    }
+  };
+  void (async () => {
+    let settings;
+    try {
+      settings = await turnstileConfig();
+    } catch {
+      return; // the server decides; if it cannot be asked, Redeem will say so
+    }
+    if (!settings?.enabled || !settings.siteKey || !slot.isConnected) return;
+    challengeRequired = true;
+    sync();
+    try {
+      const turnstile = await loadTurnstile();
+      if (!slot.isConnected) return;
+      slot.hidden = false;
+      challengeWidget = turnstile.render(slot, {
+        sitekey: settings.siteKey,
+        theme: 'dark',
+        callback: (token) => {
+          challengeToken = token;
+          sync();
+        },
+        'expired-callback': () => {
+          challengeToken = '';
+          sync();
+        },
+        'error-callback': () => {
+          challengeToken = '';
+          sync();
+        },
+      });
+    } catch {
+      slot.hidden = false;
+      slot.textContent = 'The challenge could not load. Disable your blocker and reopen this window.';
+    }
+  })();
+
   input.value = typed;
-  go.disabled = !complete(typed);
+  sync();
   input.addEventListener('input', () => {
     typed = formatCode(input.value);
     input.value = typed;
-    go.disabled = !complete(typed);
+    sync();
     setError('');
   });
 
   $('#rdmForm', host).addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (go.disabled || !complete(typed)) return;
+    if (go.disabled || !ready()) return;
     go.disabled = true;
     go.setAttribute('aria-busy', 'true');
     go.textContent = 'Redeeming…';
+    const token = challengeToken;
     let result;
     try {
-      result = await api.post('/v1/discord/codes/redeem', { code: typed });
+      result = await api.post('/v1/discord/codes/redeem', token ? { code: typed, turnstileToken: token } : { code: typed });
     } catch (failure) {
       if (failure?.status === 401) {
         void load(host); // the session ran out: the window says "log in" as it does on opening
         return;
       }
       result = { status: 'refused', reason: failure?.message || 'Could not redeem. Try again', keepCode: true };
+    } finally {
+      spendChallenge();
     }
     go.removeAttribute('aria-busy');
     go.textContent = 'Redeem';
@@ -234,7 +295,7 @@ function paintForm(host) {
       typed = '';
       input.value = '';
     }
-    go.disabled = !complete(typed);
+    sync();
     setError(`${result.reason}.`.replace(/\.\.$/, '.'));
     input.focus();
   });

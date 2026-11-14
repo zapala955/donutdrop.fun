@@ -99,8 +99,33 @@ describe('claiming one', () => {
     assert.match(source, /WHERE drop_id = \$1 AND \(user_id = \$2 OR discord_user_id = \$3\)/);
     const routes = await read('src/routes/discord-rewards.ts');
     assert.match(routes, /'\/v1\/discord\/codes\/redeem',\s*\{ preHandler: guards\.requireCsrf/);
-    assert.match(routes, /return redeemCodeDrop\(db, config, \{ userId, code: body\.code \}\);/);
+    assert.match(routes, /return redeemCodeDrop\(db, config, \{ userId, code: body\.code, ip: request\.ip \}\);/);
     assert.doesNotMatch(routes, /daily-code\/redeem/);
+  });
+
+  /* 2026-11-13, the owner: "make drops one claim per network, so a second account on the same
+   * connection gets refused" -- after Cpt_Ardian and .DashedWave65606 (one PC, a browser each) took
+   * two of every drop's five places for eleven drops running. */
+  it('is once per connection: the network is hashed, checked under the drop lock and kept on the claim', async () => {
+    const source = await read('src/lib/code-drops.ts');
+    assert.match(source, /const network = networkHash\(config, input\.ip\);\s+if \(!network\) return refused\('Your connection could not be checked\. Try again', true\);/);
+    // Checked after the drop row is locked, so two claims from one connection cannot both pass.
+    const lock = source.indexOf('WHERE code = $1 FOR UPDATE');
+    const check = source.indexOf('SELECT 1 FROM discord_code_drop_claims WHERE drop_id = $1 AND network_hash = $2');
+    assert.ok(lock > 0 && check > lock && check < source.indexOf('SET claims = claims + 1'));
+    assert.match(source, /INSERT INTO discord_code_drop_claims \(id, drop_id, user_id, discord_user_id, prize_minor, wager_minor, network_hash\)/);
+  });
+
+  it('asks Cloudflare whether a person solved the challenge before anything is claimed, while Turnstile is on', async () => {
+    const routes = await read('src/routes/discord-rewards.ts');
+    const handler = routes.slice(routes.indexOf("'/v1/discord/codes/redeem'"));
+    assert.match(handler, /if \(config\.turnstileEnabled\) \{\s+if \(!body\.turnstileToken\) throw new AppError\(400, 'CHALLENGE_REQUIRED'/);
+    assert.ok(handler.indexOf('await verifyTurnstile(config, body.turnstileToken, request.ip);') < handler.indexOf('return redeemCodeDrop('));
+    // The window draws the same widget as the sign-in card, and waits for a passed one.
+    const page = await read('../../DONUTDROP FRONTEND/Donut Drop/assets/js/redeem-code.js');
+    assert.match(page, /<div class="auth__challenge" id="rdmChallenge" hidden><\/div>/);
+    assert.match(page, /const ready = \(\) => complete\(typed\) && \(!challengeRequired \|\| Boolean\(challengeToken\)\);/);
+    assert.match(page, /token \? \{ code: typed, turnstileToken: token \} : \{ code: typed \}/);
   });
 
   it('copies the figures onto a drop when it is minted, so a change never touches a posted code', async () => {
@@ -142,5 +167,13 @@ describe('the migration', () => {
     assert.match(sql, /GRANT SELECT, INSERT, UPDATE ON TABLE discord_code_drops TO donut_api_runtime;/);
     assert.match(sql, /GRANT SELECT, INSERT ON TABLE discord_code_drop_claims TO donut_api_runtime;/);
     assert.match(sql, /CREATE FUNCTION donut_schema_ready_v92\(\) RETURNS boolean/);
+  });
+
+  it('094 adds the network to a claim, one per drop, and nothing else', async () => {
+    const sql = await read('../../packages/db/migrations/094_code_drop_networks.sql');
+    assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|DELETE FROM|TRUNCATE|^\s*UPDATE /im);
+    assert.match(sql, /ALTER TABLE discord_code_drop_claims ADD COLUMN network_hash bytea;/);
+    assert.match(sql, /CREATE UNIQUE INDEX discord_code_drop_claims_network_idx\s+ON discord_code_drop_claims \(drop_id, network_hash\)\s+WHERE network_hash IS NOT NULL;/);
+    assert.match(sql, /CREATE FUNCTION donut_schema_ready_v94\(\) RETURNS boolean/);
   });
 });

@@ -1,4 +1,5 @@
 /* app.js — entry point: shell wiring, clean-path router, home + crates + inventory. */
+import { loadTurnstile } from './turnstile.js';
 import { RARITY, IMG } from './data.js';
 import {
   state, bus, bootstrap, canAfford, openCase as requestCaseOpen,
@@ -363,31 +364,7 @@ const CARET_ICON =
   '<svg class="auth__refcaret" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">' +
   '<path d="M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"/></svg>';
 
-/**
- * Loads Cloudflare's Turnstile script, once per page.
- *
- * Deliberately not in index.html: a deployment with no challenge configured should not fetch a
- * third-party script on every page load to then not use it. The promise is cached so reopening the
- * sign-in card does not add another tag, and cleared on failure so a transient network error does
- * not permanently poison it.
- */
-let turnstileScript;
-function loadTurnstile() {
-  if (!turnstileScript) {
-    turnstileScript = new Promise((resolve, reject) => {
-      const tag = document.createElement('script');
-      tag.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      tag.async = true;
-      tag.onload = () => resolve(window.turnstile);
-      tag.onerror = () => {
-        turnstileScript = undefined;
-        reject(new Error('Turnstile could not be loaded'));
-      };
-      document.head.appendChild(tag);
-    });
-  }
-  return turnstileScript;
-}
+/* Cloudflare's Turnstile script: loaded once, shared with the code window (turnstile.js). */
 
 function openLoginModal() {
   if (state.authenticated) {

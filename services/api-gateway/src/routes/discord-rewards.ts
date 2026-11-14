@@ -7,11 +7,16 @@ import { codeDropStatus, redeemCodeDrop, type DropRedeemResult } from '../lib/co
 import { unlinkAccount } from '../lib/discord-accounts.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
+import { TURNSTILE_TOKEN_PATTERN, verifyTurnstile } from '../lib/turnstile.js';
 import { parseWith } from '../lib/validation.js';
 
 /* The code is whatever was typed or pasted, so it is judged (and refused politely) by the redeem
  * function rather than rejected here with a bare validation error. */
-const redeemSchema = z.object({ code: z.string().min(1).max(40) }).strict();
+/* `turnstileToken` is optional in the shape and required by the handler while Turnstile is on, as on
+ * the sign-in routes, so a deployment without it configured still redeems. */
+const redeemSchema = z
+  .object({ code: z.string().min(1).max(40), turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional() })
+  .strict();
 
 /* The server's invite, the same one the Discord page's button opens (DONUTDROP FRONTEND
  * assets/js/discord.js INVITE_URL). Its public endpoint carries the counts Discord itself shows on
@@ -104,7 +109,13 @@ export async function registerDiscordRewardRoutes(
       const userId = request.authUser?.id;
       if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
       const body = parseWith(redeemSchema, request.body);
-      return redeemCodeDrop(db, config, { userId, code: body.code });
+      /* The owner, 2026-11-13: "add turnstile". A claim is a race for five places, so a script that
+       * reads the Discord and posts the code wins it; Cloudflare's challenge makes it a person's. */
+      if (config.turnstileEnabled) {
+        if (!body.turnstileToken) throw new AppError(400, 'CHALLENGE_REQUIRED', 'Complete the challenge and try again');
+        await verifyTurnstile(config, body.turnstileToken, request.ip);
+      }
+      return redeemCodeDrop(db, config, { userId, code: body.code, ip: request.ip });
     },
   );
 

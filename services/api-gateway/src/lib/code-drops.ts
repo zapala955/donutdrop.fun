@@ -3,6 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { Database, DbClient } from './db.js';
 import { oldEnough } from './discord-rewards.js';
 import { liveEvents } from './live-events.js';
+import { networkHash } from './referral-network.js';
 import { creditWallet } from './wallet.js';
 import { addWagerRequirement, requirementFor } from './wager-requirements.js';
 
@@ -215,11 +216,16 @@ async function readCommitted<T>(db: Database, work: (client: DbClient) => Promis
 export async function redeemCodeDrop(
   db: Database,
   config: AppConfig,
-  input: { userId: string; code: string },
+  input: { userId: string; code: string; ip: string | undefined | null },
 ): Promise<DropRedeemResult> {
   if (!config.codeDropsEnabled) return refused('Code drops are switched off right now');
   const code = normalizeDropCode(input.code);
   if (!code) return refused('That is not a code. A code is eight letters and numbers');
+  /* One claim per network and drop (migration 094; the owner, 2026-11-13: "a second account on the
+   * same connection gets refused"). An address that cannot be read is refused rather than let
+   * through, so the limit cannot be stepped round by sending something unreadable. */
+  const network = networkHash(config, input.ip);
+  if (!network) return refused('Your connection could not be checked. Try again', true);
 
   const outcome = await readCommitted(db, async (client): Promise<{ result: DropRedeemResult; paid: boolean }> => {
     const found = await client.query<DropRow & { expired: boolean }>(
@@ -267,6 +273,17 @@ export async function redeemCodeDrop(
     );
     if (mine.rows[0]) return { result: refused('You have already claimed this code. The next one drops soon'), paid: false };
     if (drop.expired) return { result: refused('That code has expired. A new one drops in the Discord every few hours'), paid: false };
+    // Held by the drop's row lock above, and by the unique index on (drop_id, network_hash) besides.
+    const sameNetwork = await client.query(
+      'SELECT 1 FROM discord_code_drop_claims WHERE drop_id = $1 AND network_hash = $2',
+      [drop.id, network],
+    );
+    if (sameNetwork.rows[0]) {
+      return {
+        result: refused('This code was already claimed from your connection. One claim per connection on each drop'),
+        paid: false,
+      };
+    }
 
     // The limit, held by the row lock above and this guard together.
     const counted = await client.query<{ claims: number }>(
@@ -286,9 +303,9 @@ export async function redeemCodeDrop(
     const owed = requirementFor(prize, Number(drop.wager_multiplier));
     const claimId = randomUUID();
     await client.query(
-      `INSERT INTO discord_code_drop_claims (id, drop_id, user_id, discord_user_id, prize_minor, wager_minor)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [claimId, drop.id, user.id, user.discord_user_id, prize.toString(), owed.toString()],
+      `INSERT INTO discord_code_drop_claims (id, drop_id, user_id, discord_user_id, prize_minor, wager_minor, network_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [claimId, drop.id, user.id, user.discord_user_id, prize.toString(), owed.toString(), network],
     );
     /* The ledger kind the daily codes used: a Discord code reward, as the history and the admin
      * totals already name it. Keyed on the claim, so no claim is ever paid twice. */
