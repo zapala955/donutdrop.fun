@@ -59,6 +59,18 @@ describe('admin fleet proxy', () => {
     assert.ok(app.includes('await registerAdminFleetRoutes(app, db, config);'));
   });
 
+  it('reaches the fleet with node:http, because fetch drops a Host header and the fleet then refuses it', () => {
+    assert.ok(source.includes("from 'node:http'"));
+    assert.ok(!/\bfetch\(/.test(code(source)), 'no fetch() in the forwarding path');
+    assert.ok(source.includes('host: loopback,'), 'the Host is set to what the fleet accepts');
+  });
+
+  it('every answer may be shown in the console frame, errors included', () => {
+    const answers = code(source).split("frame-ancestors 'self'").length - 1;
+    assert.ok(answers >= 2, 'the fallback policy and the 502 both allow the console');
+    assert.ok(source.includes("'FLEET_UNAVAILABLE'"));
+  });
+
   it('does not touch money: no ledger, teller or payout code in the proxy', () => {
     for (const word of ['wallet', 'ledger', 'payout', 'teller', 'vault', 'transfer']) {
       assert.ok(!code(source).toLowerCase().includes(word), word);

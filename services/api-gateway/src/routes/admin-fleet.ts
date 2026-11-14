@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { type IncomingMessage, request as httpRequest } from 'node:http';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
@@ -85,37 +85,57 @@ export async function registerAdminFleetRoutes(
         body = JSON.stringify(request.body ?? {});
       }
 
-      const controller = new AbortController();
+      /* node:http and not fetch: fetch silently drops a Host header it is given, so the fleet saw
+       * "host.docker.internal", refused it with a 403, and the console showed that error page in a
+       * frame its policy forbids. node:http sends exactly the Host it is told to. */
       const isStream = rest === '/api/live';
-      const timer = isStream ? undefined : setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      request.raw.on('close', () => controller.abort());
-
-      let upstream: Response;
+      let upstream: IncomingMessage;
       try {
-        upstream = await fetch(new URL(`${rest}${query}`, fleet), {
-          method: request.method,
-          headers,
-          ...(body === undefined ? {} : { body }),
-          signal: controller.signal,
-          redirect: 'manual',
+        upstream = await new Promise<IncomingMessage>((resolve, reject) => {
+          const out = httpRequest(
+            {
+              host: fleet.hostname,
+              port: fleet.port || 80,
+              method: request.method,
+              path: `${rest}${query}`,
+              headers: body === undefined ? headers : { ...headers, 'content-length': Buffer.byteLength(body) },
+            },
+            resolve,
+          );
+          out.on('error', reject);
+          if (!isStream) out.setTimeout(REQUEST_TIMEOUT_MS, () => out.destroy(new Error('timeout')));
+          /* The browser closed the page or the tab: stop the event stream and free the fleet. */
+          reply.raw.on('close', () => {
+            if (!reply.raw.writableFinished) out.destroy();
+          });
+          out.end(body);
         });
       } catch {
-        clearTimeout(timer);
-        throw new AppError(502, 'FLEET_UNAVAILABLE', 'The fleet service is not reachable');
+        /* Answered here rather than thrown: an error handler would send the API's own policy, and the
+         * frame would show the browser's refusal page instead of saying the fleet is down. */
+        return reply
+          .code(502)
+          .header('content-security-policy', "default-src 'none'; frame-ancestors 'self'")
+          .header('x-frame-options', 'SAMEORIGIN')
+          .send({ error: { code: 'FLEET_UNAVAILABLE', message: 'The fleet service is not reachable' } });
       }
-      clearTimeout(timer);
 
-      reply.status(upstream.status);
+      reply.status(upstream.statusCode ?? 502);
       for (const name of RESPONSE_HEADERS) {
-        const value = upstream.headers.get(name);
-        if (value) reply.header(name, value);
+        const value = upstream.headers[name];
+        if (typeof value === 'string' && value) reply.header(name, value);
+      }
+      /* Every answer may be shown in the console's frame, an error too: otherwise the API's own policy
+       * (frame-ancestors 'none') replaces it with the browser's "cannot show this embedded page", which
+       * says nothing about what went wrong. The fleet's page brings a fuller policy of its own. */
+      if (!reply.hasHeader('content-security-policy') || !upstream.headers['content-security-policy']) {
+        reply.header('content-security-policy', "default-src 'none'; frame-ancestors 'self'");
       }
       /* Set here, once, and not in nginx: two copies of this header are an invalid value and the browser
        * refuses the frame. The console is the only page allowed to frame this one, and it is same-origin. */
       reply.header('x-frame-options', 'SAMEORIGIN');
       reply.header('x-content-type-options', 'nosniff');
-      if (!upstream.body) return reply.send('');
-      return reply.send(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream));
+      return reply.send(upstream);
     },
   });
 
