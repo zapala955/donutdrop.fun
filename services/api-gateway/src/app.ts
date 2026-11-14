@@ -66,6 +66,7 @@ import { registerSlotsRoutes } from './routes/slots.js';
 import { registerDiceRoutes } from './routes/dice.js';
 import { registerLimboRoutes } from './routes/limbo.js';
 import { registerStocksRoutes } from './routes/stocks.js';
+import { registerFairnessRoutes } from './routes/fairness.js';
 import { registerFishingRoutes } from './routes/fishing.js';
 import { registerIceFishingRoutes } from './routes/ice-fishing.js';
 import { registerDerbyRoutes } from './routes/derby.js';
@@ -264,6 +265,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerEconomyRoutes(app, db, config);
   await registerTransferRoutes(app, db, config);
   await registerUpgradeRoutes(app, db, config);
+  await registerFairnessRoutes(app, db, config);
   await registerVaultRoutes(app, db, config);
   await registerEngagementRoutes(app, db, config);
   await registerReferralRoutes(app, db, config);

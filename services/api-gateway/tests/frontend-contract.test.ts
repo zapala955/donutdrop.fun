@@ -166,7 +166,8 @@ describe('frontend/backend contract', () => {
       const store = await source('assets/js/store.js');
       assert.match(store, /export async function refreshFairness\(/);
       const fair = (await source('assets/js/fair.js')).replace(/\r\n/g, '\n');
-      assert.match(fair, /paint\(\);\n\s*reloadCommitment\(\);\n\}/);
+      // Every time the page opens, after the rewrite of 2026-11-14 as before it.
+      assert.match(fair, /paintCommitment\(\);\n\s*reloadCommitment\(\);\n\s*void loadRounds\(true\);/);
       assert.match(fair, /visibilitychange[\s\S]{0,120}reloadCommitment\(\)/);
     });
   });
