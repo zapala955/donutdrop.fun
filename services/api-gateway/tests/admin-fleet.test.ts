@@ -71,8 +71,14 @@ describe('admin fleet proxy', () => {
     const block = nginx.slice(start, nginx.indexOf('\n    }', start));
     assert.ok(block.includes('proxy_pass http://api_backend;'));
     assert.ok(block.includes('proxy_buffering off;'));
-    assert.ok(block.includes('X-Frame-Options SAMEORIGIN'));
     assert.ok(!block.includes('security-headers'), 'the page sends its own policy');
+    /* The API (helmet) already sends these. A second X-Frame-Options is an invalid value and the browser
+     * refuses to show the frame at all, which is exactly what happened on the first deploy. */
+    const directives = block.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
+    for (const header of ['X-Frame-Options', 'Referrer-Policy', 'X-Content-Type-Options', 'Strict-Transport-Security']) {
+      assert.ok(!directives.includes(header), `${header} comes from the API only`);
+    }
+    assert.ok(source.includes("reply.header('x-frame-options', 'SAMEORIGIN');"));
   });
 
   it('nginx: only the admin page may frame its own origin, and nothing else differs', () => {

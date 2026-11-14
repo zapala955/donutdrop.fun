@@ -110,6 +110,9 @@ export async function registerAdminFleetRoutes(
         const value = upstream.headers.get(name);
         if (value) reply.header(name, value);
       }
+      /* Set here, once, and not in nginx: two copies of this header are an invalid value and the browser
+       * refuses the frame. The console is the only page allowed to frame this one, and it is same-origin. */
+      reply.header('x-frame-options', 'SAMEORIGIN');
       reply.header('x-content-type-options', 'nosniff');
       if (!upstream.body) return reply.send('');
       return reply.send(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream));
