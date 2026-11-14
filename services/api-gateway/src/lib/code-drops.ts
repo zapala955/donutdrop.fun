@@ -2,8 +2,10 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { AppConfig } from '../config.js';
 import type { Database, DbClient } from './db.js';
 import { oldEnough } from './discord-rewards.js';
+import { DEPOSIT_KINDS } from './admin-stats.js';
 import { liveEvents } from './live-events.js';
 import { networkHash } from './referral-network.js';
+import { compactMoney } from './win-card.js';
 import { creditWallet } from './wallet.js';
 import { addWagerRequirement, requirementFor } from './wager-requirements.js';
 
@@ -207,6 +209,48 @@ async function readCommitted<T>(db: Database, work: (client: DbClient) => Promis
   }
 }
 
+/* ── the deposit a claim needs ──
+ * Real deposits only (the in-game /pay to the bot, and the payment that signs a player in), over the
+ * last CODE_DROP_DEPOSIT_WINDOW_HOURS. Bonuses, tips and winnings are not deposits. */
+
+type Queryable = Pick<DbClient, 'query'>;
+
+/** What `userId` has deposited within the window. */
+export async function depositedRecently(client: Queryable, config: AppConfig, userId: string): Promise<bigint> {
+  const result = await client.query<{ total: string }>(
+    `SELECT coalesce(sum(amount_minor), 0)::text AS total
+       FROM wallet_transactions
+      WHERE user_id = $1 AND kind = ANY($2::text[])
+        AND created_at > now() - make_interval(hours => $3)`,
+    [userId, [...DEPOSIT_KINDS], config.codeDropDepositWindowHours],
+  );
+  return BigInt(result.rows[0]?.total ?? '0');
+}
+
+/** "3 days", "1 day", "36 hours". */
+function windowText(hours: number): string {
+  if (hours % 24 !== 0) return `${hours} hours`;
+  const days = hours / 24;
+  return days === 1 ? '1 day' : `${days} days`;
+}
+
+function depositRefusal(config: AppConfig, deposited: bigint): string {
+  return `Codes are for players who deposited ${compactMoney(config.codeDropMinDepositMinor)} in the last `
+    + `${windowText(config.codeDropDepositWindowHours)}. You have deposited ${compactMoney(deposited)}. Deposit and try again`;
+}
+
+/** The rule and where this player stands, for the code window to show before anything is typed. */
+export async function codeDropDepositStatus(db: Database, config: AppConfig, userId: string) {
+  const requiredMinor = config.codeDropMinDepositMinor;
+  const depositedMinor = requiredMinor > 0n ? await depositedRecently(db, config, userId) : 0n;
+  return {
+    requiredMinor: requiredMinor.toString(),
+    windowHours: config.codeDropDepositWindowHours,
+    depositedMinor: depositedMinor.toString(),
+    met: depositedMinor >= requiredMinor,
+  };
+}
+
 /**
  * Redeems a drop code for the signed-in account `userId`.
  *
@@ -265,6 +309,13 @@ export async function redeemCodeDrop(
         ),
         paid: false,
       };
+    }
+
+    // Deposited enough lately (the owner, 2026-11-14: "add a 50m deposited in the last 3 days rule").
+    const needed = config.codeDropMinDepositMinor;
+    if (needed > 0n) {
+      const deposited = await depositedRecently(client, config, user.id);
+      if (deposited < needed) return { result: refused(depositRefusal(config, deposited), true), paid: false };
     }
 
     const mine = await client.query(

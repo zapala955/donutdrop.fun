@@ -935,6 +935,21 @@ export const runtimeSettingDefinitions = {
     min: 10n,
     max: 1_440n,
   },
+  // Read at every claim, so a change applies at once.
+  codeDropMinDepositMinor: {
+    kind: 'bigint',
+    group: 'codedrops',
+    label: 'A player must have deposited this much to claim a code (0 = no deposit needed)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  codeDropDepositWindowHours: {
+    kind: 'integer',
+    group: 'codedrops',
+    label: 'Hours back that deposit is counted over',
+    min: 1n,
+    max: 720n,
+  },
 
   /* ── crowns ──
    *

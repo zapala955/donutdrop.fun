@@ -3,7 +3,7 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { z } from 'zod';
-import { codeDropStatus, redeemCodeDrop, type DropRedeemResult } from '../lib/code-drops.js';
+import { codeDropDepositStatus, codeDropStatus, redeemCodeDrop, type DropRedeemResult } from '../lib/code-drops.js';
 import { unlinkAccount } from '../lib/discord-accounts.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
@@ -95,6 +95,8 @@ export async function registerDiscordRewardRoutes(
       signedIn: true,
       ...(await rewardStatus(db, config, userId)),
       codeDrops: await codeDropStatus(db, config),
+      // The deposit a claim needs, and this player's own, so the window can say so before a code is typed.
+      codeDropDeposit: await codeDropDepositStatus(db, config, userId),
     };
   });
 

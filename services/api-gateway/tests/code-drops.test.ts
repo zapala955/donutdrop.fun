@@ -42,6 +42,9 @@ describe('code drops', () => {
     assert.equal(config.codeDropMaxClaims, 5);
     assert.equal(config.codeDropWagerMultiplier, 3);
     assert.equal(config.codeDropEveryMinutes, 120);
+    // 2026-11-14, the owner: "add a 50m deposited in the last 3 days rule".
+    assert.equal(config.codeDropMinDepositMinor, 50_000_000n);
+    assert.equal(config.codeDropDepositWindowHours, 72);
   });
 
   it('can be tuned live from the System tab, under their own heading', () => {
@@ -51,6 +54,8 @@ describe('code drops', () => {
       'codeDropMaxClaims',
       'codeDropWagerMultiplier',
       'codeDropEveryMinutes',
+      'codeDropMinDepositMinor',
+      'codeDropDepositWindowHours',
     ] as const) {
       assert.ok(key in runtimeSettingDefinitions, key);
       assert.equal(runtimeSettingDefinitions[key].group, 'codedrops');
@@ -114,6 +119,24 @@ describe('claiming one', () => {
     const check = source.indexOf('SELECT 1 FROM discord_code_drop_claims WHERE drop_id = $1 AND network_hash = $2');
     assert.ok(lock > 0 && check > lock && check < source.indexOf('SET claims = claims + 1'));
     assert.match(source, /INSERT INTO discord_code_drop_claims \(id, drop_id, user_id, discord_user_id, prize_minor, wager_minor, network_hash\)/);
+  });
+
+  it('needs real deposits in the window, checked before a place is taken, and keeps the code when short', async () => {
+    const source = await read('src/lib/code-drops.ts');
+    // Deposits only: the /pay to the bot and the sign-in payment, never bonuses, tips or winnings.
+    assert.match(source, /WHERE user_id = \$1 AND kind = ANY\(\$2::text\[\]\)\s+AND created_at > now\(\) - make_interval\(hours => \$3\)/);
+    assert.match(source, /\[userId, \[\.\.\.DEPOSIT_KINDS\], config\.codeDropDepositWindowHours\]/);
+    assert.match(source, /if \(deposited < needed\) return \{ result: refused\(depositRefusal\(config, deposited\), true\), paid: false \};/);
+    const rule = source.indexOf('const deposited = await depositedRecently(client, config, user.id);');
+    assert.ok(rule > source.indexOf('FOR UPDATE') && rule < source.indexOf('SET claims = claims + 1'));
+    const stats = await read('src/lib/admin-stats.ts');
+    assert.match(stats, /export const DEPOSIT_KINDS = \['cash_deposit', 'pay_login_deposit'\] as const;/);
+    // The window says so before a code is typed, and offers the deposit.
+    const routes = await read('src/routes/discord-rewards.ts');
+    assert.match(routes, /codeDropDeposit: await codeDropDepositStatus\(db, config, userId\),/);
+    const page = await read('../../DONUTDROP FRONTEND/Donut Drop/assets/js/redeem-code.js');
+    assert.match(page, /if \(rule && !rule\.met\) \{\s+paintHead\(host, 'Deposit to unlock codes\.'\);/);
+    assert.match(page, /document\.getElementById\('depositBtn'\)\?\.click\(\);/);
   });
 
   it('asks Cloudflare whether a person solved the challenge before anything is claimed, while Turnstile is on', async () => {

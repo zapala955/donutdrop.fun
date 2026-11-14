@@ -171,7 +171,29 @@ function paint(host, status) {
     $('#rdmDiscord', host).addEventListener('click', () => closeModal());
     return;
   }
+  /* Deposited enough lately? (the owner, 2026-11-14: "add a 50m deposited in the last 3 days rule").
+   * Said before a code is typed, from the server's own figures; the server checks again on redeem. */
+  const rule = status.codeDropDeposit;
+  if (rule && !rule.met) {
+    paintHead(host, 'Deposit to unlock codes.');
+    host.insertAdjacentHTML('beforeend', `<p class="auth__lede rdm__p" id="rdmDepositText"></p>
+      <button class="btn btn--go auth__go" type="button" id="rdmDeposit">Deposit</button>`);
+    $('#rdmDepositText', host).textContent = `Codes are for players who deposited ${money(Number(rule.requiredMinor))} `
+      + `in the last ${windowText(rule.windowHours)}. You have deposited ${money(Number(rule.depositedMinor))}. Your code is kept.`;
+    $('#rdmDeposit', host).addEventListener('click', () => {
+      closeModal();
+      document.getElementById('depositBtn')?.click();
+    });
+    return;
+  }
   paintForm(host);
+}
+
+/** "3 days", "1 day", "36 hours". */
+function windowText(hours) {
+  if (hours % 24 !== 0) return `${hours} hours`;
+  const days = hours / 24;
+  return days === 1 ? '1 day' : `${days} days`;
 }
 
 /* No note under the button (the owner, 2026-11-12: "remove the text on the bottom"); what to wager

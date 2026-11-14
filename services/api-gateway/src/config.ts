@@ -764,6 +764,12 @@ const environmentSchema = z
     CODE_DROP_MAX_CLAIMS: z.coerce.number().int().min(1).max(1000).default(5),
     CODE_DROP_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(3),
     CODE_DROP_EVERY_MINUTES: z.coerce.number().int().min(10).max(1440).default(120),
+    /* The owner, 2026-11-14: "add a 50m deposited in the last 3 days rule". To claim a code a
+     * player must have deposited at least CODE_DROP_MIN_DEPOSIT_MINOR in the last
+     * CODE_DROP_DEPOSIT_WINDOW_HOURS (0 = no deposit needed). Accounts that never deposit were
+     * taking a quarter of all code money. */
+    CODE_DROP_MIN_DEPOSIT_MINOR: nonNegativeBigintString.default('50000000'),
+    CODE_DROP_DEPOSIT_WINDOW_HOURS: z.coerce.number().int().min(1).max(720).default(72),
     /* Media test mode: approved creators and staff play the house games with play money on a
      * separate test account, for clips (lib/media-test.ts). The balance is what the account is
      * filled back up to; it is play money and never leaves that account. */
@@ -1770,6 +1776,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     codeDropMaxClaims: env.CODE_DROP_MAX_CLAIMS,
     codeDropWagerMultiplier: env.CODE_DROP_WAGER_MULTIPLIER,
     codeDropEveryMinutes: env.CODE_DROP_EVERY_MINUTES,
+    codeDropMinDepositMinor: BigInt(env.CODE_DROP_MIN_DEPOSIT_MINOR),
+    codeDropDepositWindowHours: env.CODE_DROP_DEPOSIT_WINDOW_HOURS,
     mediaTestModeEnabled: env.MEDIA_TEST_MODE_ENABLED,
     mediaTestBalanceMinor: BigInt(env.MEDIA_TEST_BALANCE_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,
