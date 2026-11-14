@@ -23,7 +23,10 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 /* An allow-list rather than "everything under /api": a path the fleet grows later stays closed
  * until somebody opens it here. */
-const GET_PATHS = [/^\/$/, /^\/api\/live$/, /^\/api\/relays$/, /^\/api\/accounts\/[0-9a-f]+\/log$/];
+/* /switch-ip is the "pick a new server" page the fleet's Discord alert links to. The link carries the
+ * fleet's own token, and reaching it still takes a signed-in administrator here, so the token alone
+ * opens nothing: the fleet is not reachable from outside. */
+const GET_PATHS = [/^\/$/, /^\/switch-ip$/, /^\/api\/live$/, /^\/api\/relays$/, /^\/api\/accounts\/[0-9a-f]+\/log$/];
 const POST_PATHS = [/^\/api\/[a-z0-9]+(?:[/-][a-z0-9]+){0,4}$/];
 
 export function isAllowedFleetPath(method: string, path: string): boolean {

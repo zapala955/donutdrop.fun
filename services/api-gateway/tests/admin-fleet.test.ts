@@ -24,10 +24,10 @@ describe('admin fleet proxy', () => {
   });
 
   it('forwards only the pages and reads the fleet serves', () => {
-    for (const path of ['/', '/api/live', '/api/relays', '/api/accounts/0a1b2c3d4e5f/log']) {
+    for (const path of ['/', '/switch-ip', '/api/live', '/api/relays', '/api/accounts/0a1b2c3d4e5f/log']) {
       assert.ok(isAllowedFleetPath('GET', path), `GET ${path}`);
     }
-    for (const path of ['/server.mjs', '/api/accounts', '/api/settings', '/switch-ip', '/api/live/x', '/..%2f', '//evil']) {
+    for (const path of ['/server.mjs', '/api/accounts', '/api/settings', '/switch-ip/x', '/switch-ip.html', '/api/live/x', '/..%2f', '//evil']) {
       assert.ok(!isAllowedFleetPath('GET', path), `GET ${path}`);
     }
   });
