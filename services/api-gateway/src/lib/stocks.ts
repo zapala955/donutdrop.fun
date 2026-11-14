@@ -86,8 +86,25 @@ export type Side = 'long' | 'short';
 const ratio = (stepPpm: number) => 1 + stepPpm / 1_000_000;
 
 /** The price at a level, for display and records. Every decision is made on levels. */
-export function priceAt(level: number, stepPpm = STOCKS_STEP_PPM): number {
-  return STOCKS_BASE_PRICE * ratio(stepPpm) ** level;
+export function priceAt(level: number, stepPpm = STOCKS_STEP_PPM, anchorLevel = 0): number {
+  return STOCKS_BASE_PRICE * ratio(stepPpm) ** (level - anchorLevel);
+}
+
+/**
+ * ── splits: the price as shown, never the maths ──
+ * The price is a martingale, so it holds its value on average, but a martingale that moves this
+ * much drifts down in the typical case: it had gone from 1,000 to 0.81 in a day (2026-11-14), and
+ * a few weeks more would have taken it below what the price columns hold. So the shown price is
+ * BASE · U^(level − anchor), and the anchor is moved, like a stock split, when an epoch would
+ * start outside 10..100,000: to the nearest whole power of ten that brings it back near 1,000.
+ * Every decision -- liquidation, the cap, the payout -- is made on levels and does not move.
+ */
+export const STOCKS_SPLIT_LEVELS = Math.round(Math.log(10) / Math.log(1 + STOCKS_STEP_PPM / 1_000_000));
+
+/** The anchor an epoch starting at `startLevel` shows its prices from, given the last epoch's. */
+export function nextAnchorLevel(previousAnchor: number, startLevel: number): number {
+  if (Math.abs(startLevel - previousAnchor) <= 2 * STOCKS_SPLIT_LEVELS) return previousAnchor;
+  return Math.round(startLevel / STOCKS_SPLIT_LEVELS) * STOCKS_SPLIT_LEVELS;
 }
 
 /** The chance a move goes up, as a 32-bit threshold: up when the draw is below it. */
@@ -296,7 +313,7 @@ export interface Opened extends Position {
 }
 
 /** Everything a position opens with. Throws when the leverage or the stake does not fit. */
-export function openPosition(terms: PositionTerms, stepPpm = STOCKS_STEP_PPM, edgeBps = STOCKS_EDGE_BPS): Opened {
+export function openPosition(terms: PositionTerms, stepPpm = STOCKS_STEP_PPM, edgeBps = STOCKS_EDGE_BPS, anchorLevel = 0): Opened {
   const { side, stakeMinor, leverage, openLevel, maxPayoutMinor } = terms;
   if (stakeMinor <= 0n) throw new RangeError('stake must be positive');
   if (maxPayoutMinor <= stakeMinor) throw new RangeError('the cap must be above the stake');
@@ -317,7 +334,7 @@ export function openPosition(terms: PositionTerms, stepPpm = STOCKS_STEP_PPM, ed
     capDelta = room > 0 ? Math.floor(Math.log(room) / lnU) : null;
   }
   const fee = feePpm / 1_000_000;
-  const open = priceAt(openLevel, stepPpm);
+  const open = priceAt(openLevel, stepPpm, anchorLevel);
   const liquidationLevel = side === 'long' ? openLevel - n : openLevel + n;
   const capLevel = capDelta === null ? null : openLevel + capDelta;
   return {
@@ -329,8 +346,8 @@ export function openPosition(terms: PositionTerms, stepPpm = STOCKS_STEP_PPM, ed
     openPrice: open,
     // The price the position is settled against: worse than the market by fee/L' of it.
     entryPrice: side === 'long' ? open * (1 + fee / L) : open * (1 - fee / L),
-    liquidationPrice: priceAt(liquidationLevel, stepPpm),
-    capPrice: capLevel === null ? null : priceAt(capLevel, stepPpm),
+    liquidationPrice: priceAt(liquidationLevel, stepPpm, anchorLevel),
+    capPrice: capLevel === null ? null : priceAt(capLevel, stepPpm, anchorLevel),
   };
 }
 

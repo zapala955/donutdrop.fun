@@ -14,6 +14,7 @@ import { maskedName } from '../lib/masked-name.js';
 import {
   effectiveLeverage,
   epochPathAsync,
+  nextAnchorLevel,
   openPosition,
   outcomeInTick,
   payoutAt,
@@ -57,6 +58,8 @@ import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
  */
 
 const MAX_OPEN_PER_PLAYER = 20;
+/** How far behind the sweep's mark a position is checked again (checkFrom): 10 seconds of ticks. */
+const RECHECK_TICKS = 100;
 /** Ticks of history the page asks for by default: two minutes. */
 const HISTORY_TICKS = 1200;
 
@@ -78,6 +81,8 @@ interface EpochRow {
   ticks: number;
   step_ppm: number;
   start_level: number;
+  /** The level its prices are shown from (lib/stocks.ts nextAnchorLevel; migration 096). */
+  anchor_level: number;
   server_seed_hash: string;
   server_seed_ciphertext: string;
   server_seed_reveal: string | null;
@@ -299,13 +304,13 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
     return result.rows[0] ? build(result.rows[0]) : null;
   }
 
-  function insertEpoch(client: DbClient, seq: number, startsAt: Date, startLevel: number) {
+  function insertEpoch(client: DbClient, seq: number, startsAt: Date, startLevel: number, anchorLevel: number) {
     const id = randomUUID();
     const seed = generateServerSeed();
     return client.query(
       `INSERT INTO stocks_epochs
-         (id, seq, starts_at, tick_ms, ticks, step_ppm, start_level, server_seed_hash, server_seed_ciphertext)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (id, seq, starts_at, tick_ms, ticks, step_ppm, start_level, server_seed_hash, server_seed_ciphertext, anchor_level)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT DO NOTHING`,
       [
         id,
@@ -317,6 +322,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
         startLevel,
         hashServerSeed(seed),
         encryptSecret(seed, config.dataEncryptionKey, `stocks:${id}`),
+        anchorLevel,
       ],
     );
   }
@@ -333,7 +339,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
       const now = clock.rows[0]!.now.getTime();
       let latest = (await client.query<EpochRow>('SELECT * FROM stocks_epochs ORDER BY seq DESC LIMIT 1')).rows[0];
       if (!latest) {
-        await insertEpoch(client, 0, new Date(Math.floor(now / 1000) * 1000), 0);
+        await insertEpoch(client, 0, new Date(Math.floor(now / 1000) * 1000), 0, 0);
         latest = (await client.query<EpochRow>('SELECT * FROM stocks_epochs ORDER BY seq DESC LIMIT 1')).rows[0]!;
       }
       for (let guard = 0; guard < 3; guard += 1) {
@@ -343,7 +349,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
         const last = await build(latest);
         const endLevel = last.path.close[last.path.close.length - 1]!;
         const startsAt = last.end >= now - last.row.tick_ms ? new Date(last.end) : new Date(Math.ceil(now / STOCKS_TICK_MS) * STOCKS_TICK_MS);
-        await insertEpoch(client, last.seq + 1, startsAt, endLevel);
+        await insertEpoch(client, last.seq + 1, startsAt, endLevel, nextAnchorLevel(latest.anchor_level ?? 0, endLevel));
         latest = (await client.query<EpochRow>('SELECT * FROM stocks_epochs ORDER BY seq DESC LIMIT 1')).rows[0]!;
       }
     });
@@ -355,6 +361,31 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
     if (!epoch) throw new AppError(503, 'STOCKS_WARMING_UP', 'The market is opening, try again in a moment');
     const tick = Math.min(epoch.row.ticks - 1, Math.floor((now.getTime() - epoch.start) / epoch.row.tick_ms));
     return { epoch, ref: { seq: epoch.seq, tick }, level: epoch.path.close[tick]! };
+  }
+
+  /**
+   * Where to start checking a position: after its open, or after the sweep's mark less RECHECK_TICKS,
+   * whichever is later.
+   *
+   * Not the sweep's mark itself (found by replaying every position from the revealed seeds,
+   * 2026-11-14). An open reads its tick, then commits a moment later; a sweep that ran in between
+   * did not see the position yet and still moved its mark past that tick, so the ticks between the
+   * open and the mark were never checked for it -- one 1000x long reached its liquidation level on
+   * the tick after it opened and was only caught on the one after that. Checking again a little
+   * behind the mark costs nothing: a position that really reached its level on one of those ticks
+   * would already be settled, so only one the sweep never saw can be caught there. An open commits
+   * well within RECHECK_TICKS of reading its tick.
+   */
+  function checkFrom(opened: TickRef, swept: TickRef | null): TickRef {
+    if (!swept) return opened;
+    let { seq, tick } = swept;
+    tick -= RECHECK_TICKS;
+    while (tick < 0 && seq > 0) {
+      seq -= 1;
+      tick += STOCKS_EPOCH_TICKS;
+    }
+    const back = { seq, tick: Math.max(0, tick) };
+    return before(opened, back) ? back : opened;
   }
 
   /**
@@ -397,13 +428,14 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
     const position = asPosition(row);
     const payout =
       status === 'liquidated' ? 0n : status === 'capped' ? position.maxPayoutMinor : payoutAt(position, level, row.step_ppm);
+    const anchor = (await epochBySeq(client, ref.seq))?.row.anchor_level ?? 0;
     const updated = await client.query<PositionRow>(
       `UPDATE stocks_positions
           SET status = $2, close_level = $3, close_price = $4, closed_epoch = $5, closed_tick = $6,
               payout_minor = $7, settled_at = now()
         WHERE id = $1 AND status = 'open'
         RETURNING *`,
-      [row.id, status, level, priceAt(level, row.step_ppm).toFixed(10), ref.seq, ref.tick, payout.toString()],
+      [row.id, status, level, priceAt(level, row.step_ppm, anchor).toFixed(10), ref.seq, ref.tick, payout.toString()],
     );
     const settled = updated.rows[0] ?? null;
     if (settled && payout > 0n) await creditWallet(client, row.user_id, payout, 'stocks_payout', row.id);
@@ -506,9 +538,12 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
           seq: here.epoch.seq,
           startsAt: here.epoch.row.starts_at.toISOString(),
           ticks: here.epoch.row.ticks,
+          anchorLevel: here.epoch.row.anchor_level ?? 0,
           serverSeedHash: here.epoch.row.server_seed_hash,
         },
-        nextEpoch: next ? { seq: next.seq, startsAt: next.row.starts_at.toISOString(), serverSeedHash: next.row.server_seed_hash } : null,
+        nextEpoch: next
+          ? { seq: next.seq, startsAt: next.row.starts_at.toISOString(), anchorLevel: next.row.anchor_level ?? 0, serverSeedHash: next.row.server_seed_hash }
+          : null,
         history: await history(db, here.ref, query.span ?? HISTORY_TICKS),
         positions: mine.rows.map(positionView),
         feed,
@@ -592,7 +627,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
             leverage: body.leverage,
             openLevel: here.level,
             maxPayoutMinor: config.stocksMaxPayoutMinor,
-          }, here.epoch.row.step_ppm);
+          }, here.epoch.row.step_ppm, STOCKS_EDGE_BPS, here.epoch.row.anchor_level ?? 0);
         } catch {
           throw new AppError(400, 'POSITION_REFUSED', 'That position does not fit the market');
         }
@@ -690,7 +725,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
         const here = await locate(client, clock.rows[0]!.now);
         const opened: TickRef = { seq: Number(row.opened_epoch), tick: row.opened_tick };
         const swept = await sweepWatermark(client);
-        const from = swept && before(opened, swept) ? swept : opened;
+        const from = checkFrom(opened, swept);
         const ended = before(from, here.ref) ? await firstOutcome(client, asPosition(row), from, here.ref) : null;
         const settled = ended
           ? await settle(client, row, ended.outcome, ended.ref, ended.level)
@@ -775,7 +810,7 @@ export async function registerStocksRoutes(app: FastifyInstance, db: Database, c
           const endedIds: string[] = [];
           for (const row of open.rows) {
             const opened: TickRef = { seq: Number(row.opened_epoch), tick: row.opened_tick };
-            const from = before(opened, watermark) ? watermark : opened;
+            const from = checkFrom(opened, watermark);
             if (!before(from, here.ref)) continue;
             const hit = await firstOutcome(db, asPosition(row), from, here.ref);
             if (!hit) continue;

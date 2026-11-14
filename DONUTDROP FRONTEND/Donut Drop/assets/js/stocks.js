@@ -76,7 +76,15 @@ const lineBorn = new Map();
 /* ─────────── the server's maths, for display ─────────── */
 
 const ratio = (stepPpm = cfg.stepPpm) => 1 + stepPpm / 1_000_000;
-const priceOf = (level, stepPpm) => cfg.basePrice * ratio(stepPpm) ** level;
+/* Shown from the epoch's anchor, a stock split for display (lib/stocks.ts nextAnchorLevel): the
+ * price is a martingale whose typical path drifts down, and had reached 0.81 in a day. */
+const anchor = () => cfg?.epoch?.anchorLevel ?? 0;
+const priceOf = (level, stepPpm) => cfg.basePrice * ratio(stepPpm) ** (level - anchor());
+/** A position's prices, worked out from its levels so they read on the same scale as the chart. */
+const entryOf = (p) => {
+  const fee = p.feePpm / 1_000_000;
+  return priceOf(p.openLevel, p.stepPpm) * (p.side === 'long' ? 1 + fee / p.effectiveLeverage : 1 - fee / p.effectiveLeverage);
+};
 /** Two decimals while the price is in the hundreds or more; more as it falls, so a move still shows. */
 const fmtPrice = (value) => {
   const digits = value >= 100 ? 2 : value >= 1 ? 4 : 6;
@@ -249,6 +257,8 @@ function takeTicks(d) {
   if (d.seq !== lastSeq) {
     // The next epoch, announced in advance; its own details are read again a moment later.
     epochStart = cfg.nextEpoch?.seq === d.seq ? Date.parse(cfg.nextEpoch.startsAt) : epochStart + epochTicks * cfg.tickMs;
+    // The next epoch's anchor, announced with it, so a split lands on the tick it starts.
+    if (cfg.nextEpoch?.seq === d.seq) cfg.epoch = { ...cfg.epoch, seq: d.seq, anchorLevel: cfg.nextEpoch.anchorLevel ?? anchor() };
     lastSeq = d.seq;
     setTimeout(() => void refreshEpoch(), 300 + Math.random() * 1500);
   }
@@ -303,7 +313,7 @@ async function placeOrder() {
     if (response.balanceAfterMinor) showBalance(response.balanceAfterMinor);
     playSound('coin');
     positions = [response.position, ...positions.filter((p) => p.id !== response.position.id)];
-    say(`${side === 'long' ? 'Long' : 'Short'} ${leverage}x opened at ${fmtPrice(response.position.entryPrice)}.`);
+    say(`${side === 'long' ? 'Long' : 'Short'} ${leverage}x opened at ${fmtPrice(entryOf(response.position))}.`);
   } catch (error) {
     toast({ kind: 'lose', title: 'Order not placed', body: error?.message || 'Try again.' });
   } finally {
@@ -480,7 +490,7 @@ function openRow(p) {
   head.append(tagOf(p), el('span', 'stocks__pnl'));
   const sub = el('div', 'stocks__posrow');
   const facts = el('span', 'stocks__sub');
-  facts.append(el('b', '', money(Number(p.stakeMinor))), ` at ${fmtPrice(p.entryPrice)} · liq. ${fmtPrice(p.liquidationPrice)}`);
+  facts.append(el('b', '', money(Number(p.stakeMinor))), ` at ${fmtPrice(entryOf(p))} · liq. ${fmtPrice(priceOf(p.liquidationLevel, p.stepPpm))}`);
   const button = el('button', 'stocks__close', 'Close');
   button.type = 'button';
   button.dataset.close = p.id;
@@ -511,7 +521,7 @@ function doneRow(p) {
   head.append(tagOf(p), result);
   const sub = el('div', 'stocks__posrow');
   const facts = el('span', 'stocks__sub');
-  facts.append(el('b', '', money(Number(p.stakeMinor))), ` at ${fmtPrice(p.entryPrice)} → ${p.closePrice ? fmtPrice(p.closePrice) : '—'}`);
+  facts.append(el('b', '', money(Number(p.stakeMinor))), ` at ${fmtPrice(entryOf(p))} → ${p.closeLevel !== null && p.closeLevel !== undefined ? fmtPrice(priceOf(p.closeLevel, p.stepPpm)) : '—'}`);
   sub.append(facts, el('span', 'stocks__state', p.status === 'capped' ? 'Max win' : p.status === 'liquidated' ? 'Liquidated' : 'Closed'));
   row.append(head, sub);
   return row;
@@ -741,7 +751,7 @@ function drawChart(now = performance.now()) {
   const { lo, hi } = view;
   const y = (level) => top + (1 - (level - lo) / (hi - lo)) * plotH;
   const lnU = Math.log(ratio());
-  const levelOf = (price) => Math.log(price / cfg.basePrice) / lnU;
+  const levelOf = (price) => Math.log(price / cfg.basePrice) / lnU + anchor();
   const slot = plotW / shown;
   // The forming candle sits a little in from the axis; older ones slide left as time passes.
   const anchor = plotW - slot * 1.6;

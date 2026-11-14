@@ -8,14 +8,17 @@ import {
   epochPath,
   epochPathAsync,
   liquidationLevels,
+  nextAnchorLevel,
   openPosition,
   outcomeInTick,
   payoutAt,
   paceOf,
+  priceAt,
   STOCKS_MIN_LEVERAGE,
   STOCKS_PACE_BLOCK_TICKS,
   STOCKS_PACES,
   STOCKS_SPIKE_FACTOR,
+  STOCKS_SPLIT_LEVELS,
   STOCKS_STEP_PPM,
   tickMoveCount,
   tickMoves,
@@ -200,7 +203,12 @@ describe('the game', () => {
     assert.match(routes, /WHERE id = \$1 AND status = 'open'\s+RETURNING \*/);
     assert.match(routes, /SELECT \* FROM stocks_positions WHERE id = \$1 AND user_id = \$2 FOR UPDATE/);
     // A close checks every tick the sweep has not, so a touched liquidation level is never escaped.
-    assert.match(routes, /const from = swept && before\(opened, swept\) \? swept : opened;\s+const ended = before\(from, here\.ref\) \? await firstOutcome\(/);
+    assert.match(routes, /const from = checkFrom\(opened, swept\);\s+const ended = before\(from, here\.ref\) \? await firstOutcome\(/);
+    // ...and the sweep alike, both a little behind the sweep's mark (found by replaying every position,
+    // 2026-11-14: an open that commits after a sweep has passed its tick was not checked for that tick).
+    assert.match(routes, /const from = checkFrom\(opened, watermark\);/);
+    assert.match(routes, /const RECHECK_TICKS = 100;/);
+    assert.match(routes, /tick -= RECHECK_TICKS;[\s\S]{0,200}return before\(opened, back\) \? back : opened;/);
     // Nothing under 10x ("not some 2x leverage shit").
     assert.equal(STOCKS_MIN_LEVERAGE, 10);
     assert.ok(routes.includes('leverage: z.number().int().min(STOCKS_MIN_LEVERAGE)'));
@@ -224,6 +232,35 @@ describe('the game', () => {
     assert.match(broadcast, /const here = await locate\(db, new Date\(Date\.now\(\) \+ clockOffset - 15\)\);/);
     assert.match(broadcast, /liveEvents\.publishData\('stocks_tick', \{ seq: here\.ref\.seq, tick: here\.ref\.tick,/);
     assert.match(routes, /const ticker = setInterval\(\(\) => void broadcast\(\), 50\);/);
+  });
+
+  /* 2026-11-14: the price had drifted from 1,000 to 0.81 in a day -- a martingale's typical path --
+   * and in weeks would have rounded to zero in the price columns. Prices are shown from an anchor
+   * that moves like a stock split; the maths, on levels, does not move. */
+  it('shows its price from an anchor that splits by tens, and pays the same whatever the anchor', () => {
+    let anchor = 0;
+    for (const level of [0, -300_000, -2_000_000, -40_000_000, 5_000_000, 123_456]) {
+      anchor = nextAnchorLevel(anchor, level);
+      const shown = priceAt(level, STOCKS_STEP_PPM, anchor);
+      assert.ok(shown >= 10 && shown <= 100_000, `level ${level} shows ${shown}`);
+      const p = openPosition({ side: 'short', stakeMinor: 1_000_000n, leverage: 1000, openLevel: level, maxPayoutMinor: 50_000_000_000n }, STOCKS_STEP_PPM, 1000, anchor);
+      assert.ok(p.openPrice > 0 && p.entryPrice > 0 && p.liquidationPrice > 0);
+      const plain = openPosition({ side: 'short', stakeMinor: 1_000_000n, leverage: 1000, openLevel: level, maxPayoutMinor: 50_000_000_000n });
+      assert.equal(payoutAt(p, level - 7), payoutAt(plain, level - 7));
+    }
+    // Inside the band it stays put, so the shown price never flips back and forth between epochs.
+    assert.equal(nextAnchorLevel(0, STOCKS_SPLIT_LEVELS), 0);
+    assert.equal(nextAnchorLevel(0, -2 * STOCKS_SPLIT_LEVELS), 0);
+    assert.notEqual(nextAnchorLevel(0, -2 * STOCKS_SPLIT_LEVELS - 1), 0);
+  });
+
+  it('096 adds only the anchor, and every new epoch gets one', async () => {
+    const sql = await read('../../packages/db/migrations/096_stocks_price_anchor.sql');
+    assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|DELETE FROM|TRUNCATE|^\s*UPDATE /im);
+    assert.match(sql, /ALTER TABLE stocks_epochs\s+ADD COLUMN anchor_level integer NOT NULL DEFAULT 0;/);
+    const routes = await read('src/routes/stocks.ts');
+    assert.match(routes, /await insertEpoch\(client, last\.seq \+ 1, startsAt, endLevel, nextAnchorLevel\(latest\.anchor_level \?\? 0, endLevel\)\);/);
+    assert.match(routes, /priceAt\(level, row\.step_ppm, anchor\)\.toFixed\(10\)/);
   });
 
   it('adds its tables and its name to the four lists, and nothing else', async () => {
