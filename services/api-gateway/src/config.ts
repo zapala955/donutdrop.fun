@@ -606,7 +606,9 @@ const environmentSchema = z
       .transform((value) => value === 'true'),
     STOCKS_MIN_STAKE_MINOR: positiveBigintString.default('1'),
     STOCKS_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
-    STOCKS_MAX_PAYOUT_MINOR: positiveBigintString.default('50000000000'),
+    /* A position closes by itself, as a max win, the moment its payout would reach this (the owner,
+     * 2026-11-14: "max win on them is 2b so it auto cashouts at 2b"). Live setting. */
+    STOCKS_MAX_PAYOUT_MINOR: positiveBigintString.default('2000000000'),
     STOCKS_MAX_LEVERAGE: z.coerce.number().int().min(1).max(1000).default(1000),
     /* Fishing. The edge is fixed in lib/fishing.ts. A cast whose best catch would pay more than the
      * ceiling is refused, so the ceiling sets the largest stake in each weather. */

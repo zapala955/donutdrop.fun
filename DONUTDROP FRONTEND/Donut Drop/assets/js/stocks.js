@@ -196,7 +196,7 @@ function onMine() {
           say(`Your ${p.side} position was liquidated.`);
         } else if (p.status === 'capped') {
           playSound('win');
-          toast({ kind: 'win', title: `${signed(Number(p.payoutMinor) - Number(p.stakeMinor))}`, body: 'Closed at the most a position can win' });
+          toast({ kind: 'win', title: `${signed(Number(p.payoutMinor) - Number(p.stakeMinor))}`, body: `Closed by itself at the ${money(Number(p.maxPayoutMinor))} max win` });
         }
       }
       rebuildBars();
@@ -422,6 +422,8 @@ function paintOrder() {
   }
   $('#stocksFee', root).textContent = stake ? `fee ${money(Number(stake) * cfg.edgeBps / 10_000)} (10%)` : 'fee 10%';
   $('#stocksRuns', root).textContent = `runs at ${levText(runs)}`;
+  // The cap a position closes itself at (the server's maxPayoutMinor, a live setting).
+  $('#stocksMaxWin', root).textContent = `max win ${money(Number(cfg.maxPayoutMinor))}`;
   paintLiquidation();
 
   const go = $('#stocksGo', root);
@@ -754,8 +756,9 @@ function drawChart(now = performance.now()) {
   const levelOf = (price) => Math.log(price / cfg.basePrice) / lnU + anchor();
   const slot = plotW / shown;
   // The forming candle sits a little in from the axis; older ones slide left as time passes.
-  const anchor = plotW - slot * 1.6;
-  const xOf = (start) => anchor - ((view.s - (start + per / 2)) / per) * slot;
+  // Not called `anchor`: that is the price split above (anchor()), which levelOf needs in here.
+  const formingX = plotW - slot * 1.6;
+  const xOf = (start) => formingX - ((view.s - (start + per / 2)) / per) * slot;
 
   // Price lines on round prices, so they glide with the range rather than renumber.
   const pLo = priceOf(target.lo);
@@ -930,7 +933,7 @@ function build() {
           <button type="button" class="stocks__side" role="radio" data-side-pick="long" aria-checked="true"><i aria-hidden="true">▲</i>Long</button>
           <button type="button" class="stocks__side" role="radio" data-side-pick="short" aria-checked="false"><i aria-hidden="true">▼</i>Short</button>
         </div>
-        <label class="stocks__label" for="stocksStake">Stake</label>
+        <label class="stocks__label stocks__label--row" for="stocksStake"><span>Stake</span><span class="stocks__labelx" id="stocksMaxWin"></span></label>
         <div class="stocks__field">
           <span aria-hidden="true">$</span>
           <input id="stocksStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" placeholder="0" />

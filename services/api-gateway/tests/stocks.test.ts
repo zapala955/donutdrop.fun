@@ -178,7 +178,7 @@ describe('a position', () => {
 });
 
 describe('the game', () => {
-  it('ships on, with the other games’ payout cap and 1000x, tunable live under its own heading', () => {
+  it('ships on, with its own $2B max win and 1000x, tunable live under its own heading', () => {
     const config = loadConfig({
       NODE_ENV: 'test',
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
@@ -191,7 +191,8 @@ describe('the game', () => {
     });
     assert.equal(config.stocksEnabled, true);
     assert.equal(config.stocksMaxLeverage, 1000);
-    assert.equal(config.stocksMaxPayoutMinor, config.limboMaxPayoutMinor);
+    // Its own cap, not the other games' $50B: a position closes itself at a $2B payout (the owner, 2026-11-14).
+    assert.equal(config.stocksMaxPayoutMinor, 2_000_000_000n);
     for (const key of ['stocksEnabled', 'stocksMinStakeMinor', 'stocksMaxStakeMinor', 'stocksMaxPayoutMinor', 'stocksMaxLeverage'] as const) {
       assert.equal(runtimeSettingDefinitions[key].group, 'stocks', key);
     }
