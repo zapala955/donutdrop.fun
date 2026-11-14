@@ -121,3 +121,31 @@ describe('money alert payload', () => {
     assert.equal(lines.at(-1), '…and 4 more');
   });
 });
+
+describe('fleet counters in the alert feed', () => {
+  it('reads the three fleet counters as numbers and ignores garbage', async () => {
+    const { parseCounters } = await import('../src/alerts.js');
+    assert.deepEqual(
+      parseCounters({ fleet_vpns_down: '2', fleet_accounts_stuck: '0', fleet_unreachable: '1', bots_stale: 'x' }),
+      { fleet_vpns_down: 2, fleet_accounts_stuck: 0, fleet_unreachable: 1 },
+    );
+    assert.deepEqual(parseCounters({ fleet_vpns_down: '-1', fleet_accounts_stuck: 'many' }), {});
+  });
+
+  it('reports a fleet counter only when it rises, and points at the Fleet tab', async () => {
+    const { risenCounters } = await import('../src/alerts.js');
+    const base = { bots_stale: 0, fleet_vpns_down: 0, fleet_accounts_stuck: 1, fleet_unreachable: 0 };
+    assert.deepEqual(risenCounters(null, base), { lines: [], fleet: false }, 'the first poll only learns');
+    assert.deepEqual(risenCounters(base, base), { lines: [], fleet: false }, 'no change, no message');
+    const up = risenCounters(base, { ...base, fleet_vpns_down: 2, fleet_unreachable: 1 });
+    assert.deepEqual(up.lines, ['**2** fleet VPN(s) down (was 0)', '**1** fleet service unreachable (was 0)']);
+    assert.equal(up.fleet, true);
+    assert.deepEqual(risenCounters({ ...base, fleet_vpns_down: 3 }, base), { lines: [], fleet: false }, 'falling says nothing');
+  });
+
+  it('a site counter alone does not carry the fleet hint', async () => {
+    const { risenCounters } = await import('../src/alerts.js');
+    const out = risenCounters({ bots_stale: 0, fleet_vpns_down: 0 }, { bots_stale: 2, fleet_vpns_down: 0 });
+    assert.deepEqual(out, { lines: ['**2** bot(s) with a stale heartbeat (was 0)'], fleet: false });
+  });
+});

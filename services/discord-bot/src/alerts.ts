@@ -40,7 +40,14 @@ const WATCHED = [
   ['jobs_dead_letter', 'job(s) in dead letter'],
   ['withdrawals_manual_review', 'withdrawal(s) awaiting manual review'],
   ['cash_withdrawals_waiting', 'cash withdrawal(s) waiting for an operator'],
+  /* The bot fleet (see api-gateway lib/fleet-alerts.ts). Three numbers: which VPN and which account is
+   * for the admin console's Fleet tab, so the message points there instead of naming anyone. */
+  ['fleet_vpns_down', 'fleet VPN(s) down'],
+  ['fleet_accounts_stuck', 'fleet account(s) that cannot get back in'],
+  ['fleet_unreachable', 'fleet service unreachable'],
 ] as const;
+
+export const FLEET_HINT = 'Open the admin console, tab **Fleet**, to see which and to pick a new server.';
 
 const RED = 0xc0392b;
 const GOLD = 0xffaa00;
@@ -85,7 +92,26 @@ export interface MoneyAlerts {
   readonly holds: readonly Hold[];
 }
 
-function parseCounters(payload: unknown): Counters {
+/** The counters that went up since the last poll, as lines, and whether one of them is the fleet's. */
+export function risenCounters(
+  previous: Counters | null,
+  current: Counters,
+): { lines: string[]; fleet: boolean } {
+  const lines: string[] = [];
+  let fleet = false;
+  for (const [key, label] of WATCHED) {
+    const now = current[key];
+    const before = previous?.[key];
+    if (now === undefined) continue;
+    if (before !== undefined && now > before) {
+      lines.push(`**${now}** ${label} (was ${before})`);
+      if (key.startsWith('fleet_')) fleet = true;
+    }
+  }
+  return { lines, fleet };
+}
+
+export function parseCounters(payload: unknown): Counters {
   if (!payload || typeof payload !== 'object') return {};
   const record = payload as Record<string, unknown>;
   const out: Counters = {};
@@ -358,20 +384,14 @@ export function startAlertFeed(
     const embeds: EmbedBuilder[] = [];
     if (counterResult.status === 'fulfilled') {
       const current = parseCounters(counterResult.value);
-      const risen: string[] = [];
-      for (const [key, label] of WATCHED) {
-        const now = current[key];
-        const before = previous?.[key];
-        if (now === undefined) continue;
-        if (before !== undefined && now > before) risen.push(`**${now}** ${label} (was ${before})`);
-      }
+      const { lines: risen, fleet } = risenCounters(previous ?? null, current);
       previous = current;
       if (risen.length) {
         embeds.push(
           new EmbedBuilder()
             .setColor(RED)
             .setTitle('Needs attention')
-            .setDescription(risen.join('\n'))
+            .setDescription(fleet ? [...risen, '', FLEET_HINT].join('\n') : risen.join('\n'))
             .setTimestamp(new Date()),
         );
       }

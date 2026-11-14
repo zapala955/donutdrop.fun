@@ -18,6 +18,7 @@ import {
 } from '../lib/discord-control.js';
 import { parseWith } from '../lib/validation.js';
 import { safeText } from '../lib/sanitize.js';
+import { fleetCounters } from '../lib/fleet-alerts.js';
 import { moneyAlerts } from '../lib/staff-alerts.js';
 
 /**
@@ -505,7 +506,10 @@ export async function registerDiscordControlRoutes(
              AS cash_withdrawals_waiting`,
         [[...config.botCredentials.keys()]],
       );
-      return result.rows[0] ?? {};
+      /* The bot fleet's three counters ride along: how many of its VPNs are down, how many accounts
+       * cannot get back in, and whether it answers. Empty without a fleet, and a fleet that does not
+       * answer costs one key, never the counters above. See lib/fleet-alerts.ts. */
+      return { ...(result.rows[0] ?? {}), ...(await fleetCounters(config)) };
     },
   );
 
