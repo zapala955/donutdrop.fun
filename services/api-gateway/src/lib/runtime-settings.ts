@@ -950,6 +950,12 @@ export const runtimeSettingDefinitions = {
     min: 1n,
     max: 720n,
   },
+  // Read at every claim, so a change applies at once.
+  codeDropTagRequired: {
+    kind: 'boolean',
+    group: 'codedrops',
+    label: 'A player must wear the Discord server tag to claim a code',
+  },
 
   /* ── crowns ──
    *

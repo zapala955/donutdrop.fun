@@ -242,6 +242,10 @@ services:
       DISCORD_OPERATORS_JSON_FILE: /run/secrets/discord_operators_json
       COMMUNITY_BOT_ENABLED: '${COMMUNITY_BOT_ENABLED:-false}'
       COMMUNITY_BOT_HMAC_KEY_FILE: /run/secrets/community_bot_hmac_key
+      # The public server and its bot's token, for one read: whether a code drop claimer wears the
+      # server tag (lib/discord-tag.ts). deploy.sh writes a placeholder token file if there is none.
+      COMMUNITY_GUILD_ID: '${COMMUNITY_GUILD_ID:-}'
+      COMMUNITY_BOT_TOKEN_FILE: /run/secrets/community_bot_token
       # Discord OAuth: the referral verification. Off until its redirect URI is set; the secret
       # file is a placeholder until the real one is written.
       DISCORD_CLIENT_ID: '${DISCORD_CLIENT_ID:-}'
@@ -275,6 +279,7 @@ services:
       - discord_control_hmac_key
       - discord_operators_json
       - community_bot_hmac_key
+      - community_bot_token
       - turnstile_secret_key
       - discord_client_secret
       - resend_api_key

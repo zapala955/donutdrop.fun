@@ -35,6 +35,9 @@ const FILE_BACKED_SETTINGS = [
    * mints admin sessions, this one reads a public profile, and the process holding this one runs
    * in a server anybody can join. See lib/community-bot-auth.ts. */
   'COMMUNITY_BOT_HMAC_KEY',
+  /* The community bot's token, which the gateway uses for one read only: a member's profile, to see
+   * whether they wear the server's tag (lib/discord-tag.ts). It is still the bot, so it is a file. */
+  'COMMUNITY_BOT_TOKEN',
   /* The half of the Turnstile pair that proves a challenge was really solved. The site key beside
    * it is public by design and printed into the page; this one is what stops somebody minting
    * their own "passed" answer, so it is read the same careful way as every other secret here. */
@@ -770,6 +773,13 @@ const environmentSchema = z
      * taking a quarter of all code money. */
     CODE_DROP_MIN_DEPOSIT_MINOR: nonNegativeBigintString.default('50000000'),
     CODE_DROP_DEPOSIT_WINDOW_HOURS: z.coerce.number().int().min(1).max(720).default(72),
+    /* The owner, 2026-11-14: "u also need to have the discord server tag equipped to claim the code
+     * drops". Asked of Discord at the claim (lib/discord-tag.ts), with COMMUNITY_BOT_TOKEN and
+     * COMMUNITY_GUILD_ID; while either is missing the tag cannot be seen and such claims are refused. */
+    CODE_DROP_TAG_REQUIRED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
     /* Media test mode: approved creators and staff play the house games with play money on a
      * separate test account, for clips (lib/media-test.ts). The balance is what the account is
      * filled back up to; it is play money and never leaves that account. */
@@ -943,6 +953,13 @@ const environmentSchema = z
      * quietly open a second door. */
     COMMUNITY_BOT_ENABLED: booleanString,
     COMMUNITY_BOT_HMAC_KEY: z.string().default(''),
+    /* The public server and its bot's token: the server whose tag a code drop claim needs, and the
+     * token its wearer's profile is read with (lib/discord-tag.ts). Nothing else here uses them. */
+    COMMUNITY_BOT_TOKEN: z.string().default(''),
+    COMMUNITY_GUILD_ID: z
+      .string()
+      .regex(/^$|^[0-9]{5,32}$/, 'must be a Discord guild id')
+      .default(''),
     /* What the Discord server pays, through the community bot, to accounts linked to it: once for
      * joining and linking, every UTC day for wearing the server's tag, and to an inviter when
      * somebody they brought in links an account. 0 switches one off. The minimum Discord account
@@ -1784,6 +1801,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     codeDropEveryMinutes: env.CODE_DROP_EVERY_MINUTES,
     codeDropMinDepositMinor: BigInt(env.CODE_DROP_MIN_DEPOSIT_MINOR),
     codeDropDepositWindowHours: env.CODE_DROP_DEPOSIT_WINDOW_HOURS,
+    codeDropTagRequired: env.CODE_DROP_TAG_REQUIRED,
     mediaTestModeEnabled: env.MEDIA_TEST_MODE_ENABLED,
     mediaTestBalanceMinor: BigInt(env.MEDIA_TEST_BALANCE_MINOR),
     battlesEnabled: env.BATTLES_ENABLED,
@@ -1843,6 +1861,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     discordControlHmacKey: env.DISCORD_CONTROL_HMAC_KEY,
     communityBotEnabled: env.COMMUNITY_BOT_ENABLED,
     communityBotHmacKey: env.COMMUNITY_BOT_HMAC_KEY,
+    communityBotToken: env.COMMUNITY_BOT_TOKEN,
+    communityGuildId: env.COMMUNITY_GUILD_ID,
     discordRewardsEnabled: env.DISCORD_REWARDS_ENABLED,
     discordJoinRewardMinor: BigInt(env.DISCORD_JOIN_REWARD_MINOR),
     discordTagRewardMinor: BigInt(env.DISCORD_TAG_REWARD_MINOR),

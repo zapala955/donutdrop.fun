@@ -3,6 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { Database, DbClient } from './db.js';
 import { oldEnough } from './discord-rewards.js';
 import { DEPOSIT_KINDS } from './admin-stats.js';
+import { serverTagState } from './discord-tag.js';
 import { liveEvents } from './live-events.js';
 import { networkHash } from './referral-network.js';
 import { compactMoney } from './win-card.js';
@@ -251,6 +252,53 @@ export async function codeDropDepositStatus(db: Database, config: AppConfig, use
   };
 }
 
+/* ── the server tag a claim needs ──
+ * The owner, 2026-11-14: "u also need to have the discord server tag equipped to claim the code
+ * drops". Discord is asked at the claim (lib/discord-tag.ts), never from a remembered answer. */
+
+const TAG_REFUSAL = 'Codes are for players wearing the DonutLuxe server tag. In Discord, open User Settings, '
+  + 'then Profiles, then Server Tag, and pick DonutLuxe. Then redeem again. Your code is kept';
+
+/**
+ * Why `userId` cannot claim for want of the tag, or null when the tag is worn or the claim will be
+ * refused for something said first (no such code, no linked Discord, too young, short of the deposit).
+ *
+ * Asked BEFORE the drop is locked: it is a call to Discord, which can take a moment, and the drop's
+ * row lock is what every other claimer of the same code waits on. The wearing has no bearing on
+ * the count, so seeing it a moment before the lock is as good as seeing it under it.
+ */
+async function tagRefusal(db: Database, config: AppConfig, userId: string, code: string): Promise<DropRedeemResult | null> {
+  if (!config.codeDropTagRequired) return null;
+  const found = await db.query<{ discord_user_id: string | null; has_drop: boolean }>(
+    `SELECT u.discord_user_id, EXISTS (SELECT 1 FROM discord_code_drops WHERE code = $2) AS has_drop
+       FROM users u WHERE u.id = $1`,
+    [userId, code],
+  );
+  const row = found.rows[0];
+  const discordUserId = row?.discord_user_id;
+  if (!row?.has_drop || !discordUserId || !oldEnough(config, discordUserId)) return null;
+  const needed = config.codeDropMinDepositMinor;
+  if (needed > 0n && (await depositedRecently(db, config, userId)) < needed) return null;
+  const state = await serverTagState(config, discordUserId, { fresh: true });
+  if (state === 'wearing') return null;
+  if (state === 'unknown') return refused('Your Discord server tag could not be checked just now. Try again in a moment', true);
+  return refused(TAG_REFUSAL, true);
+}
+
+/** Whether a claim needs the tag, and whether this player wears it (null: not linked, or Discord did not say). */
+export async function codeDropTagStatus(
+  db: Pick<Database, 'query'>,
+  config: AppConfig,
+  userId: string,
+): Promise<{ required: boolean; wearing: boolean | null }> {
+  if (!config.codeDropTagRequired) return { required: false, wearing: null };
+  const found = await db.query<{ discord_user_id: string | null }>('SELECT discord_user_id FROM users WHERE id = $1', [userId]);
+  const discordUserId = found.rows[0]?.discord_user_id;
+  if (!discordUserId) return { required: true, wearing: null };
+  const state = await serverTagState(config, discordUserId);
+  return { required: true, wearing: state === 'unknown' ? null : state === 'wearing' };
+}
+
 /**
  * Redeems a drop code for the signed-in account `userId`.
  *
@@ -270,6 +318,8 @@ export async function redeemCodeDrop(
    * through, so the limit cannot be stepped round by sending something unreadable. */
   const network = networkHash(config, input.ip);
   if (!network) return refused('Your connection could not be checked. Try again', true);
+  const tag = await tagRefusal(db, config, input.userId, code);
+  if (tag) return tag;
 
   const outcome = await readCommitted(db, async (client): Promise<{ result: DropRedeemResult; paid: boolean }> => {
     const found = await client.query<DropRow & { expired: boolean }>(
@@ -394,6 +444,8 @@ export async function codeDropStatus(
   readonly maxClaims: number;
   readonly wagerMultiplier: number;
   readonly everyMinutes: number;
+  /** Whether a claim needs the server tag worn, for the help centre to say so. */
+  readonly tagRequired: boolean;
   readonly nextAt: string;
   readonly current: { readonly claimsLeft: number; readonly maxClaims: number; readonly expiresAt: string } | null;
 }> {
@@ -413,6 +465,7 @@ export async function codeDropStatus(
     maxClaims: config.codeDropMaxClaims,
     wagerMultiplier: config.codeDropWagerMultiplier,
     everyMinutes: every,
+    tagRequired: config.codeDropTagRequired,
     nextAt: new Date(slot.getTime() + every * 60_000).toISOString(),
     current: row
       ? {

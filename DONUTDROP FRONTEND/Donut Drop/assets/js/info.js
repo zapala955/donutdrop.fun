@@ -58,6 +58,7 @@ function figures() {
     dropPrize: usd(d?.codeDrops?.prizeMinor),
     dropClaims: d?.codeDrops?.maxClaims ?? null,
     dropX: times(d?.codeDrops?.wagerMultiplier),
+    dropTag: Boolean(d?.codeDrops?.tagRequired),
     dropEvery: d?.codeDrops?.everyMinutes
       ? d.codeDrops.everyMinutes % 60 === 0
         ? d.codeDrops.everyMinutes === 60 ? 'every hour' : `every ${d.codeDrops.everyMinutes / 60} hours`
@@ -221,6 +222,7 @@ function articles(f) {
         : `A new code is posted in the Discord ${f.dropEvery}, and the first few players to redeem it win a prize.` },
       { steps: [
         'Link your Discord first. Codes are only for linked players.',
+        ...(f.dropTag ? ['Wear the DonutLuxe server tag on your Discord profile: User Settings, then Profiles, then Server Tag.'] : []),
         'Tap Redeem on DonutLuxe under the code, or open your account menu and choose Redeem code.',
         'Tap Code pings under any drop to be pinged for the next one.',
       ] },

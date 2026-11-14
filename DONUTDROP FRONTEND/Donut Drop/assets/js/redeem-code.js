@@ -16,6 +16,8 @@
  * Every state says what to do next:
  *   signed out   → log in (the window comes back, code kept, once they have)
  *   not linked   → the Discord page, where the link code is
+ *   short        → the deposit a claim needs, and the Deposit button
+ *   no tag       → where to put the server tag on, and a button that checks again
  *   switched off → that, plainly
  *   ready        → the field, which formats as it is typed (ABCD-2345) and takes a paste
  *   refused      → the server's own words, under the field
@@ -36,6 +38,7 @@ let openLogin = () => {};
 let typed = ''; // the field, formatted; kept across a login and a refusal
 let resumeAfterLogin = false;
 let openHost = null; // the window's body while it is showing
+let tagRechecked = false; // "Check again" was pressed on the server tag gate
 
 const escapeText = (value) => String(value ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -110,6 +113,12 @@ async function load(host) {
     status = await api.get('/v1/discord/rewards');
   } catch {
     status = null;
+  }
+  /* The server tag is asked of Discord, so only once every gate before it is passed. Not known
+   * (Discord did not answer) shows the form: the server asks again on redeem and says why. */
+  if (status?.signedIn && status.linked && status.codeDrops?.enabled && status.codeDrops.tagRequired
+      && (!status.codeDropDeposit || status.codeDropDeposit.met)) {
+    status.codeDropTag = await api.get('/v1/discord/codes/tag').catch(() => null);
   }
   // Gone, or the modal now shows something else (it is shared): nothing to paint.
   if (!host?.isConnected || host !== openHost || $('#modalTitle')?.textContent !== TITLE) return;
@@ -186,6 +195,30 @@ function paint(host, status) {
     });
     return;
   }
+  /* Wearing the server tag? (the owner, 2026-11-14: "u also need to have the discord server tag
+   * equipped to claim the code drops"). Discord's own answer, read by the server; asked again on redeem. */
+  if (status.codeDropTag?.required && status.codeDropTag.wearing === false) {
+    // After "Check again", a second "not wearing" says so, rather than repainting the same words.
+    const stillOff = tagRechecked;
+    tagRechecked = false;
+    paintHead(host, 'Wear the server tag to unlock codes.');
+    host.insertAdjacentHTML('beforeend', `<p class="auth__lede rdm__p">Codes are for players wearing the DonutLuxe
+        server tag. In Discord, open <b>User Settings</b>, then <b>Profiles</b>, then <b>Server Tag</b>, and pick
+        DonutLuxe. Your code is kept.</p>
+      <p class="auth__err rdm__p" id="rdmTagError" role="alert"${stillOff ? '' : ' hidden'}>Not on your profile
+        yet. Pick DonutLuxe under Server Tag, save, then check again.</p>
+      <button class="btn btn--go auth__go" type="button" id="rdmTagCheck">Check again</button>`);
+    const check = $('#rdmTagCheck', host);
+    check.addEventListener('click', () => {
+      check.disabled = true;
+      check.setAttribute('aria-busy', 'true');
+      check.textContent = 'Checking…';
+      tagRechecked = true;
+      void load(host);
+    });
+    return;
+  }
+  tagRechecked = false;
   paintForm(host);
 }
 

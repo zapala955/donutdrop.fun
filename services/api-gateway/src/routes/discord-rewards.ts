@@ -3,7 +3,13 @@ import type { AppConfig } from '../config.js';
 import { createAuthGuards } from '../lib/auth.js';
 import type { Database } from '../lib/db.js';
 import { z } from 'zod';
-import { codeDropDepositStatus, codeDropStatus, redeemCodeDrop, type DropRedeemResult } from '../lib/code-drops.js';
+import {
+  codeDropDepositStatus,
+  codeDropStatus,
+  codeDropTagStatus,
+  redeemCodeDrop,
+  type DropRedeemResult,
+} from '../lib/code-drops.js';
 import { unlinkAccount } from '../lib/discord-accounts.js';
 import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
 import { AppError } from '../lib/errors.js';
@@ -100,6 +106,19 @@ export async function registerDiscordRewardRoutes(
       codeDropDeposit: await codeDropDepositStatus(db, config, userId),
     };
   });
+
+  /* Whether this player wears the server tag a claim needs (lib/discord-tag.ts). Its own route, read
+   * only by the code window once its other gates are passed: it is a call to Discord, and
+   * /v1/discord/rewards is read by half the site. */
+  app.get(
+    '/v1/discord/codes/tag',
+    { preHandler: softAuth, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      const userId = request.authUser?.id;
+      if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+      return codeDropTagStatus(db, config, userId);
+    },
+  );
 
   /* Redeeming a code drop's code (lib/code-drops.ts). It happens HERE, by a signed-in player, and
    * nowhere else: the bot only posts codes. The Discord account is the one linked to this session,

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { loadConfig } from '../src/config.js';
 import { generateDropCode, normalizeDropCode, slotStartOf } from '../src/lib/code-drops.js';
+import { profileWearsTag, serverTagState } from '../src/lib/discord-tag.js';
 import { runtimeSettingDefinitions } from '../src/lib/runtime-settings.js';
 
 /*
@@ -45,6 +46,12 @@ describe('code drops', () => {
     // 2026-11-14, the owner: "add a 50m deposited in the last 3 days rule".
     assert.equal(config.codeDropMinDepositMinor, 50_000_000n);
     assert.equal(config.codeDropDepositWindowHours, 72);
+    // 2026-11-14, the owner: "u also need to have the discord server tag equipped to claim the code drops".
+    assert.equal(config.codeDropTagRequired, true);
+    assert.equal(loadConfig({ ...env, CODE_DROP_TAG_REQUIRED: 'false' }).codeDropTagRequired, false);
+    assert.equal(config.communityBotToken, '');
+    assert.equal(config.communityGuildId, '');
+    assert.throws(() => loadConfig({ ...env, COMMUNITY_GUILD_ID: 'donutluxe' }), /COMMUNITY_GUILD_ID/);
   });
 
   it('can be tuned live from the System tab, under their own heading', () => {
@@ -56,6 +63,7 @@ describe('code drops', () => {
       'codeDropEveryMinutes',
       'codeDropMinDepositMinor',
       'codeDropDepositWindowHours',
+      'codeDropTagRequired',
     ] as const) {
       assert.ok(key in runtimeSettingDefinitions, key);
       assert.equal(runtimeSettingDefinitions[key].group, 'codedrops');
@@ -151,11 +159,108 @@ describe('claiming one', () => {
     assert.match(page, /token \? \{ code: typed, turnstileToken: token \} : \{ code: typed \}/);
   });
 
+  /* 2026-11-14, the owner: "make it so u also need to have the discord server tag equipped to claim
+   * the code drops". */
+  it('needs the server tag worn, asked of Discord before the drop is locked, and keeps the code without it', async () => {
+    const source = await read('src/lib/code-drops.ts');
+    const redeem = source.slice(source.indexOf('export async function redeemCodeDrop('));
+    // Asked after the cheap refusals of its own (the connection), and before the lock every claimer waits on.
+    assert.match(redeem, /const tag = await tagRefusal\(db, config, input\.userId, code\);\s+if \(tag\) return tag;\s+const outcome = await readCommitted\(/);
+    assert.ok(redeem.indexOf('tagRefusal(') < redeem.indexOf('FOR UPDATE'));
+    const check = source.slice(source.indexOf('async function tagRefusal('), source.indexOf('export async function codeDropTagStatus('));
+    assert.match(check, /if \(!config\.codeDropTagRequired\) return null;/);
+    // A claim always asks Discord; never what the window was told a moment ago.
+    assert.match(check, /await serverTagState\(config, discordUserId, \{ fresh: true \}\);/);
+    assert.match(check, /if \(state === 'unknown'\) return refused\('Your Discord server tag could not be checked just now\. Try again in a moment', true\);/);
+    assert.match(check, /return refused\(TAG_REFUSAL, true\);/);
+    // Said first by the claim itself: no such code, no linked Discord, too young, short of the deposit.
+    assert.match(check, /if \(!row\?\.has_drop \|\| !discordUserId \|\| !oldEnough\(config, discordUserId\)\) return null;/);
+    assert.match(check, /if \(needed > 0n && \(await depositedRecently\(db, config, userId\)\) < needed\) return null;/);
+    // The window asks on its own route, not on /v1/discord/rewards, which half the site reads.
+    const routes = await read('src/routes/discord-rewards.ts');
+    assert.match(routes, /'\/v1\/discord\/codes\/tag',\s+\{ preHandler: softAuth, config: \{ rateLimit: \{ max: 30, timeWindow: '1 minute' \} \} \},/);
+    assert.match(routes, /return codeDropTagStatus\(db, config, userId\);/);
+    const rewards = routes.slice(routes.indexOf("'/v1/discord/rewards'"), routes.indexOf("'/v1/discord/codes/tag'"));
+    assert.doesNotMatch(rewards, /codeDropTagStatus/);
+    const page = await read('../../DONUTDROP FRONTEND/Donut Drop/assets/js/redeem-code.js');
+    assert.match(page, /status\.codeDropTag = await api\.get\('\/v1\/discord\/codes\/tag'\)\.catch\(\(\) => null\);/);
+    const gate = page.slice(page.indexOf('if (status.codeDropTag?.required && status.codeDropTag.wearing === false) {'), page.indexOf('paintForm(host);', page.indexOf('codeDropTag.wearing === false')));
+    assert.match(gate, /paintHead\(host, 'Wear the server tag to unlock codes\.'\);/);
+    // A second 'not wearing' after Check again says so, instead of repainting the same words.
+    assert.match(gate, /id="rdmTagError" role="alert"\$\{stillOff \? '' : ' hidden'\}/);
+    assert.match(gate, /check\.setAttribute\('aria-busy', 'true'\);/);
+    // The API reads the profile with the community bot's token, mounted as a file like every other.
+    const compose = await read('../../infra/docker/compose.yml');
+    const api = compose.slice(compose.indexOf('\n  api:'), compose.indexOf('\n  maintenance:'));
+    assert.match(api, /COMMUNITY_GUILD_ID: '\$\{COMMUNITY_GUILD_ID:-\}'/);
+    assert.match(api, /COMMUNITY_BOT_TOKEN_FILE: \/run\/secrets\/community_bot_token/);
+    assert.match(api, /- community_bot_token\r?\n/);
+    const deploy = await read('../../infra/vps/deploy.sh');
+    assert.match(deploy, /community_token_file="\$\{COMMUNITY_BOT_TOKEN_FILE:-\/opt\/donutdrop\/shared\/secrets\/community-bot-token\}"/);
+  });
+
   it('copies the figures onto a drop when it is minted, so a change never touches a posted code', async () => {
     const source = await read('src/lib/code-drops.ts');
     assert.match(source, /INSERT INTO discord_code_drops\s+\(id, slot_start, code, prize_minor, max_claims, wager_multiplier, expires_at\)/);
     assert.match(source, /ON CONFLICT \(slot_start\) DO NOTHING/);
     assert.match(source, /const prize = BigInt\(drop\.prize_minor\);/);
+  });
+});
+
+describe('the server tag', () => {
+  const GUILD = '1551142401710497836';
+  const tagConfig = { communityBotToken: 'token', communityGuildId: GUILD };
+  const profile = (primary: unknown) => ({ id: '111111111111111111', primary_guild: primary });
+  const answering = (body: unknown, status = 200) => {
+    const calls: { url: string; init: RequestInit | undefined }[] = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  };
+
+  it('is worn only when the profile shows this server’s tag, switched on', () => {
+    assert.equal(profileWearsTag(profile({ identity_guild_id: GUILD, identity_enabled: true, tag: 'DNUT' }), GUILD), true);
+    assert.equal(profileWearsTag(profile({ identity_guild_id: GUILD, identity_enabled: false }), GUILD), false);
+    assert.equal(profileWearsTag(profile({ identity_guild_id: GUILD, identity_enabled: null }), GUILD), false);
+    assert.equal(profileWearsTag(profile({ identity_guild_id: '999999999999999999', identity_enabled: true }), GUILD), false);
+    assert.equal(profileWearsTag(profile(null), GUILD), false);
+    assert.equal(profileWearsTag({ id: '1' }, GUILD), false);
+    assert.equal(profileWearsTag(null, GUILD), false);
+  });
+
+  it('asks Discord for the profile with the community bot’s token', async () => {
+    const { calls, fetchImpl } = answering(profile({ identity_guild_id: GUILD, identity_enabled: true }));
+    assert.equal(await serverTagState(tagConfig, '222222222222222222', { fresh: true, fetchImpl }), 'wearing');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.url, 'https://discord.com/api/v10/users/222222222222222222');
+    assert.equal((calls[0]!.init?.headers as Record<string, string>)['authorization'], 'Bot token');
+  });
+
+  it('says "unknown", never "not wearing", when Discord does not answer, and asks nothing it cannot', async () => {
+    assert.equal(await serverTagState(tagConfig, '333333333333333333', { fetchImpl: answering({}, 401).fetchImpl }), 'unknown');
+    assert.equal(await serverTagState(tagConfig, '333333333333333333', { fetchImpl: answering({}, 500).fetchImpl }), 'unknown');
+    const failing = (async () => { throw new Error('offline'); }) as typeof fetch;
+    assert.equal(await serverTagState(tagConfig, '333333333333333333', { fetchImpl: failing }), 'unknown');
+    const unused = answering({});
+    assert.equal(await serverTagState({ communityBotToken: '', communityGuildId: GUILD }, '333333333333333333', { fetchImpl: unused.fetchImpl }), 'unknown');
+    assert.equal(await serverTagState({ communityBotToken: 'token', communityGuildId: '' }, '333333333333333333', { fetchImpl: unused.fetchImpl }), 'unknown');
+    assert.equal(await serverTagState(tagConfig, '../users/@me', { fetchImpl: unused.fetchImpl }), 'unknown');
+    assert.equal(unused.calls.length, 0);
+  });
+
+  it('remembers a worn tag briefly for the window, never a missing one, and a claim always asks', async () => {
+    const id = '444444444444444444';
+    const worn = answering(profile({ identity_guild_id: GUILD, identity_enabled: true }));
+    assert.equal(await serverTagState(tagConfig, id, { fetchImpl: worn.fetchImpl, now: 1_000 }), 'wearing');
+    assert.equal(await serverTagState(tagConfig, id, { fetchImpl: worn.fetchImpl, now: 20_000 }), 'wearing');
+    assert.equal(worn.calls.length, 1);
+    const off = answering(profile(null));
+    assert.equal(await serverTagState(tagConfig, id, { fresh: true, fetchImpl: off.fetchImpl, now: 21_000 }), 'not-wearing');
+    // Taken off: forgotten at once, so the window asks again rather than believing the old answer.
+    assert.equal(await serverTagState(tagConfig, id, { fetchImpl: off.fetchImpl, now: 22_000 }), 'not-wearing');
+    assert.equal(off.calls.length, 2);
   });
 });
 

@@ -57,6 +57,20 @@ if [[ ! -s "$community_hmac_file" ]]; then
   echo "Generated $community_hmac_file (the API mounts it whether or not the bot runs)."
 fi
 
+# ── the community bot's token, mounted the same way ───────────────────────────────────────────────
+# The api lists it too (the server tag a code drop claim needs, lib/discord-tag.ts), so its file must
+# exist before the container can be created. A placeholder cannot log in or read a profile, so code
+# drop claims say the tag could not be checked until add-community-bot.sh writes the real token.
+community_token_file="${COMMUNITY_BOT_TOKEN_FILE:-/opt/donutdrop/shared/secrets/community-bot-token}"
+if [[ ! -s "$community_token_file" ]]; then
+  secrets_dir="$(dirname "$community_token_file")"
+  [[ -d "$secrets_dir" ]] || install -d -m 0700 "$secrets_dir"
+  printf '%s' 'not-configured' >"$community_token_file"
+  chown 0:0 "$community_token_file"
+  chmod 0444 "$community_token_file"
+  echo "Wrote a placeholder $community_token_file (the API mounts it whether or not the bot runs)."
+fi
+
 # ── the Discord OAuth client secret, mounted the same way ─────────────────────────────────────────
 # Same bind-mount rule as above: the api lists this secret, so its file must exist before the
 # container can be created, whether or not Discord OAuth is set up. A placeholder is harmless: the
