@@ -132,10 +132,10 @@ describe('lava rain', () => {
     assert.match(routes, /const SERVER_COUNTS_TTL_MS = 5 \* 60_000;/);
     assert.match(routes, /signal: AbortSignal\.timeout\(4_000\)/);
     const page = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/discord.js');
-    assert.match(page, /const INVITE_URL = 'https:\/\/discord\.gg\/aHfRsUaGgx';/);
-    assert.match(routes, /const INVITE_CODE = 'aHfRsUaGgx';/);
+    assert.match(page, /const INVITE_URL = 'https:\/\/discord\.gg\/donutluxe';/);
+    assert.match(routes, /const INVITE_CODE = 'donutluxe';/);
     assert.match(page, /api\.get\('\/v1\/discord\/server'\)/);
-    assert.doesNotMatch(page, /INVITE_URL\.replace|inviteurl|discord\.gg\/aHfRsUaGgx<|textContent = INVITE_URL/);
+    assert.doesNotMatch(page, /INVITE_URL\.replace|inviteurl|discord\.gg\/donutluxe<|textContent = INVITE_URL/);
     assert.equal(page.match(/\.href = INVITE_URL;/g)?.length, 1);
     assert.match(page, /amount: `\$\{money\(tag\)\}\/day`,/);
     assert.doesNotMatch(page, /every 24h'/);

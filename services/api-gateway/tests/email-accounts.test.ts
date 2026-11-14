@@ -72,7 +72,7 @@ describe('email on accounts', () => {
     const notice = noticeEmail('Your email was changed', 'Changed.', [['Account', 'Alice']], new Date('2026-11-10T22:54:00Z'));
     assert.equal(notice.subject, 'DonutLuxe: Your email was changed');
     assert.match(notice.html, />10 Nov 2026, 22:54 UTC</);
-    assert.match(notice.html, /href="https:\/\/discord\.gg\/aHfRsUaGgx"[^>]*>Contact staff on Discord<\/a>/);
+    assert.match(notice.html, /href="https:\/\/discord\.gg\/donutluxe"[^>]*>Contact staff on Discord<\/a>/);
     assert.match(notice.text, /Account: Alice\nWhen: 10 Nov 2026, 22:54 UTC/);
   });
 

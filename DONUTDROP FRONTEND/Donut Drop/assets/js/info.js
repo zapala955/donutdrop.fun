@@ -18,7 +18,7 @@ import { $, el, money } from './util.js';
 /* The same server as the Discord tab. Duplicated as a constant rather than imported from
  * discord.js, which exists to mount a view and would drag a DOM module into this one for a
  * string. */
-const SUPPORT_INVITE_URL = 'https://discord.gg/aHfRsUaGgx';
+const SUPPORT_INVITE_URL = 'https://discord.gg/donutluxe';
 const ITEM = (name) => `assets/img/items/${name}.png`;
 
 const GROUPS = [

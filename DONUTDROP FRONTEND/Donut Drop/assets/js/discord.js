@@ -25,7 +25,7 @@ import { openRedeemCode } from './redeem-code.js';
  * Here rather than in a config endpoint because it is public, unchanging, and needed before any
  * request completes — fetching it would mean a page that renders empty and fills in.
  */
-const INVITE_URL = 'https://discord.gg/aHfRsUaGgx';
+const INVITE_URL = 'https://discord.gg/donutluxe';
 const WATCH_MS = 4000;
 
 const MARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 5.3A16.3 16.3 0 0 0 15.1 4l-.5 1.1a15 15 0 0 0-5.2 0L8.9 4a16.3 16.3 0 0 0-4.1 1.3C2.2 9.2 1.5 13 1.9 16.7A16.6 16.6 0 0 0 7 19.3l1.2-1.7c-.7-.3-1.4-.7-2-1.2l.5-.4c3.8 1.8 7.9 1.8 11.6 0l.5.4c-.6.5-1.3.9-2 1.2l1.2 1.7a16.6 16.6 0 0 0 5.1-2.6c.5-4.3-.8-8.1-2.9-11.4ZM8.5 14.5c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.9 2-1.9 2Zm7 0c-1 0-1.9-.9-1.9-2s.8-2 1.9-2 1.9.9 1.9 2-.8 2-1.9 2Z"/></svg>';

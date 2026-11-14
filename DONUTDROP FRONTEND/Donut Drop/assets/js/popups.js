@@ -43,7 +43,7 @@ const RETRY_MS = 8_000;
  * or a focus is read as interest and stops the clock (see show). */
 const AUTO_DISMISS_MS = 18_000;
 /* Where a player who has run out can buy more, cheap. */
-const SHOP_URL = 'https://discord.gg/qEyuAew5m';
+const SHOP_URL = 'https://discord.gg/donutluxe';
 /* Out of money: less than the smallest stake any game takes ($100K, every game's default minimum). */
 const BROKE_BELOW = 100_000;
 /* Long enough after the round that emptied the account for its result to be read first. */

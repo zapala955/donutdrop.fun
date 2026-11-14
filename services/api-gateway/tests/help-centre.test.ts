@@ -34,7 +34,7 @@ describe('the help centre', () => {
 
   it('ends at a ticket in the Discord', async () => {
     const info = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/info.js');
-    assert.match(info, /const SUPPORT_INVITE_URL = 'https:\/\/discord\.gg\/aHfRsUaGgx';/);
+    assert.match(info, /const SUPPORT_INVITE_URL = 'https:\/\/discord\.gg\/donutluxe';/);
     assert.match(info, /root\.appendChild\(ticketCard\(false\)\);/);
   });
 });

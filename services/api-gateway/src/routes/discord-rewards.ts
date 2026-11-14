@@ -18,10 +18,11 @@ const redeemSchema = z
   .object({ code: z.string().min(1).max(40), turnstileToken: z.string().regex(TURNSTILE_TOKEN_PATTERN).optional() })
   .strict();
 
-/* The server's invite, the same one the Discord page's button opens (DONUTDROP FRONTEND
- * assets/js/discord.js INVITE_URL). Its public endpoint carries the counts Discord itself shows on
- * an invite: how many members, how many online. */
-const INVITE_CODE = 'aHfRsUaGgx';
+/* The server's vanity invite, the same one the Discord page's button opens (DONUTDROP FRONTEND
+ * assets/js/discord.js INVITE_URL). A vanity invite never expires; the plain one used before it
+ * (aHfRsUaGgx) did on 2026-11-14 and took these counts with it. Its public endpoint carries the
+ * counts Discord itself shows on an invite: how many members, how many online. */
+const INVITE_CODE = 'donutluxe';
 const SERVER_COUNTS_TTL_MS = 5 * 60_000;
 type ServerCounts = { members: number | null; online: number | null };
 let serverCounts: { at: number; body: ServerCounts } | null = null;

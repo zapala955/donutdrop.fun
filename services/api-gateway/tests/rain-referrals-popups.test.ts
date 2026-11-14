@@ -169,7 +169,7 @@ describe('the pop-ups', () => {
 
   it('point a player who has run out of money at the Discord shop, once in six hours', async () => {
     const popups = await front('assets/js/popups.js');
-    assert.match(popups, /const SHOP_URL = 'https:\/\/discord\.gg\/qEyuAew5m';/);
+    assert.match(popups, /const SHOP_URL = 'https:\/\/discord\.gg\/donutluxe';/);
     // Out of money is less than the smallest stake any game takes.
     assert.match(popups, /const BROKE_BELOW = 100_000;/);
     // Asked on every change of the store: the first balance arrives with 'ready', not 'balance'.

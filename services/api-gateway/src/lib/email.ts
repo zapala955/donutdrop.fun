@@ -262,7 +262,7 @@ function escapeHtml(value: string): string {
  * back to Segoe UI / Helvetica / Arial where a client will not load Figtree and Archivo.
  * Every email has a plain-text part too. */
 const SITE_URL = 'https://donutluxe.com';
-const DISCORD_URL = 'https://discord.gg/aHfRsUaGgx';
+const DISCORD_URL = 'https://discord.gg/donutluxe';
 const LOGO_URL = `${SITE_URL}/assets/img/brand/logo-com.png`;
 const MAIL = {
   page: '#121216',
