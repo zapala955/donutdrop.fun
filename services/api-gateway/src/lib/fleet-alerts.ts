@@ -15,7 +15,10 @@ import type { AppConfig } from '../config.js';
  */
 
 const TIMEOUT_MS = 3_000;
-const MAX_BODY_BYTES = 64 * 1024;
+/* The three numbers are tiny. The page is read only for its token and is large (about 70 KB today and
+ * growing): the first version capped everything at 64 KB and so never saw a live fleet as reachable. */
+const MAX_ANSWER_BYTES = 64 * 1024;
+const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 
 export interface FleetCounters {
   readonly fleet_vpns_down?: string;
@@ -24,7 +27,12 @@ export interface FleetCounters {
 }
 
 /** node:http because fetch drops a Host header, and the fleet only answers its own loopback address. */
-function get(url: URL, path: string, headers: Record<string, string>): Promise<{ status: number; body: string }> {
+function get(
+  url: URL,
+  path: string,
+  headers: Record<string, string>,
+  maxBytes: number,
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const out = httpRequest(
       { host: url.hostname, port: url.port || 80, path, method: 'GET', headers },
@@ -33,7 +41,7 @@ function get(url: URL, path: string, headers: Record<string, string>): Promise<{
         res.setEncoding('utf8');
         res.on('data', (chunk: string) => {
           body += chunk;
-          if (body.length > MAX_BODY_BYTES) out.destroy(new Error('answer too large'));
+          if (body.length > maxBytes) out.destroy(new Error('answer too large'));
         });
         res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
         res.on('error', reject);
@@ -53,10 +61,10 @@ export async function fleetCounters(config: Pick<AppConfig, 'fleetUrl'>): Promis
     /* The fleet's token is minted per process and handed to its own page, so it is read from there, the
      * way the console's frame gets it. A restart of the fleet changes it, and the next poll just reads
      * the new one. */
-    const page = await get(fleet, '/', headers);
+    const page = await get(fleet, '/', headers, MAX_PAGE_BYTES);
     const token = /const TOKEN = '([0-9a-f]{20,})'/.exec(page.body)?.[1];
     if (page.status !== 200 || !token) throw new Error('no token');
-    const answer = await get(fleet, '/api/alerts', { ...headers, 'x-token': token });
+    const answer = await get(fleet, '/api/alerts', { ...headers, 'x-token': token }, MAX_ANSWER_BYTES);
     if (answer.status !== 200) throw new Error(`status ${answer.status}`);
     const data = JSON.parse(answer.body) as { vpns_down?: unknown; accounts_stuck?: unknown };
     const vpns = Number(data.vpns_down);

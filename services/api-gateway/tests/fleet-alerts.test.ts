@@ -19,7 +19,9 @@ function standIn(behaviour: { numbers?: unknown; status?: number; page?: string 
       }
       if (req.url === '/') {
         res.writeHead(200, { 'content-type': 'text/html' });
-        return res.end(behaviour.page ?? `<script>const TOKEN = '${TOKEN}';</script>`);
+        /* As big as the real page (about 70 KB), with the token well inside it: a small stand-in is what let
+         * a size cap that rejected the real page go unnoticed. */
+        return res.end(behaviour.page ?? `<!-- ${'x'.repeat(90_000)} --><script>const TOKEN = '${TOKEN}';</script>`);
       }
       if (req.url === '/api/alerts') {
         if (req.headers['x-token'] !== TOKEN) {
