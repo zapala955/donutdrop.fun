@@ -2501,3 +2501,14 @@ p.hint {
     --search-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9aab3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6'/%3E%3Cpath d='M15 15l5 5'/%3E%3C/svg%3E");
   }
 }
+
+/* The fleet tab: its own page, as tall as the window allows. */
+.fleet-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 190px);
+  min-height: 560px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg, #fff);
+}

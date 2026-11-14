@@ -4656,7 +4656,15 @@ async function loadPayoutQueue() {
   renderPayRecent(data);
 }
 
+/* The fleet is a page of its own, framed. It is only fetched when the tab is first opened, so the
+ * console costs nothing while nobody looks at it. Reload sets the address again to restart it. */
+function loadFleet() {
+  const frame = $('fleetFrame');
+  if (!frame.getAttribute('src')) frame.setAttribute('src', '/v1/admin/fleet/');
+}
+
 const LOADERS = {
+  fleet: loadFleet,
   payouts: loadPayoutQueue,
   overview: loadOverview,
   players: () => loadPlayers($('playerQuery').value.trim()),
@@ -4794,6 +4802,8 @@ async function start() {
   glider.setAttribute('aria-hidden', 'true');
   document.querySelector('.tabs').prepend(glider);
   window.addEventListener('resize', moveGlider);
+  /* Not a data-refresh button: switching tabs must not restart the fleet page and lose what is open in it. */
+  $('fleetReload').addEventListener('click', () => $('fleetFrame').setAttribute('src', '/v1/admin/fleet/'));
   for (const button of document.querySelectorAll('[data-refresh]')) {
     button.addEventListener('click', () => void show(button.dataset.refresh));
   }

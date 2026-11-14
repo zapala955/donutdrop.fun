@@ -22,6 +22,7 @@ import { registerCommunityRoutes } from './routes/community.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminOperationRoutes } from './routes/admin-operations.js';
 import { registerAdminDiscordRoutes } from './routes/admin-discord.js';
+import { registerAdminFleetRoutes } from './routes/admin-fleet.js';
 import { registerAdminPayoutRoutes } from './routes/admin-payouts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
@@ -304,6 +305,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerAdminOperationRoutes(app, db, config, runtimeSettings);
   await registerAdminPayoutRoutes(app, db, config);
   await registerAdminDiscordRoutes(app, db, config);
+  await registerAdminFleetRoutes(app, db, config);
   startAntiDrainMonitor(app, db, config);
   startCrownSweeper(app, db, config);
   startStakingJobs(app, db, config);

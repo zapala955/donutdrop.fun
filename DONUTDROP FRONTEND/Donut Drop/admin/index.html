@@ -87,6 +87,7 @@
             Programs
           </button>
           <button class="tab" type="button" data-panel="feedback" aria-selected="false">Feedback</button>
+          <button class="tab" type="button" data-panel="fleet" aria-selected="false">Fleet</button>
           <button class="tab" type="button" data-panel="audit" aria-selected="false">Audit</button>
           <button class="tab" type="button" data-panel="system" aria-selected="false">
             System
@@ -424,6 +425,17 @@
             time an account sends one, and only once it has played the minimum (System → Feedback).
           </p>
           <div class="tablewrap"><table class="grid" id="feedbackTable"></table></div>
+        </section>
+
+        <section class="panel" data-panel="fleet" hidden>
+          <div class="panel__head">
+            <div>
+              <h2>Bot fleet</h2>
+              <span class="hint">Accounts, VPN servers, funding and settings. It has its own page, shown here.</span>
+            </div>
+            <button class="btn" type="button" id="fleetReload">Reload</button>
+          </div>
+          <iframe class="fleet-frame" id="fleetFrame" title="Bot fleet" referrerpolicy="same-origin"></iframe>
         </section>
 
         <section class="panel" data-panel="audit" hidden>

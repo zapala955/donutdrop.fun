@@ -1049,6 +1049,12 @@ const environmentSchema = z
     EMAIL_FROM: z.string().min(3).max(200).default('DonutLuxe <login@donutluxe.com>'),
     EMAIL_DAILY_LIMIT: z.coerce.number().int().min(0).max(1_000_000).default(100),
     RESEND_API_KEY: z.string().max(256).default(''),
+    /* The bot fleet's dashboard, as a tab of the admin console. Plain http on purpose: it is a service
+     * on this host, reached through the Docker bridge, never over the internet. Empty means no tab
+     * and no route. See routes/admin-fleet.ts. */
+    FLEET_URL: z
+      .union([z.string().url().startsWith('http://'), z.literal('')])
+      .default(''),
     TRUSTED_PROXY_CIDRS: z.string().default('127.0.0.1/32,::1/128'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -1935,6 +1941,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     emailFrom: env.EMAIL_FROM,
     emailDailyLimit: env.EMAIL_DAILY_LIMIT,
     resendApiKey: env.RESEND_API_KEY,
+    fleetUrl: env.FLEET_URL,
     trustedProxyCidrs,
     logLevel: env.LOG_LEVEL,
     secureCookies: env.NODE_ENV === 'production',

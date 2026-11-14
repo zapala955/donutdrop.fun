@@ -110,6 +110,8 @@ services:
       DATABASE_SSL: '${DATABASE_SSL:-false}'
       REDIS_URL_FILE: /run/secrets/api_redis_url
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN to the English website HTTPS origin}
+      # The bot fleet's dashboard on this host, e.g. http://host.docker.internal:8890. Empty: no fleet tab.
+      FLEET_URL: '${FLEET_URL:-}'
       COOKIE_SECRET_FILE: /run/secrets/api_cookie_secret
       DATA_ENCRYPTION_KEY_FILE: /run/secrets/api_data_encryption_key
       BOT_CREDENTIALS_JSON_FILE: /run/secrets/api_bot_credentials_json
@@ -297,6 +299,8 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+    # The fleet runs on the host, not in a container. Only this service gets the way to it.
+    extra_hosts: ['host.docker.internal:host-gateway']
     networks: [edge, database, cache, bot-control, api-egress]
     mem_limit: 768m
     cpus: 2
@@ -544,6 +548,7 @@ services:
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../nginx/security-headers.conf:/etc/nginx/security-headers.conf:ro
+      - ../nginx/security-headers-admin.conf:/etc/nginx/security-headers-admin.conf:ro
       - ../../DONUTDROP FRONTEND/Donut Drop:/srv/www:ro
     ports:
       - '127.0.0.1:8080:8080'
