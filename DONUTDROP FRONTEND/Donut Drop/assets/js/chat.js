@@ -109,6 +109,13 @@ const seenHits = new Set();
 const HIT_COOLDOWN_MS = 60_000;
 const lastHitAt = new Map(); // player id -> the round time of their last card
 let appliedResetId;
+/* Whether the reader is following the newest line. Only scrolling changes it. It used to be measured
+ * at each new line, and avatars, win art and fonts that finish loading after a line is placed push
+ * the log taller without a scroll: the reader then measured as scrolled up, the log stopped following
+ * and opened on old messages under a "New messages" pill -- which every PC visitor saw once the chat
+ * opened by default (2026-11-15). */
+let following = true;
+let keepFollowing = null;
 
 export function initChat() {
   log = $('#chatLog');
@@ -205,10 +212,22 @@ function initJump() {
   log.addEventListener(
     'scroll',
     () => {
-      if (!jump.hidden && atTail()) jump.hidden = true;
+      following = atTail();
+      if (!jump.hidden && following) jump.hidden = true;
     },
     { passive: true },
   );
+  /* Anything that grows after it is placed -- an image loading, a font arriving -- keeps a following
+   * reader at the bottom. Images report it with a load event (captured: it does not bubble); a line
+   * that changes height for any other reason is watched while it is in the log. */
+  const stick = () => {
+    if (following) log.scrollTop = log.scrollHeight;
+  };
+  log.addEventListener('load', stick, true);
+  if (typeof ResizeObserver === 'function') {
+    const watcher = new ResizeObserver(stick);
+    keepFollowing = (node) => watcher.observe(node);
+  }
   rail.appendChild(jump);
 }
 
@@ -1723,7 +1742,7 @@ function appendLine(node, when) {
   /* Measure before changing the log. Measuring after append makes a newly-added line increase
    * scrollHeight first, so a reader who was exactly at the bottom suddenly appears not to be and
    * the rail stops following. An empty log always follows while its initial history is filled. */
-  const followTail = !log.children.length || atTail();
+  const followTail = !log.children.length || following;
 
   /* Messages and big hits come from separate requests and either one can finish first. Comparing
    * only with the final row is not enough: after one older hit is inserted, that final row remains
@@ -1738,6 +1757,7 @@ function appendLine(node, when) {
     break;
   }
   if (!inserted) log.appendChild(node);
+  keepFollowing?.(node);
 
   // Only follow the tail when the reader is already at it; yanking someone away from a line they
   // are reading is the most annoying thing a chat can do.
