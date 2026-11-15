@@ -369,6 +369,7 @@ export async function sweepBounties(
           client,
           winner.user_id,
           requirementFor(prize, config.signupBonusWagerMultiplier),
+          prize,
         );
         return true;
       });

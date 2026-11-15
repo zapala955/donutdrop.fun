@@ -22,7 +22,7 @@ import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import {
   assertWagerRequirementMet,
   rainLock,
-  settleRainLock,
+  settleRequirements,
   wagerRequirementRemaining,
 } from '../lib/wager-requirements.js';
 
@@ -401,11 +401,12 @@ export async function registerCashWithdrawalRoutes(
        * form while one was still on its way. */
       const pending = live.rows.find((row) => OPEN_STATUSES.includes(row.status));
       const pendingPosition = pending ? await queuePositionOf(db, pending) : null;
+      // Money already lost is let go of first, rain and the running figure alike, so the form never
+      // holds back, or asks wagering for, money that is not there any more.
+      if (userId) await settleRequirements(db, userId);
       // Stated up front, so the form can say "wager $X more" before anybody fills it in.
       const wagerRemaining = userId ? await wagerRequirementRemaining(db, userId) : 0n;
       // Rain money still held in the balance, and the wagering that frees it (RAIN MONEY).
-      // Rain money already lost is let go of first, so the form never holds what is not there.
-      if (userId) await settleRainLock(db, userId);
       const rain = userId ? await rainLock(db, userId) : { heldMinor: 0n, remainingMinor: 0n };
       return {
         wagerRequirementRemainingMinor: wagerRemaining.toString(),

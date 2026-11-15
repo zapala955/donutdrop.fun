@@ -102,7 +102,7 @@ describe('claiming one', () => {
     const source = await read('src/lib/code-drops.ts');
     assert.doesNotMatch(source, /wageredFrom|minWager|status: 'locked'/);
     assert.match(source, /const owed = requirementFor\(prize, Number\(drop\.wager_multiplier\)\);/);
-    assert.match(source, /await creditWallet\(client, user\.id, prize, 'daily_code_reward', claimId\);\s+await addWagerRequirement\(client, user\.id, owed\);/);
+    assert.match(source, /await creditWallet\(client, user\.id, prize, 'daily_code_reward', claimId\);\s+await addWagerRequirement\(client, user\.id, owed, prize\);/);
   });
 
   it('is for a signed-in player with a linked, old-enough Discord, once per account and once per Discord', async () => {

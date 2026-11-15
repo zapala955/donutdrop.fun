@@ -25,7 +25,20 @@
  *
  * ONE FIGURE, NOT A LEDGER OF LOCKS. The only question anybody asks is "may this player move money
  * out yet", and one row answers it in one read. The cost is that it cannot say which deposit is
- * still locked, and nothing needs it to.
+ * still locked, and nothing needs it to. Beside it the row keeps its basis: how much credited money
+ * the figure is for (a deposit, a bonus), until it is wagered off.
+ *
+ * A REQUIREMENT DIES WITH THE MONEY IT WAS FOR, ALL OF IT (the owner, 2026-11-15: "make sure every
+ * wager req works correctly"). The figure only ever came down by wagering, so a player who lost most
+ * of a bonus still owed all of it, and their next deposit stacked on top: a $10M invite bonus at 10x
+ * lost down to $270K still owed $67M before a deposit of their own could leave. Now the figure works
+ * as the rain hold does (settleWagerRequirement): with nothing in play, a basis above the balance
+ * comes down to the balance and what is owed comes down in proportion, the player's own free money
+ * counted as spent first; at dust both clear. It runs before every check that lets money leave,
+ * before a deposit is credited, and when the withdraw form asks. Requirements from before 2026-11-15
+ * have an estimated basis, from below (migration 101): they owe at most 5x what is left, 10x for the
+ * invite bonus. Every credit since is tracked exactly, which is why addWagerRequirement takes both
+ * what is owed and what was credited.
  *
  * RAIN MONEY IS HELD ON ITS OWN (the owner, 2026-11-14: "insane big rains, but hard to withdraw the
  * money from rains, only that"). A share adds to user_rain_locks instead of the running figure: how
@@ -72,26 +85,37 @@ export function requirementFor(amountMinor: bigint, multiplier: number): bigint 
 /**
  * Adds to what the player owes. Called in the same transaction as the credit that caused it.
  *
- * The sum is clamped in SQL rather than trusted to fit: this runs inside a deposit's settlement,
+ * `owedMinor` is the requirement (requirementFor the credit at its multiplier) and `creditedMinor`
+ * the money credited, which is what the requirement is for: the basis that lets it go again when
+ * that money is lost (settleWagerRequirement). Both are required, so no credit can add a figure
+ * that never lets go.
+ *
+ * The sums are clamped in SQL rather than trusted to fit: this runs inside a deposit's settlement,
  * and a deposit that failed on an overflow would leave the bot retrying a payment it had already
  * received.
  */
 export async function addWagerRequirement(
   client: DbClient,
   userId: string,
-  amountMinor: bigint,
+  owedMinor: bigint,
+  creditedMinor: bigint,
 ): Promise<void> {
-  if (amountMinor <= 0n) return;
+  if (owedMinor <= 0n) return;
+  const basis = creditedMinor > 0n ? creditedMinor : 0n;
   await client.query(
-    `INSERT INTO user_wager_requirements (user_id, remaining_minor)
-     VALUES ($1, $2::bigint)
+    `INSERT INTO user_wager_requirements (user_id, remaining_minor, basis_minor)
+     VALUES ($1, $2::bigint, $3::bigint)
      ON CONFLICT (user_id) DO UPDATE
        SET remaining_minor = LEAST(
              user_wager_requirements.remaining_minor::numeric + EXCLUDED.remaining_minor,
              ${BIGINT_MAX.toString()}
            )::bigint,
+           -- A figure already wagered off is for nothing any more: the basis starts again.
+           basis_minor = CASE WHEN user_wager_requirements.remaining_minor <= 0 THEN EXCLUDED.basis_minor
+             ELSE LEAST(user_wager_requirements.basis_minor::numeric + EXCLUDED.basis_minor,
+                        ${BIGINT_MAX.toString()})::bigint END,
            updated_at = now()`,
-    [userId, amountMinor.toString()],
+    [userId, owedMinor.toString(), basis.toString()],
   );
 }
 
@@ -114,13 +138,16 @@ export async function addDepositRequirement(
   userId: string,
   depositMinor: bigint,
 ): Promise<void> {
-  // Rain money already lost is let go of first, measured without this deposit: the deposit is free.
+  // Money already lost is let go of first, rain and the figure alike, measured without this deposit:
+  // the deposit owes only its own requirement.
   await settleRainLock(client, userId, depositMinor);
+  await settleWagerRequirement(client, userId, depositMinor);
   await forgiveSpentRequirement(client, userId, depositMinor);
   await addWagerRequirement(
     client,
     userId,
     requirementFor(depositMinor, config.depositWagerMultiplier),
+    depositMinor,
   );
 }
 
@@ -163,7 +190,7 @@ export async function forgiveSpentRequirement(
 ): Promise<bigint> {
   const result = await client.query<{ forgiven: string }>(
     `UPDATE user_wager_requirements r
-        SET remaining_minor = 0, updated_at = now()
+        SET remaining_minor = 0, basis_minor = 0, updated_at = now()
        FROM (SELECT remaining_minor AS before FROM user_wager_requirements WHERE user_id = $1) old
       WHERE r.user_id = $1 AND r.remaining_minor > 0
         AND (SELECT w.balance_minor FROM user_wallets w WHERE w.user_id = $1) - $2::bigint < $3::bigint
@@ -237,6 +264,43 @@ export async function settleRainLock(
   );
 }
 
+/**
+ * Lets go of the running figure as far as the money it was for has been lost (A REQUIREMENT DIES
+ * WITH THE MONEY IT WAS FOR, ALL OF IT), exactly as settleRainLock does for rain money. With nothing
+ * in play, a basis above the settled balance (the balance less `justCreditedMinor`, a deposit being
+ * credited in the same transaction) comes down to it and what is owed comes down in the same
+ * proportion, rounded up; at dust both clear. Never raises anything. A basis of 0 with something owed
+ * (a figure written by an older API during a deploy) is left as it is: it has nothing to measure by.
+ */
+export async function settleWagerRequirement(
+  client: DbClient,
+  userId: string,
+  justCreditedMinor: bigint = 0n,
+): Promise<void> {
+  await client.query(
+    `UPDATE user_wager_requirements r
+        SET basis_minor = CASE WHEN s.settled <= $3::bigint THEN 0 ELSE s.settled END,
+            remaining_minor = CASE WHEN s.settled <= $3::bigint THEN 0
+              ELSE LEAST(r.remaining_minor, ceil(r.remaining_minor::numeric * s.settled / r.basis_minor)::bigint) END,
+            updated_at = now()
+       FROM (SELECT GREATEST(w.balance_minor - $2::bigint, 0) AS settled
+               FROM user_wallets w WHERE w.user_id = $1) s
+      WHERE r.user_id = $1 AND r.remaining_minor > 0 AND r.basis_minor > s.settled
+        ${IDLE_SQL}`,
+    [userId, justCreditedMinor.toString(), SPENT_BALANCE_MINOR.toString()],
+  );
+}
+
+/** Both holds, settled: rain money and the running figure let go of whatever money is gone. */
+export async function settleRequirements(
+  client: DbClient,
+  userId: string,
+  justCreditedMinor: bigint = 0n,
+): Promise<void> {
+  await settleRainLock(client, userId, justCreditedMinor);
+  await settleWagerRequirement(client, userId, justCreditedMinor);
+}
+
 /** What is held of the balance as rain money, and what is still to wager to free it. */
 export async function rainLock(
   client: DbClient,
@@ -267,7 +331,8 @@ export async function reduceWagerRequirement(
   if (wagerMinor > 0n) {
     await client.query(
       `UPDATE user_wager_requirements
-          SET remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
+          SET basis_minor = CASE WHEN remaining_minor <= $2::bigint THEN 0 ELSE basis_minor END,
+              remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
         WHERE user_id = $1 AND remaining_minor > 0`,
       [userId, wagerMinor.toString()],
     );
@@ -316,7 +381,7 @@ export async function assertWagerRequirementMet(
     'SELECT balance_minor FROM user_wallets WHERE user_id = $1 FOR UPDATE',
     [userId],
   );
-  await settleRainLock(client, userId);
+  await settleRequirements(client, userId);
   const remaining = await wagerRequirementRemaining(client, userId);
   if (remaining > 0n) {
     throw new AppError(

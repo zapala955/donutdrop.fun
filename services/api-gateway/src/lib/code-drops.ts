@@ -416,7 +416,7 @@ export async function redeemCodeDrop(
     /* The ledger kind the daily codes used: a Discord code reward, as the history and the admin
      * totals already name it. Keyed on the claim, so no claim is ever paid twice. */
     await creditWallet(client, user.id, prize, 'daily_code_reward', claimId);
-    await addWagerRequirement(client, user.id, owed);
+    await addWagerRequirement(client, user.id, owed, prize);
     return {
       result: {
         status: 'paid',

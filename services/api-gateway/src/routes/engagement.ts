@@ -143,6 +143,7 @@ export async function registerEngagementRoutes(
           client,
           userId,
           requirementFor(reward, config.questRewardWagerMultiplier),
+          reward,
         );
         await client.query(
           `UPDATE quest_progress
@@ -246,6 +247,7 @@ export async function registerEngagementRoutes(
           client,
           userId,
           requirementFor(reward, config.signupBonusWagerMultiplier),
+          reward,
         );
 
         await client.query(

@@ -349,7 +349,7 @@ export async function tryUnlockMilestone(
 
   await creditWallet(client, referral.referrer_id, bonus, 'referral_bonus', refereeId);
   // Wagered before it can leave, at the referral bonus's own multiplier (lib/wager-requirements.ts).
-  await addWagerRequirement(client, referral.referrer_id, requirementFor(bonus, config.referralBonusWagerMultiplier));
+  await addWagerRequirement(client, referral.referrer_id, requirementFor(bonus, config.referralBonusWagerMultiplier), bonus);
   await client.query(
     `UPDATE referrals
         SET bonus_unlocked_at = now(), bonus_paid_minor = $2, updated_at = now()

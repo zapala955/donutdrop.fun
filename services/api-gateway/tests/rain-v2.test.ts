@@ -306,13 +306,19 @@ describe('lost rain money is let go of everywhere it is checked', () => {
     const settle = lib.slice(lib.indexOf('export async function settleRainLock'), lib.indexOf('/** What is held of the balance as rain money'));
     assert.match(settle, /\$\{IDLE_SQL\}/, 'nothing is let go of while a stake rides or items are held');
     assert.match(settle, /r\.held_minor > s\.settled/, 'it only ever lowers the held amount');
-    for (const fn of ['export async function assertWagerRequirementMet', 'export async function assertRainMoneyStays']) {
-      const body = lib.slice(lib.indexOf(fn));
-      assert.ok(body.indexOf('await settleRainLock(client, userId);') < body.indexOf('rainLock(client, userId)'), fn);
-    }
+    // Both holds, before either is read: the rain lock and the running figure (settleRequirements).
+    const met = lib.slice(lib.indexOf('export async function assertWagerRequirementMet'), lib.indexOf('export async function assertRainMoneyStays'));
+    assert.ok(met.indexOf('await settleRequirements(client, userId);') > 0, 'assertWagerRequirementMet settles both holds');
+    assert.ok(met.indexOf('await settleRequirements(client, userId);') < met.indexOf('wagerRequirementRemaining(client, userId)'));
+    const stays = lib.slice(lib.indexOf('export async function assertRainMoneyStays'));
+    assert.ok(stays.indexOf('await settleRainLock(client, userId);') > 0);
+    assert.ok(stays.indexOf('await settleRainLock(client, userId);') < stays.indexOf('rainLock(client, userId)'));
+    const both = lib.slice(lib.indexOf('export async function settleRequirements'));
+    assert.match(both, /await settleRainLock\(client, userId, justCreditedMinor\);\s+await settleWagerRequirement\(client, userId, justCreditedMinor\);/);
     const deposit = lib.slice(lib.indexOf('export async function addDepositRequirement'));
     assert.ok(deposit.indexOf('await settleRainLock(client, userId, depositMinor);') < deposit.indexOf('forgiveSpentRequirement('));
-    assert.match(withdrawals, /if \(userId\) await settleRainLock\(db, userId\);\n\s*const rain = userId \? await rainLock\(db, userId\)/);
+    assert.ok(deposit.indexOf('await settleWagerRequirement(client, userId, depositMinor);') < deposit.indexOf('forgiveSpentRequirement('));
+    assert.match(withdrawals, /if \(userId\) await settleRequirements\(db, userId\);[\s\S]{0,200}const wagerRemaining = userId \? await wagerRequirementRemaining\(db, userId\)[\s\S]{0,200}const rain = userId \? await rainLock\(db, userId\)/);
     assert.match(social, /await settleClosedRain\(\);\n\s*await settleLostRain\(\);/);
   });
 });

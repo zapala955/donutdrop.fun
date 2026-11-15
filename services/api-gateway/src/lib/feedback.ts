@@ -125,7 +125,7 @@ export async function submitFeedback(
     );
     if (reward > 0n) {
       await creditWallet(client, userId, reward, 'feedback_reward', id);
-      await addWagerRequirement(client, userId, requirementFor(reward, config.signupBonusWagerMultiplier));
+      await addWagerRequirement(client, userId, requirementFor(reward, config.signupBonusWagerMultiplier), reward);
     }
     return { id, rewardMinor: reward.toString() };
   });

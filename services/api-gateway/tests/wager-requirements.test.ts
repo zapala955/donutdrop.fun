@@ -162,7 +162,7 @@ describe('the wager requirement', () => {
     lockedAfter(admin, "$4, 'admin_adjustment', $5)", 'delta', 'admin.ts');
     // A code drop carries its own multiple, copied onto it when it was minted (3x by default).
     assert.match(drops, /const owed = requirementFor\(prize, Number\(drop\.wager_multiplier\)\);/);
-    assert.match(drops, /await creditWallet\(client, user\.id, prize, 'daily_code_reward', claimId\);\s+await addWagerRequirement\(client, user\.id, owed\);/);
+    assert.match(drops, /await creditWallet\(client, user\.id, prize, 'daily_code_reward', claimId\);\s+await addWagerRequirement\(client, user\.id, owed, prize\);/);
     lockedAfter(crowns, "'bounty_reward', bounty.id)", 'prize', 'crowns.ts');
     assert.match(discord, /creditWallet\(client, userId, amount, kind, rewardId\);\s+await addWagerRequirement\(/);
     // A giveaway locks unless the operator says it is a refund; a debit never adds anything.
@@ -255,7 +255,7 @@ describe('the wager requirement against PostgreSQL', { skip: !requirementDatabas
 
       // A $1M bonus at 3x: $3M owed. A $50M deposit at 0x leaves it exactly where it was.
       let rules = atMultipliers(3, 0);
-      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier));
+      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier), 1_000_000n);
       assert.equal(await wagerRequirementRemaining(pool, user), 3_000_000n);
       await addDepositRequirement(pool, rules, user, 50_000_000n);
       assert.equal(await wagerRequirementRemaining(pool, user), 3_000_000n, 'a deposit never clears the bonus requirement');
@@ -276,7 +276,7 @@ describe('the wager requirement against PostgreSQL', { skip: !requirementDatabas
 
       // At 0x the bonus owes nothing at all: that is the setting, not the code.
       rules = atMultipliers(0, 0);
-      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier));
+      await addWagerRequirement(pool, user, requirementFor(1_000_000n, rules.signupBonusWagerMultiplier), 1_000_000n);
       assert.equal(await wagerRequirementRemaining(pool, user), 0n);
     } finally {
       await pool.end();

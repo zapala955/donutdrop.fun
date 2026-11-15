@@ -232,7 +232,7 @@ export async function claimBoardQuest(
     );
     if (inserted.rowCount !== 1) conflict('QUEST_ALREADY_CLAIMED', 'That quest is already claimed for this period');
     // Free money: wagered like the signup bonus before it can leave.
-    await addWagerRequirement(client, userId, requirementFor(reward, config.questRewardWagerMultiplier));
+    await addWagerRequirement(client, userId, requirementFor(reward, config.questRewardWagerMultiplier), reward);
     return { rewardMinor: reward.toString(), balanceAfterMinor: balanceAfter };
   });
   liveEvents.publish('balance', [userId]);

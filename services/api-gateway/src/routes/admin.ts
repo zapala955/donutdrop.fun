@@ -914,7 +914,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
         delta > 0n && body.wagerLock !== false
           ? requirementFor(delta, config.signupBonusWagerMultiplier)
           : 0n;
-      await addWagerRequirement(client, params.id, wagerLock);
+      await addWagerRequirement(client, params.id, wagerLock, delta);
       await appendAudit(client, config, {
         actorUserId: actor,
         action: delta > 0n ? 'user.balance.credit' : 'user.balance.debit',

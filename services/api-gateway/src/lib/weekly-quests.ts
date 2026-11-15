@@ -322,6 +322,7 @@ export async function settleRound(db: Database, config: AppConfig, roundId: stri
         client,
         winner.userId,
         requirementFor(winner.amount, config.questRewardWagerMultiplier),
+        winner.amount,
       );
       paid.push({ roundId: round.id, quest: round.quest, userId: winner.userId, amountMinor: winner.amount });
     }

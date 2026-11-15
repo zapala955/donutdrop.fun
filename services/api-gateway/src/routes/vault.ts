@@ -8,6 +8,7 @@ import type { Database } from '../lib/db.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
 import { computeYield } from '../lib/vault-yield.js';
+import { addWagerRequirement, requirementFor } from '../lib/wager-requirements.js';
 
 const claimSchema = z
   .object({
@@ -238,6 +239,14 @@ export async function registerVaultRoutes(app: FastifyInstance, db: Database, co
              (id, user_id, amount_minor, balance_after_minor, kind, reference_id)
            VALUES ($1, $2, $3, $4, 'vault_yield', $5)`,
           [randomUUID(), userId, credited.toString(), balanceAfter, claimId],
+        );
+        /* Yield is money the player did not stake for, so it carries the free-money requirement
+         * (FREE MONEY IS FREE MONEY, lib/wager-requirements.ts) like a code or the streak. */
+        await addWagerRequirement(
+          client,
+          userId,
+          requirementFor(credited, config.signupBonusWagerMultiplier),
+          credited,
         );
 
         return {

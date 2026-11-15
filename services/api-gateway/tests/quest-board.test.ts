@@ -58,7 +58,7 @@ describe('quest board: what counts and what pays', () => {
     assert.match(lib, /creditWallet\(client, userId, reward, 'quest_reward', claimId\)/);
     assert.match(lib, /ON CONFLICT \(quest_id, user_id, period_start\) DO NOTHING/);
     assert.match(lib, /if \(inserted\.rowCount !== 1\) conflict\('QUEST_ALREADY_CLAIMED'/);
-    assert.match(lib, /addWagerRequirement\(client, userId, requirementFor\(reward, config\.questRewardWagerMultiplier\)\)/);
+    assert.match(lib, /addWagerRequirement\(client, userId, requirementFor\(reward, config\.questRewardWagerMultiplier\), reward\)/);
   });
 
   it('has a public, rate-limited board, a CSRF-guarded claim, and audited admin writes', async () => {

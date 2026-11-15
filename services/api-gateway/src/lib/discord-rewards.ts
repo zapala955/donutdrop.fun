@@ -185,6 +185,7 @@ async function credit(
     client,
     userId,
     requirementFor(amount, config.signupBonusWagerMultiplier),
+    amount,
   );
 }
 

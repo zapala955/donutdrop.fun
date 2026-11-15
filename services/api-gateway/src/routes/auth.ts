@@ -418,7 +418,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
            * ledger's unique index still allows one signup bonus per account, of either size. */
           const bonusWager = requirementFor(config.referralSignupBonusMinor, config.referralSignupBonusWagerMultiplier);
           await creditWallet(client, row.id, config.referralSignupBonusMinor, 'signup_bonus', row.id);
-          await addWagerRequirement(client, row.id, bonusWager);
+          await addWagerRequirement(client, row.id, bonusWager, config.referralSignupBonusMinor);
           /* And that money is the bonus's, not the invitee's: the inviter's milestone counts only
            * wagers made with the invitee's own deposited money (lib/referrals.ts, migration 095). */
           await client.query(
@@ -431,6 +431,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
             client,
             row.id,
             requirementFor(config.signupBonusMinor, config.signupBonusWagerMultiplier),
+            config.signupBonusMinor,
           );
         }
         if (acceptedTotpCounter !== null) {
