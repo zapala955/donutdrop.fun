@@ -109,9 +109,10 @@ describe('lava rain', () => {
   it('settles closed drops on a clock and can open drops by itself', async () => {
     const social = await read('services/api-gateway/src/routes/social.ts');
     assert.match(social, /setInterval\(\(\) => void tick\(\), 15_000\)/);
+    // A drop waiting in the queue (migration 099) opens first, then an automatic one if it is due.
     assert.match(
       social,
-      /await settleClosedRain\(\);\s+if \(await autoDropRain\(\)\) liveEvents\.publish\('rain'\);/,
+      /await settleClosedRain\(\);[^]{0,200}if \(\(await openScheduledRain\(\)\) \|\| \(await autoDropRain\(\)\)\) liveEvents\.publish\('rain'\);/,
     );
     // The automatic drop takes the same lock as a manual one, so they cannot open two at once.
     const auto = social.slice(social.indexOf('async function autoDropRain'));

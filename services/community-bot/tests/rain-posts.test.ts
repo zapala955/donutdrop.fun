@@ -51,6 +51,8 @@ describe('the rain post', () => {
     assert.match(who, /Wear the \*\*DonutLuxe\*\* server tag/);
     assert.match(who, /\*\*\$25m\*\* deposited in the last 3 days/);
     assert.match(who, /\*\*\$10m\*\* wagered in the last 1 hour/);
+    // One claim per connection is kept, but not written in the post (the owner, 2026-11-15).
+    assert.doesNotMatch(JSON.stringify(shown), /connection/i);
     // No wager-requirement line: the site says it, as with code drops.
     assert.doesNotMatch(JSON.stringify(shown), /20x|wager req/i);
   });

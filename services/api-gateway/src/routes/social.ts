@@ -14,6 +14,7 @@ import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
 import { addRainLock, assertWagerRequirementMet } from '../lib/wager-requirements.js';
 import { assertRainEntry, drawRainPool, rainEntry, rainRules } from '../lib/lava-rain.js';
+import { networkHash } from '../lib/referral-network.js';
 
 /**
  * The social suite: the vault jackpot readout, lava rain, and player-to-player tips.
@@ -290,6 +291,44 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     });
   }
 
+  /**
+   * Opens the oldest drop waiting in lava_rain_scheduled, the moment nothing is falling (migration
+   * 099: the owner's $3B launch drop, 2026-11-15). The row is deleted in the same transaction as the
+   * drop it opens, under the same advisory lock as every other way a drop starts, so it opens once.
+   * The drop it opens starts the automatic clock like any other.
+   */
+  async function openScheduledRain(): Promise<boolean> {
+    if (!config.lavaRainEnabled) return false;
+    return db.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('lava-rain-create', 0))");
+      const falling = await client.query(
+        `SELECT 1 FROM lava_rain_events WHERE status = 'open' AND closes_at > now() LIMIT 1`,
+      );
+      if (falling.rows[0]) return false;
+      const taken = await client.query<{ pool_minor: string; claim_minutes: number | null }>(
+        `DELETE FROM lava_rain_scheduled
+          WHERE id = (SELECT id FROM lava_rain_scheduled ORDER BY created_at LIMIT 1)
+          RETURNING pool_minor::text AS pool_minor, claim_minutes`,
+      );
+      const next = taken.rows[0];
+      if (!next) return false;
+      await client.query(
+        `INSERT INTO lava_rain_events
+           (id, pool_minor, created_by, min_wagered_minor, window_minutes,
+            opens_at, closes_at, status)
+         VALUES ($1, $2, NULL, $3, $4, now(), now() + make_interval(mins => $5), 'open')`,
+        [
+          randomUUID(),
+          next.pool_minor,
+          config.lavaRainMinWageredMinor.toString(),
+          config.lavaRainWindowMinutes,
+          next.claim_minutes ?? config.lavaRainClaimMinutes,
+        ],
+      );
+      return true;
+    });
+  }
+
   /* ── the rain clock ──
    * Settlement used to happen only when somebody loaded the card, so a drop whose window shut with
    * the site quiet stayed unpaid until the next visitor. This pays it within fifteen seconds of
@@ -302,7 +341,8 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       running = true;
       try {
         await settleClosedRain();
-        if (await autoDropRain()) liveEvents.publish('rain');
+        // A drop waiting in the queue first (migration 099), then the automatic one if it is due.
+        if ((await openScheduledRain()) || (await autoDropRain())) liveEvents.publish('rain');
       } catch (error) {
         app.log.error({ err: error }, 'lava rain tick failed');
       } finally {
@@ -348,12 +388,19 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       const windowMinutes = event?.window_minutes ?? config.lavaRainWindowMinutes;
       const barMinor = BigInt(event?.min_wagered_minor ?? config.lavaRainMinWageredMinor);
       const wagered = await wageredSince(db, config, viewerId, windowMinutes);
+      // One claim per network and drop: another account on this connection may already be in.
+      const network = event && !claimed ? networkHash(config, request.ip) : null;
+      const networkUsed = network
+        ? ((await db.query('SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND network_hash = $2', [event!.id, network]))
+            .rowCount ?? 0) > 0
+        : false;
       you = {
         wageredMinor: wagered.toString(),
         wager: { requiredMinor: barMinor.toString(), wageredMinor: wagered.toString(), windowMinutes, met: wagered >= barMinor },
         deposit: entry.deposit,
         tag: entry.tag,
-        eligible: wagered >= barMinor && entry.deposit.met && entry.tag.met,
+        networkUsed,
+        eligible: wagered >= barMinor && entry.deposit.met && entry.tag.met && !networkUsed,
         claimed,
       };
     }
@@ -461,6 +508,17 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       if (!upcoming) throw new AppError(404, 'NO_RAIN', 'Nothing is falling right now');
       const already = await db.query('SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND user_id = $2', [upcoming.id, userId]);
       if ((already.rowCount ?? 0) > 0) throw new AppError(409, 'RAIN_ALREADY_CLAIMED', 'You are already in this one');
+      /* One claim per network and drop (the owner, 2026-11-15: "make sure ppl can only join once per
+       * network"; migration 100), as code drops keep: the keyed hash of the IPv4 address or IPv6 /64,
+       * never the address. An address that cannot be read is refused rather than let through, so the
+       * rule cannot be stepped round by sending something unreadable. Checked again under the drop's
+       * row lock below, and held by the unique index besides. */
+      const network = networkHash(config, request.ip);
+      if (!network) throw new AppError(403, 'RAIN_NETWORK_UNKNOWN', 'Your connection could not be checked. Try again');
+      const sameNetwork = await db.query('SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND network_hash = $2', [upcoming.id, network]);
+      if ((sameNetwork.rowCount ?? 0) > 0) {
+        throw new AppError(409, 'RAIN_NETWORK_USED', 'This rain was already claimed from your connection');
+      }
       if ((await wageredSince(db, config, userId, upcoming.window_minutes)) < BigInt(upcoming.min_wagered_minor)) {
         throw new AppError(403, 'RAIN_NOT_ELIGIBLE', 'Not enough wagered inside the window');
       }
@@ -483,14 +541,25 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
           throw new AppError(403, 'RAIN_NOT_ELIGIBLE', 'Not enough wagered inside the window');
         }
 
+        const usedNetwork = await client.query(
+          'SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND network_hash = $2',
+          [event.id, network],
+        );
+        if ((usedNetwork.rowCount ?? 0) > 0) {
+          throw new AppError(409, 'RAIN_NETWORK_USED', 'This rain was already claimed from your connection');
+        }
+
         try {
           await client.query(
-            `INSERT INTO lava_rain_claims (event_id, user_id, qualifying_wagered_minor)
-             VALUES ($1, $2, $3)`,
-            [event.id, userId, wagered.toString()],
+            `INSERT INTO lava_rain_claims (event_id, user_id, qualifying_wagered_minor, network_hash)
+             VALUES ($1, $2, $3, $4)`,
+            [event.id, userId, wagered.toString(), network],
           );
         } catch (error) {
           if ((error as { code?: string }).code === '23505') {
+            if ((error as { constraint?: string }).constraint === 'lava_rain_claims_network_idx') {
+              throw new AppError(409, 'RAIN_NETWORK_USED', 'This rain was already claimed from your connection');
+            }
             throw new AppError(409, 'RAIN_ALREADY_CLAIMED', 'You are already in this one');
           }
           throw error;

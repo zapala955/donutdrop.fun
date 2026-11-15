@@ -376,6 +376,8 @@ function rainRules(board, you) {
 
 /** What the button asks for: the first rule not met, in the order a player can fix them. */
 function missingStep(board, you) {
+  // Another account on this connection already has this drop (one claim per network; not spelled out).
+  if (you?.networkUsed) return { label: 'Already claimed', go: null };
   if (you?.tag && !you.tag.met) {
     if (!you.tag.linked) return { label: 'Link your Discord', go: () => document.querySelector('a[href="/discord"]')?.click() };
     if (you.tag.wearing === false) return { label: 'Wear the server tag', go: () => tagHelp() };

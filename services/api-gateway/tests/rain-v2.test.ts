@@ -118,6 +118,47 @@ describe('who may claim', () => {
   });
 });
 
+describe('the launch, the five-hour clock, one claim per network (2026-11-15)', () => {
+  it('queues a $3B launch drop the new API opens, and sets a drop every 300 minutes, on the live database only', async () => {
+    const sql = await read('packages/db/migrations/099_rain_launch.sql');
+    assert.match(sql, /CREATE TABLE lava_rain_scheduled \(/);
+    assert.match(sql, /SELECT gen_random_uuid\(\), 3000000000, 10, 'Launch of the new Lava Rain/);
+    assert.match(sql, /'lavaRainAutoEveryMinutes', to_jsonb\(300\)/);
+    // Both guarded: a fresh database or a test run gets neither.
+    assert.equal((sql.match(/EXISTS \(SELECT 1 FROM lava_rain_events\)/g) ?? []).length, 2);
+    assert.match(sql, /GRANT SELECT, DELETE ON TABLE lava_rain_scheduled TO donut_api_runtime;/);
+  });
+
+  it('opens a queued drop before an automatic one, once, under the same lock, only while nothing is falling', async () => {
+    const route = await read('services/api-gateway/src/routes/social.ts');
+    assert.match(route, /if \(\(await openScheduledRain\(\)\) \|\| \(await autoDropRain\(\)\)\) liveEvents\.publish\('rain'\);/);
+    const open = route.slice(route.indexOf('async function openScheduledRain()'), route.indexOf('/* ── the rain clock ──'));
+    assert.ok(open.indexOf("pg_advisory_xact_lock(hashtextextended('lava-rain-create', 0))") < open.indexOf('DELETE FROM lava_rain_scheduled'));
+    assert.ok(open.indexOf("status = 'open' AND closes_at > now()") < open.indexOf('DELETE FROM lava_rain_scheduled'));
+    assert.match(open, /next\.claim_minutes \?\? config\.lavaRainClaimMinutes/);
+  });
+
+  it('takes one claim per network on each drop, refusing an unreadable address, held by an index too', async () => {
+    const [route, sql, chat, post] = await Promise.all([
+      read('services/api-gateway/src/routes/social.ts'),
+      read('packages/db/migrations/100_rain_networks.sql'),
+      read('DONUTDROP FRONTEND/Donut Drop/assets/js/chat.js'),
+      read('services/community-bot/src/features/rain-posts.ts'),
+    ]);
+    const claim = route.slice(route.indexOf("'/v1/social/rain/claim'"));
+    assert.match(claim, /const network = networkHash\(config, request\.ip\);\n\s*if \(!network\) throw new AppError\(403, 'RAIN_NETWORK_UNKNOWN'/);
+    // Before Discord is asked, and again under the drop's row lock.
+    assert.ok(claim.indexOf("'RAIN_NETWORK_USED'") < claim.indexOf('await assertRainEntry(db, config, userId);'));
+    assert.ok(claim.indexOf('FOR UPDATE') < claim.lastIndexOf("'RAIN_NETWORK_USED'"));
+    assert.match(claim, /INSERT INTO lava_rain_claims \(event_id, user_id, qualifying_wagered_minor, network_hash\)/);
+    assert.match(sql, /CREATE UNIQUE INDEX lava_rain_claims_network_idx\s+ON lava_rain_claims \(event_id, network_hash\)/);
+    // Kept, but not spelled out on the card or in the Discord post (the owner, 2026-11-15).
+    assert.doesNotMatch(chat, /One claim per connection/);
+    assert.doesNotMatch(post, /claim per connection/);
+    assert.match(chat, /if \(you\?\.networkUsed\) return \{ label: 'Already claimed', go: null \};/);
+  });
+});
+
 describe('the 20x cannot be walked around', () => {
   it('keeps held rain money off every game against another player', async () => {
     for (const file of ['coinflip', 'mines-duel', 'duels', 'battles', 'sidebets']) {
