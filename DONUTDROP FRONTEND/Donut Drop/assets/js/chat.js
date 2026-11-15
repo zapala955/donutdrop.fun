@@ -536,9 +536,11 @@ function paintRain(board) {
 }
 
 /**
- * Between automatic drops: when the next one opens and how big it may be, with the rules, so the
- * rail says rain is on its way and a player can get ready. Nothing to claim yet; the card refetches
- * the moment the countdown reaches zero, which is when the drop opens.
+ * Between automatic drops: when the next one opens, with the rules, so the rail says rain is on its
+ * way and a player can get ready. Never how big it may be: the size is a surprise until it falls (the
+ * owner, 2026-11-15: "make it so it doesnt spoil how much the rain can have"), and the server no
+ * longer sends it. Nothing to claim yet; the card refetches the moment the countdown reaches zero,
+ * which is when the drop opens.
  */
 function paintNextRain(board) {
   const next = board.next;
@@ -550,11 +552,8 @@ function paintNextRain(board) {
   rainShownId = null;
   card.replaceChildren();
 
-  const lo = next.poolMinMinor ?? next.poolMinor;
-  const hi = next.poolMaxMinor ?? next.poolMinor;
-  const range = lo === hi ? money(Number(hi)) : `${money(Number(lo))} – ${money(Number(hi))}`;
   const clockNode = el('span', 'rain__clock mono');
-  const { top } = rainHead('Next Lava Rain', range, clockNode);
+  const { top } = rainHead('Lava Rain', 'Next drop in', clockNode);
   card.appendChild(top);
   card.appendChild(rainRules(board, board.you));
 

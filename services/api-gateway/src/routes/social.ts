@@ -442,22 +442,17 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     const paid = payout?.rows[0];
 
     /* When the next automatic drop is due, for the countdown the card shows between drops. Null
-     * while one is falling or while drops are only started by hand. */
-    let next: { at: string; poolMinor: string; poolMinMinor: string; poolMaxMinor: string } | null = null;
+     * while one is falling or while drops are only started by hand. Only WHEN: how big it may be is
+     * not given away (the owner, 2026-11-15: "make it so it doesnt spoil how much the rain can
+     * have"). The size is drawn as it opens, and shown from then on. */
+    let next: { at: string } | null = null;
     if (!event && config.lavaRainAutoEveryMinutes > 0) {
       const last = await db.query<{ due: Date }>(
         `SELECT greatest(now(), max(created_at) + make_interval(mins => $1)) AS due
            FROM lava_rain_events`,
         [config.lavaRainAutoEveryMinutes],
       );
-      // Its size is drawn when it opens; until then the card shows the range. poolMinor, the top of
-      // it, is for a page loaded before the range was sent.
-      next = {
-        at: (last.rows[0]?.due ?? new Date()).toISOString(),
-        poolMinor: config.lavaRainPoolMaxMinor.toString(),
-        poolMinMinor: config.lavaRainPoolMinMinor.toString(),
-        poolMaxMinor: config.lavaRainPoolMaxMinor.toString(),
-      };
+      next = { at: (last.rows[0]?.due ?? new Date()).toISOString() };
     }
 
     return {

@@ -162,6 +162,20 @@ describe('the launch, the five-hour clock, one claim per network (2026-11-15)', 
   });
 });
 
+describe('the next drop is a surprise (2026-11-15)', () => {
+  it('tells the card when the next drop opens, never how big it may be', async () => {
+    const [route, chat] = await Promise.all([
+      read('services/api-gateway/src/routes/social.ts'),
+      read('DONUTDROP FRONTEND/Donut Drop/assets/js/chat.js'),
+    ]);
+    assert.match(route, /let next: \{ at: string \} \| null = null;/);
+    assert.match(route, /next = \{ at: \(last\.rows\[0\]\?\.due \?\? new Date\(\)\)\.toISOString\(\) \};/);
+    const card = chat.slice(chat.indexOf('function paintNextRain'), chat.indexOf('async function claimRain'));
+    assert.doesNotMatch(card, /poolM|poolMinor|money\(/);
+    assert.match(card, /rainHead\('Lava Rain', 'Next drop in', clockNode\)/);
+  });
+});
+
 describe('the 20x cannot be walked around', () => {
   it('keeps held rain money off every game against another player', async () => {
     for (const file of ['coinflip', 'mines-duel', 'duels', 'battles', 'sidebets']) {
