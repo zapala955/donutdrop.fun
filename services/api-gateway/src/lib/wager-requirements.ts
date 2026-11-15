@@ -35,6 +35,15 @@
  * less than the held amount stays behind; items, which carry no amount, wait for it. A rain the
  * player has lost is forgiven with the rest when they deposit from nothing (forgiveSpentRequirement).
  *
+ * RAIN MONEY THAT IS LOST IS GONE (the owner, 2026-11-15: "after ppl lose their rain money they still
+ * cant withdraw cause the req stays"). The held amount used to stay at the whole share however much
+ * of it was lost, so a player down to $25M of a $230M share could deposit $50M and not withdraw it.
+ * Now, whenever the account has nothing in play, a held amount above the balance comes down to the
+ * balance -- what is left of the rain money -- and what is still to wager comes down in proportion;
+ * at dust it clears (settleRainLock). The player's own money is used first, as bonus terms go: the
+ * held amount only falls once the balance is below it. Money that arrives afterwards is free. It runs
+ * before every check that lets money leave, before a deposit is credited, and on the rain clock.
+ *
  * RAIN MONEY NEVER CROSSES TO ANOTHER PLAYER (2026-11-14, before rains went to $300M-$1.5B). The
  * held amount can be played on the house games, which is how it is wagered off, but not staked
  * against another player (assertRainMoneyStays): a coinflip, a duel, a battle or a side bet lost on
@@ -105,6 +114,8 @@ export async function addDepositRequirement(
   userId: string,
   depositMinor: bigint,
 ): Promise<void> {
+  // Rain money already lost is let go of first, measured without this deposit: the deposit is free.
+  await settleRainLock(client, userId, depositMinor);
   await forgiveSpentRequirement(client, userId, depositMinor);
   await addWagerRequirement(
     client,
@@ -200,6 +211,32 @@ export async function addRainLock(
   );
 }
 
+/**
+ * Lets go of rain money that has been lost (RAIN MONEY THAT IS LOST IS GONE). With nothing in play, a
+ * held amount above the settled balance (the balance less `justCreditedMinor`, a deposit being
+ * credited in the same transaction) comes down to it, and what is still to wager comes down in the
+ * same proportion, rounded up; at dust both clear. Never raises anything, and does nothing while a
+ * stake is riding or items are held: a stake that comes back, or an item sold, is still rain money.
+ */
+export async function settleRainLock(
+  client: DbClient,
+  userId: string,
+  justCreditedMinor: bigint = 0n,
+): Promise<void> {
+  await client.query(
+    `UPDATE user_rain_locks r
+        SET held_minor = CASE WHEN s.settled <= $3::bigint THEN 0 ELSE s.settled END,
+            remaining_minor = CASE WHEN s.settled <= $3::bigint THEN 0
+              ELSE LEAST(r.remaining_minor, ceil(r.remaining_minor::numeric * s.settled / r.held_minor)::bigint) END,
+            updated_at = now()
+       FROM (SELECT GREATEST(w.balance_minor - $2::bigint, 0) AS settled
+               FROM user_wallets w WHERE w.user_id = $1) s
+      WHERE r.user_id = $1 AND r.remaining_minor > 0 AND r.held_minor > s.settled
+        ${IDLE_SQL}`,
+    [userId, justCreditedMinor.toString(), SPENT_BALANCE_MINOR.toString()],
+  );
+}
+
 /** What is held of the balance as rain money, and what is still to wager to free it. */
 export async function rainLock(
   client: DbClient,
@@ -279,6 +316,7 @@ export async function assertWagerRequirementMet(
     'SELECT balance_minor FROM user_wallets WHERE user_id = $1 FOR UPDATE',
     [userId],
   );
+  await settleRainLock(client, userId);
   const remaining = await wagerRequirementRemaining(client, userId);
   if (remaining > 0n) {
     throw new AppError(
@@ -325,6 +363,7 @@ export async function assertRainMoneyStays(
     'SELECT balance_minor FROM user_wallets WHERE user_id = $1 FOR UPDATE',
     [userId],
   );
+  await settleRainLock(client, userId);
   const rain = await rainLock(client, userId);
   if (rain.heldMinor <= 0n) return;
   const balance = BigInt(wallet.rows[0]?.balance_minor ?? '0');

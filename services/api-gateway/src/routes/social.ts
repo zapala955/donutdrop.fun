@@ -12,7 +12,7 @@ import { liveEvents } from '../lib/live-events.js';
 import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
-import { addRainLock, assertWagerRequirementMet } from '../lib/wager-requirements.js';
+import { addRainLock, assertWagerRequirementMet, settleRainLock } from '../lib/wager-requirements.js';
 import { assertRainEntry, drawRainPool, rainEntry, rainRules } from '../lib/lava-rain.js';
 import { networkHash } from '../lib/referral-network.js';
 
@@ -329,6 +329,22 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     });
   }
 
+  /** Lets go of lost rain money for every account holding more than its balance (settleRainLock),
+   * each under its wallet's lock, so the figures are right before anybody asks. */
+  async function settleLostRain(): Promise<void> {
+    const sinking = await db.query<{ user_id: string }>(
+      `SELECT r.user_id FROM user_rain_locks r JOIN user_wallets w ON w.user_id = r.user_id
+        WHERE r.remaining_minor > 0 AND w.balance_minor < r.held_minor
+        LIMIT 500`,
+    );
+    for (const row of sinking.rows) {
+      await db.transaction(async (client) => {
+        await client.query('SELECT 1 FROM user_wallets WHERE user_id = $1 FOR UPDATE', [row.user_id]);
+        await settleRainLock(client, row.user_id);
+      });
+    }
+  }
+
   /* ── the rain clock ──
    * Settlement used to happen only when somebody loaded the card, so a drop whose window shut with
    * the site quiet stayed unpaid until the next visitor. This pays it within fifteen seconds of
@@ -341,6 +357,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       running = true;
       try {
         await settleClosedRain();
+        await settleLostRain();
         // A drop waiting in the queue first (migration 099), then the automatic one if it is due.
         if ((await openScheduledRain()) || (await autoDropRain())) liveEvents.publish('rain');
       } catch (error) {

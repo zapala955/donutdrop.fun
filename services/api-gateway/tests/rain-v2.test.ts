@@ -251,4 +251,68 @@ describe('the rain lock against PostgreSQL', { skip: !databaseUrl }, () => {
       await pool.end();
     }
   });
+
+  it('lets go of rain money that was lost, so a deposit made after it can leave (2026-11-15)', async () => {
+    if (!databaseUrl) return;
+    const { randomUUID } = await import('node:crypto');
+    const pg = (await import('pg')).default;
+    const { addDepositRequirement, addRainLock, assertWagerRequirementMet, rainLock, settleRainLock } = await import('../src/lib/wager-requirements.js');
+    const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+    const user = randomUUID();
+    const tag = user.slice(0, 8);
+    // Deposits carry no running requirement here, so only the rain lock is under test.
+    const rules = { ...config, depositWagerMultiplier: 0 } as typeof config;
+    try {
+      await pool.query(
+        `INSERT INTO users (id, minecraft_identity, minecraft_username, normalized_username, role, status, terms_accepted_at)
+         VALUES ($1, $2, $3, $4, 'player', 'active', now())`,
+        [user, `mc:lost${tag}`, `Lost${tag}`, `lost${tag}`],
+      );
+      // A $230,769,230 share, then all but $25M of it lost.
+      await pool.query('INSERT INTO user_wallets (user_id, balance_minor) VALUES ($1, 25000000)', [user]);
+      await addRainLock(pool, config, user, 230_769_230n);
+      // A $50M deposit lands, credited first and then accounted for, as the deposit path does it.
+      await pool.query('UPDATE user_wallets SET balance_minor = balance_minor + 50000000 WHERE user_id = $1', [user]);
+      await addDepositRequirement(pool, rules, user, 50_000_000n);
+      const held = await rainLock(pool, user);
+      assert.equal(held.heldMinor, 25_000_000n, 'only what is left of the share is held');
+      // 20x of what is left: the $4,615,384,600 to wager scaled by 25M / 230,769,230 is exactly $500M.
+      assert.equal(held.remainingMinor, 500_000_000n);
+      await assert.doesNotReject(assertWagerRequirementMet(pool, user, 'withdrawing', 50_000_000n));
+      await assert.rejects(assertWagerRequirementMet(pool, user, 'withdrawing', 50_000_001n), { code: 'RAIN_WAGER_REQUIREMENT' });
+
+      // It never raises anything: a win does not bring the share back.
+      await pool.query('UPDATE user_wallets SET balance_minor = 900000000 WHERE user_id = $1', [user]);
+      await settleRainLock(pool, user);
+      assert.equal((await rainLock(pool, user)).heldMinor, 25_000_000n);
+
+      // Lost to dust, it is gone.
+      await pool.query('UPDATE user_wallets SET balance_minor = 400 WHERE user_id = $1', [user]);
+      await settleRainLock(pool, user);
+      assert.deepEqual(await rainLock(pool, user), { heldMinor: 0n, remainingMinor: 0n });
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe('lost rain money is let go of everywhere it is checked', () => {
+  it('settles before every way money leaves, before a deposit, on the withdraw form and on the clock; never mid-game', async () => {
+    const [lib, withdrawals, social] = await Promise.all([
+      read('services/api-gateway/src/lib/wager-requirements.ts'),
+      read('services/api-gateway/src/routes/cash-withdrawals.ts'),
+      read('services/api-gateway/src/routes/social.ts'),
+    ]);
+    const settle = lib.slice(lib.indexOf('export async function settleRainLock'), lib.indexOf('/** What is held of the balance as rain money'));
+    assert.match(settle, /\$\{IDLE_SQL\}/, 'nothing is let go of while a stake rides or items are held');
+    assert.match(settle, /r\.held_minor > s\.settled/, 'it only ever lowers the held amount');
+    for (const fn of ['export async function assertWagerRequirementMet', 'export async function assertRainMoneyStays']) {
+      const body = lib.slice(lib.indexOf(fn));
+      assert.ok(body.indexOf('await settleRainLock(client, userId);') < body.indexOf('rainLock(client, userId)'), fn);
+    }
+    const deposit = lib.slice(lib.indexOf('export async function addDepositRequirement'));
+    assert.ok(deposit.indexOf('await settleRainLock(client, userId, depositMinor);') < deposit.indexOf('forgiveSpentRequirement('));
+    assert.match(withdrawals, /if \(userId\) await settleRainLock\(db, userId\);\n\s*const rain = userId \? await rainLock\(db, userId\)/);
+    assert.match(social, /await settleClosedRain\(\);\n\s*await settleLostRain\(\);/);
+  });
 });
