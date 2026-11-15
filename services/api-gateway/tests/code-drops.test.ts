@@ -133,7 +133,9 @@ describe('claiming one', () => {
     const source = await read('src/lib/code-drops.ts');
     // Deposits only: the /pay to the bot and the sign-in payment, never bonuses, tips or winnings.
     assert.match(source, /WHERE user_id = \$1 AND kind = ANY\(\$2::text\[\]\)\s+AND created_at > now\(\) - make_interval\(hours => \$3\)/);
-    assert.match(source, /\[userId, \[\.\.\.DEPOSIT_KINDS\], config\.codeDropDepositWindowHours\]/);
+    // One query for every window (Lava Rain asks it too), at the code drops' own window here.
+    assert.match(source, /\[userId, \[\.\.\.DEPOSIT_KINDS\], hours\]/);
+    assert.match(source, /return depositedWithin\(client, userId, config\.codeDropDepositWindowHours\);/);
     assert.match(source, /if \(deposited < needed\) return \{ result: refused\(depositRefusal\(config, deposited\), true\), paid: false \};/);
     const rule = source.indexOf('const deposited = await depositedRecently(client, config, user.id);');
     assert.ok(rule > source.indexOf('FOR UPDATE') && rule < source.indexOf('SET claims = claims + 1'));

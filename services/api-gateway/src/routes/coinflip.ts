@@ -11,6 +11,7 @@ import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { duelMarginPerPlayer, splitPot } from '../lib/duel-engine.js';
 import { AppError } from '../lib/errors.js';
+import { assertRainMoneyStays } from '../lib/wager-requirements.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { publishLiveSoon } from '../lib/live-events.js';
 import { maskedName } from '../lib/masked-name.js';
@@ -176,6 +177,8 @@ export async function registerCoinflipRoutes(
     gameId: string,
     role: 'host' | 'opponent',
   ): Promise<void> {
+    // Rain money stays on the house games until it is wagered off (lib/wager-requirements.ts).
+    await assertRainMoneyStays(client, userId, stake);
     const debited = await client.query<{ balance_minor: string }>(
       `UPDATE user_wallets SET balance_minor = balance_minor - $2, updated_at = now()
         WHERE user_id = $1 AND balance_minor >= $2

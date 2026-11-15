@@ -13,6 +13,7 @@ import { deterministicUuid } from '../lib/battle-engine.js';
 import { parseWith } from '../lib/validation.js';
 import { safePublicText } from '../lib/sanitize.js';
 import { addRainLock, assertWagerRequirementMet } from '../lib/wager-requirements.js';
+import { assertRainEntry, drawRainPool, rainEntry, rainRules } from '../lib/lava-rain.js';
 
 /**
  * The social suite: the vault jackpot readout, lava rain, and player-to-player tips.
@@ -70,9 +71,13 @@ const tipSchema = z
  * note one character short. The amount itself still has to be digits by the time it is checked. */
 export const rainSchema = z
   .object({
+    /** Left out (or blank): drawn at random between the pool settings, as an automatic drop is. */
     poolMinor: z.preprocess(
-      (value) => (typeof value === 'string' ? value.replace(/[,_\s$]/g, '') : value),
-      z.string().regex(/^[1-9][0-9]{0,18}$/),
+      (value) => {
+        const text = typeof value === 'string' ? value.replace(/[,_\s$]/g, '') : value;
+        return text === '' ? undefined : text;
+      },
+      z.string().regex(/^[1-9][0-9]{0,18}$/).optional(),
     ),
     /** Minutes the claim window stays open. Defaults to the configured value. */
     claimMinutes: z.coerce.number().int().min(1).max(60).optional(),
@@ -256,10 +261,8 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
    */
   async function autoDropRain(): Promise<boolean> {
     if (!config.lavaRainEnabled || config.lavaRainAutoEveryMinutes <= 0) return false;
-    const pool =
-      config.lavaRainAutoPoolMinor < config.lavaRainMaxPoolMinor
-        ? config.lavaRainAutoPoolMinor
-        : config.lavaRainMaxPoolMinor;
+    // A random size every time, between the pool settings (lib/lava-rain.ts drawRainPool).
+    const pool = drawRainPool(config);
     return db.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('lava-rain-create', 0))");
       const recent = await client.query(
@@ -325,17 +328,33 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
     );
     const event = live.rows[0] ?? null;
 
+    /* Where the viewer stands on every rule: the wagering bar, the deposit and the server tag. Between
+     * drops only the deposit and the Discord link are read; Discord is asked about the tag only while
+     * a drop is falling, and then a recent answer stands (lib/lava-rain.ts). */
     let you = null;
-    if (event && viewerId) {
-      const wagered = await wageredSince(db, config, viewerId, event.window_minutes);
-      const claimed = await db.query(
-        'SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND user_id = $2',
-        [event.id, viewerId],
-      );
+    if (viewerId) {
+      const claimed = event
+        ? (
+            (await db.query('SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND user_id = $2', [event.id, viewerId]))
+              .rowCount ?? 0
+          ) > 0
+        : false;
+      // Discord is only asked for somebody it could matter for: a drop falling, not claimed, deposit met.
+      const known = await rainEntry(db, config, viewerId, 'skip');
+      const entry =
+        event && !claimed && known.deposit.met && known.tag.required && known.tag.linked
+          ? await rainEntry(db, config, viewerId, 'cached')
+          : known;
+      const windowMinutes = event?.window_minutes ?? config.lavaRainWindowMinutes;
+      const barMinor = BigInt(event?.min_wagered_minor ?? config.lavaRainMinWageredMinor);
+      const wagered = await wageredSince(db, config, viewerId, windowMinutes);
       you = {
         wageredMinor: wagered.toString(),
-        eligible: wagered >= BigInt(event.min_wagered_minor),
-        claimed: (claimed.rowCount ?? 0) > 0,
+        wager: { requiredMinor: barMinor.toString(), wageredMinor: wagered.toString(), windowMinutes, met: wagered >= barMinor },
+        deposit: entry.deposit,
+        tag: entry.tag,
+        eligible: wagered >= barMinor && entry.deposit.met && entry.tag.met,
+        claimed,
       };
     }
 
@@ -377,25 +396,26 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
 
     /* When the next automatic drop is due, for the countdown the card shows between drops. Null
      * while one is falling or while drops are only started by hand. */
-    let next: { at: string; poolMinor: string } | null = null;
+    let next: { at: string; poolMinor: string; poolMinMinor: string; poolMaxMinor: string } | null = null;
     if (!event && config.lavaRainAutoEveryMinutes > 0) {
       const last = await db.query<{ due: Date }>(
         `SELECT greatest(now(), max(created_at) + make_interval(mins => $1)) AS due
            FROM lava_rain_events`,
         [config.lavaRainAutoEveryMinutes],
       );
-      const pool =
-        config.lavaRainAutoPoolMinor < config.lavaRainMaxPoolMinor
-          ? config.lavaRainAutoPoolMinor
-          : config.lavaRainMaxPoolMinor;
+      // Its size is drawn when it opens; until then the card shows the range. poolMinor, the top of
+      // it, is for a page loaded before the range was sent.
       next = {
         at: (last.rows[0]?.due ?? new Date()).toISOString(),
-        poolMinor: pool.toString(),
+        poolMinor: config.lavaRainPoolMaxMinor.toString(),
+        poolMinMinor: config.lavaRainPoolMinMinor.toString(),
+        poolMaxMinor: config.lavaRainPoolMaxMinor.toString(),
       };
     }
 
     return {
       next,
+      rules: rainRules(config),
       active: event
         ? {
             id: event.id,
@@ -429,6 +449,22 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
         throw new AppError(404, 'RAIN_DISABLED', 'Lava rain is not switched on');
       }
       const userId = requireUser(request);
+
+      /* The entry rules, before the drop's row is locked: the server tag is a call to Discord, and
+       * every other claimer waits on that lock. What is cheap to say comes first -- nothing falling,
+       * already in, short of the bar -- so a claim that would fail anyway never asks Discord. The bar
+       * is checked again under the lock below, against the live window. */
+      const falling = await db.query<RainRow>(
+        `SELECT * FROM lava_rain_events WHERE status = 'open' AND closes_at > now() ORDER BY closes_at LIMIT 1`,
+      );
+      const upcoming = falling.rows[0];
+      if (!upcoming) throw new AppError(404, 'NO_RAIN', 'Nothing is falling right now');
+      const already = await db.query('SELECT 1 FROM lava_rain_claims WHERE event_id = $1 AND user_id = $2', [upcoming.id, userId]);
+      if ((already.rowCount ?? 0) > 0) throw new AppError(409, 'RAIN_ALREADY_CLAIMED', 'You are already in this one');
+      if ((await wageredSince(db, config, userId, upcoming.window_minutes)) < BigInt(upcoming.min_wagered_minor)) {
+        throw new AppError(403, 'RAIN_NOT_ELIGIBLE', 'Not enough wagered inside the window');
+      }
+      await assertRainEntry(db, config, userId);
 
       const result = await db.transaction(async (client) => {
         const live = await client.query<RainRow>(
@@ -491,8 +527,9 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
       }
       const userId = requireUser(request);
       const body = parseWith(rainSchema, request.body);
-      const pool = BigInt(body.poolMinor);
-      if (pool > config.lavaRainMaxPoolMinor) {
+      // No pool typed: drawn at random between the pool settings, like an automatic drop's.
+      const pool = body.poolMinor === undefined ? drawRainPool(config) : BigInt(body.poolMinor);
+      if (body.poolMinor !== undefined && pool > config.lavaRainMaxPoolMinor) {
         throw new AppError(400, 'RAIN_POOL_TOO_LARGE', 'That exceeds the configured maximum pool');
       }
 
@@ -528,6 +565,7 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
           targetId: id,
           details: {
             poolMinor: pool.toString(),
+            drawn: body.poolMinor === undefined,
             claimMinutes: minutes,
             reason: body.reason ?? 'Manual operator promotion',
           },

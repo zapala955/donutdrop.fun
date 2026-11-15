@@ -358,6 +358,9 @@ body.lx .lxbal .cashpill__n {
    these are written one step heavier (.lxtop__end) to win regardless of order. */
 @container lxtop (max-width: 1040px) { body.lx .lxtop .lxtop__end .lvl { display: none; } }
 @container lxtop (max-width: 860px) { body.lx .lxtop .lxtop__end :is(#lxSearchBtn, #muteBtn) { display: none; } }
+/* The chat docked beside the page from 1280px (open by default since 2026-11-14) leaves the bar about
+   880px: the donut alone stands for the name, so the wallet and the bar's buttons all fit. */
+@container lxtop (max-width: 940px) { body.lx .lxtop .lxbrand__word { display: none; } }
 
 /* ═════════ buttons ═════════
    Two kinds, the reference's two: a grey one for the quiet way, a gold one for the main way.

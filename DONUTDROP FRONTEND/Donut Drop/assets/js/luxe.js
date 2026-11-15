@@ -14,7 +14,9 @@ import { $, $$, reduceMotion } from './util.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
 
 const SIDE_KEY = 'lx:side';
-const CHAT_KEY = 'lx:chat';
+/* v2 (2026-11-14): the chat now opens by default on a wide screen, so everybody starts from open
+ * once; closing it is remembered from then on. */
+const CHAT_KEY = 'lx:chat:v2';
 const PLAYING_EVERY_MS = 30_000;
 /* Below this the menu is a drawer and the chat a sheet over the page. Matches luxe.css. */
 const phone = matchMedia('(max-width: 1023px)');
@@ -137,7 +139,19 @@ function setChat(open, { save = true } = {}) {
   chatBtn.setAttribute('aria-label', open ? 'Hide chat' : 'Show chat');
   if (save) remember(CHAT_KEY, body.dataset.chat);
 }
-setChat(recall(CHAT_KEY) === 'open', { save: false });
+/* Open by default where it fits beside the page without covering a game (wide.matches, the width
+ * luxe.css docks it at); below that it lays over the page, so it waits to be asked for. Whatever
+ * the player chose last wins. A Discord rain post links here with ?rain=1: the chat opens on the
+ * rain card, on a phone as its drawer. */
+const wide = matchMedia('(min-width: 1280px)');
+{
+  const saved = recall(CHAT_KEY);
+  setChat(saved ? saved === 'open' : wide.matches, { save: false });
+  if (new URLSearchParams(location.search).has('rain')) {
+    if (phone.matches) requestAnimationFrame(() => { if (!body.classList.contains('chat-open')) drawerHandle?.click(); });
+    else setChat(true, { save: false });
+  }
+}
 
 /* chat.js still remembers whether the OLD rail was folded away (body[data-chat-collapsed], stored
  * per browser), and social.css answers that flag by squeezing the chat to no width and hiding

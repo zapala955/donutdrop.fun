@@ -24,6 +24,7 @@ import {
 } from '../lib/duel-engine.js';
 import { DuelHub } from '../lib/duel-hub.js';
 import { AppError } from '../lib/errors.js';
+import { assertRainMoneyStays } from '../lib/wager-requirements.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { maskedName } from '../lib/masked-name.js';
 import { parseWith } from '../lib/validation.js';
@@ -230,6 +231,8 @@ export async function registerDuelRoutes(app: FastifyInstance, db: Database, con
     duelId: string,
     role: 'host' | 'opponent',
   ): Promise<void> {
+    // Rain money stays on the house games until it is wagered off (lib/wager-requirements.ts).
+    await assertRainMoneyStays(client, userId, stake);
     const debited = await client.query<{ balance_minor: string }>(
       `UPDATE user_wallets SET balance_minor = balance_minor - $2, updated_at = now()
         WHERE user_id = $1 AND balance_minor >= $2

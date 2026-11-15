@@ -848,18 +848,31 @@ const environmentSchema = z
      * is why it is absent from the solvency guard: there is no automatic accrual to be solvent
      * about. The cap is what stops a fat-fingered admin drop. */
     LAVA_RAIN_ENABLED: booleanString,
-    LAVA_RAIN_MAX_POOL_MINOR: positiveBigintString.default('250000000'),
+    LAVA_RAIN_MAX_POOL_MINOR: positiveBigintString.default('1500000000'),
     LAVA_RAIN_MIN_WAGERED_MINOR: z
       .string()
       .regex(/^(0|[1-9][0-9]{0,18})$/)
       .default('10000000'),
     LAVA_RAIN_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
     LAVA_RAIN_CLAIM_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
-    /* Drops that start themselves: every N minutes a pool of LAVA_RAIN_AUTO_POOL_MINOR opens, if
-     * none is already falling. 0 leaves rain to the operator's hand, which is the default -- an
-     * automatic drop spends the operator's money, so it is switched on deliberately. */
+    /* Drops that start themselves: every N minutes one opens, if none is already falling. 0 leaves
+     * rain to the operator's hand, which is the default -- an automatic drop spends the operator's
+     * money, so it is switched on deliberately. */
     LAVA_RAIN_AUTO_EVERY_MINUTES: z.coerce.number().int().min(0).max(10080).default(0),
-    LAVA_RAIN_AUTO_POOL_MINOR: positiveBigintString.default('10000000'),
+    /* How big a drop is: drawn at random between these, in whole millions, for every automatic drop
+     * and for a drop started by hand without a pool (the owner, 2026-11-14: "i want the rains to be
+     * a random amount from 300m to 1.5b"). LAVA_RAIN_MAX_POOL_MINOR caps only a pool typed by hand. */
+    LAVA_RAIN_POOL_MIN_MINOR: positiveBigintString.default('300000000'),
+    LAVA_RAIN_POOL_MAX_MINOR: positiveBigintString.default('1500000000'),
+    /* Who may claim a drop, besides the wagering bar (the owner, 2026-11-14: "make sure they have to
+     * wear the server tag, have 25m deposited in the last 3 days to enter"). The tag is asked of
+     * Discord at the claim (lib/discord-tag.ts); the deposit counts real deposits only. */
+    LAVA_RAIN_TAG_REQUIRED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
+    LAVA_RAIN_MIN_DEPOSIT_MINOR: nonNegativeBigintString.default('25000000'),
+    LAVA_RAIN_DEPOSIT_WINDOW_HOURS: z.coerce.number().int().min(1).max(720).default(72),
     /* ── tips ──
      * Player money moving sideways, with no house cut. Bounded at both ends: a floor so the table
      * is not a spam log, and a ceiling because an unbounded transfer between accounts is the
@@ -1327,6 +1340,13 @@ const environmentSchema = z
         code: 'custom',
         path: ['STOCKS_MAX_STAKE_MINOR'],
         message: 'must be at least STOCKS_MIN_STAKE_MINOR',
+      });
+    }
+    if (BigInt(env.LAVA_RAIN_POOL_MIN_MINOR) > BigInt(env.LAVA_RAIN_POOL_MAX_MINOR)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LAVA_RAIN_POOL_MIN_MINOR'],
+        message: 'must not be above LAVA_RAIN_POOL_MAX_MINOR',
       });
     }
     if (BigInt(env.STOCKS_MAX_PAYOUT_MINOR) <= BigInt(env.STOCKS_MAX_STAKE_MINOR)) {
@@ -1830,7 +1850,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     lavaRainWindowMinutes: env.LAVA_RAIN_WINDOW_MINUTES,
     lavaRainClaimMinutes: env.LAVA_RAIN_CLAIM_MINUTES,
     lavaRainAutoEveryMinutes: env.LAVA_RAIN_AUTO_EVERY_MINUTES,
-    lavaRainAutoPoolMinor: BigInt(env.LAVA_RAIN_AUTO_POOL_MINOR),
+    lavaRainPoolMinMinor: BigInt(env.LAVA_RAIN_POOL_MIN_MINOR),
+    lavaRainPoolMaxMinor: BigInt(env.LAVA_RAIN_POOL_MAX_MINOR),
+    lavaRainTagRequired: env.LAVA_RAIN_TAG_REQUIRED,
+    lavaRainMinDepositMinor: BigInt(env.LAVA_RAIN_MIN_DEPOSIT_MINOR),
+    lavaRainDepositWindowHours: env.LAVA_RAIN_DEPOSIT_WINDOW_HOURS,
     tipsEnabled: env.TIPS_ENABLED,
     tipMinMinor: BigInt(env.TIP_MIN_MINOR),
     tipMaxMinor: BigInt(env.TIP_MAX_MINOR),

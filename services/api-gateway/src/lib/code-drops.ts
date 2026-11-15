@@ -216,16 +216,21 @@ async function readCommitted<T>(db: Database, work: (client: DbClient) => Promis
 
 type Queryable = Pick<DbClient, 'query'>;
 
-/** What `userId` has deposited within the window. */
-export async function depositedRecently(client: Queryable, config: AppConfig, userId: string): Promise<bigint> {
+/** What `userId` has deposited over the last `hours`: real deposits only. Lava Rain asks this too. */
+export async function depositedWithin(client: Queryable, userId: string, hours: number): Promise<bigint> {
   const result = await client.query<{ total: string }>(
     `SELECT coalesce(sum(amount_minor), 0)::text AS total
        FROM wallet_transactions
       WHERE user_id = $1 AND kind = ANY($2::text[])
         AND created_at > now() - make_interval(hours => $3)`,
-    [userId, [...DEPOSIT_KINDS], config.codeDropDepositWindowHours],
+    [userId, [...DEPOSIT_KINDS], hours],
   );
   return BigInt(result.rows[0]?.total ?? '0');
+}
+
+/** What `userId` has deposited within the code drops' window. */
+export async function depositedRecently(client: Queryable, config: AppConfig, userId: string): Promise<bigint> {
+  return depositedWithin(client, userId, config.codeDropDepositWindowHours);
 }
 
 /** "3 days", "1 day", "36 hours". */

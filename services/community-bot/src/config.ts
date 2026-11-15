@@ -99,6 +99,11 @@ const schema = z.object({
    * role turns the ping and the button off; the codes still post. */
   COMMUNITY_CODE_DROP_CHANNEL_ID: snowflake.default('1570039925661892608'),
   COMMUNITY_CODE_DROP_ROLE_ID: z.union([snowflake, z.literal('')]).default('1570041127393042573'),
+  /* Lava Rain (features/rain-posts.ts): the channel every drop is announced in, and the role its
+   * "Rain pings" button hands out and every new drop pings. The owner's own, 2026-11-14. An empty
+   * role turns the ping and the button off; the drops still post. */
+  COMMUNITY_RAIN_CHANNEL_ID: snowflake.default('1571305826965131456'),
+  COMMUNITY_RAIN_ROLE_ID: z.union([snowflake, z.literal('')]).default('1571306576311230624'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -115,6 +120,8 @@ export interface CommunityConfig {
   readonly ownerIds: readonly string[];
   readonly codeDropChannelId: string;
   readonly codeDropRoleId: string | null;
+  readonly rainChannelId: string;
+  readonly rainRoleId: string | null;
   readonly logLevel: string;
 }
 
@@ -155,6 +162,8 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): Commun
       .filter(Boolean),
     codeDropChannelId: env.COMMUNITY_CODE_DROP_CHANNEL_ID,
     codeDropRoleId: env.COMMUNITY_CODE_DROP_ROLE_ID || null,
+    rainChannelId: env.COMMUNITY_RAIN_CHANNEL_ID,
+    rainRoleId: env.COMMUNITY_RAIN_ROLE_ID || null,
     logLevel: env.LOG_LEVEL,
   });
 }

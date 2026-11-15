@@ -1268,12 +1268,38 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: 10080n,
   },
-  lavaRainAutoPoolMinor: {
+  lavaRainPoolMinMinor: {
     kind: 'bigint',
     group: 'rain',
-    label: 'Lava Rain automatic drop pool',
+    label: 'Lava Rain pool, smallest (each drop draws its pool at random between these)',
     min: 1n,
     max: BIGINT_MAX,
+  },
+  lavaRainPoolMaxMinor: {
+    kind: 'bigint',
+    group: 'rain',
+    label: 'Lava Rain pool, largest',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
+  lavaRainTagRequired: {
+    kind: 'boolean',
+    group: 'rain',
+    label: 'A player must wear the Discord server tag to claim a drop',
+  },
+  lavaRainMinDepositMinor: {
+    kind: 'bigint',
+    group: 'rain',
+    label: 'A player must have deposited this much to claim a drop (0 = no deposit needed)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
+  lavaRainDepositWindowHours: {
+    kind: 'integer',
+    group: 'rain',
+    label: 'Hours back that deposit is counted over',
+    min: 1n,
+    max: 720n,
   },
 
   /* ── money moving sideways ── */
@@ -1498,7 +1524,7 @@ function assertInvariants(view: AppConfig): void {
     ['Ice Fishing maximum stake', view.iceFishingMaxStakeMinor, 'the maximum payout', view.iceFishingMaxPayoutMinor],
     ['Mob Derby minimum stake', view.derbyMinStakeMinor, 'the maximum', view.derbyMaxStakeMinor],
     ['Mob Derby maximum stake', view.derbyMaxStakeMinor, 'the maximum payout', view.derbyMaxPayoutMinor],
-    ['Lava Rain automatic pool', view.lavaRainAutoPoolMinor, 'the maximum pool', view.lavaRainMaxPoolMinor],
+    ['Lava Rain smallest pool', view.lavaRainPoolMinMinor, 'the largest', view.lavaRainPoolMaxMinor],
     /* The same floor config.ts holds a deployment to at boot. Without it here, the panel could save
      * what the environment would refuse: an invite paying more than the wager that unlocks it. */
     [

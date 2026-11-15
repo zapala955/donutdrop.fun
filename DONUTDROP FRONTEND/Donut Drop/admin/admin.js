@@ -3360,13 +3360,15 @@ async function startRain() {
   const values = await editRecord({
     title: 'Start Lava Rain',
     description:
-      'This spends the operator-funded pool. The server enforces the configured maximum.',
+      'This spends the operator-funded pool. Leave the amount blank for a random one between the ' +
+      'smallest and largest pool settings, as every automatic drop draws. A typed amount is held to the maximum pool.',
     fields: [
       {
         name: 'poolMinor',
-        label: 'Pool amount (50m, 1.5b or 50000000)',
+        label: 'Pool amount (blank = random; or 50m, 1.5b, 50000000)',
         value: '',
-        placeholder: 'e.g. 50m',
+        placeholder: 'random',
+        required: false,
       },
       {
         name: 'claimMinutes',
@@ -3385,10 +3387,11 @@ async function startRain() {
    * both mean what they say. It used to go to the server as typed, and the server wants digits and
    * nothing else, so the natural way to write an amount came back as `VALIDATION_ERROR: the
    * request is invalid`, with the offending field named only in a detail the response withholds. */
-  const pool = parseAmount(values.poolMinor);
+  const random = !String(values.poolMinor ?? '').trim();
+  const pool = random ? null : parseAmount(values.poolMinor);
   const minutes = Number(values.claimMinutes);
-  if (pool === null) {
-    toast('Enter the pool as an amount, like 50m or 50000000.', 'bad');
+  if (!random && pool === null) {
+    toast('Enter the pool as an amount, like 50m or 50000000, or leave it blank for a random one.', 'bad');
     return;
   }
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
@@ -3397,7 +3400,8 @@ async function startRain() {
   }
   try {
     const result = await api.post('/v1/social/rain', {
-      poolMinor: pool.toString(),
+      // Left out for a random pool, drawn on the server between the pool settings.
+      ...(random ? {} : { poolMinor: pool.toString() }),
       claimMinutes: minutes,
       // Left out when blank: an empty string is not "no note" to a schema that wants one character.
       ...(values.reason ? { reason: values.reason } : {}),

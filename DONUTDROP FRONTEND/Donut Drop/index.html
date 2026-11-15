@@ -149,6 +149,9 @@
      flourish at the wallet (assets/js/winfx.js). Paint only, same layout. After the luxe and retro
      sheets it repaints; before prefs.css, so a theme the player picks still has the last word. -->
 <link rel="stylesheet" href="assets/css/dopamine.css" />
+<!-- The chat panel's own look (2026-11-14): after the skins above, before prefs.css, so the player's
+     chat text size still has the last word. -->
+<link rel="stylesheet" href="assets/css/chat.css" />
 <!-- The player's settings: the theme, reduced motion, chat and balance options, and the settings
      page. The script is a plain blocking one on purpose: it puts the saved theme on <html> before
      the first paint, so a themed page never flashes obsidian first. -->
@@ -1229,7 +1232,7 @@
          "$0 · RAIN POT · 12:00 · Join" here that showed whenever no drop was running. -->
     <div class="chat__rain" hidden></div>
     <div class="chat__head">
-      <span>GLOBAL CHAT</span>
+      <span>Chat</span>
     </div>
     <div class="chat__log" id="chatLog"></div>
     <form class="chat__send" id="chatForm">

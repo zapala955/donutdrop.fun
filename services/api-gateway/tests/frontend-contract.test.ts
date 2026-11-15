@@ -502,9 +502,10 @@ describe('frontend/backend contract', () => {
     // The skin loads after every other sheet, so it has the last word, phones included; the retro
     // skin (the old Minecraft theme) comes after the luxe sheets it repaints, and the dopamine skin
     // (the crates page's material on every panel, paint only) after that. The player's own settings
-    // (prefs.css: their theme, and the settings page) come last of all, over every skin.
+    // (prefs.css: their theme, and the settings page) come last of all, over every skin. The chat
+    // panel's own look (chat.css, 2026-11-14) sits just before them, so the chat text size still wins.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(sheets.slice(-6), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'dopamine.css', 'prefs.css']);
+    assert.deepEqual(sheets.slice(-7), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'dopamine.css', 'chat.css', 'prefs.css']);
 
     // The drawer opens from the chat button only, closed on arrival, and a tap off it closes it.
     assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);

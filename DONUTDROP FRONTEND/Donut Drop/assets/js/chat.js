@@ -287,54 +287,200 @@ function hideRain() {
   delete document.body.dataset.rain;
 }
 
+/* ── the rain card (2026-11-14) ──
+ * Flat, in the site's obsidian and gold: the pool, a clock and a bar draining with the claim window,
+ * and the three rules a claim needs (the server tag, a deposit in the last days, the wagering bar),
+ * each with where the player stands on it. The button says what is missing rather than going grey:
+ * "Deposit $13M more" is a step, a dead CLAIM is not. Between drops the card shows when the next one
+ * opens and how big it may be, with the same rules, so a player can get ready before it falls. */
+const RAIN_ART = 'assets/img/items/lava_bucket.png';
+const TICK_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>';
+const CROSS_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7m0-7-7 7"/></svg>';
+const DOT_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/></svg>';
+let rainShownId = null;
+
+function clockText(ms) {
+  const left = Math.max(0, ms);
+  const h = Math.floor(left / 3_600_000);
+  const m = Math.floor((left % 3_600_000) / 60_000);
+  const sec = Math.floor((left % 60_000) / 1000);
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function hoursText(hours) {
+  if (hours % 24 !== 0) return `${hours}h`;
+  const days = hours / 24;
+  return days === 1 ? '1 day' : `${days} days`;
+}
+
+function minutesText(minutes) {
+  if (minutes % 60 === 0) return minutes === 60 ? '1 hour' : `${minutes / 60} hours`;
+  return `${minutes} min`;
+}
+
+/** One rule on the card: met, not met, or not known yet (the tag between drops). */
+function ruleRow(label, detail, met) {
+  const row = el('li', 'rain__rule');
+  row.dataset.met = met === null ? '?' : met ? '1' : '0';
+  const mark = el('span', 'rain__mark');
+  // Fixed SVG strings only: nothing from the server goes into markup.
+  mark.innerHTML = met === null ? DOT_SVG : met ? TICK_SVG : CROSS_SVG;
+  const name = el('span', 'rain__rulename');
+  name.textContent = label;
+  const where = el('span', 'rain__ruledetail mono');
+  where.textContent = detail;
+  row.append(mark, name, where);
+  return row;
+}
+
+/** The rules, with the viewer's standing on each when they are signed in. */
+function rainRules(board, you) {
+  const rules = board.rules ?? {};
+  const list = el('ul', 'rain__rules');
+  if (rules.tagRequired) {
+    const tag = you?.tag;
+    let detail = '';
+    let met = null;
+    if (tag) {
+      /* Discord is only asked while a drop falls and the deposit is met (lib/lava-rain.ts); until
+       * then the tag is checked when the player claims, and the row says so. */
+      if (!tag.linked) { detail = 'Link Discord'; met = false; }
+      else if (tag.wearing === true) { detail = 'Worn'; met = true; }
+      else if (tag.wearing === false) { detail = 'Not worn'; met = false; }
+      else { detail = 'At claim'; met = null; }
+    }
+    list.append(ruleRow('Wear the server tag', detail, met));
+  }
+  const depositNeed = BigInt(rules.minDepositMinor ?? '0');
+  if (depositNeed > 0n) {
+    const has = you?.deposit ? BigInt(you.deposit.depositedMinor) : null;
+    list.append(ruleRow(
+      `${money(Number(depositNeed))} deposited · ${hoursText(rules.depositWindowHours ?? 72)}`,
+      has === null ? '' : `${money(Number(has > depositNeed ? depositNeed : has))} / ${money(Number(depositNeed))}`,
+      you?.deposit ? Boolean(you.deposit.met) : null,
+    ));
+  }
+  const bar = BigInt(board.active?.minWageredMinor ?? rules.minWageredMinor ?? '0');
+  if (bar > 0n) {
+    const done = you?.wager ? BigInt(you.wager.wageredMinor) : null;
+    list.append(ruleRow(
+      `${money(Number(bar))} wagered · ${minutesText(board.active?.windowMinutes ?? rules.wagerWindowMinutes ?? 60)}`,
+      done === null ? '' : `${money(Number(done > bar ? bar : done))} / ${money(Number(bar))}`,
+      you?.wager ? Boolean(you.wager.met) : null,
+    ));
+  }
+  return list;
+}
+
+/** What the button asks for: the first rule not met, in the order a player can fix them. */
+function missingStep(board, you) {
+  if (you?.tag && !you.tag.met) {
+    if (!you.tag.linked) return { label: 'Link your Discord', go: () => document.querySelector('a[href="/discord"]')?.click() };
+    if (you.tag.wearing === false) return { label: 'Wear the server tag', go: () => tagHelp() };
+  }
+  if (you?.deposit && !you.deposit.met) {
+    const short = BigInt(you.deposit.requiredMinor) - BigInt(you.deposit.depositedMinor);
+    return { label: `Deposit ${money(Number(short))} more`, go: () => document.querySelector('#depositBtn, #lxDeposit')?.click() };
+  }
+  if (you?.wager && !you.wager.met) {
+    const short = BigInt(you.wager.requiredMinor) - BigInt(you.wager.wageredMinor);
+    return { label: `Wager ${money(Number(short))} more`, go: null };
+  }
+  return null;
+}
+
+function tagHelp() {
+  toast({
+    kind: 'gold',
+    title: 'Wear the server tag',
+    body: 'In Discord: User Settings, then Profiles, then Server Tag, and pick DonutLuxe. Then claim again.',
+  });
+}
+
+function rainHead(label, poolText, clockNode) {
+  const top = el('div', 'rain__top');
+  const art = document.createElement('img');
+  art.className = 'rain__art';
+  art.src = safeImage(RAIN_ART);
+  art.alt = '';
+  const title = el('div', 'rain__title');
+  const tag = el('span', 'rain__label');
+  tag.textContent = label;
+  const pool = el('b', 'rain__pool mono');
+  pool.textContent = poolText;
+  title.append(tag, pool);
+  top.append(art, title, clockNode);
+  return { top, pool };
+}
+
+/** The pot counting up from a fifth of itself the first time a drop is shown. */
+function countPool(node, value) {
+  if (reduceMotionNow()) { node.textContent = money(value); return; }
+  const started = performance.now();
+  const from = value * 0.2;
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / 700);
+    node.textContent = money(Math.round(from + (value - from) * (1 - (1 - t) ** 3)));
+    if (t < 1 && node.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function reduceMotionNow() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
 function paintRain(board) {
   const card = rainCard;
   window.clearInterval(rainCountdown);
   if (!board.active) {
-    if (board.next) paintNextRain(board.next);
+    if (board.next) paintNextRain(board);
     else hideRain();
     return;
   }
-  delete card.dataset.next;
   card.hidden = false;
   document.body.dataset.rain = '1';
   card.replaceChildren();
 
   const active = board.active;
   const you = board.you;
+  const fresh = rainShownId !== active.id;
+  rainShownId = active.id;
+  card.dataset.state = !state.authenticated ? 'out' : you?.claimed ? 'claimed' : you?.eligible ? 'ready' : 'locked';
+  if (fresh) card.dataset.fresh = '1';
+  else delete card.dataset.fresh;
 
-  const art = document.createElement('img');
-  art.src = safeImage('assets/img/items/gold_block.png');
-  art.alt = '';
-  card.appendChild(art);
+  const clockNode = el('span', 'rain__clock mono');
+  const { top, pool } = rainHead('Lava Rain', money(Number(active.poolMinor)), clockNode);
+  card.appendChild(top);
+  if (fresh) countPool(pool, Number(active.poolMinor));
 
-  const figures = el('div', 'chat__rainfig');
-  const pot = el('b', 'mono');
-  pot.textContent = money(Number(active.poolMinor));
-  const caption = el('span');
-  caption.textContent = you?.claimed
-    ? `YOU'RE IN · ${active.claimants} IN`
-    : `LAVA RAIN · ${active.claimants} IN`;
-  figures.append(pot, caption);
-  /* What a share is worth right now. Labelled as an estimate everywhere it appears, because every
-   * claim until the window shuts moves the divisor. */
-  figures.title = `About ${money(
-    Number(active.poolMinor) / Math.max(1, active.claimants + (you?.claimed ? 0 : 1)),
-  )} each if you claim now · split evenly when the window closes`;
-  card.appendChild(figures);
+  // The claim window, draining.
+  const bar = el('div', 'rain__bar');
+  const fill = el('i');
+  bar.appendChild(fill);
+  card.appendChild(bar);
 
-  const clockNode = el('span', 'chat__timer mono');
-  card.appendChild(clockNode);
+  /* What a share is worth right now: an estimate, and labelled one, since every claim until the
+   * window shuts moves the divisor. */
+  const meta = el('p', 'rain__meta');
+  const divisor = Math.max(1, active.claimants + (you?.claimed ? 0 : 1));
+  meta.textContent = `${active.claimants} in · about ${money(Number(active.poolMinor) / divisor)} each`;
+  card.appendChild(meta);
 
-  const button = el('button', 'btn btn--tiny');
+  if (!you?.claimed) card.appendChild(rainRules(board, you));
+
+  const button = el('button', 'rain__go');
   button.type = 'button';
+  const opensAt = new Date(active.opensAt).getTime();
   const closesAt = new Date(active.closesAt).getTime();
-
+  const span = Math.max(1, closesAt - opensAt);
   const paintClock = () => {
     const remaining = Math.max(0, closesAt - Date.now());
-    clockNode.textContent = `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(
-      Math.floor((remaining % 60000) / 1000),
-    ).padStart(2, '0')}`;
+    clockNode.textContent = clockText(remaining);
+    fill.style.transform = `scaleX(${Math.min(1, remaining / span)})`;
     card.dataset.closing = remaining <= 30_000 ? '1' : '0';
     if (remaining <= 0) {
       window.clearInterval(rainCountdown);
@@ -348,62 +494,53 @@ function paintRain(board) {
   rainCountdown = window.setInterval(paintClock, 1000);
 
   if (!state.authenticated) {
-    /* A disabled LOG IN was a dead end on the one card with a deadline on it. */
-    button.textContent = 'LOG IN';
+    button.textContent = 'Log in to claim';
     button.addEventListener('click', () => document.querySelector('#loginBtn')?.click());
   } else if (you?.claimed) {
-    button.textContent = 'CLAIMED';
+    button.textContent = "You're in";
+    button.dataset.tone = 'in';
     button.disabled = true;
-  } else if (!you?.eligible) {
-    /* The bar is stated as a figure, not as a sentence. A player who is short needs to know by how
-     * much, and "wager $10M in 60 minutes" is a rule they can act on where a paragraph is not. The
-     * figure is the shortfall, not the bar: someone $1M away should not read "NEED $10M". */
-    const short = Number(BigInt(active.minWageredMinor) - BigInt(you?.wageredMinor ?? '0'));
-    button.textContent = `NEED ${money(Math.max(0, short))}`;
-    button.disabled = true;
-    button.title = `Wager ${money(Number(active.minWageredMinor))} in ${active.windowMinutes}m to claim · ${money(
-      Number(you?.wageredMinor ?? 0),
-    )} so far`;
-  } else {
-    button.textContent = 'CLAIM';
+  } else if (you?.eligible) {
+    button.textContent = 'Claim';
+    button.dataset.sfx = 'none';
     button.addEventListener('click', () => void claimRain(button));
+  } else {
+    const step = missingStep(board, you);
+    button.dataset.tone = 'step';
+    button.textContent = step?.label ?? 'Not eligible yet';
+    if (step?.go) button.addEventListener('click', step.go);
+    else button.disabled = true;
   }
   card.appendChild(button);
 }
 
 /**
- * Between automatic drops: the pot that is coming and when, so the rail says rain is on its way
- * rather than showing nothing. No button -- there is nothing to claim yet -- and the card refetches
+ * Between automatic drops: when the next one opens and how big it may be, with the rules, so the
+ * rail says rain is on its way and a player can get ready. Nothing to claim yet; the card refetches
  * the moment the countdown reaches zero, which is when the drop opens.
  */
-function paintNextRain(next) {
+function paintNextRain(board) {
+  const next = board.next;
   const card = rainCard;
   card.hidden = false;
-  card.dataset.next = '1';
+  card.dataset.state = 'next';
+  delete card.dataset.fresh;
   delete document.body.dataset.rain;
+  rainShownId = null;
   card.replaceChildren();
 
-  const art = document.createElement('img');
-  art.src = safeImage('assets/img/items/gold_block.png');
-  art.alt = '';
-  card.appendChild(art);
+  const lo = next.poolMinMinor ?? next.poolMinor;
+  const hi = next.poolMaxMinor ?? next.poolMinor;
+  const range = lo === hi ? money(Number(hi)) : `${money(Number(lo))} – ${money(Number(hi))}`;
+  const clockNode = el('span', 'rain__clock mono');
+  const { top } = rainHead('Next Lava Rain', range, clockNode);
+  card.appendChild(top);
+  card.appendChild(rainRules(board, board.you));
 
-  const figures = el('div', 'chat__rainfig');
-  const pot = el('b', 'mono');
-  pot.textContent = money(Number(next.poolMinor));
-  const caption = el('span');
-  caption.textContent = 'NEXT LAVA RAIN';
-  figures.append(pot, caption);
-  card.appendChild(figures);
-
-  const clockNode = el('span', 'chat__timer mono');
-  card.appendChild(clockNode);
   const opensAt = new Date(next.at).getTime();
   const paintClock = () => {
     const remaining = Math.max(0, opensAt - Date.now());
-    clockNode.textContent = `${String(Math.floor(remaining / 60000)).padStart(2, '0')}:${String(
-      Math.floor((remaining % 60000) / 1000),
-    ).padStart(2, '0')}`;
+    clockNode.textContent = clockText(remaining);
     if (remaining <= 0) {
       window.clearInterval(rainCountdown);
       scheduleRain();
@@ -415,20 +552,22 @@ function paintNextRain(next) {
 
 async function claimRain(button) {
   button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
   try {
     const result = await api.post('/v1/social/rain/claim', {});
     playSound('chime');
     toast({
       kind: 'gold',
-      title: 'IN THE RAIN',
+      title: "You're in the rain",
       /* Labelled an estimate on purpose: the divisor is still moving while the window is open. */
       body: `${result.claimants} in · about ${money(Number(result.estimatedShareMinor))} each`,
     });
     void pollRain();
   } catch (error) {
     button.disabled = false;
-    toast({ kind: 'lose', title: 'NOT CLAIMED', body: error?.message || 'Try again' });
-    /* Already claimed, window shut, or no longer eligible: all of them mean the card is stale. */
+    button.removeAttribute('aria-busy');
+    toast({ kind: 'lose', title: 'Not claimed', body: error?.message || 'Try again' });
+    /* Already claimed, window shut, short of a rule: every one of them means the card is stale. */
     scheduleRain();
   }
 }
@@ -488,10 +627,8 @@ function announceRain(board) {
     const at = new Date(active.opensAt ?? Date.now()).getTime();
     announcedRain.add(`open:${active.id}`);
     if (at > clearedAt) {
-      const bar = BigInt(active.minWageredMinor ?? '0');
-      const text =
-        `${money(Number(active.poolMinor))} is falling. Claim a share above` +
-        (bar > 0n ? ` · needs ${money(Number(bar))} wagered in ${active.windowMinutes}m.` : '.');
+      // The rules are on the card above; the line only says it is falling.
+      const text = `${money(Number(active.poolMinor))} is falling. Claim a share above.`;
       appendLine(buildRainLine('LIVE', text, at), at);
       added = true;
     }

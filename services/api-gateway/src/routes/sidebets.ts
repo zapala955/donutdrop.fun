@@ -6,6 +6,7 @@ import { createAuthGuards } from '../lib/auth.js';
 import { creditWallet } from '../lib/cash-settlement.js';
 import type { Database, DbClient } from '../lib/db.js';
 import { AppError } from '../lib/errors.js';
+import { assertRainMoneyStays } from '../lib/wager-requirements.js';
 import { assertGameEligible } from '../lib/game-eligibility.js';
 import { impliedMultiplierBps, settlePool, type Bet } from '../lib/sidebet-engine.js';
 import { parseWith } from '../lib/validation.js';
@@ -188,6 +189,9 @@ export async function registerSideBetRoutes(app: FastifyInstance, db: Database, 
         /* Every other wager path rechecks the account under lock before it debits; this one did
          * not, so a suspended account could keep staking on side markets. */
         await assertGameEligible(client, userId);
+        /* Rain money stays on the house games until it is wagered off: a side bet is a pool between
+         * players, and a losing side backed by a second account would carry it across. */
+        await assertRainMoneyStays(client, userId, stake);
 
         const debited = await client.query<{ balance_minor: string }>(
           `UPDATE user_wallets SET balance_minor = balance_minor - $2, updated_at = now()

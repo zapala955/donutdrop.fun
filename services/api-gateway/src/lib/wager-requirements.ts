@@ -35,9 +35,17 @@
  * less than the held amount stays behind; items, which carry no amount, wait for it. A rain the
  * player has lost is forgiven with the rest when they deposit from nothing (forgiveSpentRequirement).
  *
+ * RAIN MONEY NEVER CROSSES TO ANOTHER PLAYER (2026-11-14, before rains went to $300M-$1.5B). The
+ * held amount can be played on the house games, which is how it is wagered off, but not staked
+ * against another player (assertRainMoneyStays): a coinflip, a duel, a battle or a side bet lost on
+ * purpose to a second account would hand the rain money to an account with no lock, for the rake.
+ * And a PvP stake counts down the rain lock only as the house wager its rake is worth
+ * (countedWagerMinor), so two accounts playing each other cannot buy the 20x for 3% of it.
+ *
  * WHAT IT DOES NOT COVER. Losing a skill duel or a battle on purpose to a second account moves value
- * between players, and counts as wagering while doing it. That leak is priced by the rake rather
- * than closed; closing it would mean a separate bonus balance, which this deliberately is not.
+ * between players, and counts as wagering while doing it. For the running figure that leak is priced
+ * by the rake rather than closed; closing it would mean a separate bonus balance, which this
+ * deliberately is not. For rain money it is closed, above.
  */
 import type { AppConfig } from '../config.js';
 import type { DbClient } from './db.js';
@@ -116,6 +124,7 @@ const IDLE_SQL = `
         AND NOT EXISTS (SELECT 1 FROM ice_fishing_games g WHERE g.user_id = $1 AND g.status = 'active')
         AND NOT EXISTS (SELECT 1 FROM fishing_casts g WHERE g.user_id = $1 AND g.status = 'open')
         AND NOT EXISTS (SELECT 1 FROM crash_bets g WHERE g.user_id = $1 AND g.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM stocks_positions g WHERE g.user_id = $1 AND g.status = 'open')
         AND NOT EXISTS (SELECT 1 FROM roulette_bets g WHERE g.user_id = $1 AND g.settled_at IS NULL)
         AND NOT EXISTS (SELECT 1 FROM side_bets g WHERE g.user_id = $1 AND g.settled_at IS NULL)
         AND NOT EXISTS (SELECT 1 FROM coinflip_games g
@@ -205,27 +214,38 @@ export async function rainLock(
   return { heldMinor: BigInt(row.held_minor), remainingMinor: BigInt(row.remaining_minor) };
 }
 
-/** Counts a settled wager against whatever the player owes. A no-op for everybody who owes nothing. */
+/**
+ * Counts a settled wager against whatever the player owes. A no-op for everybody who owes nothing.
+ *
+ * `rainCountedMinor` is what the same wager is worth against the rain lock: the whole stake on a
+ * house game, the house wager its rake is worth on a PvP one (countedWagerMinor; RAIN MONEY NEVER
+ * CROSSES TO ANOTHER PLAYER). The running figure always takes the whole stake.
+ */
 export async function reduceWagerRequirement(
   client: DbClient,
   userId: string,
   wagerMinor: bigint,
+  rainCountedMinor: bigint = wagerMinor,
 ): Promise<void> {
-  if (wagerMinor <= 0n) return;
-  await client.query(
-    `UPDATE user_wager_requirements
-        SET remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
-      WHERE user_id = $1 AND remaining_minor > 0`,
-    [userId, wagerMinor.toString()],
-  );
+  if (wagerMinor > 0n) {
+    await client.query(
+      `UPDATE user_wager_requirements
+          SET remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
+        WHERE user_id = $1 AND remaining_minor > 0`,
+      [userId, wagerMinor.toString()],
+    );
+  }
   // The rain lock counts down with it; once it is wagered off the rain money is the player's.
-  await client.query(
-    `UPDATE user_rain_locks
-        SET held_minor = CASE WHEN remaining_minor <= $2::bigint THEN 0 ELSE held_minor END,
-            remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
-      WHERE user_id = $1 AND remaining_minor > 0`,
-    [userId, wagerMinor.toString()],
-  );
+  const rainCounted = rainCountedMinor < wagerMinor ? rainCountedMinor : wagerMinor;
+  if (rainCounted > 0n) {
+    await client.query(
+      `UPDATE user_rain_locks
+          SET held_minor = CASE WHEN remaining_minor <= $2::bigint THEN 0 ELSE held_minor END,
+              remaining_minor = GREATEST(remaining_minor - $2::bigint, 0), updated_at = now()
+        WHERE user_id = $1 AND remaining_minor > 0`,
+      [userId, rainCounted.toString()],
+    );
+  }
 }
 
 /** What the player still owes, or 0. */
@@ -282,6 +302,41 @@ export async function assertWagerRequirementMet(
       ? `Wager ${owed} more before ${action} items: ${held} of your balance is Lava Rain money`
       : `${held} of your balance is Lava Rain money: wager ${owed} more to free it. ` +
           `You can move up to $${free.toLocaleString('en-US')} now`,
+    {
+      remainingMinor: rain.remainingMinor.toString(),
+      heldMinor: rain.heldMinor.toString(),
+      freeMinor: free.toString(),
+    },
+  );
+}
+
+/**
+ * Refuses a stake against another player that would come out of held rain money (RAIN MONEY NEVER
+ * CROSSES TO ANOTHER PLAYER). Call inside the transaction that takes the stake, before the debit:
+ * the wallet row is locked first, as assertWagerRequirementMet locks it, so a rain settling at the
+ * same moment is either seen or waits. The player's own money above the held amount stakes freely.
+ */
+export async function assertRainMoneyStays(
+  client: DbClient,
+  userId: string,
+  stakeMinor: bigint,
+): Promise<void> {
+  const wallet = await client.query<{ balance_minor: string }>(
+    'SELECT balance_minor FROM user_wallets WHERE user_id = $1 FOR UPDATE',
+    [userId],
+  );
+  const rain = await rainLock(client, userId);
+  if (rain.heldMinor <= 0n) return;
+  const balance = BigInt(wallet.rows[0]?.balance_minor ?? '0');
+  const free = balance > rain.heldMinor ? balance - rain.heldMinor : 0n;
+  if (stakeMinor <= free) return;
+  const held = `$${rain.heldMinor.toLocaleString('en-US')}`;
+  const owed = `$${rain.remainingMinor.toLocaleString('en-US')}`;
+  throw new AppError(
+    409,
+    'RAIN_WAGER_REQUIREMENT',
+    `${held} of your balance is Lava Rain money, which plays on the house games until it is wagered ` +
+      `off: ${owed} more. Games against other players can take up to $${free.toLocaleString('en-US')} now`,
     {
       remainingMinor: rain.remainingMinor.toString(),
       heldMinor: rain.heldMinor.toString(),

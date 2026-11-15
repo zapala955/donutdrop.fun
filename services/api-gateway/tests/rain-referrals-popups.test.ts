@@ -32,13 +32,20 @@ describe('starting a lava rain', () => {
       { poolMinor: '50m' },
       { poolMinor: '0' },
       { poolMinor: '-5' },
-      { poolMinor: '' },
       { poolMinor: '100', claimMinutes: 0 },
       { poolMinor: '100', claimMinutes: 61 },
       { poolMinor: '100', extra: true },
       { poolMinor: '100', reason: '<script>x</script>' },
     ]) {
       assert.equal(rainSchema.safeParse(bad).success, false, JSON.stringify(bad));
+    }
+  });
+
+  it('takes a blank or missing pool as "draw one at random" (2026-11-14)', () => {
+    for (const blank of [{}, { poolMinor: '' }, { poolMinor: '   ' }]) {
+      const parsed = rainSchema.safeParse(blank);
+      assert.equal(parsed.success, true, JSON.stringify(blank));
+      assert.equal(parsed.data?.poolMinor, undefined);
     }
   });
 

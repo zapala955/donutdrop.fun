@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import type { Database } from '../lib/db.js';
 import { codeDropStatus, codeDropTick, recordDropMessage } from '../lib/code-drops.js';
+import { rainPostTick, recordRainPost } from '../lib/lava-rain.js';
 import { verifyCommunityBotSignature } from '../lib/community-bot-auth.js';
 import {
   linkedAccounts,
@@ -103,6 +104,12 @@ const accountChoiceSchema = z
   .strict();
 
 const watchSchema = z.object({}).strict();
+
+/* The bot's report on a Lava Rain it took to post: where the message is, or that the post failed. */
+const rainPostSchema = z.union([
+  z.object({ rainId: z.uuid(), channelId: snowflake, messageId: snowflake }).strict(),
+  z.object({ rainId: z.uuid(), failed: z.literal(true) }).strict(),
+]);
 
 /* The bot's report on a code drop it took to post: where the message is, or that the post failed. */
 const dropMessageSchema = z.union([
@@ -278,6 +285,30 @@ export async function registerCommunityBotRoutes(
       verifyCommunityBotSignature(request, config);
       const body = parseWith(dropMessageSchema, request.body);
       await recordDropMessage(db, body);
+      return { recorded: true };
+    },
+  );
+
+  /* Lava Rain in Discord (lib/lava-rain.ts). Every few seconds the bot asks about the current drop:
+   * the ask that finds one falling and unannounced is told to post it, pinging the rain role; after
+   * that the latest drop comes back with where its post is, so the bot can edit it when it pays out.
+   * The bot posts and edits; it cannot start, claim or pay a drop. */
+  app.post(
+    '/internal/v1/community/rain/tick',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      parseWith(watchSchema, request.body);
+      return rainPostTick(db, config);
+    },
+  );
+  app.post(
+    '/internal/v1/community/rain/message',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      const body = parseWith(rainPostSchema, request.body);
+      await recordRainPost(db, body);
       return { recorded: true };
     },
   );

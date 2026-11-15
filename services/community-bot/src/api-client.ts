@@ -145,6 +145,36 @@ export interface CodeDropTick {
   readonly nextAt: string;
 }
 
+/** A Lava Rain, as the site tells the bot about it (lib/lava-rain.ts RainPost). */
+export interface RainPost {
+  readonly id: string;
+  readonly poolMinor: string;
+  readonly status: 'open' | 'settled' | 'expired';
+  readonly closesAt: string;
+  readonly claimMinutes: number;
+  readonly claimants: number;
+  readonly perClaimMinor: string | null;
+  readonly channelId: string | null;
+  readonly messageId: string | null;
+}
+
+/** Who may claim a drop, from the site's live settings. */
+export interface RainRules {
+  readonly tagRequired: boolean;
+  readonly minDepositMinor: string;
+  readonly depositWindowHours: number;
+  readonly minWageredMinor: string;
+  readonly wagerWindowMinutes: number;
+}
+
+/** The answer to the bot's ask: the current drop, and whether this ask is the one to post it. */
+export interface RainTick {
+  readonly enabled: boolean;
+  readonly rain: RainPost | null;
+  readonly announce: boolean;
+  readonly rules: RainRules;
+}
+
 export interface TagSighting {
   readonly discordUserId: string;
   readonly wearing: boolean;
@@ -264,6 +294,17 @@ export class PlatformApi {
     body: { dropId: string; channelId: string; messageId: string } | { dropId: string; failed: true },
   ): Promise<void> {
     await this.post<{ recorded: boolean }>('/internal/v1/community/code-drops/message', body);
+  }
+
+  async rainTick(): Promise<RainTick> {
+    return this.post<RainTick>('/internal/v1/community/rain/tick', {});
+  }
+
+  /** Where a drop was posted, or that the post failed (so a later ask tries again). */
+  async rainMessage(
+    body: { rainId: string; channelId: string; messageId: string } | { rainId: string; failed: true },
+  ): Promise<void> {
+    await this.post<{ recorded: boolean }>('/internal/v1/community/rain/message', body);
   }
 
   async rewardStatus(discordUserId: string): Promise<RewardStatus> {

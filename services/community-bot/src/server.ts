@@ -74,6 +74,7 @@ import {
   onDropPingButton,
   startCodeDrops,
 } from './features/code-drops.js';
+import { RAIN_PING_BUTTON, onRainPingButton, startRainPosts } from './features/rain-posts.js';
 import {
   avatar,
   castPollVote,
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
   const wrongGuild = (guildId: string | null): boolean => guildId !== config.guildId;
   let stopTagWatch: () => void = () => undefined;
   let stopCodeDrops: () => void = () => undefined;
+  let stopRainPosts: () => void = () => undefined;
 
   client.once(Events.ClientReady, (ready) => {
     log.info({ tag: ready.user.tag, guilds: ready.guilds.cache.size }, 'connected');
@@ -169,6 +171,16 @@ async function main(): Promise<void> {
         siteUrl: config.siteUrl,
         channelId: config.codeDropChannelId,
         roleId: config.codeDropRoleId,
+        onError: (error, message) => log.error({ error }, message),
+      });
+    }
+    /* Lava Rain (2026-11-14): every few seconds the site is asked about the current drop, which this
+     * announces in the rain channel, pinging the rain role, and edits when it pays out. */
+    if (api) {
+      stopRainPosts = startRainPosts(ready, api, {
+        siteUrl: config.siteUrl,
+        channelId: config.rainChannelId,
+        roleId: config.rainRoleId,
         onError: (error, message) => log.error({ error }, message),
       });
     }
@@ -288,6 +300,10 @@ async function main(): Promise<void> {
        * button, still on welcome DMs already sent, now turns code pings on instead. */
       if (interaction.customId === DROP_PING_BUTTON || interaction.customId === LEGACY_DAILY_BUTTON) {
         await onDropPingButton(client, config.guildId, config.codeDropRoleId, interaction);
+        return;
+      }
+      if (interaction.customId === RAIN_PING_BUTTON) {
+        await onRainPingButton(client, config.guildId, config.rainRoleId, interaction);
         return;
       }
       if (wrongGuild(interaction.guildId)) return;
@@ -480,6 +496,7 @@ async function main(): Promise<void> {
     stopAutomod();
     stopTagWatch();
     stopCodeDrops();
+    stopRainPosts();
     await client.destroy().catch(() => undefined);
     await db.close().catch(() => undefined);
     process.exit(0);

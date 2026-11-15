@@ -102,7 +102,8 @@ describe('the wager requirement', () => {
       read('services/api-gateway/src/routes/minecraft-in.ts'),
     ]);
     const recordWager = settlement.slice(settlement.indexOf('export async function recordWager('));
-    assert.match(recordWager, /await reduceWagerRequirement\(client, userId, amountMinor\)/);
+    // The whole stake for the running figure; for the rain lock, a PvP stake at its rake's worth.
+    assert.match(recordWager, /await reduceWagerRequirement\(client, userId, amountMinor, countedWagerMinor\(config, amountMinor, marginMinor\)\)/);
     assert.match(auth, /'signup_bonus', row\.id\)/);
     assert.match(auth, /requirementFor\(config\.signupBonusMinor, config\.signupBonusWagerMultiplier\)/);
     assert.match(auth, /addDepositRequirement\(client, config, row\.id, BigInt\(payment\.pay_amount!\)\)/);

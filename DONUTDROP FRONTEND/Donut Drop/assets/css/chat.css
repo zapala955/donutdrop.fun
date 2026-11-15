@@ -1,0 +1,318 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
+ * Hallmark · component: the chat panel · genre: atmospheric (casino floor: the site's obsidian + gold)
+ *   · theme: luxe tokens; the rain card's lava lifted into tokens below
+ * layout (2026-11-14): down the right edge, under the top bar. Open by default on a screen wide
+ *         enough to dock it beside the page (luxe.js), so it never lays over a game; a phone keeps
+ *         it as a drawer. Top to bottom: the header, the Lava Rain card, the log, the box.
+ * states: the rain card -- next (the coming drop's range and clock), out (signed out), locked (a rule
+ *         not met: the button names the step), ready (Claim, gold), claimed (You're in), closing (the
+ *         last 30 seconds, red), fresh (just opened: it drops in, the pool counts up); each rule --
+ *         met, not met, not known yet. The lines -- a message (hover, mine, staff, a mention), a big
+ *         win, a tip, a rain line. The box -- default, hover, focus, disabled (signed out), slow mode.
+ * signature: the rain card -- a pot, a clock and a bar draining, and a checklist that says exactly
+ *            what stands between a player and a share.
+ * motion: the card dropping in, flat drops of lava falling behind an open drop, the bar draining,
+ *         the pool counting up (chat.js), a new line sliding in. Flat, no glow. Reduced motion: none.
+ *
+ * Loaded after luxe.css and dopamine.css, before prefs.css: its rules are as specific as the panel's
+ * old ones, so they win by order, and the player's chat text size (prefs.css) still wins over them.
+ */
+
+body.lx .chat {
+  --chat-lava: #ff6a1f;
+  --chat-lava-hi: #ff9a3c;
+  --chat-lava-wash: color-mix(in oklab, var(--chat-lava) 12%, var(--lx-2));
+  --chat-win: oklch(0.77 0.17 152);
+  --chat-loss: #ff4d5e;
+  --chat-tip: #6cc4ff;
+  --chat-lip: rgba(0, 0, 0, .55);
+  --chat-ease: cubic-bezier(.16, 1, .3, 1);
+  background: var(--lx-1);
+  box-shadow: -1px 0 0 rgba(255, 255, 255, .05);
+}
+
+/* ─────────── the header ─────────── */
+body.lx .chat .chat__head {
+  height: var(--lx-top);
+  padding: 0 var(--lx-s2) 0 var(--lx-s4);
+  background: var(--lx-1);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .05);
+}
+body.lx .chat .chat__head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lx-ink);
+  font: 800 .9375rem var(--lx-ui);
+}
+body.lx .chat .chat__head span::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chat-win);
+}
+
+/* ─────────── the Lava Rain card ─────────── */
+body.lx .chat .chat__rain:not([hidden]) {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: 10px;
+  flex: none;
+  margin: var(--lx-s3) var(--lx-s3) var(--lx-s1);
+  padding: 14px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--lx-2);
+  box-shadow: 0 4px 0 var(--chat-lip);
+}
+/* An open drop: lava-tinted, flat drops of it falling behind the card. */
+body.lx .chat .chat__rain:is([data-state="out"], [data-state="locked"], [data-state="ready"], [data-state="claimed"]) {
+  background: var(--chat-lava-wash);
+}
+body.lx .chat .chat__rain:is([data-state="out"], [data-state="locked"], [data-state="ready"], [data-state="claimed"])::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -40px 0 0;
+  background:
+    radial-gradient(circle at 12% 50%, var(--chat-lava) 0 2px, transparent 2.5px) 0 0 / 46px 40px,
+    radial-gradient(circle at 70% 30%, var(--chat-lava-hi) 0 1.5px, transparent 2px) 0 0 / 62px 52px;
+  opacity: .22;
+  animation: chat-rain-fall 1.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes chat-rain-fall { to { transform: translateY(40px); } }
+body.lx .chat .chat__rain[data-fresh="1"] { animation: chat-rain-in 420ms var(--chat-ease) both; }
+@keyframes chat-rain-in {
+  from { opacity: 0; transform: translateY(-14px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+body.lx .chat .rain__top { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+body.lx .chat .rain__art { width: 36px; height: 36px; image-rendering: pixelated; }
+body.lx .chat .rain__title { display: grid; gap: 2px; min-width: 0; }
+body.lx .chat .rain__label {
+  color: var(--chat-lava-hi);
+  font: 800 .6875rem/1 var(--lx-ui);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+body.lx .chat .chat__rain[data-state="next"] .rain__label { color: var(--lx-mute); }
+body.lx .chat .rain__pool {
+  overflow: hidden;
+  color: var(--lx-ink);
+  font: 800 1.375rem/1.1 var(--lx-display);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.lx .chat .chat__rain[data-state="next"] .rain__pool { font-size: 1.0625rem; }
+body.lx .chat .rain__clock {
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--lx-0);
+  color: var(--lx-ink);
+  font: 800 .8125rem/1 var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+body.lx .chat .chat__rain[data-closing="1"] .rain__clock { color: var(--chat-loss); }
+
+/* The claim window, draining. */
+body.lx .chat .rain__bar { height: 4px; overflow: hidden; border-radius: 2px; background: var(--lx-0); }
+body.lx .chat .rain__bar i {
+  display: block;
+  height: 100%;
+  background: var(--chat-lava);
+  transform-origin: left;
+  transition: transform 1s linear;
+}
+body.lx .chat .chat__rain[data-closing="1"] .rain__bar i { background: var(--chat-loss); }
+
+body.lx .chat .rain__meta { margin: -2px 0 0; color: var(--lx-mute); font: 600 .75rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+
+/* The rules: what a claim needs, and where the player stands on each. */
+body.lx .chat .rain__rules { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+body.lx .chat .rain__rule {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--lx-1);
+  color: var(--lx-text);
+  font: 600 .75rem/1.25 var(--lx-ui);
+}
+body.lx .chat .rain__mark { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--lx-4); }
+body.lx .chat .rain__mark svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+body.lx .chat .rain__rule[data-met="1"] .rain__mark { background: color-mix(in oklab, var(--chat-win) 22%, transparent); color: var(--chat-win); }
+body.lx .chat .rain__rule[data-met="0"] .rain__mark { background: color-mix(in oklab, var(--chat-loss) 20%, transparent); color: var(--chat-loss); }
+body.lx .chat .rain__rule[data-met="?"] .rain__mark { color: var(--lx-mute); }
+body.lx .chat .rain__rule[data-met="?"] .rain__mark svg { fill: currentColor; stroke: none; }
+body.lx .chat .rain__rulename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.lx .chat .rain__ruledetail { color: var(--lx-faint); font: 700 .6875rem var(--lx-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.lx .chat .rain__rule[data-met="1"] .rain__ruledetail { color: var(--chat-win); }
+
+/* The button: Claim in gold on a lip; a step the player can take in plain dark; You're in in green. */
+body.lx .chat .rain__go {
+  position: relative;
+  overflow: hidden;
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .875rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--lx-gold-lo);
+  cursor: pointer;
+  transition: background-color 140ms var(--chat-ease), transform 120ms var(--chat-ease);
+}
+body.lx .chat .rain__go:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .chat .rain__go:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lx-gold-lo); }
+body.lx .chat .rain__go:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx .chat .rain__go[data-tone="step"] { background: var(--lx-4); color: var(--lx-ink); box-shadow: 0 4px 0 var(--lx-0); }
+body.lx .chat .rain__go[data-tone="step"]:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .chat .rain__go[data-tone="step"]:active:not(:disabled) { box-shadow: 0 1px 0 var(--lx-0); }
+body.lx .chat .rain__go[data-tone="in"] {
+  background: color-mix(in oklab, var(--chat-win) 18%, var(--lx-2));
+  color: var(--chat-win);
+  box-shadow: none;
+  cursor: default;
+}
+body.lx .chat .rain__go:disabled:not([data-tone="in"]) { opacity: .55; cursor: not-allowed; }
+body.lx .chat .rain__go[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, .38) 50%, transparent 65%);
+  animation: chat-sheen 900ms linear infinite;
+}
+@keyframes chat-sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* ─────────── the log ─────────── */
+body.lx .chat .chat__log {
+  padding: var(--lx-s2) var(--lx-s2) var(--lx-s3);
+  /* A line scrolling up under the rain card fades out rather than being cut off. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+}
+body.lx .chat .msg {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+  animation: chat-line-in 260ms var(--chat-ease) both;
+}
+@keyframes chat-line-in { from { opacity: 0; transform: translateY(6px); } }
+body.lx .chat .msg:hover { background: var(--lx-2); }
+body.lx .chat .msg__top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+body.lx .chat .msg__av { flex: none; width: 24px; height: 24px; overflow: hidden; border-radius: 6px; background: var(--lx-3); }
+body.lx .chat .msg__who {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lx-ink);
+  font: 700 .8125rem var(--lx-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.lx .chat .msg__badge {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font: 800 .5625rem/1.2 var(--lx-ui);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+body.lx .chat .msg__t { margin-left: auto; padding-left: 6px; color: var(--lx-faint); font: 600 .6875rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .chat .msg__body {
+  margin: 3px 0 0 30px;
+  color: var(--lx-text);
+  font: 500 .875rem/1.45 var(--lx-ui);
+  overflow-wrap: anywhere;
+}
+/* Mine: my name in gold. Staff: a gold rule down the side. */
+body.lx .chat .msg.msg--me { box-shadow: none; }
+body.lx .chat .msg.msg--me .msg__who { color: var(--lx-gold-hi); }
+body.lx .chat .msg[data-staff="1"] { box-shadow: inset 2px 0 0 var(--lx-gold); }
+
+/* A big win: a flat card, the game's art and what it paid in the win green. */
+body.lx .chat .msg.msg--hit {
+  margin: 4px 0;
+  padding: 10px;
+  background: var(--lx-2);
+  box-shadow: inset 3px 0 0 var(--chat-win);
+}
+body.lx .chat .msg--hit .flexwin { margin: 6px 0 0 30px; }
+body.lx .chat .msg--hit .flexwin__tag { color: var(--chat-win); font: 800 .9375rem var(--lx-ui); }
+body.lx .chat .msg--hit .flexwin__from { color: var(--lx-mute); font: 600 .75rem var(--lx-ui); }
+/* A tip, and a rain line: their own colour down the side. */
+body.lx .chat .msg.msg--tip { margin: 4px 0; background: var(--lx-2); box-shadow: inset 3px 0 0 var(--chat-tip); }
+body.lx .chat .msg.msg--rain { margin: 4px 0; background: var(--chat-lava-wash); box-shadow: inset 3px 0 0 var(--chat-lava); }
+body.lx .chat .msg--rain .msg__who { color: var(--chat-lava-hi); }
+
+/* "New messages": a pill over the foot of the log. */
+body.lx .chat .chat__jump {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .75rem var(--lx-ui);
+  box-shadow: 0 3px 0 var(--lx-gold-lo);
+}
+
+/* ─────────── the box ─────────── */
+body.lx .chat .chat__send {
+  gap: var(--lx-s2);
+  padding: var(--lx-s3);
+  background: var(--lx-1);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, .05);
+}
+body.lx .chat .chat__send input {
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lx-0);
+  box-shadow: inset 0 0 0 2px var(--lx-3);
+  color: var(--lx-ink);
+  font: 500 .875rem var(--lx-ui);
+  transition: box-shadow 140ms var(--chat-ease);
+}
+body.lx .chat .chat__send input:hover { box-shadow: inset 0 0 0 2px var(--lx-4); }
+body.lx .chat .chat__send input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--lx-gold); }
+body.lx .chat .chat__send input:disabled { cursor: not-allowed; opacity: .7; }
+body.lx .chat .chat__send .btn {
+  min-width: 64px;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 .8125rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 3px 0 var(--lx-gold-lo);
+  transition: background-color 140ms var(--chat-ease), transform 120ms var(--chat-ease);
+}
+body.lx .chat .chat__send .btn:hover:not(:disabled) { background: var(--lx-gold-hi); }
+body.lx .chat .chat__send .btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--lx-gold-lo); }
+body.lx .chat .chat__send .btn:disabled,
+body.lx .chat .chat__send .btn[aria-disabled="true"] { background: var(--lx-4); color: var(--lx-mute); box-shadow: 0 3px 0 var(--lx-0); }
+
+@media (prefers-reduced-motion: reduce) {
+  body.lx .chat .chat__rain::before,
+  body.lx .chat .chat__rain[data-fresh="1"],
+  body.lx .chat .msg,
+  body.lx .chat .rain__go[aria-busy="true"]::after { animation: none; }
+  body.lx .chat .rain__bar i,
+  body.lx .chat .rain__go,
+  body.lx .chat .chat__send input,
+  body.lx .chat .chat__send .btn { transition: none; }
+}
