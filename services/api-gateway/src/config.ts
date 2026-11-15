@@ -854,7 +854,8 @@ const environmentSchema = z
       .regex(/^(0|[1-9][0-9]{0,18})$/)
       .default('10000000'),
     LAVA_RAIN_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
-    LAVA_RAIN_CLAIM_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
+    // How long a drop stays open to claim (the owner, 2026-11-15: "make sure the rain lasts 30 mins").
+    LAVA_RAIN_CLAIM_MINUTES: z.coerce.number().int().min(1).max(60).default(30),
     /* Drops that start themselves: every N minutes one opens, if none is already falling. 0 leaves
      * rain to the operator's hand, which is the default -- an automatic drop spends the operator's
      * money, so it is switched on deliberately. */

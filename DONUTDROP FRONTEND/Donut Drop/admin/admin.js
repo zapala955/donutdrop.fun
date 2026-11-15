@@ -3374,7 +3374,7 @@ async function startRain() {
         name: 'claimMinutes',
         label: 'Claim window (minutes, 1-60)',
         type: 'number',
-        value: 5,
+        value: 30,
         min: 1,
         max: 60,
       },

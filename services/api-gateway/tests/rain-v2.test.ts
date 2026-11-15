@@ -122,10 +122,13 @@ describe('the launch, the five-hour clock, one claim per network (2026-11-15)', 
   it('queues a $3B launch drop the new API opens, and sets a drop every 300 minutes, on the live database only', async () => {
     const sql = await read('packages/db/migrations/099_rain_launch.sql');
     assert.match(sql, /CREATE TABLE lava_rain_scheduled \(/);
-    assert.match(sql, /SELECT gen_random_uuid\(\), 3000000000, 10, 'Launch of the new Lava Rain/);
+    assert.match(sql, /SELECT gen_random_uuid\(\), 3000000000, 30, 'Launch of the new Lava Rain/);
     assert.match(sql, /'lavaRainAutoEveryMinutes', to_jsonb\(300\)/);
-    // Both guarded: a fresh database or a test run gets neither.
-    assert.equal((sql.match(/EXISTS \(SELECT 1 FROM lava_rain_events\)/g) ?? []).length, 2);
+    // Every drop open for 30 minutes (the owner, 2026-11-15), the default and the live setting alike.
+    assert.match(sql, /'lavaRainClaimMinutes', to_jsonb\(30\)/);
+    assert.equal(config.lavaRainClaimMinutes, 30);
+    // All guarded: a fresh database or a test run gets none of them.
+    assert.equal((sql.match(/EXISTS \(SELECT 1 FROM lava_rain_events\)/g) ?? []).length, 3);
     assert.match(sql, /GRANT SELECT, DELETE ON TABLE lava_rain_scheduled TO donut_api_runtime;/);
   });
 

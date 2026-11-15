@@ -1,7 +1,7 @@
 BEGIN;
 
 -- The owner, 2026-11-15: "i want there to be a rain every 5h, also start the first one now and i want
--- it to be 3b".
+-- it to be 3b", and then "make sure the rain lasts 30 mins".
 --
 -- lava_rain_scheduled holds drops waiting to open: the API's rain clock opens the oldest one the
 -- moment nothing is falling (routes/social.ts openScheduledRain), deleting the row in the same
@@ -24,10 +24,10 @@ CREATE TABLE lava_rain_scheduled (
 
 GRANT SELECT, DELETE ON TABLE lava_rain_scheduled TO donut_api_runtime;
 
--- The launch drop: $3B, ten minutes to claim, opened as soon as the new API is up. Only on a database
--- that has run Lava Rain before (the live one), never on a fresh one or a test run.
+-- The launch drop: $3B, thirty minutes to claim, opened as soon as the new API is up. Only on a
+-- database that has run Lava Rain before (the live one), never on a fresh one or a test run.
 INSERT INTO lava_rain_scheduled (id, pool_minor, claim_minutes, reason)
-SELECT gen_random_uuid(), 3000000000, 10, 'Launch of the new Lava Rain (the owner, 2026-11-15)'
+SELECT gen_random_uuid(), 3000000000, 30, 'Launch of the new Lava Rain (the owner, 2026-11-15)'
  WHERE EXISTS (SELECT 1 FROM lava_rain_events);
 
 -- A drop every five hours (Admin -> System -> Lava Rain, "automatic drop every N minutes"), set here so
@@ -35,6 +35,15 @@ SELECT gen_random_uuid(), 3000000000, 10, 'Launch of the new Lava Rain (the owne
 -- in the first administrator's name, as the settings table requires one; on the same database only.
 INSERT INTO runtime_settings (key, value, updated_by, updated_at)
 SELECT 'lavaRainAutoEveryMinutes', to_jsonb(300), u.id, now()
+  FROM users u
+ WHERE u.role = 'admin' AND EXISTS (SELECT 1 FROM lava_rain_events)
+ ORDER BY u.created_at
+ LIMIT 1
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now();
+
+-- Every drop open for thirty minutes (Admin -> System -> Lava Rain, "claim window"), the same way.
+INSERT INTO runtime_settings (key, value, updated_by, updated_at)
+SELECT 'lavaRainClaimMinutes', to_jsonb(30), u.id, now()
   FROM users u
  WHERE u.role = 'admin' AND EXISTS (SELECT 1 FROM lava_rain_events)
  ORDER BY u.created_at
