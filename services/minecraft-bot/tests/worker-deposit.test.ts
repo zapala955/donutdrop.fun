@@ -36,10 +36,11 @@ type WorkerHarness = {
     | {
         payee: string;
         settle: (receipt: { payee: string; displayedAmount: string }) => void;
-        refuse: (reason: 'insufficient_funds') => void;
+        refuse: (reason: 'insufficient_funds' | 'player_unknown') => void;
       }
     | undefined;
   payoutConfirmMs: number;
+  awaitingAnswer: boolean;
   polling: boolean;
   relogDue: boolean;
   relogging: boolean;
@@ -412,7 +413,7 @@ const payoutJob = {
  */
 async function runPayout(
   harness: WorkerHarness,
-  displayed: string | null | 'refused',
+  displayed: string | null | 'refused' | 'player_unknown',
 ): Promise<void> {
   /* A REF'D timer for the duration, which is the whole point of this function.
    *
@@ -435,6 +436,8 @@ async function runPayout(
     }
     if (displayed === 'refused') {
       harness.pendingPayout?.refuse('insufficient_funds');
+    } else if (displayed === 'player_unknown') {
+      harness.pendingPayout?.refuse('player_unknown');
     } else if (displayed !== null) {
       harness.pendingPayout?.settle({ payee: 'q9w', displayedAmount: displayed });
     }
@@ -570,9 +573,10 @@ describe('cash payout worker', () => {
     assert.notEqual(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
   });
 
-  it('reconnects after a payout the server never answered, and only then', async () => {
-    /* The vault went hours hearing nothing from the server while its socket stayed open, until an
-     * operator reconnected it by hand. Silence after a /pay is the signal to do that ourselves. */
+  it('does not reconnect after a payout the server never answered: it holds payouts and asks with /bal', async () => {
+    /* The owner, 2026-11-16: "make it not reconnect everytime a payout fails". A reconnect after every
+     * unconfirmed payout ran the teller into Mojang's login limit. The connection is asked instead:
+     * payouts are held until a /bal is answered, and only unanswered probes log in again. */
     const api = {
       claimJob: async () => payoutJob,
       completeJob: async () => undefined,
@@ -583,7 +587,8 @@ describe('cash payout worker', () => {
     (silent.harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) =>
       silentQuits.push(reason);
     await runPayout(silent.harness, null);
-    assert.deepEqual(silentQuits, ['payout unconfirmed']);
+    assert.deepEqual(silentQuits, []);
+    assert.equal(silent.harness.awaitingAnswer, true, 'payouts are held until the server answers');
 
     const answered = payoutHarness(api);
     const answeredQuits: string[] = [];
@@ -591,6 +596,33 @@ describe('cash payout worker', () => {
       answeredQuits.push(reason);
     await runPayout(answered.harness, '100K');
     assert.deepEqual(answeredQuits, []);
+    assert.equal(answered.harness.awaitingAnswer, false);
+  });
+
+  it('reports a payee who has never joined as not sent, at once, without reconnecting', async () => {
+    /* 2026-11-16: red "That player does not exist" for the promo accounts' withdrawals. Read as
+     * silence it cost a reconnect each time; it is an answer, and the gateway refunds PAYOUT_NOT_SENT. */
+    let completed: { outcome: string; options: { errorCode?: string; retryable?: boolean } | undefined } | undefined;
+    const api = {
+      claimJob: async () => payoutJob,
+      completeJob: async (_job: unknown, outcome: string, options?: { errorCode?: string; retryable?: boolean }) => {
+        completed = { outcome, options };
+      },
+    } as unknown as ApiClient;
+
+    const { harness } = payoutHarness(api);
+    const quits: string[] = [];
+    (harness.bot as unknown as { quit: (reason: string) => void }).quit = (reason) => quits.push(reason);
+    harness.payoutConfirmMs = 60_000;
+    const started = Date.now();
+    await runPayout(harness, 'player_unknown');
+
+    assert.equal(completed?.outcome, 'failed');
+    assert.equal(completed?.options?.errorCode, 'PAYOUT_NOT_SENT');
+    assert.equal(completed?.options?.retryable, false);
+    assert.ok(Date.now() - started < 5_000, 'it waited for the timeout instead of the answer');
+    assert.deepEqual(quits, []);
+    assert.equal(harness.awaitingAnswer, false);
   });
 
   it('reports a refusal for funds as its own answer, at once, without reconnecting', async () => {

@@ -1829,6 +1829,22 @@ export class MinecraftWorker {
       return;
     }
 
+    /* The server said no because nobody of that name has ever joined it (2026-11-16, the promo
+     * accounts' withdrawals). An answer like the one above: refused, nothing moved, refunded by the
+     * gateway as PAYOUT_NOT_SENT, and not retried -- it cannot land until the account joins. No
+     * reconnect: the connection just answered. */
+    if (receipt === 'player_unknown') {
+      this.log.warn(
+        { jobId: job.id, payee, amountMinor },
+        'cash payout refused: no player of that name has joined the server; nothing was sent',
+      );
+      await this.api.completeJob(job, 'failed', {
+        retryable: false,
+        errorCode: 'PAYOUT_NOT_SENT',
+      });
+      return;
+    }
+
     /* No confirmation, and the server said the command did not run (its cooldown). That is an
      * answer, like a refusal for funds: no money moved. Reported as not sent and retryable, so the
      * gateway sends it again in a moment rather than parking a payment that never happened in
@@ -1855,14 +1871,17 @@ export class MinecraftWorker {
         retryable: false,
         errorCode: 'PAYOUT_UNCONFIRMED',
       });
-      /* Silence after a /pay is almost always this connection, not the payment: the vault went
-       * hours at a time hearing nothing from the server -- no receipts for money it was sent, no
-       * answer to its own /pay -- while its socket stayed open and every heartbeat looked fine,
-       * until an operator reconnected it by hand. A fresh login is what put it back, so do it
-       * here, once the result is reported and nothing is in flight. The gateway retries a vault
-       * release after a delay long enough for this to finish. */
-      this.log.warn({ jobId: job.id }, 'reconnecting after an unconfirmed payout');
-      this.cycleConnection('payout unconfirmed');
+      /* Is it the connection, or only this payment? Asked, not assumed (the owner, 2026-11-16: "make
+       * it not reconnect everytime a payout fails"). The vault once went hours hearing nothing from
+       * the server while its socket stayed open, and a fresh login put it back; but logging in
+       * again after every unconfirmed payout ran the teller into Mojang's login limit, five
+       * minutes offline each time. So payouts are held (awaitingAnswer, the claim gate) and a
+       * /bal goes at once: an answer means the connection works and payouts carry on; silence
+       * is asked again, and only after COMMAND_PROBE_LIMIT unanswered probes in a row does the
+       * bot log in again (awaitAnswer) -- the same path a deaf session has always taken. */
+      this.awaitingAnswer = true;
+      this.log.warn({ jobId: job.id }, 'payout unconfirmed: holding payouts and checking the connection with /bal');
+      this.balanceSoon(0);
       return;
     }
     if (!coversRequestedAmount(receipt.displayedAmount, amountMinor)) {

@@ -138,7 +138,14 @@ const INSUFFICIENT_FUNDS_TEXT = "you don't have enough funds to do this";
  * unconfirmed payout, cost the teller a reconnect and waited for an operator to refund it. */
 const PAYMENTS_DISABLED_TEXT = 'that player does not have payments enabled in /settings';
 
-export type PayoutRefusal = 'insufficient_funds' | 'payments_disabled';
+/* What DonutSMP answers, in red, when the payee has never joined the server. Logged from the live
+ * server on 2026-11-16 as red:"That player does not exist", for the promo accounts' 100K
+ * withdrawals before those accounts had joined: each was read as an unconfirmed payout, cost the
+ * teller a reconnect, and the reconnects ran into Mojang's login limit (429) -- the teller offline
+ * five minutes at a time. A payment to the same name went through once the account had joined. */
+const PLAYER_UNKNOWN_TEXT = 'that player does not exist';
+
+export type PayoutRefusal = 'insufficient_funds' | 'payments_disabled' | 'player_unknown';
 
 /**
  * Recognizes the server refusing this bot's /pay. A refusal is a definite answer -- no money
@@ -152,6 +159,7 @@ export function parsePayoutRefusal(packet: unknown): PayoutRefusal | undefined {
   const text = serverErrorText(packet);
   if (text === INSUFFICIENT_FUNDS_TEXT) return 'insufficient_funds';
   if (text === PAYMENTS_DISABLED_TEXT) return 'payments_disabled';
+  if (text === PLAYER_UNKNOWN_TEXT) return 'player_unknown';
   return undefined;
 }
 

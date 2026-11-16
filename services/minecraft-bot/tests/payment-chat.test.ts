@@ -749,6 +749,22 @@ test('recognises the server refusing a payout because the player has payments tu
   );
 });
 
+/* The payee has never joined the server. Logged from the live server on 2026-11-16 as red:"That
+ * player does not exist", for the promo accounts' withdrawals, each taken for an unconfirmed payout
+ * and a reconnect until the teller ran into Mojang's login limit. */
+test('recognises the server refusing a payout because no player of that name exists', async () => {
+  const { parsePayoutRefusal } = await import('../src/payment-chat.js');
+  const line = 'That player does not exist';
+  assert.equal(parsePayoutRefusal({ content: { text: line, color: 'red' } }), 'player_unknown');
+  assert.equal(parsePayoutRefusal({ content: { text: '', extra: [{ text: `${line}.`, color: 'red' }] } }), 'player_unknown');
+  // Only the server's own red line, never a player repeating it in chat.
+  assert.equal(parsePayoutRefusal({ content: { text: line, color: 'white' } }), undefined);
+  assert.equal(
+    parsePayoutRefusal({ content: { text: '', extra: [{ text: 'Steve: ', color: 'gray' }, { text: line, color: 'red' }] } }),
+    undefined,
+  );
+});
+
 /* /bal, now the only way a bot learns what it holds (DonutSMP switched its stats API off). The
  * exact wording was never captured, so the reader is tested against every plausible shape and
  * against the lookalikes it must refuse. */
