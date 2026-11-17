@@ -31,6 +31,7 @@ import {
 } from './payment-chat.js';
 import { retryReport } from './report-retry.js';
 import { readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
+import { customClickActionId, customClickActionPacket } from './dialog-click.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 type BotWindow = NonNullable<Bot['currentWindow']>;
@@ -328,7 +329,7 @@ export function dialogTexts(value: unknown, depth = 0, out: string[] = []): stri
   if (depth > 24 || out.length >= 80 || value === null || value === undefined) return out;
   if (typeof value === 'string') {
     const text = describeKick(value);
-    if (text && !/^[a-z_:.]+$/.test(text)) out.push(text);
+    if (text && !/^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(text) && !/^[a-z_:.]+$/.test(text)) out.push(text);
     return out;
   }
   if (Array.isArray(value)) {
@@ -345,6 +346,58 @@ export function dialogTexts(value: unknown, depth = 0, out: string[] = []): stri
   }
   for (const child of Object.values(node)) dialogTexts(child, depth + 1, out);
   return out;
+}
+
+/** A dialog button's action as a game client sends it back: its id and its payload, as the server sent them. */
+export interface DialogButton {
+  readonly id: string;
+  readonly nbt: unknown;
+}
+
+/**
+ * The "View Full Profile" button of DonutSMP's /stats dialog: a button whose label says "Full Profile"
+ * or whose action asks for "full ...", with a custom action (an id and a payload). Found by walking the
+ * dialog as the server sent it, NBT and all, so the payload can be handed back exactly.
+ */
+export function fullProfileButton(value: unknown, depth = 0): DialogButton | undefined {
+  if (depth > 24 || value === null || typeof value !== 'object') return undefined;
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      const found = fullProfileButton(child, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  const node = value as Record<string, unknown>;
+  const action = node['action'] as { type?: unknown; value?: Record<string, { type?: unknown; value?: unknown }> } | undefined;
+  if (action && action.type === 'compound' && action.value) {
+    const id = action.value['id']?.value;
+    const additions = action.value['additions'];
+    const args = (additions?.value as Record<string, { value?: unknown }> | undefined)?.['args']?.value;
+    const label = node['label'] === undefined ? '' : describeKick(isNbtNode(node['label'] as Record<string, unknown>)
+      ? fromNbt(node['label'] as { type: string; value: unknown }, 0)
+      : node['label']);
+    if (
+      typeof id === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(id) && additions && additions.type === 'compound' &&
+      (/full profile/i.test(label) || (typeof args === 'string' && /^full\b/i.test(args)))
+    ) {
+      return { id, nbt: additions };
+    }
+  }
+  for (const child of Object.values(node)) {
+    const found = fullProfileButton(child, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Whether anything the server showed names the player, as a whole word: the full profile must be theirs. */
+export function mentionsPlayer(capture: StatsCapture, player: string): boolean {
+  const wanted = player.toLowerCase();
+  const texts = [capture.title ?? '', ...capture.items.map((item) => item.name), ...capture.dialog, ...capture.chat];
+  return texts.some((text) =>
+    text.toLowerCase().split(/[^a-z0-9_.]+/).some((token) => token.replace(/'s$/, '') === wanted),
+  );
 }
 
 /**
@@ -1711,29 +1764,118 @@ export class MinecraftWorker {
   }
 
   /**
-   * Runs `/stats <player>` and reports what the server showed: the menu it opened (title, and every
-   * item's name and lore), the chat lines and any dialog, for the few seconds the answer takes. The
-   * figures are read from that by stats-reader.ts; the capture itself goes along, trimmed, so the
-   * reader can be checked against the real menu.
+   * Runs DonutSMP's /stats for a player and reports what the server showed.
+   *
+   * Seen live 2026-11-17: /stats answers with a dialog of money, kills, deaths and playtime and a
+   * "View Full Profile" button; shards and blocks are only on the full profile. That button is a
+   * dialog action, not a command: typed, `/stats full <player>` shows a player called "full". So the
+   * bot runs plain /stats, then presses the button the way a game client does (custom_click_action
+   * with the button's own id and payload), and reads the two together, the full profile first. The
+   * full profile only counts if it names the player asked for.
    */
   private async runStatsLookup(
     lookup: { id: string; player: string },
     bot: Bot,
     connectionController: AbortController,
   ): Promise<void> {
-    await this.waitForCommandGap();
+    const summary = await this.captureStats(bot, connectionController, () =>
+      this.sendCommand(bot, `/stats ${lookup.player}`),
+    );
+    let capture = summary.capture;
+    let skinUrl = summary.skinUrl;
+    const button = summary.fullProfile;
+    // The packet id from the bot's own protocol data; with none, the summary is the answer.
+    const packetId = customClickActionId((bot as unknown as { registry?: unknown }).registry);
+    if (button && packetId !== undefined && this.isCurrentConnection(bot, connectionController)) {
+      const full = await this.captureStats(bot, connectionController, () => {
+        this.lastCommandAt = Date.now();
+        // Built byte for byte (dialog-click.ts): the library's own encoding of this packet gets the bot kicked.
+        bot._client.writeRaw(customClickActionPacket(packetId, button.id, button.nbt));
+      });
+      if (mentionsPlayer(full.capture, lookup.player)) {
+        capture = {
+          ...(full.capture.title ?? capture.title ? { title: full.capture.title ?? capture.title } : {}),
+          items: [...full.capture.items, ...capture.items],
+          chat: [...full.capture.chat, ...capture.chat],
+          dialog: [...full.capture.dialog, ...capture.dialog],
+        };
+        skinUrl ??= full.skinUrl;
+      } else {
+        this.log.warn(
+          { player: lookup.player, dialog: trimCapture(full.capture).dialog.slice(0, 12) },
+          'the full profile did not name the player; using the summary only',
+        );
+      }
+    }
+    const reading = readStats(capture, lookup.player);
+
     if (!this.isCurrentConnection(bot, connectionController)) {
       await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
       return;
     }
+    const answered = capture.items.length > 0 || capture.chat.length > 0 || capture.dialog.length > 0;
+    if (answered) {
+      // The server runs this bot's commands: as good as an answered /bal.
+      this.lastBalanceAnswerAt = Date.now();
+      this.awaitingAnswer = false;
+      this.unansweredProbes = 0;
+    }
+    const raw = trimCapture(capture);
+    this.log.info(
+      {
+        player: lookup.player,
+        outcome: reading.outcome,
+        figures: reading.outcome === 'found' ? Object.keys(reading.stats) : [],
+        title: raw.title,
+        items: raw.items.length,
+        chat: raw.chat.slice(0, 5),
+        dialog: raw.dialog.slice(0, 30),
+        skin: Boolean(skinUrl),
+      },
+      '/stats read',
+    );
+    if (reading.outcome === 'found') {
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'found',
+        stats: reading.stats,
+        ...(reading.shownName ? { shownName: reading.shownName } : {}),
+        ...(skinUrl ? { skinUrl } : {}),
+        raw,
+      });
+    } else if (reading.outcome === 'not_found') {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'not_found', raw });
+    } else {
+      // Nothing back at all is worth one more try; an answer the reader could not read is not.
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'failed',
+        errorCode: answered ? 'UNREADABLE' : 'NO_ANSWER',
+        retryable: !answered,
+        raw,
+      });
+    }
+  }
+
+  /**
+   * Sends one command and keeps everything the server shows for it: a menu (title, every item's
+   * name and lore), chat lines and a dialog, for the few seconds the answer takes.
+   */
+  private async captureStats(
+    bot: Bot,
+    connectionController: AbortController,
+    ask: () => void,
+  ): Promise<{ capture: StatsCapture; skinUrl: string | undefined; fullProfile: DialogButton | undefined }> {
+    const capture: StatsCapture = { items: [], chat: [], dialog: [] };
+    let skinUrl: string | undefined;
+    let fullProfile: DialogButton | undefined;
+    await this.waitForCommandGap();
+    if (!this.isCurrentConnection(bot, connectionController)) return { capture, skinUrl, fullProfile };
     // A menu left open (a teleport's, a server's) would swallow the one /stats opens.
     if (bot.currentWindow) {
       void bot.closeWindow(bot.currentWindow);
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
-
-    const capture: StatsCapture = { items: [], chat: [], dialog: [] };
-    let skinUrl: string | undefined;
     let menuSeen = false;
     await new Promise<void>((resolve) => {
       let quiet: NodeJS.Timeout | undefined;
@@ -1775,6 +1917,8 @@ export class MinecraftWorker {
           if (text) capture.chat.push(text);
         } else {
           capture.dialog.push(...dialogTexts(data));
+          skinUrl ??= skinUrlIn(data);
+          fullProfile ??= fullProfileButton(data);
         }
         // An answer in chat or a dialog: if no menu follows, the answer is complete shortly after.
         if (!menuSeen) {
@@ -1785,56 +1929,15 @@ export class MinecraftWorker {
       bot.on('windowOpen', onWindow);
       bot._client.on('packet', onPacket);
       connectionController.signal.addEventListener('abort', finish, { once: true });
-      this.sendCommand(bot, `/stats ${lookup.player}`);
+      try {
+        ask();
+      } catch (error) {
+        this.log.warn({ err: error }, 'could not ask the server for /stats');
+        finish();
+      }
     });
     if (bot.currentWindow) void bot.closeWindow(bot.currentWindow);
-
-    if (!this.isCurrentConnection(bot, connectionController)) {
-      await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
-      return;
-    }
-    const answered = capture.items.length > 0 || capture.chat.length > 0 || capture.dialog.length > 0;
-    if (answered) {
-      // The server runs this bot's commands: as good as an answered /bal.
-      this.lastBalanceAnswerAt = Date.now();
-      this.awaitingAnswer = false;
-      this.unansweredProbes = 0;
-    }
-    const raw = trimCapture(capture);
-    const reading = readStats(capture, lookup.player);
-    this.log.info(
-      {
-        player: lookup.player,
-        outcome: reading.outcome,
-        figures: reading.outcome === 'found' ? Object.keys(reading.stats) : [],
-        title: raw.title,
-        items: raw.items.length,
-        chat: raw.chat.slice(0, 5),
-        skin: Boolean(skinUrl),
-      },
-      '/stats read',
-    );
-    if (reading.outcome === 'found') {
-      await this.api.reportStats({
-        lookupId: lookup.id,
-        outcome: 'found',
-        stats: reading.stats,
-        ...(reading.shownName ? { shownName: reading.shownName } : {}),
-        ...(skinUrl ? { skinUrl } : {}),
-        raw,
-      });
-    } else if (reading.outcome === 'not_found') {
-      await this.api.reportStats({ lookupId: lookup.id, outcome: 'not_found', raw });
-    } else {
-      // Nothing back at all is worth one more try; an answer the reader could not read is not.
-      await this.api.reportStats({
-        lookupId: lookup.id,
-        outcome: 'failed',
-        errorCode: answered ? 'UNREADABLE' : 'NO_ANSWER',
-        retryable: !answered,
-        raw,
-      });
-    }
+    return { capture, skinUrl, fullProfile };
   }
 
   /** Hurt and not already moving: /rtp away, at most once per STATS_ESCAPE_GAP_MS. */
