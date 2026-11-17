@@ -30,7 +30,7 @@ import {
   type PayoutRefusal,
 } from './payment-chat.js';
 import { retryReport } from './report-retry.js';
-import { STAT_KEYS, readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
+import { readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 type BotWindow = NonNullable<Bot['currentWindow']>;
@@ -328,7 +328,7 @@ export function dialogTexts(value: unknown, depth = 0, out: string[] = []): stri
   if (depth > 24 || out.length >= 80 || value === null || value === undefined) return out;
   if (typeof value === 'string') {
     const text = describeKick(value);
-    if (text && !/^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(text) && !/^[a-z_:.]+$/.test(text)) out.push(text);
+    if (text && !/^[a-z_:.]+$/.test(text)) out.push(text);
     return out;
   }
   if (Array.isArray(value)) {
@@ -1711,102 +1711,29 @@ export class MinecraftWorker {
   }
 
   /**
-   * Runs DonutSMP's /stats for a player and reports what the server showed.
-   *
-   * DonutSMP answers /stats with a dialog (seen live 2026-11-17): money, kills, deaths and playtime,
-   * and a "View Full Profile" button that runs `/stats full <player>`. So the full profile goes
-   * first; plain /stats only runs when the full one left a figure out, and the two are read
-   * together. What the server showed goes along, trimmed, so the reader can be checked against it.
+   * Runs `/stats <player>` and reports what the server showed: the menu it opened (title, and every
+   * item's name and lore), the chat lines and any dialog, for the few seconds the answer takes. The
+   * figures are read from that by stats-reader.ts; the capture itself goes along, trimmed, so the
+   * reader can be checked against the real menu.
    */
   private async runStatsLookup(
     lookup: { id: string; player: string },
     bot: Bot,
     connectionController: AbortController,
   ): Promise<void> {
-    const full = await this.captureStats(bot, connectionController, `/stats full ${lookup.player}`);
-    let capture = full.capture;
-    let skinUrl = full.skinUrl;
-    let reading = readStats(capture, lookup.player);
-    const first = reading;
-    const missing = first.outcome !== 'found' || STAT_KEYS.some((key) => !first.stats[key]);
-    if (missing && reading.outcome !== 'not_found' && this.isCurrentConnection(bot, connectionController)) {
-      const summary = await this.captureStats(bot, connectionController, `/stats ${lookup.player}`);
-      capture = {
-        ...(capture.title ?? summary.capture.title ? { title: capture.title ?? summary.capture.title } : {}),
-        items: [...capture.items, ...summary.capture.items],
-        chat: [...capture.chat, ...summary.capture.chat],
-        dialog: [...capture.dialog, ...summary.capture.dialog],
-      };
-      skinUrl ??= summary.skinUrl;
-      reading = readStats(capture, lookup.player);
-    }
-
+    await this.waitForCommandGap();
     if (!this.isCurrentConnection(bot, connectionController)) {
       await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
       return;
     }
-    const answered = capture.items.length > 0 || capture.chat.length > 0 || capture.dialog.length > 0;
-    if (answered) {
-      // The server runs this bot's commands: as good as an answered /bal.
-      this.lastBalanceAnswerAt = Date.now();
-      this.awaitingAnswer = false;
-      this.unansweredProbes = 0;
-    }
-    const raw = trimCapture(capture);
-    this.log.info(
-      {
-        player: lookup.player,
-        outcome: reading.outcome,
-        figures: reading.outcome === 'found' ? Object.keys(reading.stats) : [],
-        title: raw.title,
-        items: raw.items.length,
-        chat: raw.chat.slice(0, 5),
-        dialog: raw.dialog.slice(0, 30),
-        skin: Boolean(skinUrl),
-      },
-      '/stats read',
-    );
-    if (reading.outcome === 'found') {
-      await this.api.reportStats({
-        lookupId: lookup.id,
-        outcome: 'found',
-        stats: reading.stats,
-        ...(reading.shownName ? { shownName: reading.shownName } : {}),
-        ...(skinUrl ? { skinUrl } : {}),
-        raw,
-      });
-    } else if (reading.outcome === 'not_found') {
-      await this.api.reportStats({ lookupId: lookup.id, outcome: 'not_found', raw });
-    } else {
-      // Nothing back at all is worth one more try; an answer the reader could not read is not.
-      await this.api.reportStats({
-        lookupId: lookup.id,
-        outcome: 'failed',
-        errorCode: answered ? 'UNREADABLE' : 'NO_ANSWER',
-        retryable: !answered,
-        raw,
-      });
-    }
-  }
-
-  /**
-   * Sends one command and keeps everything the server shows for it: a menu (title, every item's
-   * name and lore), chat lines and a dialog, for the few seconds the answer takes.
-   */
-  private async captureStats(
-    bot: Bot,
-    connectionController: AbortController,
-    command: string,
-  ): Promise<{ capture: StatsCapture; skinUrl: string | undefined }> {
-    const capture: StatsCapture = { items: [], chat: [], dialog: [] };
-    let skinUrl: string | undefined;
-    await this.waitForCommandGap();
-    if (!this.isCurrentConnection(bot, connectionController)) return { capture, skinUrl };
     // A menu left open (a teleport's, a server's) would swallow the one /stats opens.
     if (bot.currentWindow) {
       void bot.closeWindow(bot.currentWindow);
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
+
+    const capture: StatsCapture = { items: [], chat: [], dialog: [] };
+    let skinUrl: string | undefined;
     let menuSeen = false;
     await new Promise<void>((resolve) => {
       let quiet: NodeJS.Timeout | undefined;
@@ -1848,7 +1775,6 @@ export class MinecraftWorker {
           if (text) capture.chat.push(text);
         } else {
           capture.dialog.push(...dialogTexts(data));
-          skinUrl ??= skinUrlIn(data);
         }
         // An answer in chat or a dialog: if no menu follows, the answer is complete shortly after.
         if (!menuSeen) {
@@ -1859,10 +1785,56 @@ export class MinecraftWorker {
       bot.on('windowOpen', onWindow);
       bot._client.on('packet', onPacket);
       connectionController.signal.addEventListener('abort', finish, { once: true });
-      this.sendCommand(bot, command);
+      this.sendCommand(bot, `/stats ${lookup.player}`);
     });
     if (bot.currentWindow) void bot.closeWindow(bot.currentWindow);
-    return { capture, skinUrl };
+
+    if (!this.isCurrentConnection(bot, connectionController)) {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
+      return;
+    }
+    const answered = capture.items.length > 0 || capture.chat.length > 0 || capture.dialog.length > 0;
+    if (answered) {
+      // The server runs this bot's commands: as good as an answered /bal.
+      this.lastBalanceAnswerAt = Date.now();
+      this.awaitingAnswer = false;
+      this.unansweredProbes = 0;
+    }
+    const raw = trimCapture(capture);
+    const reading = readStats(capture, lookup.player);
+    this.log.info(
+      {
+        player: lookup.player,
+        outcome: reading.outcome,
+        figures: reading.outcome === 'found' ? Object.keys(reading.stats) : [],
+        title: raw.title,
+        items: raw.items.length,
+        chat: raw.chat.slice(0, 5),
+        skin: Boolean(skinUrl),
+      },
+      '/stats read',
+    );
+    if (reading.outcome === 'found') {
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'found',
+        stats: reading.stats,
+        ...(reading.shownName ? { shownName: reading.shownName } : {}),
+        ...(skinUrl ? { skinUrl } : {}),
+        raw,
+      });
+    } else if (reading.outcome === 'not_found') {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'not_found', raw });
+    } else {
+      // Nothing back at all is worth one more try; an answer the reader could not read is not.
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'failed',
+        errorCode: answered ? 'UNREADABLE' : 'NO_ANSWER',
+        retryable: !answered,
+        raw,
+      });
+    }
   }
 
   /** Hurt and not already moving: /rtp away, at most once per STATS_ESCAPE_GAP_MS. */

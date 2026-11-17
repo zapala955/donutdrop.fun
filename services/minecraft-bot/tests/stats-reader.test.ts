@@ -86,21 +86,6 @@ describe('reading /stats', () => {
     assert.equal(fromChat.shownName, '.Bedrock_Guy');
   });
 
-  it('reads the dialog DonutSMP really sends (2026-11-17)', () => {
-    const reading = readStats(
-      capture({ dialog: ['View Full Profile', 'Back', 'teexs', 'teexs', 'Money: $ 679', 'Kills: 2', 'Deaths: 5', 'Playtime: 2h 15m'] }),
-      'teexs',
-    );
-    assert.equal(reading.outcome, 'found');
-    if (reading.outcome !== 'found') return;
-    assert.deepEqual(reading.stats, {
-      money: { display: '$ 679', value: 679 },
-      kills: { display: '2', value: 2 },
-      deaths: { display: '5', value: 5 },
-      playtime: { display: '2h 15m', value: 2 * 3_600 + 15 * 60 },
-    });
-  });
-
   it('reads a dialog the same way', () => {
     const reading = readStats(capture({ dialog: ['teexs', 'Money: $10K', 'Deaths: 12'] }), 'teexs');
     assert.equal(reading.outcome, 'found');
@@ -178,10 +163,7 @@ describe('the stats bot', () => {
     const worker = await readFile(path.join(import.meta.dirname, '../src/worker.ts'), 'utf8');
     assert.match(worker, /this\.statsRole = route\.stats === true;/);
     assert.match(worker, /if \(this\.statsRole\) \{[\s\S]{0,200}this\.schedule\(\(\) => this\.run\(this\.pollStats\(\), 'stats poll'\), STATS_POLL_MS\);/);
-    // DonutSMP's /stats is a dialog whose "View Full Profile" runs /stats full: that goes first, plain
-    // /stats only to fill what the full profile left out (seen live 2026-11-17).
-    assert.match(worker, /this\.captureStats\(bot, connectionController, `\/stats full \$\{lookup\.player\}`\)/);
-    assert.match(worker, /this\.captureStats\(bot, connectionController, `\/stats \$\{lookup\.player\}`\)/);
+    assert.match(worker, /this\.sendCommand\(bot, `\/stats \$\{lookup\.player\}`\);/);
     // The same gate a payout waits for, and no relog or manual-play logout mid-lookup.
     assert.match(worker, /private async pollStats\(\)[\s\S]{0,400}const claimState = this\.captureJobClaimState\(\);/);
     assert.match(worker, /this\.polling \|\|\n\s+this\.statsBusy \|\|/);
