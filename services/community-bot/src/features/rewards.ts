@@ -6,15 +6,15 @@ import {
 } from 'discord.js';
 import { ApiRefused, ApiUnavailable, type PlatformApi, type RewardStatus } from '../api-client.js';
 import { COLOR, bad, embed, formatMoney, ok, relative, warn } from '../ui.js';
-import { watchTag } from './tag-watch.js';
 
 /**
  * rewards.ts — what this server pays, and the commands that collect it.
  *
  *   /link         ties this Discord account to the DonutLuxe account that showed the code (typed
  *                 into the pop-up, or as `code:`), and pays the join reward the link unlocks.
- *   /tag          the reward for wearing the server's tag: the first at once, then one for every
- *                 24 hours it stays on.
+ *   /tag          where the reward for wearing the server's tag is claimed now: the site's Rewards
+ *                 tab (the owner, 2026-11-17: "users dont need to do /tag"). The bot still watches
+ *                 the tag (tag-watch.ts) for the 24 hours each reward after the first needs.
  *   /rewards      where you stand.
  *
  * The bot decides nothing about money. It reports who typed what, and whether they wear the tag;
@@ -72,7 +72,7 @@ export async function linkWithCode(
     if (result.main === false) {
       lines.push(
         `That makes ${result.accounts} of ${result.maxAccounts} accounts on this Discord. ` +
-          '`/tag` keeps paying your main account; `/accounts main` changes which one that is.',
+          '`/profile` keeps showing your main account; `/accounts main` changes which one that is.',
       );
     }
     for (const reward of result.rewards) {
@@ -82,8 +82,8 @@ export async function linkWithCode(
     if (result.joinSkipped) lines.push(`_${result.joinSkipped}._`);
     lines.push(
       '',
-      'Wear the server tag and run `/tag`: the first reward is yours straight away, then one for ' +
-        'every 24 hours you keep the tag on.',
+      'Wear the server tag and claim it on the Rewards tab at donutluxe.com/rewards: the first reward ' +
+        'is yours straight away, then one for every 24 hours you keep the tag on.',
     );
     await interaction.editReply({ embeds: [ok('Linked', lines.join('\n'))] });
   } catch (error) {
@@ -91,42 +91,21 @@ export async function linkWithCode(
   }
 }
 
-/** `/tag` — the tag reward, if it is due. */
-export async function claimTag(api: PlatformApi | null, interaction: ChatInputCommandInteraction) {
-  if (!api) {
-    await interaction.reply({ embeds: [unavailable()], flags: MessageFlags.Ephemeral });
-    return;
-  }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  if (!interaction.guildId) {
-    await interaction.editReply({ embeds: [bad('Server only', 'Run this inside the server.')] });
-    return;
-  }
-  try {
-    const wearing = await wearsServerTag(interaction.user, interaction.guildId);
-    const result = await api.claimTag(interaction.user.id, wearing);
-    if (result.paid) {
-      // Watched from now, not from the next sweep, so the next 24 hours are seen from the start.
-      watchTag(interaction.user.id);
-      await interaction.editReply({
-        embeds: [
-          ok(
-            'Tag reward claimed',
-            `**${formatMoney(BigInt(result.amountMinor))}** added to **${result.username}**. ` +
-              `Keep the tag on: the next one opens ${relative(new Date(Date.now() + 86_400_000))}. ` +
-              'Taking it off starts the 24 hours again.',
-          ),
-        ],
-      });
-      return;
-    }
-    const next = result.nextAt ? ` Next one ${relative(new Date(result.nextAt))}.` : '';
-    await interaction.editReply({
-      embeds: [embed('No reward this time', `${result.reason}.${next}`, COLOR.quiet)],
-    });
-  } catch (error) {
-    await interaction.editReply({ embeds: [failed(error)] });
-  }
+/** `/tag` — the tag reward is claimed on the site now; this says where. */
+export async function tagMoved(interaction: ChatInputCommandInteraction, siteUrl: string) {
+  const rewards = `${siteUrl.replace(/\/$/, '')}/rewards`;
+  await interaction.reply({
+    embeds: [
+      embed(
+        'Tag rewards are on the site now',
+        `Claim them on the **Rewards** tab: ${rewards}\n` +
+          'Keep the server tag on: the first reward is yours straight away, then one for every 24 hours ' +
+          'you keep it on. No command needed.',
+        COLOR.brand,
+      ),
+    ],
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 /** `/rewards` — what is on offer and what you have collected. */
@@ -178,12 +157,12 @@ export async function showRewards(
 
 /** Where somebody stands on the tag reward, in one line. */
 function tagLine(tag: RewardStatus['tag']): string {
-  if (!tag || tag.days === 0) return 'Wear the tag, then `/tag`: the first one is instant';
+  if (!tag || tag.days === 0) return 'Wear the tag, then claim it on the site\u2019s Rewards tab: the first one is instant';
   const count = `${tag.days} collected`;
   if (tag.nextAt) {
     const next = new Date(tag.nextAt);
     return next.getTime() <= Date.now()
-      ? `✅ Ready now: run \`/tag\` · ${count}`
+      ? `✅ Ready now on the site\u2019s Rewards tab · ${count}`
       : `Next one ${relative(next)} if the tag stays on · ${count}`;
   }
   return `Put the tag on: the next one needs 24 hours straight · ${count}`;

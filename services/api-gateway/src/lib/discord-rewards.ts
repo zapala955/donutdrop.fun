@@ -294,7 +294,7 @@ function tagDueAt(wearingSince: Date, lastClaim: Date): Date {
 export async function claimTagReward(
   db: Database,
   config: AppConfig,
-  input: { discordUserId: string; wearingTag: boolean },
+  input: { discordUserId: string; wearingTag: boolean; userId?: string },
 ): Promise<
   | { paid: true; amountMinor: string; username: string }
   | { paid: false; reason: string; nextAt?: string }
@@ -308,8 +308,13 @@ export async function claimTagReward(
     const sightings = await recordTagSightings(client, [
       { discordUserId: input.discordUserId, wearing: input.wearingTag },
     ]);
-    // Paid to the Discord's main account: /tag has a Discord in hand and no other way to choose.
-    const user = await mainAccount(client, input.discordUserId);
+    /* From the site's Rewards tab (the owner, 2026-11-17: "make it so the discord tag rewards
+     * automatically go there and users dont need to do /tag") the account is the one claiming, linked
+     * to this Discord; from the bot it was the Discord's main account, having no other way to choose.
+     * The rules below are per Discord as well as per account, so an alt claims nothing extra. */
+    const user = input.userId
+      ? await linkedAccount(client, input.userId, input.discordUserId)
+      : await mainAccount(client, input.discordUserId);
     if (!user || user.status !== 'active') return { outcome: 'unlinked' as const };
     /* Either side of the link counts as having claimed: relinking the Discord account to another
      * site account, or the site account to another Discord account, is not a new first time. */
@@ -343,7 +348,7 @@ export async function claimTagReward(
   });
   switch (result.outcome) {
     case 'unlinked':
-      return { paid: false, reason: 'Link your site account first with /link' };
+      return { paid: false, reason: input.userId ? 'Link your Discord account first' : 'Link your site account first with /link' };
     case 'not-wearing':
       return {
         paid: false,
@@ -363,6 +368,20 @@ export async function claimTagReward(
       liveEvents.publish('balance', [result.user.id]);
       return { paid: true, amountMinor: amount.toString(), username: result.user.minecraft_username };
   }
+}
+
+/** A site account linked to this Discord (verified), as the tag reward pays it from the site. */
+async function linkedAccount(
+  client: DbClient,
+  userId: string,
+  discordUserId: string,
+): Promise<{ id: string; minecraft_username: string; status: string } | null> {
+  const rows = await client.query<{ id: string; minecraft_username: string; status: string }>(
+    `SELECT id, minecraft_username, status FROM users
+      WHERE id = $1 AND discord_user_id = $2 AND discord_verified_at IS NOT NULL AND demo_of IS NULL`,
+    [userId, discordUserId],
+  );
+  return rows.rows[0] ?? null;
 }
 
 /** What the site shows a signed-in player on the Discord page, and the bot shows for /rewards. */
@@ -399,6 +418,10 @@ export async function rewardStatus(db: Database, config: AppConfig, userId: stri
   const lastTag = by.get('tag')?.last ?? null;
   const since = account.rows[0]?.wear_fresh ? (account.rows[0]?.wearing_since ?? null) : null;
   const tagNextAt = lastTag && since ? tagDueAt(since, lastTag).toISOString() : null;
+  /* Claimable from the Rewards tab now: the first one whenever the tag is on (checked at the claim),
+   * every one after it once the 24 hours are up. */
+  const tagOn = config.discordRewardsEnabled && config.discordTagRewardMinor > 0n && linkedId !== null;
+  const tagReady = tagOn && (lastTag === null || (tagNextAt !== null && Date.parse(tagNextAt) <= Date.now()));
   const main = accounts.find((linked) => linked.main) ?? accounts[0] ?? null;
   return {
     enabled: config.discordRewardsEnabled,
@@ -416,6 +439,9 @@ export async function rewardStatus(db: Database, config: AppConfig, userId: stri
       days: Number(by.get('tag')?.n ?? 0),
       streakHours: TAG_STREAK_HOURS,
       nextAt: tagNextAt,
+      lastAt: lastTag ? lastTag.toISOString() : null,
+      ready: tagReady,
+      totalMinor: by.get('tag')?.total ?? '0',
     },
     /* The accounts on this Discord (migration 075): whether this one is the main account the bot
      * pays /tag to, which one is, and how many more may be linked. */

@@ -99,7 +99,7 @@ export function buildWelcomeDm(facts: WelcomeFacts): WelcomeMessage {
 
   const tagLine =
     'Set this server’s tag as your own (User Settings → Profiles → Server Tag), ' +
-    'then run `/tag`' +
+    'then claim it on the Rewards tab at donutluxe.com/rewards' +
     (rewardsOn && tag ? ` for **${tag}**` : ' for a reward') +
     ' straight away, and again for every 24 hours you keep it on.';
 

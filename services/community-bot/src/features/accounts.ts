@@ -46,8 +46,7 @@ export async function handleAccounts(
         embeds: [
           ok(
             'Main account changed',
-            `**${result.username}** is now your main account: \`/tag\` pays it, and \`/profile\` and ` +
-              '`/rewards` show it.',
+            `**${result.username}** is now your main account: \`/profile\` and \`/rewards\` show it.`,
           ),
         ],
       });
@@ -94,7 +93,7 @@ async function listCard(api: PlatformApi, discordUserId: string) {
       (accounts.length < max
         ? 'To add another: sign in to it on the site, get a link code, and `/link` it here.'
         : 'That is the most one Discord may carry; `/accounts unlink` frees a slot.'),
-    '`/accounts main` picks which one `/tag` pays.',
+    '`/accounts main` picks which one `/profile` shows.',
   );
   return embed('Your linked accounts', lines.join('\n'), COLOR.brand);
 }

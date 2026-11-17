@@ -11,7 +11,8 @@ import {
   type DropRedeemResult,
 } from '../lib/code-drops.js';
 import { unlinkAccount } from '../lib/discord-accounts.js';
-import { createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
+import { claimTagReward, createLinkCode, rewardStatus } from '../lib/discord-rewards.js';
+import { serverTagState } from '../lib/discord-tag.js';
 import { AppError } from '../lib/errors.js';
 import { TURNSTILE_TOKEN_PATTERN, verifyTurnstile } from '../lib/turnstile.js';
 import { parseWith } from '../lib/validation.js';
@@ -138,6 +139,30 @@ export async function registerDiscordRewardRoutes(
         await verifyTurnstile(config, body.turnstileToken, request.ip);
       }
       return redeemCodeDrop(db, config, { userId, code: body.code, ip: request.ip });
+    },
+  );
+
+  /* The server tag reward, claimed on the Rewards tab (the owner, 2026-11-17: "make it so the discord
+   * tag rewards automatically go there and users dont need to do /tag"). The tag is checked with
+   * Discord at the moment of the claim (lib/discord-tag.ts, as a code drop checks it); the rules are
+   * the ones /tag had: the first whenever the tag is on, each after it 24 hours of wearing later. */
+  app.post(
+    '/v1/discord/tag/claim',
+    { preHandler: guards.requireCsrf, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request) => {
+      const userId = request.authUser?.id;
+      if (!userId) throw new AppError(401, 'AUTH_REQUIRED', 'Authentication is required');
+      const linked = await db.query<{ discord_user_id: string | null }>(
+        'SELECT discord_user_id FROM users WHERE id = $1 AND discord_verified_at IS NOT NULL',
+        [userId],
+      );
+      const discordUserId = linked.rows[0]?.discord_user_id;
+      if (!discordUserId) throw new AppError(409, 'DISCORD_NOT_LINKED', 'Link your Discord account first');
+      const state = await serverTagState(config, discordUserId, { fresh: true });
+      if (state === 'unknown') {
+        throw new AppError(503, 'TAG_UNCHECKED', 'Discord did not answer, so the tag could not be checked. Try again in a moment.');
+      }
+      return claimTagReward(db, config, { discordUserId, wearingTag: state === 'wearing', userId });
     },
   );
 

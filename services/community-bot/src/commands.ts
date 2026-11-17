@@ -453,7 +453,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
       .addSubcommand((sub) =>
         sub
           .setName('main')
-          .setDescription('Pick the account /tag pays and /profile shows')
+          .setDescription('Pick the account /profile shows')
           .addStringOption((option) =>
             option
               .setName('account')
@@ -491,7 +491,7 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
   add(
     new SlashCommandBuilder()
       .setName('tag')
-      .setDescription('Claim your reward for wearing the server tag (then one per 24 hours worn)'),
+      .setDescription('Where to claim the server tag reward (the site\u2019s Rewards tab)'),
   );
 
   add(

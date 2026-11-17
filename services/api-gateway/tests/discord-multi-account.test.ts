@@ -114,7 +114,13 @@ describe('several accounts on one Discord: the rules', () => {
 
   it("pays the bot's rewards to the main account, and a code drop to whoever redeems it", async () => {
     const rewards = await read('services/api-gateway/src/lib/discord-rewards.ts');
-    assert.match(rewards, /const user = await mainAccount\(client, input\.discordUserId\);/);
+    /* From the bot: the Discord's main account. From the site's Rewards tab (2026-11-17, the tag
+     * reward without /tag): the account claiming, linked to that Discord. Per Discord either way. */
+    assert.match(
+      rewards,
+      /const user = input\.userId\s+\? await linkedAccount\(client, input\.userId, input\.discordUserId\)\s+: await mainAccount\(client, input\.discordUserId\);/,
+    );
+    assert.match(rewards, /WHERE kind = 'tag' AND \(user_id = \$1 OR discord_user_id = \$2\)/);
     // The site's status counts the Discord's rewards too, so an alt is not told a claimed one waits.
     assert.match(
       rewards,

@@ -65,7 +65,7 @@ import {
 import { showLink, showProfile, submitLinkCode } from './features/link.js';
 import { showStats } from './features/stats.js';
 import { handleAccounts } from './features/accounts.js';
-import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
+import { linkWithCode, showRewards, tagMoved } from './features/rewards.js';
 import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
 import { startVipRoleSync } from './features/vip-roles.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
@@ -392,7 +392,7 @@ async function main(): Promise<void> {
       case 'daily-invite':
         return dailyRetired(interaction, config.codeDropChannelId);
       case 'tag':
-        return claimTag(api, interaction);
+        return tagMoved(interaction, config.siteUrl);
       case 'rewards':
         return showRewards(api, interaction);
       case 'profile':

@@ -59,7 +59,9 @@ describe('the welcome message', () => {
     assert.match(text, /Linking pays \*\*\$5m\*\*/);
     assert.match(text, /at least 7 days old/);
     assert.match(text, /Server Tag/);
-    assert.match(text, /\/tag/);
+    // Claimed on the site now, not with /tag (2026-11-17).
+    assert.match(text, /Rewards tab/);
+    assert.doesNotMatch(text, /\/tag/);
     assert.match(text, /\*\*\$1m\*\*/, 'the daily tag reward');
     assert.match(text, /\*\*\$20m per invite\*\*/);
     assert.match(text, /\/invites/);
@@ -82,7 +84,9 @@ describe('the welcome message', () => {
     assert.doesNotMatch(text, /free\./);
     assert.match(text, /earn a bonus per invite/);
     assert.match(text, /\/link/);
-    assert.match(text, /\/tag/);
+    // Claimed on the site now, not with /tag (2026-11-17).
+    assert.match(text, /Rewards tab/);
+    assert.doesNotMatch(text, /\/tag/);
   });
 
   it('stays inside Discord’s limits however long the names are', () => {

@@ -146,7 +146,7 @@ function tagState(tag) {
   if (!tag?.days) return null;
   if (tag.nextAt) {
     const left = Date.parse(tag.nextAt) - Date.now();
-    if (left <= 0) return { kind: 'ready', text: 'Ready: run /tag' };
+    if (left <= 0) return { kind: 'ready', text: 'Ready on Rewards' };
     const hours = Math.floor(left / 3_600_000);
     return { kind: 'wait', text: `Next in ${hours ? `${hours}h` : `${Math.max(1, Math.ceil(left / 60_000))}m`}` };
   }
@@ -201,7 +201,8 @@ function paintRewards() {
     list.appendChild(rewardRow({
       sprite: 'name_tag.png',
       title: 'Wear the server tag',
-      detail: 'Put the DonutLuxe tag on in Discord, then run /tag. It pays again for every 24 hours it stays on.',
+      // Claimed on the Rewards tab since 2026-11-17 (the owner: "users dont need to do /tag").
+      detail: 'Put the DonutLuxe tag on in Discord, then claim it on the Rewards tab. It pays again for every 24 hours it stays on.',
       // One line, as the owner asked (2026-11-11): "$5M/day", not a figure with small print under it.
       amount: `${money(tag)}/day`,
       chip: signedIn ? tagState(status.tag) : null,
@@ -244,13 +245,13 @@ function paintRewards() {
 /* ─────────── linking ─────────── */
 
 /* One Discord may carry several accounts (a main and its alts); the main one is the account the
- * bot pays /tag to. Said here so an alt does not wonder where its tag rewards went. */
+ * bot's /profile shows. The tag reward is claimed on the Rewards tab by whichever account is signed in. */
 function accountsNote(accounts) {
   const note = el('p', 'dsc__fine');
   if (!accounts) return note;
   const role = accounts.main
-    ? 'This is your main account: /tag in the server pays it.'
-    : `This is an alt. /tag pays your main account${accounts.mainUsername ? `, ${accounts.mainUsername}` : ''}; /accounts main in the server changes which one that is.`;
+    ? 'This is your main account: /profile in the server shows it.'
+    : `This is an alt. /profile in the server shows your main account${accounts.mainUsername ? `, ${accounts.mainUsername}` : ''}; /accounts main changes which one that is.`;
   const room =
     accounts.count < accounts.max
       ? ' To add another, sign in to it here, get its link code and /link it.'

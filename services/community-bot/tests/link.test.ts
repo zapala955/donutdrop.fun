@@ -101,7 +101,7 @@ describe('/link', () => {
     assert.match(JSON.stringify(calls[0]?.payload), /\/accounts unlink/);
   });
 
-  it('tells an alt that /tag keeps paying the main account', async () => {
+  it('tells an alt which account /profile keeps showing', async () => {
     const edits: unknown[] = [];
     const api = {
       link: async () => ({

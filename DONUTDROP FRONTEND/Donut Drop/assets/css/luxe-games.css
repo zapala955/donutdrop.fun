@@ -1490,6 +1490,81 @@ body.lx .vp__lrow[data-state="locked"] { color: var(--lx-mute); }
   body.lx .vp__tier:active { transform: none; }
 }
 
+/* ═════════ the Rewards page (assets/js/rakeback.js, /rewards) ═════════
+ * Hallmark · component: rewards page (summary panel, three reward cards, claim history)
+ * genre: atmospheric · theme: site tokens, flat obsidian; the VIP page's panel, hairline and type
+ * states: card idle · ready; claim default · hover · focus · active · disabled · loading
+ * The owner, 2026-11-17: "recode the rewards tab like u did with basically everything to make it more
+ * premium and fit the new design", with the Discord server tag reward claimed here instead of /tag. */
+body.lx .rw { display: grid; gap: var(--lx-s5); max-width: 1040px; min-width: 0; }
+body.lx .rw__notice { padding: var(--lx-s5); border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: inset 0 0 0 1px var(--lx-3); color: var(--lx-mute); font: 500 .9375rem var(--lx-ui); }
+body.lx .rw__k { color: var(--lx-mute); font: 600 .75rem var(--lx-ui); }
+
+body.lx .rw__hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: var(--lx-s5); align-items: center;
+  padding: var(--lx-s5) var(--lx-s6); border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .rw__herolead { display: grid; gap: 6px; min-width: 0; }
+body.lx .rw__big { color: var(--lx-ink); font: 800 2.375rem/1 var(--lx-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+body.lx .rw__big--live { color: var(--lx-gold); }
+body.lx .rw__herostats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s2); min-width: 0; }
+body.lx .rw__stat { display: grid; align-content: start; gap: 4px; padding: var(--lx-s3) var(--lx-s4); border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); min-width: 0; }
+body.lx .rw__v { color: var(--lx-ink); font: 800 1.125rem var(--lx-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+body.lx .rw__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s3); }
+body.lx .rw__card {
+  --rc: var(--lx-gold);
+  display: grid; grid-template-rows: auto auto 1fr auto; gap: var(--lx-s4); min-width: 0; padding: var(--lx-s5);
+  border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: inset 0 0 0 1px var(--lx-3);
+}
+body.lx .rw__card[data-kind="referral"] { --rc: var(--lx-tier-diamond); }
+body.lx .rw__card[data-kind="tag"] { --rc: var(--lx-discord); }
+body.lx .rw__card[data-state="ready"] { box-shadow: inset 0 0 0 1px var(--lx-gold); }
+body.lx .rw__head { display: flex; align-items: flex-start; gap: var(--lx-s3); min-width: 0; }
+body.lx .rw__icon {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px;
+  border-radius: var(--lx-r-s); background: var(--lx-0); box-shadow: inset 0 0 0 1px var(--lx-3); color: var(--rc, var(--lx-gold));
+}
+body.lx .rw__icon svg { width: 22px; height: 22px; }
+body.lx .rw__titles { display: grid; gap: 3px; min-width: 0; }
+body.lx .rw__title { margin: 0; color: var(--lx-ink); font: 800 1rem var(--lx-ui); }
+body.lx .rw__sub { margin: 0; color: var(--lx-mute); font: 500 .8125rem/1.45 var(--lx-ui); }
+body.lx .rw__amount { color: var(--lx-ink); font: 800 1.875rem/1 var(--lx-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+body.lx .rw__amount--live { color: var(--lx-gold); }
+body.lx .rw__meta { display: grid; align-content: start; gap: 8px; margin: 0; }
+body.lx .rw__metarow { display: flex; justify-content: space-between; gap: var(--lx-s3); padding-top: 8px; border-top: 1px solid var(--lx-3); font: 600 .8125rem var(--lx-ui); }
+body.lx .rw__metarow dt { color: var(--lx-mute); }
+body.lx .rw__metarow dd { margin: 0; color: var(--lx-ink); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+body.lx .rw__claim { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; text-decoration: none; white-space: nowrap; }
+body.lx .rw__claim[data-state="loading"] { cursor: progress; }
+body.lx .rw__claim:focus-visible { outline: 2px solid var(--lx-gold); outline-offset: 2px; }
+
+body.lx .rw__history { display: grid; gap: var(--lx-s3); min-width: 0; }
+body.lx .rw__h { display: flex; align-items: center; gap: var(--lx-s2); margin: 0; color: var(--lx-ink); font: 800 1.125rem var(--lx-display); }
+body.lx .rw__h .rw__icon { width: 24px; height: 24px; background: none; box-shadow: none; color: var(--lx-mute); }
+body.lx .rw__h .rw__icon svg { width: 20px; height: 20px; }
+body.lx .rw__rows { display: grid; border-radius: var(--lx-r); background: var(--dd-panel); box-shadow: inset 0 0 0 1px var(--lx-3); overflow: hidden; }
+body.lx .rw__row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(64px, auto); gap: var(--lx-s4); align-items: center;
+  padding: var(--lx-s3) var(--lx-s4); font: 600 .875rem var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx .rw__row + .rw__row { border-top: 1px solid var(--lx-3); }
+body.lx .rw__pill { justify-self: start; padding: 3px 10px; border-radius: var(--lx-r-pill); background: var(--lx-0); color: var(--lx-mute); font: 700 .75rem var(--lx-ui); }
+body.lx .rw__pill[data-kind="rakeback"] { color: var(--lx-gold); }
+body.lx .rw__pill[data-kind="referral"] { color: var(--lx-tier-diamond); }
+body.lx .rw__rowamt { color: var(--lx-ink); font: 800 .9375rem var(--lx-ui); }
+body.lx .rw__rowat { color: var(--lx-mute); text-align: right; }
+
+@media (max-width: 960px) {
+  body.lx .rw__hero { grid-template-columns: minmax(0, 1fr); padding: var(--lx-s5); }
+  body.lx .rw__cards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  body.lx .rw__herostats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  body.lx .rw__herostats .rw__stat:first-child { grid-column: 1 / -1; }
+  body.lx .rw__big { font-size: 2rem; }
+}
+
 /* ═════════ the statistics page (assets/js/board.js, /statistics) ═════════
  * Hallmark · component: statistics page (result card, highlights, per-game rows, rewards, crates)
  * genre: atmospheric · theme: site tokens, flat obsidian; pixel game art in slots
