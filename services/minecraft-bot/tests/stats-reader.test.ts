@@ -101,6 +101,30 @@ describe('reading /stats', () => {
     });
   });
 
+  it('reads the full profile menu in DonutSMP\u2019s small caps (2026-11-17)', () => {
+    const reading = readStats(
+      capture({
+        title: 'ᴛᴇᴇхѕ Stats',
+        items: [
+          { slot: 10, name: 'ᴍᴏɴᴇʏ', lore: ['679'] },
+          { slot: 11, name: 'ѕʜᴀʀᴅѕ', lore: ['12'] },
+          { slot: 12, name: 'ʙʟᴏᴄᴋѕ ᴘʟᴀᴄᴇᴅ', lore: ['1,204'] },
+          { slot: 13, name: 'ʙʟᴏᴄᴋѕ ʙʀᴏᴋᴇɴ', lore: ['3.4ᴋ'] },
+        ],
+        dialog: ['teexs', 'Kills: 2'],
+      }),
+      'teexs',
+    );
+    assert.equal(reading.outcome, 'found');
+    if (reading.outcome !== 'found') return;
+    assert.equal(reading.stats.money?.value, 679);
+    assert.equal(reading.stats.shards?.value, 12);
+    assert.equal(reading.stats.blocksPlaced?.value, 1_204);
+    assert.equal(reading.stats.blocksBroken?.value, 3_400);
+    assert.equal(reading.shownName, 'teexs');
+    assert.equal(cleanText('ᴛᴇᴇхѕ Stats'), 'teexs Stats');
+  });
+
   it('reads a dialog the same way', () => {
     const reading = readStats(capture({ dialog: ['teexs', 'Money: $10K', 'Deaths: 12'] }), 'teexs');
     assert.equal(reading.outcome, 'found');
@@ -216,6 +240,8 @@ describe('the full profile', () => {
     assert.equal(mentionsPlayer(capture({ dialog: ["teexs's Profile", 'Shards: 12'] }), 'teexs'), true);
     assert.equal(mentionsPlayer(capture({ dialog: ['.Bedrock_Guy'] }), '.bedrock_guy'), true);
     assert.equal(mentionsPlayer(capture({ dialog: ['teexs2'] }), 'teexs'), false);
+    // The full profile as DonutSMP titles it.
+    assert.equal(mentionsPlayer(capture({ title: 'ᴛᴇᴇхѕ Stats' }), 'teexs'), true);
   });
 });
 

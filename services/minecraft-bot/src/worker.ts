@@ -30,7 +30,7 @@ import {
   type PayoutRefusal,
 } from './payment-chat.js';
 import { retryReport } from './report-retry.js';
-import { readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
+import { cleanText, readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
 import { customClickActionId, customClickActionPacket } from './dialog-click.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
@@ -395,8 +395,9 @@ export function fullProfileButton(value: unknown, depth = 0): DialogButton | und
 export function mentionsPlayer(capture: StatsCapture, player: string): boolean {
   const wanted = player.toLowerCase();
   const texts = [capture.title ?? '', ...capture.items.map((item) => item.name), ...capture.dialog, ...capture.chat];
+  // Small caps as plain letters first: the full profile is titled "ᴛᴇᴇхѕ Stats".
   return texts.some((text) =>
-    text.toLowerCase().split(/[^a-z0-9_.]+/).some((token) => token.replace(/'s$/, '') === wanted),
+    cleanText(text).toLowerCase().split(/[^a-z0-9_.]+/).some((token) => token.replace(/'s$/, '') === wanted),
   );
 }
 
@@ -1802,7 +1803,12 @@ export class MinecraftWorker {
         skinUrl ??= full.skinUrl;
       } else {
         this.log.warn(
-          { player: lookup.player, dialog: trimCapture(full.capture).dialog.slice(0, 12) },
+          {
+            player: lookup.player,
+            title: trimCapture(full.capture).title,
+            items: trimCapture(full.capture).items.slice(0, 20),
+            dialog: trimCapture(full.capture).dialog.slice(0, 12),
+          },
           'the full profile did not name the player; using the summary only',
         );
       }

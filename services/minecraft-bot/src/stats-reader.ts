@@ -39,9 +39,21 @@ export type StatsReading =
   | { outcome: 'not_found' }
   | { outcome: 'unreadable' };
 
-/** Text as a person reads it: no § colour codes, no private-use icon glyphs or emoji, single spaces. */
+/* DonutSMP sets its menus in "small caps": Unicode letters that look like capitals ("ᴍᴏɴᴇʏ",
+ * "ᴛᴇᴇхѕ Stats", seen live 2026-11-17), with Cyrillic х and ѕ standing in for x and s. Each is read
+ * as the plain letter it stands for, so a label and a name match as typed. */
+const LOOKALIKE: Record<string, string> = {
+  ᴀ: 'a', ʙ: 'b', ᴄ: 'c', ᴅ: 'd', ᴇ: 'e', ꜰ: 'f', ɢ: 'g', ʜ: 'h', ɪ: 'i', ᴊ: 'j', ᴋ: 'k', ʟ: 'l', ᴍ: 'm',
+  ɴ: 'n', ᴏ: 'o', ᴘ: 'p', ǫ: 'q', ʀ: 'r', ꜱ: 's', ѕ: 's', ᴛ: 't', ᴜ: 'u', ᴠ: 'v', ᴡ: 'w', х: 'x', ʏ: 'y',
+  ᴢ: 'z', а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', і: 'i', ј: 'j', һ: 'h', ԁ: 'd', ɡ: 'g',
+};
+const LOOKALIKES = new RegExp(`[${Object.keys(LOOKALIKE).join('')}]`, 'gu');
+
+/** Text as a person reads it: no § colour codes, no private-use icon glyphs or emoji, small caps as
+ * plain letters, single spaces. */
 export function cleanText(text: string): string {
   return text
+    .replace(LOOKALIKES, (letter) => LOOKALIKE[letter] ?? letter)
     .replace(/§[0-9a-fk-orx]/gi, '')
     .replace(/[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu, '')
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')
@@ -160,7 +172,7 @@ export function readStats(capture: StatsCapture, player: string): StatsReading {
   }
 
   if (STAT_KEYS.some((key) => stats[key])) {
-    const shownName = shownNameIn([capture.title ?? '', ...items.map((item) => item.name), ...capture.dialog, ...capture.chat], player);
+    const shownName = shownNameIn([...capture.dialog, ...capture.chat, capture.title ?? '', ...items.map((item) => item.name)], player);
     return { outcome: 'found', stats, ...(shownName ? { shownName } : {}) };
   }
   const said = [capture.title ?? '', ...capture.chat, ...capture.dialog].map(cleanText);
