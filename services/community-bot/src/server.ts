@@ -67,6 +67,7 @@ import { showStats } from './features/stats.js';
 import { handleAccounts } from './features/accounts.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
+import { startVipRoleSync } from './features/vip-roles.js';
 import { sendWelcomeDm, testWelcomeDm } from './features/welcome-dm.js';
 import { LEGACY_DAILY_BUTTON, onDirectMessage } from './features/redeem.js';
 import {
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
 
   const wrongGuild = (guildId: string | null): boolean => guildId !== config.guildId;
   let stopTagWatch: () => void = () => undefined;
+  let stopVipRoles: () => void = () => undefined;
   let stopCodeDrops: () => void = () => undefined;
   let stopRainPosts: () => void = () => undefined;
 
@@ -164,6 +166,14 @@ async function main(): Promise<void> {
       stopTagWatch = startTagWatch(ready, api, config.guildId, (error, message) =>
         log.error({ error }, message),
       );
+    }
+    /* VIP roles (2026-11-17): every ten minutes each linked member gets the role for their VIP tier
+     * on the site, and loses the others. The member role the autorole gives is never touched. */
+    if (api) {
+      stopVipRoles = startVipRoleSync(ready, api, config.guildId, {
+        info: (fields, message) => log.info(fields, message),
+        error: (error, message) => log.error({ error }, message),
+      });
     }
     /* Code drops (2026-11-11, replacing the daily codes): once a minute the site is asked for the
      * current drop, which this posts in the drop channel and keeps up to date. */
@@ -498,6 +508,7 @@ async function main(): Promise<void> {
     stopGiveaways();
     stopAutomod();
     stopTagWatch();
+    stopVipRoles();
     stopCodeDrops();
     stopRainPosts();
     await client.destroy().catch(() => undefined);

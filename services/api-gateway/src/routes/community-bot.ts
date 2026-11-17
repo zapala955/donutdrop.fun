@@ -21,7 +21,7 @@ import {
 import { maskedName } from '../lib/masked-name.js';
 import { MINECRAFT_USERNAME_PATTERN } from '../lib/minecraft-username.js';
 import { parseWith } from '../lib/validation.js';
-import { vipStandingFor } from '../lib/vip.js';
+import { levelFor, vipStandingFor } from '../lib/vip.js';
 
 /**
  * community-bot.ts — what the public server's bot may ask this platform.
@@ -221,6 +221,33 @@ export async function registerCommunityBotRoutes(
       verifyCommunityBotSignature(request, config);
       parseWith(watchSchema, request.body);
       return { discordUserIds: await tagWatchList(db) };
+    },
+  );
+
+  /* VIP roles in Discord (the owner, 2026-11-17: "sync users vip levels with their roles"): every
+   * linked member's VIP tier, from the account /profile shows for them (their main one). The bot
+   * gives each the role for that tier and takes the others away; a member not here gets none. */
+  app.post(
+    '/internal/v1/community/vip-roles',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request) => {
+      verifyCommunityBotSignature(request, config);
+      parseWith(watchSchema, request.body);
+      if (!config.vipEnabled) return { members: [] };
+      const linked = await db.query<{ discord_user_id: string; wagered_minor: string | null }>(
+        `SELECT DISTINCT ON (u.discord_user_id) u.discord_user_id, t.wagered_minor
+           FROM users u
+           LEFT JOIN user_wager_totals t ON t.user_id = u.id
+          WHERE u.discord_user_id IS NOT NULL AND u.discord_verified_at IS NOT NULL
+            AND u.demo_of IS NULL AND u.status = 'active'
+          ORDER BY u.discord_user_id, u.discord_main DESC, u.discord_verified_at, u.id`,
+      );
+      return {
+        members: linked.rows.map((row) => ({
+          discordUserId: row.discord_user_id,
+          tier: levelFor(BigInt(row.wagered_minor ?? '0')).tier,
+        })),
+      };
     },
   );
 

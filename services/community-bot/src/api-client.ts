@@ -39,6 +39,12 @@ export type ProfileLookup =
       readonly maxAccounts?: number;
     };
 
+export type VipTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'high_roller';
+export interface VipRoleMember {
+  discordUserId: string;
+  tier: VipTier;
+}
+
 export type StatsStatus = 'queued' | 'running' | 'found' | 'not_found' | 'failed';
 export interface StatsRequest {
   lookupId: string;
@@ -255,6 +261,12 @@ export class PlatformApi {
   }
 
   /** Whose tag to keep checking: everybody who has collected a tag reward lately. */
+  /** Every linked member's VIP tier (their main account's), for the VIP roles. */
+  async vipRoles(): Promise<VipRoleMember[]> {
+    const result = await this.post<{ members: VipRoleMember[] }>('/internal/v1/community/vip-roles', {});
+    return result.members;
+  }
+
   async tagWatchList(): Promise<string[]> {
     const result = await this.post<{ discordUserIds: string[] }>(
       '/internal/v1/community/rewards/tag-watch',
