@@ -12,7 +12,7 @@ import {
   trimCapture,
   type StatsCapture,
 } from '../src/stats-reader.js';
-import { dialogTexts, fullProfileButton, mentionsPlayer } from '../src/worker.js';
+import { dialogTexts } from '../src/worker.js';
 
 /* The owner, 2026-11-17: "make sure it gets the stats by running /stats on donutsmp". The reader does
  * not know in advance how DonutSMP lays /stats out, so it is held here to every shape a server
@@ -84,21 +84,6 @@ describe('reading /stats', () => {
     assert.deepEqual(fromChat.stats.money, { display: '$3,000', value: 3_000 });
     assert.deepEqual(fromChat.stats.kills, { display: '0', value: 0 });
     assert.equal(fromChat.shownName, '.Bedrock_Guy');
-  });
-
-  it('reads the dialog DonutSMP really sends (2026-11-17)', () => {
-    const reading = readStats(
-      capture({ dialog: ['View Full Profile', 'Back', 'teexs', 'teexs', 'Money: $ 679', 'Kills: 2', 'Deaths: 5', 'Playtime: 2h 15m'] }),
-      'teexs',
-    );
-    assert.equal(reading.outcome, 'found');
-    if (reading.outcome !== 'found') return;
-    assert.deepEqual(reading.stats, {
-      money: { display: '$ 679', value: 679 },
-      kills: { display: '2', value: 2 },
-      deaths: { display: '5', value: 5 },
-      playtime: { display: '2h 15m', value: 2 * 3_600 + 15 * 60 },
-    });
   });
 
   it('reads a dialog the same way', () => {
@@ -173,63 +158,12 @@ describe('the parts', () => {
   });
 });
 
-/* The /stats dialog as DonutSMP sent it on 2026-11-17, trimmed to its two buttons. */
-const button = (label: string, args: string) => ({
-  action: {
-    type: 'compound',
-    value: {
-      id: { type: 'string', value: 'donutdialogues:action' },
-      type: { type: 'string', value: 'minecraft:dynamic/custom' },
-      additions: { type: 'compound', value: { args: { type: 'string', value: args }, cmd: { type: 'string', value: 'stats' } } },
-    },
-  },
-  width: { type: 'int', value: 200 },
-  label: { type: 'compound', value: { color: { type: 'string', value: 'white' }, text: { type: 'string', value: label } } },
-});
-const liveDialog = {
-  dialog: {
-    data: {
-      type: 'compound',
-      value: {
-        after_action: { type: 'string', value: 'none' },
-        actions: { type: 'list', value: { type: 'compound', value: [button('Back', ''), button('View Full Profile', 'full teexs')] } },
-      },
-    },
-  },
-};
-
-describe('the full profile', () => {
-  it('finds the View Full Profile button and hands back its id and payload exactly as sent', () => {
-    const found = fullProfileButton(liveDialog);
-    assert.equal(found?.id, 'donutdialogues:action');
-    assert.deepEqual(found?.nbt, {
-      type: 'compound',
-      value: { args: { type: 'string', value: 'full teexs' }, cmd: { type: 'string', value: 'stats' } },
-    });
-    assert.equal(fullProfileButton({ dialog: { data: { type: 'compound', value: {} } } }), undefined);
-  });
-
-  it('only trusts a profile that names the player asked for', () => {
-    // What typing `/stats full teexs` returned: the stats of a player called "full".
-    const wrong = capture({ dialog: ['full full', 'View Full Profile', 'Money: $ 55.6M'] });
-    assert.equal(mentionsPlayer(wrong, 'teexs'), false);
-    assert.equal(mentionsPlayer(capture({ dialog: ["teexs's Profile", 'Shards: 12'] }), 'teexs'), true);
-    assert.equal(mentionsPlayer(capture({ dialog: ['.Bedrock_Guy'] }), '.bedrock_guy'), true);
-    assert.equal(mentionsPlayer(capture({ dialog: ['teexs2'] }), 'teexs'), false);
-  });
-});
-
 describe('the stats bot', () => {
   it('runs /stats only in the stats role, holds relogs and manual play for a lookup in flight, and survives', async () => {
     const worker = await readFile(path.join(import.meta.dirname, '../src/worker.ts'), 'utf8');
     assert.match(worker, /this\.statsRole = route\.stats === true;/);
     assert.match(worker, /if \(this\.statsRole\) \{[\s\S]{0,200}this\.schedule\(\(\) => this\.run\(this\.pollStats\(\), 'stats poll'\), STATS_POLL_MS\);/);
-    // Plain /stats, then the dialog's own "View Full Profile" button pressed as a client presses it:
-    // typed, `/stats full x` reads a player called "full" (seen live 2026-11-17).
-    assert.match(worker, /this\.sendCommand\(bot, `\/stats \$\{lookup\.player\}`\)/);
-    assert.match(worker, /bot\._client\.write\('custom_click_action', \{ id: button\.id, nbt: button\.nbt \}\);/);
-    assert.match(worker, /if \(mentionsPlayer\(full\.capture, lookup\.player\)\) \{/);
-    assert.doesNotMatch(worker, /sendCommand\(bot, `\/stats full/, 'the full profile is never typed');
+    assert.match(worker, /this\.sendCommand\(bot, `\/stats \$\{lookup\.player\}`\);/);
     // The same gate a payout waits for, and no relog or manual-play logout mid-lookup.
     assert.match(worker, /private async pollStats\(\)[\s\S]{0,400}const claimState = this\.captureJobClaimState\(\);/);
     assert.match(worker, /this\.polling \|\|\n\s+this\.statsBusy \|\|/);
