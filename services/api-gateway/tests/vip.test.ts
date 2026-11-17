@@ -109,11 +109,14 @@ describe('vip ladder shape', () => {
   it('opens each tier at its specified wager band', () => {
     const entry = (tier: string) => LADDER.find((level) => level.tier === tier)!.thresholdMinor;
     assert.equal(entry('bronze'), 0n);
-    assert.equal(entry('silver'), 50_000_000n);
-    assert.equal(entry('gold'), 250_000_000n);
-    assert.equal(entry('platinum'), 1_250_000_000n);
-    assert.equal(entry('diamond'), 5_000_000_000n);
+    // The owner, 2026-11-17: Silver from 250M, Gold 2.5B, Platinum 7.5B, Diamond 15B, High Roller
+    // 25B up to 100B.
+    assert.equal(entry('silver'), 250_000_000n);
+    assert.equal(entry('gold'), 2_500_000_000n);
+    assert.equal(entry('platinum'), 7_500_000_000n);
+    assert.equal(entry('diamond'), 15_000_000_000n);
     assert.equal(entry('high_roller'), 25_000_000_000n);
+    assert.equal(LADDER[29]!.thresholdMinor, 100_000_000_000n, 'High Roller V at 100B');
   });
 });
 
@@ -124,31 +127,33 @@ describe('vip level resolution', () => {
   });
 
   it('awards a level at its threshold, not one unit past it', () => {
-    assert.equal(levelFor(50_000_000n).label, 'Silver I');
-    assert.equal(levelFor(49_999_999n).label, 'Bronze V');
-    assert.equal(levelFor(250_000_000n).label, 'Gold I');
+    assert.equal(levelFor(250_000_000n).label, 'Silver I');
+    assert.equal(levelFor(249_999_999n).label, 'Bronze V');
+    assert.equal(levelFor(2_500_000_000n).label, 'Gold I');
+    assert.equal(levelFor(7_500_000_000n).label, 'Platinum I');
+    assert.equal(levelFor(15_000_000_000n).label, 'Diamond I');
     assert.equal(levelFor(25_000_000_000n).label, 'High Roller I');
   });
 
   it('keeps the lower level between two thresholds', () => {
-    // Halfway between Gold I (250M) and Gold II (345M) is still Gold I.
-    assert.equal(levelFor(300_000_000n).label, 'Gold I');
+    // Between Gold I (2.5B) and Gold II (3.1B) is still Gold I.
+    assert.equal(levelFor(3_000_000_000n).label, 'Gold I');
   });
 
   it('tops out and stays there however large the total gets', () => {
-    assert.equal(levelFor(76_000_000_000n).label, 'High Roller V');
+    assert.equal(levelFor(99_999_999_999n).label, 'High Roller IV');
     assert.equal(levelFor(100_000_000_000n).label, 'High Roller V');
     assert.equal(levelFor(9_000_000_000_000n).label, 'High Roller V');
     assert.equal(nextLevelFor(100_000_000_000n), null);
   });
 
   it('reports progress toward the next level, and a full bar at the top', () => {
-    // Gold I spans 250M -> 345M. At 297.5M that is exactly half.
-    const mid = progressFor(297_500_000n);
+    // Gold I spans 2.5B -> 3.1B. At 2.8B that is exactly half.
+    const mid = progressFor(2_800_000_000n);
     assert.equal(mid.current.label, 'Gold I');
     assert.equal(mid.next?.label, 'Gold II');
     assert.equal(Math.round(mid.ratio * 100), 50);
-    assert.equal(mid.remainingMinor, 47_500_000n);
+    assert.equal(mid.remainingMinor, 300_000_000n);
 
     const top = progressFor(200_000_000_000n);
     assert.equal(top.next, null);

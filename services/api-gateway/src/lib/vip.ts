@@ -58,7 +58,7 @@ export interface VipLevel {
  * thresholds and reprice every VIP on the platform. Thirty explicit numbers can be diffed.
  *
  * Bronze starts at zero, which no geometric series can, so its five steps are spaced by hand to
- * reach the 50,000,000 handover at Silver I.
+ * reach the 250,000,000 handover at Silver I.
  *
  * Rates follow the specified per-tier increments exactly:
  *   bronze      +0.040% per sub-level   0.10% -> 0.26%
@@ -93,46 +93,51 @@ interface TierSpec {
 const M = 1_000_000n;
 const B = 1_000_000_000n;
 
+/* The tier entries, the owner, 2026-11-17: "silver from 250m wagered etc etc gold from 2.5b etc etc
+ * platinum from 7.5b diamond from 15b and high roller from 25b up to 100b". The sub-levels between
+ * are spaced geometrically across each band and rounded; High Roller V is reached at 100B. The rates
+ * are unchanged: a level pays what it paid, it just takes more wagering to reach. Before this the
+ * entries were 50M, 250M, 1.25B, 5B and 25B (High Roller V at 76B). */
 const TIER_SPECS: readonly TierSpec[] = [
   {
     tier: 'bronze',
     label: 'Bronze',
-    thresholds: [0n, 1n * M, 5n * M, 15n * M, 30n * M],
+    thresholds: [0n, 10n * M, 30n * M, 75n * M, 150n * M],
     baseRate: 1_000, // 0.10%
     step: 400, // +0.04%
   },
   {
     tier: 'silver',
     label: 'Silver',
-    thresholds: [50n * M, 70n * M, 95n * M, 130n * M, 180n * M],
+    thresholds: [250n * M, 400n * M, 625n * M, 1n * B, 1_600n * M],
     baseRate: 3_000, // 0.30%
     step: 500, // +0.05%
   },
   {
     tier: 'gold',
     label: 'Gold',
-    thresholds: [250n * M, 345n * M, 475n * M, 655n * M, 905n * M],
+    thresholds: [2_500n * M, 3_100n * M, 3_900n * M, 4_800n * M, 6n * B],
     baseRate: 5_500, // 0.55%
     step: 750, // +0.075%
   },
   {
     tier: 'platinum',
     label: 'Platinum',
-    thresholds: [1_250n * M, 1_650n * M, 2_175n * M, 2_875n * M, 3_800n * M],
+    thresholds: [7_500n * M, 8_600n * M, 9_900n * M, 11_400n * M, 13_100n * M],
     baseRate: 9_000, // 0.90%
     step: 750, // +0.075%
   },
   {
     tier: 'diamond',
     label: 'Diamond',
-    thresholds: [5n * B, 6_900n * M, 9_500n * M, 13_100n * M, 18_100n * M],
+    thresholds: [15n * B, 16_600n * M, 18_400n * M, 20_400n * M, 22_600n * M],
     baseRate: 12_500, // 1.25%
     step: 875, // +0.0875%
   },
   {
     tier: 'high_roller',
     label: 'High Roller',
-    thresholds: [25n * B, 33n * B, 43_500n * M, 57_500n * M, 76n * B],
+    thresholds: [25n * B, 35n * B, 50n * B, 70n * B, 100n * B],
     baseRate: 16_500, // 1.65%
     step: 875, // +0.0875%
   },
