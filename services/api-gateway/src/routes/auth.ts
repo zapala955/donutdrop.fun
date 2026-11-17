@@ -109,7 +109,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Database, con
       const body = parseWith(startSchema, request.body);
       const bot = await db.query<{ id: string; username: string; server_host: string }>(
         `SELECT id, username, server_host FROM bot_accounts
-          WHERE id = ANY($1::uuid[]) AND status = 'online'
+          WHERE id = ANY($1::uuid[]) AND status = 'online' AND role <> 'stats'
             AND last_heartbeat_at > now() - interval '45 seconds'
           ORDER BY last_heartbeat_at DESC`,
         [provisionedBotIds],

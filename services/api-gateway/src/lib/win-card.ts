@@ -33,6 +33,9 @@ const DISPLAY = 'Archivo';
 const DISPLAY_WEIGHT = 900;
 const BODY = 'Figtree';
 
+/** The card's palette and faces, shared with the other cards drawn here (lib/stats-card.ts). */
+export const CARD_THEME = { PAPER, GOLD, INK, MUTED, CHIP, CHIP_EDGE, DISPLAY, DISPLAY_WEIGHT, BODY } as const;
+
 /** What a card shows: one settled win, as it was when it was shared. */
 export interface WinCard {
   readonly gameName: string;
@@ -73,7 +76,11 @@ function fontFiles(): string[] {
   for (let level = 0; level < 5; level += 1) {
     const fonts = path.join(directory, 'assets', 'fonts');
     if (existsSync(fonts)) {
-      return ['archivo-900.ttf', 'figtree-600.ttf', 'figtree-700.ttf'].map((file) => path.join(fonts, file));
+      return [
+        'archivo-900.ttf', 'figtree-600.ttf', 'figtree-700.ttf',
+        // The stats card's face (lib/stats-card.ts).
+        'geist-500.ttf', 'geist-600.ttf', 'geist-700.ttf', 'geist-800.ttf',
+      ].map((file) => path.join(fonts, file));
     }
     directory = path.dirname(directory);
   }
@@ -81,7 +88,8 @@ function fontFiles(): string[] {
 }
 
 let options: ResvgRenderOptions | undefined;
-function renderOptions(): ResvgRenderOptions {
+/** The renderer's options: the card fonts and nothing from the system. Shared with lib/stats-card.ts. */
+export function renderOptions(): ResvgRenderOptions {
   options ??= {
     font: { fontFiles: fontFiles(), loadSystemFonts: false, defaultFontFamily: BODY },
     fitTo: { mode: 'original' },
@@ -89,7 +97,7 @@ function renderOptions(): ResvgRenderOptions {
   return options;
 }
 
-const escapeXml = (text: string) =>
+export const escapeXml = (text: string) =>
   text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 
 const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}">`;

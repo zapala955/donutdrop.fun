@@ -39,6 +39,21 @@ export type ProfileLookup =
       readonly maxAccounts?: number;
     };
 
+export type StatsStatus = 'queued' | 'running' | 'found' | 'not_found' | 'failed';
+export interface StatsRequest {
+  lookupId: string;
+  status: StatsStatus;
+  reused: boolean;
+}
+export interface StatsResult {
+  status: StatsStatus;
+  player: string;
+  errorCode?: string | null;
+  stats?: Record<string, { display: string; value: number | null }>;
+  finishedAt?: string | null;
+  cardPng?: string;
+}
+
 export class ApiUnavailable extends Error {
   constructor(message: string) {
     super(message);
@@ -210,6 +225,17 @@ export class PlatformApi {
     });
   }
 
+  /** `/stats <player>`: queues a lookup for the stats bot, or reuses one for the same player. */
+  async statsRequest(player: string, discordUserId: string): Promise<StatsRequest> {
+    return this.post<StatsRequest>('/internal/v1/community/stats/request', { player, discordUserId });
+  }
+
+  /** Where a lookup stands; once found, it carries the card as a base64 PNG. Longer to answer: the
+   * gateway may fetch the player's skin and draws the card. */
+  async statsResult(lookupId: string): Promise<StatsResult> {
+    return this.post<StatsResult>('/internal/v1/community/stats/result', { lookupId }, 12_000);
+  }
+
   /** `/link <code>`: the code the site showed a signed-in player. */
   async link(body: {
     discordUserId: string;
@@ -316,7 +342,7 @@ export class PlatformApi {
    * (a wrong link code, an account linked elsewhere); those come back as `ApiRefused` so the
    * command can say what went wrong. Anything else is the platform being unavailable.
    */
-  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  private async post<T>(path: string, body: Record<string, unknown>, timeoutMs = 5_000): Promise<T> {
     const timestamp = Date.now().toString();
     const signature = hmacHex(
       this.secret,
@@ -343,7 +369,7 @@ export class PlatformApi {
           'x-community-signature': signature,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       throw new ApiUnavailable(

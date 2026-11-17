@@ -255,6 +255,7 @@ describe('every way money leaves or rides is decided against the wagering requir
       lava_rain_events: 'the house’s pool',
       staking_lots: 'only free money can be staked (assertWagerRequirementMet, staking)',
       discord_suggestions: 'no money', discord_tickets: 'no money',
+      player_stats_lookups: 'a /stats lookup for the community bot; no money (migration 102)',
     };
     const guard = await idleGuard();
     const live = new Set<string>();

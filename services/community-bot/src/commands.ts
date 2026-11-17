@@ -502,6 +502,20 @@ export function commandDefinitions(): RESTPostAPIApplicationCommandsJSONBody[] {
 
   add(
     new SlashCommandBuilder()
+      .setName('stats')
+      .setDescription("Show a player's DonutSMP stats")
+      .addStringOption((option) =>
+        option
+          .setName('player')
+          .setDescription('Their Minecraft name (a Bedrock name keeps its dot)')
+          .setRequired(true)
+          .setMinLength(3)
+          .setMaxLength(16),
+      ) as SlashCommandBuilder,
+  );
+
+  add(
+    new SlashCommandBuilder()
       .setName('profile')
       .setDescription('Show a linked DonutLuxe profile')
       .addUserOption((option) =>

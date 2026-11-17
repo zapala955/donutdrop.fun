@@ -63,6 +63,7 @@ import {
   whoInvited,
 } from './features/invites.js';
 import { showLink, showProfile, submitLinkCode } from './features/link.js';
+import { showStats } from './features/stats.js';
 import { handleAccounts } from './features/accounts.js';
 import { claimTag, linkWithCode, showRewards } from './features/rewards.js';
 import { onUserUpdate, startTagWatch } from './features/tag-watch.js';
@@ -386,6 +387,8 @@ async function main(): Promise<void> {
         return showRewards(api, interaction);
       case 'profile':
         return showProfile(api, interaction);
+      case 'stats':
+        return showStats(api, interaction);
       case 'accounts':
         return handleAccounts(api, interaction);
 
@@ -513,6 +516,7 @@ async function showHelp(interaction: ChatInputCommandInteraction): Promise<void>
         [
           '**Tickets** — press a button on the ticket panel for support or a media application.',
           '**/suggest** — put an idea on the board; everyone votes.',
+          '**/stats** — any player\u2019s DonutSMP stats: money, shards, kills, deaths, playtime and blocks.',
           '**/profile** — show a linked DonutLuxe profile. **/link** explains how to connect one.',
           '**/accounts** — the accounts on your Discord (alts too); pick your main one.',
           '**/invites** — how many people you have brought in. **/invite-leaderboard** ranks everyone.',

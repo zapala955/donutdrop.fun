@@ -81,8 +81,14 @@ const botProxySchema = z
 /* `parked` is present, and true, only while an operator has the bot switched off for manual play
  * (gateway migration 083). */
 const connectionRouteResponseSchema = z
-  .object({ proxy: botProxySchema.nullable(), parked: z.literal(true).optional() })
+  .object({ proxy: botProxySchema.nullable(), parked: z.literal(true).optional(), stats: z.literal(true).optional() })
   .strict();
+
+/* The stats bot's work (routes/player-stats.ts on the gateway): a player to run /stats for. */
+const statsClaimResponseSchema = z
+  .object({ lookup: z.object({ id: z.uuid(), player: z.string().regex(/^(?:[A-Za-z0-9_]{3,16}|\.[A-Za-z0-9_]{2,15})$/) }).strict().nullable() })
+  .strict();
+const statsReportResponseSchema = z.object({ applied: z.boolean() }).strict();
 export type BotProxy = z.infer<typeof botProxySchema>;
 
 /** How to reach the server, and whether to stay out of it for now. */
@@ -90,6 +96,20 @@ export interface ConnectionRoute {
   readonly proxy: BotProxy | null;
   /** Switched off by an operator so they can log into the account by hand. */
   readonly parked: boolean;
+  /** This account is the stats bot: it runs /stats for the community bot and takes no money work. */
+  readonly stats?: boolean;
+}
+
+/** What one /stats showed, for the gateway. Fields left out rather than sent empty. */
+export interface StatsReport {
+  readonly lookupId: string;
+  readonly outcome: 'found' | 'not_found' | 'failed';
+  readonly stats?: Record<string, { display: string; value: number | null }>;
+  readonly shownName?: string;
+  readonly skinUrl?: string;
+  readonly raw?: unknown;
+  readonly errorCode?: string;
+  readonly retryable?: boolean;
 }
 
 const botJobSchema = z
@@ -369,7 +389,23 @@ export class ApiClient {
       botId: this.config.botId,
     });
     const route = connectionRouteResponseSchema.parse(response);
-    return { proxy: route.proxy, parked: route.parked === true };
+    return { proxy: route.proxy, parked: route.parked === true, ...(route.stats ? { stats: true } : {}) };
+  }
+
+  /** The next player to run /stats for, or null. Only ever answered for a bot in the stats role. */
+  async claimStats(): Promise<{ id: string; player: string } | null> {
+    const response = await this.post('/stats/claim', { eventId: randomUUID(), botId: this.config.botId });
+    return statsClaimResponseSchema.parse(response).lookup;
+  }
+
+  /** What /stats showed for a claimed player. True when the gateway took it. */
+  async reportStats(report: StatsReport): Promise<boolean> {
+    // Undefined fields are dropped: the signature covers the canonical body, and JSON drops them too.
+    const body = Object.fromEntries(
+      Object.entries({ eventId: randomUUID(), botId: this.config.botId, ...report }).filter(([, value]) => value !== undefined),
+    );
+    const response = await this.post('/stats/report', body);
+    return statsReportResponseSchema.parse(response).applied;
   }
 
   async claimJob(): Promise<BotJob | null> {

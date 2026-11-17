@@ -463,9 +463,9 @@ export async function registerMinecraftInternalRoutes(
       const authenticated = verifyBotSignature(request, config);
       const body = parseWith(connectionRouteSchema, request.body);
       requireMatchingBotId(authenticated.botId, body.botId);
-      const result = await db.query<BotProxyColumns & { parked: boolean }>(
+      const result = await db.query<BotProxyColumns & { parked: boolean; stats: boolean }>(
         `SELECT proxy_type, proxy_host, proxy_port, proxy_username, proxy_password_encrypted,
-                proxy_revision, proxy_updated_at, parked_at IS NOT NULL AS parked
+                proxy_revision, proxy_updated_at, parked_at IS NOT NULL AS parked, role = 'stats' AS stats
            FROM bot_accounts WHERE id = $1`,
         [body.botId],
       );
@@ -483,9 +483,12 @@ export async function registerMinecraftInternalRoutes(
       /* Switched off for manual play (migration 083): stay out of the game. Sent only when true, so
        * a bot from before the field existed -- whose reader refuses unknown keys -- is only ever
        * confused while an operator has it switched off, and then falls back to its last route. */
+      /* The stats role (migration 102) the same way: sent only to a stats bot, so the money bots,
+       * which run an image that refuses the key, never see it. */
       return sendAuthenticatedBotResponse(reply, authenticated, request.body, {
         proxy,
         ...(row?.parked ? { parked: true } : {}),
+        ...(row?.stats ? { stats: true } : {}),
       });
     },
   );
@@ -769,7 +772,7 @@ async function processLinkConfirmation(
 ): Promise<void> {
   const bot = await client.query(
     `SELECT 1 FROM bot_accounts
-      WHERE id = $1 AND status = 'online'
+      WHERE id = $1 AND status = 'online' AND role <> 'stats'
         AND lower(username) = lower($2) AND lower(server_host) = lower($3)
         AND last_heartbeat_at > now() - interval '45 seconds'
       FOR SHARE`,

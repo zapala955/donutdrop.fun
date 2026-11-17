@@ -30,6 +30,7 @@ import {
   type PayoutRefusal,
 } from './payment-chat.js';
 import { retryReport } from './report-retry.js';
+import { readStats, skinUrlIn, trimCapture, type StatsCapture } from './stats-reader.js';
 import { parseVerifiedPlayerChat } from './verified-chat.js';
 
 type BotWindow = NonNullable<Bot['currentWindow']>;
@@ -148,6 +149,21 @@ const PARKED_RECHECK_MS = 30_000;
 const MANUAL_PLAY_CHECK_MS = 10_000;
 /** How long a login gets, from opening the connection to spawning, before it is started again. */
 const LOGIN_TIMEOUT_MS = 90_000;
+
+/* ── The stats bot (role 'stats', the owner 2026-11-17) ──────────────────────────────────────────
+ * It runs DonutSMP's /stats for the community bot's /stats. How often it asks the gateway for the next
+ * player; how long it listens for what /stats sends back; how long a menu gets for its items to fill
+ * in; and how long after the last chat line it stops listening when no menu came. */
+const STATS_POLL_MS = 1_500;
+const STATS_REPLY_MS = 6_000;
+const STATS_MENU_SETTLE_MS = 700;
+const STATS_QUIET_MS = 1_500;
+/* "make sure it solves issues like dying etc": a stats bot being hurt moves away with /rtp (not
+ * more than once in this long), and one that keeps dying logs in afresh. */
+const STATS_ESCAPE_HEALTH = 8;
+const STATS_ESCAPE_GAP_MS = 5 * 60_000;
+const STATS_DEATH_LIMIT = 3;
+const STATS_DEATH_WINDOW_MS = 10 * 60_000;
 
 /** A whole number of milliseconds in [min, max), drawn uniformly. */
 function randomBetween(min: number, max: number): number {
@@ -305,6 +321,33 @@ function fromNbt(node: { type: string; value: unknown }, depth: number): unknown
 }
 
 /**
+ * Every line of text in a dialog the server showed (show_dialog, Minecraft's dialog screens): each text
+ * component rendered as one line, wherever in the dialog it sits.
+ */
+export function dialogTexts(value: unknown, depth = 0, out: string[] = []): string[] {
+  if (depth > 24 || out.length >= 80 || value === null || value === undefined) return out;
+  if (typeof value === 'string') {
+    const text = describeKick(value);
+    if (text && !/^[a-z_:.]+$/.test(text)) out.push(text);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const child of value) dialogTexts(child, depth + 1, out);
+    return out;
+  }
+  if (typeof value !== 'object') return out;
+  const node = value as Record<string, unknown>;
+  if (isNbtNode(node)) return dialogTexts(fromNbt(node as { type: string; value: unknown }, 0), depth + 1, out);
+  if (typeof node['text'] === 'string' || typeof node['translate'] === 'string') {
+    const text = describeKick(node);
+    if (text) out.push(text);
+    return out;
+  }
+  for (const child of Object.values(node)) dialogTexts(child, depth + 1, out);
+  return out;
+}
+
+/**
  * Renders a kick reason as something a person can read.
  *
  * The server sends a chat component -- a nested object of text, translate keys and `extra` arrays
@@ -425,6 +468,13 @@ export class MinecraftWorker {
   private knownRoute: ConnectionRoute | undefined;
   /** The "switched off for manual play" message has been logged for the current stretch. */
   private parkedNoted = false;
+  /** This account is the stats bot (the gateway says so on the route): it also runs /stats lookups. */
+  private statsRole = false;
+  /** A /stats lookup is in flight: no relog and no manual-play logout until it has been answered. */
+  private statsBusy = false;
+  /** When a hurt stats bot last moved away, and when it died lately. */
+  private lastEscapeAt = 0;
+  private recentDeaths: number[] = [];
   /** The proxy assignment the current connection was opened with; undefined when direct. */
   private routeRevision: string | undefined;
   private timers = new Set<NodeJS.Timeout>();
@@ -522,6 +572,7 @@ export class MinecraftWorker {
     this.invalidateSnapshotState();
     void this.resolveRoute().then(
       (route) => {
+        this.statsRole = route.stats === true;
         if (route.parked) {
           this.stayParked();
           return;
@@ -589,8 +640,9 @@ export class MinecraftWorker {
     if (this.stopped || !this.bot?.entity) return;
     const route = await this.api.connectionRoute();
     this.knownRoute = route;
+    this.statsRole = route.stats === true;
     if (!route.parked) return;
-    if (this.pendingPayout || this.payoutPreparing || this.transferring || this.polling) return;
+    if (this.pendingPayout || this.payoutPreparing || this.transferring || this.polling || this.statsBusy) return;
     this.log.warn('Switched off for manual play by an operator; logging out');
     this.cycleConnection('manual play');
   }
@@ -739,6 +791,12 @@ export class MinecraftWorker {
        * Item work stays refused where it was always refused: the adapter throws, the job fails
        * non-retryably, and the withdrawal goes to manual review rather than sitting unseen. */
       this.schedule(() => this.run(this.pollJobs(), 'job poll'), this.config.pollIntervalMs);
+      if (this.statsRole) {
+        this.log.info('This is the stats bot: running /stats lookups');
+        this.schedule(() => this.run(this.pollStats(), 'stats poll'), STATS_POLL_MS);
+        // Hurt: move away before it dies. Dying anyway is handled by the death handler below.
+        bot.on('health', () => this.escapeIfHurt(bot, connectionController));
+      }
     });
     bot.on('windowOpen', () => this.markInventoryDirty());
     bot._client.on('playerChat', (packet: unknown) => {
@@ -874,6 +932,7 @@ export class MinecraftWorker {
     bot.on('death', () => {
       this.log.warn({ position: bot.entity?.position, dimension: bot.game?.dimension }, 'Bot died; respawning');
       this.respawnUntilAlive(bot, connectionController, 1);
+      if (this.statsRole) this.noteStatsDeath();
     });
     bot.on('error', (error) => {
       this.log.error({ err: error }, 'Mineflayer error');
@@ -1356,6 +1415,7 @@ export class MinecraftWorker {
     if (this.stopped || !this.relogDue || this.relogging || !this.bot) return;
     if (
       this.polling ||
+      this.statsBusy ||
       this.pendingPayout ||
       this.transferring ||
       this.teleporting ||
@@ -1622,6 +1682,180 @@ export class MinecraftWorker {
     } finally {
       if (this.snapshottingBot === bot) this.snapshottingBot = undefined;
     }
+  }
+
+  /* ── The stats bot ─────────────────────────────────────────────────────────────────────────── */
+
+  /** Claims the next player to run /stats for, when the bot is fit to send commands, and runs it. */
+  private async pollStats(): Promise<void> {
+    if (!this.statsRole || this.statsBusy || this.polling || this.pendingPayout || this.payoutPreparing) return;
+    // The same gate a payout waits for: in game, alive, not teleporting, the server answering.
+    const claimState = this.captureJobClaimState();
+    if (!claimState) return;
+    this.statsBusy = true;
+    let lookup: { id: string; player: string } | null = null;
+    try {
+      lookup = await this.api.claimStats();
+      if (!lookup) return;
+      await this.runStatsLookup(lookup, claimState.bot, claimState.connectionController);
+    } catch (error) {
+      this.log.error({ err: error, player: lookup?.player }, 'stats lookup failed');
+      if (lookup) {
+        await this.api
+          .reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'BOT_ERROR', retryable: true })
+          .catch(() => undefined);
+      }
+    } finally {
+      this.statsBusy = false;
+    }
+  }
+
+  /**
+   * Runs `/stats <player>` and reports what the server showed: the menu it opened (title, and every
+   * item's name and lore), the chat lines and any dialog, for the few seconds the answer takes. The
+   * figures are read from that by stats-reader.ts; the capture itself goes along, trimmed, so the
+   * reader can be checked against the real menu.
+   */
+  private async runStatsLookup(
+    lookup: { id: string; player: string },
+    bot: Bot,
+    connectionController: AbortController,
+  ): Promise<void> {
+    await this.waitForCommandGap();
+    if (!this.isCurrentConnection(bot, connectionController)) {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
+      return;
+    }
+    // A menu left open (a teleport's, a server's) would swallow the one /stats opens.
+    if (bot.currentWindow) {
+      void bot.closeWindow(bot.currentWindow);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    const capture: StatsCapture = { items: [], chat: [], dialog: [] };
+    let skinUrl: string | undefined;
+    let menuSeen = false;
+    await new Promise<void>((resolve) => {
+      let quiet: NodeJS.Timeout | undefined;
+      let settle: NodeJS.Timeout | undefined;
+      const finish = () => {
+        clearTimeout(overall);
+        clearTimeout(quiet);
+        clearTimeout(settle);
+        bot.removeListener('windowOpen', onWindow);
+        bot._client.removeListener('packet', onPacket);
+        connectionController.signal.removeEventListener('abort', finish);
+        resolve();
+      };
+      const overall = setTimeout(finish, STATS_REPLY_MS);
+      const onWindow = (window: BotWindow) => {
+        menuSeen = true;
+        clearTimeout(quiet);
+        // Let the menu's items arrive, then read them all at once.
+        settle = setTimeout(() => {
+          capture.title = describeKick(window.title);
+          for (const item of window.containerItems()) {
+            const lore = (item as { customLore?: unknown }).customLore;
+            capture.items.push({
+              slot: item.slot,
+              name: item.customName ? describeKick(item.customName) : item.displayName,
+              lore: Array.isArray(lore) ? lore.map((line: unknown) => describeKick(line)) : [],
+            });
+            skinUrl ??= skinUrlIn((item as { components?: unknown }).components) ?? skinUrlIn(item.nbt);
+          }
+          finish();
+        }, STATS_MENU_SETTLE_MS);
+      };
+      const onPacket = (data: unknown, meta: unknown) => {
+        const name = packetName(meta);
+        if (name !== 'system_chat' && name !== 'show_dialog') return;
+        if (name === 'system_chat') {
+          const record = (data ?? {}) as Record<string, unknown>;
+          const text = describeKick(record['content'] ?? record['message']);
+          if (text) capture.chat.push(text);
+        } else {
+          capture.dialog.push(...dialogTexts(data));
+        }
+        // An answer in chat or a dialog: if no menu follows, the answer is complete shortly after.
+        if (!menuSeen) {
+          clearTimeout(quiet);
+          quiet = setTimeout(finish, STATS_QUIET_MS);
+        }
+      };
+      bot.on('windowOpen', onWindow);
+      bot._client.on('packet', onPacket);
+      connectionController.signal.addEventListener('abort', finish, { once: true });
+      this.sendCommand(bot, `/stats ${lookup.player}`);
+    });
+    if (bot.currentWindow) void bot.closeWindow(bot.currentWindow);
+
+    if (!this.isCurrentConnection(bot, connectionController)) {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'failed', errorCode: 'CONNECTION_LOST', retryable: true });
+      return;
+    }
+    const answered = capture.items.length > 0 || capture.chat.length > 0 || capture.dialog.length > 0;
+    if (answered) {
+      // The server runs this bot's commands: as good as an answered /bal.
+      this.lastBalanceAnswerAt = Date.now();
+      this.awaitingAnswer = false;
+      this.unansweredProbes = 0;
+    }
+    const raw = trimCapture(capture);
+    const reading = readStats(capture, lookup.player);
+    this.log.info(
+      {
+        player: lookup.player,
+        outcome: reading.outcome,
+        figures: reading.outcome === 'found' ? Object.keys(reading.stats) : [],
+        title: raw.title,
+        items: raw.items.length,
+        chat: raw.chat.slice(0, 5),
+        skin: Boolean(skinUrl),
+      },
+      '/stats read',
+    );
+    if (reading.outcome === 'found') {
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'found',
+        stats: reading.stats,
+        ...(reading.shownName ? { shownName: reading.shownName } : {}),
+        ...(skinUrl ? { skinUrl } : {}),
+        raw,
+      });
+    } else if (reading.outcome === 'not_found') {
+      await this.api.reportStats({ lookupId: lookup.id, outcome: 'not_found', raw });
+    } else {
+      // Nothing back at all is worth one more try; an answer the reader could not read is not.
+      await this.api.reportStats({
+        lookupId: lookup.id,
+        outcome: 'failed',
+        errorCode: answered ? 'UNREADABLE' : 'NO_ANSWER',
+        retryable: !answered,
+        raw,
+      });
+    }
+  }
+
+  /** Hurt and not already moving: /rtp away, at most once per STATS_ESCAPE_GAP_MS. */
+  private escapeIfHurt(bot: Bot, connectionController: AbortController): void {
+    if (!this.isCurrentConnection(bot, connectionController) || this.teleporting || this.statsBusy) return;
+    if (bot.health <= 0 || bot.health > STATS_ESCAPE_HEALTH) return;
+    if (Date.now() - this.lastEscapeAt < STATS_ESCAPE_GAP_MS) return;
+    this.lastEscapeAt = Date.now();
+    this.log.warn({ health: bot.health, position: bot.entity?.position }, 'Stats bot is being hurt; moving away with /rtp');
+    this.teleporting = true;
+    this.randomTeleport(bot, connectionController);
+  }
+
+  /** Dying again and again where it stands: log in afresh rather than keep respawning into it. */
+  private noteStatsDeath(): void {
+    const now = Date.now();
+    this.recentDeaths = [...this.recentDeaths.filter((at) => now - at < STATS_DEATH_WINDOW_MS), now];
+    if (this.recentDeaths.length < STATS_DEATH_LIMIT) return;
+    this.recentDeaths = [];
+    this.log.error({ deaths: STATS_DEATH_LIMIT, minutes: STATS_DEATH_WINDOW_MS / 60_000 }, 'Stats bot keeps dying; logging in again');
+    this.cycleConnection('dying repeatedly');
   }
 
   private async pollJobs(): Promise<void> {

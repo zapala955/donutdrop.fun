@@ -43,6 +43,7 @@ import { registerDuelRoutes } from './routes/duels.js';
 import { registerEconomyRoutes } from './routes/economy.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMinecraftInternalRoutes } from './routes/minecraft-in.js';
+import { registerPlayerStatsRoutes } from './routes/player-stats.js';
 import { registerInsightRoutes } from './routes/insights.js';
 import { registerCrownRoutes } from './routes/crowns.js';
 import { registerStakingRoutes } from './routes/staking.js';
@@ -318,6 +319,8 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
    * with a different key, and the only thing it may ask is a public profile lookup. */
   await registerCommunityBotRoutes(app, db, config);
   await registerMinecraftInternalRoutes(app, db, config);
+  // /stats: the community bot asks, the stats bot runs DonutSMP's own /stats (routes/player-stats.ts).
+  await registerPlayerStatsRoutes(app, db, config);
 
   app.setNotFoundHandler(async (_request, reply) =>
     reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Route not found' } }),
