@@ -115,9 +115,15 @@ const COMMAND_GAP_MS = 1_500;
  * two, drawn afresh on every login. A session can go deaf while its socket stays open -- the vault
  * once heard nothing from the server for hours until an operator reconnected it by hand -- and a
  * regular fresh login bounds how long that can last without waiting for a payout to go unanswered.
+ *
+ * 40-60 minutes, not 10-30 (the owner, 2026-11-18: "make jacob relog every 40-60 mins to avoid the
+ * connection issues"). Each relog is a fresh login, and Mojang's login service rate-limits them: a
+ * relog that lands on the limit is kicked (encryptionLoginError) and the account sits out ~5 minutes
+ * before it gets back in. Relogging less often means fewer logins and fewer of those outages, while
+ * still bounding a deaf session to about an hour.
  */
-const RELOG_MIN_MS = 10 * 60_000;
-const RELOG_MAX_MS = 30 * 60_000;
+const RELOG_MIN_MS = 40 * 60_000;
+const RELOG_MAX_MS = 60 * 60_000;
 /**
  * How long a relog stays logged out. The gateway counts a bot as gone after 45 seconds without a
  * heartbeat; beats go every fifteen, so up to fifteen seconds out plus the login stays inside it
