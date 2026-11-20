@@ -142,7 +142,7 @@ body.lx :is(.tower__mode, .chicken__mode)[aria-checked="true"],
 body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-pressed="true"],
 body.lx :is(.crash__pick, .mines__pick, .plinko__risk)[aria-checked="true"] {
   background: var(--dd-ramp);
-  color: #0a0a0c;
+  color: #080605;
   box-shadow: var(--dd-ramp-glow);
 }
 
@@ -172,7 +172,7 @@ body.lx .lxbal.is-won { animation: dd-won 1.1s var(--lx-ease) 1; }
   padding: 3px 8px;
   border-radius: var(--lx-r-pill, 999px);
   background: var(--dd-ramp);
-  color: #0a0a0c;
+  color: #080605;
   font: 800 .75rem/1.2 var(--lx-ui, sans-serif);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

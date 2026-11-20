@@ -18,22 +18,22 @@
 
 :root {
   /* ── the ladder: obsidian, five steps ── */
-  --lx-0: #0a0a0c;   /* the rail, wells, the tab tray            */
-  --lx-1: #121216;   /* the page and the top bar                 */
-  --lx-2: #1c1c22;   /* a card, a panel                          */
-  --lx-3: #24242b;   /* a card being pointed at                  */
-  --lx-4: #2f2f38;   /* a control; a pressed tab                 */
-  --lx-5: #3a3a45;   /* a control being pointed at               */
+  --lx-0: #080605;   /* the rail, wells, the tab tray            */
+  --lx-1: #0e0c09;   /* the page and the top bar                 */
+  --lx-2: #171411;   /* a card, a panel                          */
+  --lx-3: #211d1a;   /* a card being pointed at                  */
+  --lx-4: #2c2824;   /* a control; a pressed tab                 */
+  --lx-5: #39342f;   /* a control being pointed at               */
 
-  --lx-ink:   #ffffff;   /* titles, the live thing                */
-  --lx-text:  #d1d5db;   /* body                                  */
-  --lx-mute:  #9096a0;   /* secondary: 5.9:1 on --lx-1            */
-  --lx-faint: #757b85;
+  --lx-ink:   #f5f3ef;   /* titles, the live thing                */
+  --lx-text:  #d0cdc8;   /* body                                  */
+  --lx-mute:  #9c9792;   /* secondary: 5.9:1 on --lx-1            */
+  --lx-faint: #7e7a74;
 
   --lx-gold:    #ffaa00;   /* the one action colour               */
   --lx-gold-hi: #ffd700;
   --lx-gold-lo: #d98800;
-  --lx-on-gold: #0a0a0c;   /* 9.6:1 on --lx-gold                  */
+  --lx-on-gold: #080605;   /* 9.6:1 on --lx-gold                  */
   --lx-gold-wash: rgba(255, 170, 0, .12);
   --lx-loss:  #ff2222;
   --lx-loss-text: #ff5c5c;   /* small red words: 5.6:1 on --lx-2    */
@@ -89,7 +89,7 @@
   --panel: var(--lx-2);
   --panel2: var(--lx-3);
   --panel3: var(--lx-4);
-  --line: #24242b;
+  --line: #211d1a;
   --line2: var(--lx-4);
   --text: var(--lx-text);
   --muted: var(--lx-mute);
@@ -325,11 +325,23 @@ body.lx-anim .lxapp { transition: margin var(--lx-slide) var(--lx-ease); }
 .lxwallet { flex: none; display: flex; align-items: center; gap: var(--lx-s2); margin: 0 auto; }
 body:not([data-auth="in"]) .lxwallet { display: none; }
 
+/* The balance and Deposit as one flush control, like a wallet: the figure on a panel, the gold
+   button joined to its right edge. */
+/* Not overflow: hidden: the win chip (dopamine.css .winfx) hangs below the balance. */
+.lxpurse {
+  display: flex; align-items: stretch; height: 44px;
+  border-radius: var(--lx-r-s); background: var(--lx-2);
+}
+body.lx .lxpurse .lxbal, body.lx .lxpurse #depositBtn { height: 100%; box-shadow: none; }
+body.lx .lxpurse .lxbal { border-radius: var(--lx-r-s) 0 0 var(--lx-r-s); }
+body.lx .lxpurse #depositBtn { border-radius: 0 var(--lx-r-s) var(--lx-r-s) 0; }
+body.lx .lxpurse #depositBtn:active:not(:disabled) { transform: none; filter: brightness(.94); }
+
 body.lx .lxbal {
   display: inline-flex; align-items: center; gap: var(--lx-s2);
-  width: auto; min-width: 150px; height: 44px; padding: 0 var(--lx-s4);
+  width: auto; min-width: 128px; height: 44px; padding: 0 var(--lx-s4) 0 var(--lx-s3);
   border: 0; border-radius: var(--lx-r-s);
-  background: var(--lx-0);
+  background: transparent;
   box-shadow: none;
   backdrop-filter: none;
   /* obsidian.css makes the old fixed-width pill a size container; this one sizes to its figure,
@@ -339,14 +351,15 @@ body.lx .lxbal {
 }
 body.lx .lxbal .cashpill__lbl { display: none; }
 body.lx .lxbal .cashpill__coin {
-  width: 16px; height: 16px; flex: none;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--lx-gold-hi), var(--lx-gold) 55%, var(--lx-gold-lo));
+  width: 20px; height: 20px; flex: none;
+  border-radius: 0;
+  background: url("../img/coin.svg") center / contain no-repeat;
+  image-rendering: pixelated;
   box-shadow: none;
 }
 body.lx .lxbal .cashpill__n {
   margin-left: auto;
-  color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+  color: var(--lx-ink); font: 800 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; letter-spacing: .01em;
   text-shadow: none;
 }
 
@@ -890,7 +903,8 @@ body.lx .chat__dock { display: none; }
   .lxbrand { gap: 12px; }
   .lxbrand__word { width: 124px; height: 16px; }
   .lxwallet { gap: var(--lx-s1); }
-  body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3); }
+  .lxpurse { height: 40px; }
+  body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3) 0 10px; }
   /* Withdraw stays on a phone: the way out is never harder to find than the way in. */
   body.lx :is(#depositBtn, #withdrawBtn) { height: 40px; padding: 0 var(--lx-s3); }
   body.lx #lxSearchBtn, body.lx #muteBtn, body.lx .lxtop .lvl, body.lx #lxChatBtn { display: none; }
@@ -947,8 +961,9 @@ body.lx .chat__dock { display: none; }
 @media (max-width: 399px) {
   .lxtop__in { gap: 6px; padding: 0 10px; }
   .lxtop__end { gap: 0; }
-  body.lx .lxbal { padding: 0 8px; gap: 0; }
-  body.lx .lxbal .cashpill__coin { display: none; }
+  body.lx .lxbal { padding: 0 8px 0 6px; gap: 4px; }
+  /* Smaller, not gone: with no "$" on the figure, the coin is what says it is money. */
+  body.lx .lxbal .cashpill__coin { width: 16px; height: 16px; }
   body.lx :is(#depositBtn, #withdrawBtn) { padding: 0 8px; font-size: .75rem; }
   body.lx .lxtop :is(.notif__btn, .acct__btn) { width: 38px; }
 }

@@ -24,7 +24,7 @@
    own overflow container.                                                   */
 
 .crates, .cratebrowse, .quests, .war, .fair {
-  --p-obsidian: #0a0a0c;
+  --p-obsidian: #080605;
   --p-charcoal: #14120c;
   --p-panel:    #17140d;
 
@@ -510,7 +510,7 @@
 }
 .qty__b:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
 .qty__b[aria-pressed="true"] {
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--p-ramp);
   border-color: transparent;
   box-shadow: 0 0 18px -6px var(--p-gold);
@@ -726,7 +726,7 @@
   margin-top: 7px;
   border-radius: 50%;
   background-image: linear-gradient(180deg, #ffe89a, #ffaa00);
-  border: 2px solid #0a0a0c;
+  border: 2px solid #080605;
   box-shadow: 0 0 0 1px rgba(255, 170, 0, .5), 0 4px 10px -3px rgba(0, 0, 0, .9);
   cursor: grab;
 }
@@ -736,7 +736,7 @@
   height: 16px;
   border-radius: 50%;
   background-image: linear-gradient(180deg, #ffe89a, #ffaa00);
-  border: 2px solid #0a0a0c;
+  border: 2px solid #080605;
   box-shadow: 0 0 0 1px rgba(255, 170, 0, .5), 0 4px 10px -3px rgba(0, 0, 0, .9);
   cursor: grab;
 }
@@ -1257,7 +1257,7 @@
 .fairhead__facts dd { margin: 2px 0 0; font-size: .75rem; color: var(--text); overflow-wrap: anywhere; }
 
 .fairsteps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
-.fairsteps li { font-size: .75rem; line-height: 1.6; color: #d1d5db; overflow-wrap: anywhere; }
+.fairsteps li { font-size: .75rem; line-height: 1.6; color: #d0cdc8; overflow-wrap: anywhere; }
 .fairsteps code {
   font-family: var(--mono);
   font-size: .75rem;
@@ -1561,12 +1561,12 @@ html, body { overflow-x: clip; }
    have to reach into the purged green and violet wedges to stay distinguishable. Teams are told
    apart by position and by a gold weight instead, which also survives colour blindness. */
 .battles, .studiowrap {
-  --b-obsidian: #0a0a0c;
+  --b-obsidian: #080605;
   --b-panel:    #14120c;
   --b-line:     rgba(255, 170, 0, .18);
   --b-gold:     #ffaa00;
   --b-gold-hi:  var(--gold-bright);
-  --b-text:     #d1d5db;
+  --b-text:     #d0cdc8;
   --b-ramp: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
   display: flex;
   flex-direction: column;
@@ -1625,7 +1625,7 @@ html, body { overflow-x: clip; }
 }
 .btl__chip:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
 .btl__chip[aria-pressed="true"] {
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--b-ramp);
   border-color: transparent;
   box-shadow: 0 0 18px -6px var(--b-gold);
@@ -1766,7 +1766,7 @@ html, body { overflow-x: clip; }
   font-size: .625rem;
   font-weight: 800;
   letter-spacing: .08em;
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--b-ramp);
 }
 .btlcard__crazy {
@@ -1824,7 +1824,7 @@ html, body { overflow-x: clip; }
 .arena__code { font-size: .625rem; letter-spacing: .2em; color: var(--b-gold); }
 .arena__tools { display: flex; gap: 4px; flex: none; }
 .arena__fast[aria-checked="true"] {
-  color: #0a0a0c; background-image: var(--b-ramp); border-color: transparent;
+  color: #080605; background-image: var(--b-ramp); border-color: transparent;
 }
 
 .arena__strip { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
@@ -1999,7 +1999,7 @@ html, body { overflow-x: clip; }
 }
 .studio__tab:hover { color: var(--text); border-color: rgba(255, 170, 0, .45); }
 .studio__tab[aria-pressed="true"] {
-  color: #0a0a0c;
+  color: #080605;
   background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
   border-color: transparent;
 }
@@ -2360,7 +2360,7 @@ html, body { overflow-x: clip; }
   margin-left: 4px;
   padding: 7px 14px;
   border-radius: 999px;
-  color: #0a0a0c;
+  color: #080605;
   text-decoration: none;
   white-space: nowrap;
   background-color: #ffaa00;

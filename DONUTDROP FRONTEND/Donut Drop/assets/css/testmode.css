@@ -15,8 +15,8 @@
   padding: 0 12px;
   border: 0;
   border-radius: var(--lx-r-s, 4px);
-  background: var(--lx-0, #0a0a0c);
-  color: var(--lx-mute, #9096a0);
+  background: var(--lx-0, #080605);
+  color: var(--lx-mute, #9c9792);
   font: 700 0.6875rem/1 var(--lx-ui, system-ui, sans-serif);
   letter-spacing: 0.14em;
   cursor: pointer;
@@ -28,7 +28,7 @@
   display: none;
 }
 .testpill:hover {
-  background: var(--lx-3, #24242b);
+  background: var(--lx-3, #211d1a);
   color: #7fe7ff;
 }
 .testpill:active {

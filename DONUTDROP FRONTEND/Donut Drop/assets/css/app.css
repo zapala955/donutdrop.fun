@@ -160,7 +160,7 @@ img { display: block; max-width: 100%; }
 
 .skip {
   position: fixed; left: 10px; top: -60px; z-index: 300;
-  background: var(--gold-bright); color: #0a0a0c; font-weight: 800;
+  background: var(--gold-bright); color: #080605; font-weight: 800;
   padding: 9px 16px; border: 0; border-radius: var(--r-s); cursor: pointer;
   font-family: var(--body); transition: top .15s;
 }
@@ -185,7 +185,7 @@ img { display: block; max-width: 100%; }
  * engine paints if it drops the image; without it a failed gradient leaves
  * black text on a transparent button. */
 .btn--go {
-  color: #0a0a0c;
+  color: #080605;
   background-color: #ffaa00;
   background-image: linear-gradient(135deg, #ffaa00 0%, var(--gold-bright) 100%);
   border-color: transparent;
@@ -450,7 +450,7 @@ img { display: block; max-width: 100%; }
 }
 /* Subtitle copy lifted to a crisp off-white. The old --muted sat too dark
    against obsidian to read at a glance. */
-.hero__copy p { color: #d1d5db; max-width: 46ch; margin-bottom: 22px; }
+.hero__copy p { color: #d0cdc8; max-width: 46ch; margin-bottom: 22px; }
 .hero__cta { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .hero__art { position: relative; height: 300px; display: grid; place-items: center; }
@@ -688,10 +688,10 @@ img { display: block; max-width: 100%; }
 .stakes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .stakes__k { font-family: var(--mono); font-size: .75rem; letter-spacing: .12em; color: var(--faint); text-transform: uppercase; }
 .stakes button { font-family: var(--mono); font-size: .75rem; padding: 6px 11px; }
-.stakes button[aria-pressed="true"] { background-color: var(--green); background-image: linear-gradient(180deg, var(--green), var(--green2)); color: #0a0a0c; border-color: transparent; font-weight: 800; }
+.stakes button[aria-pressed="true"] { background-color: var(--green); background-image: linear-gradient(180deg, var(--green), var(--green2)); color: #080605; border-color: transparent; font-weight: 800; }
 canvas.play {
   width: 100%; aspect-ratio: 16/10; display: block; border-radius: var(--r-s);
-  background: #0a0a0c; border: 1px solid var(--line); touch-action: none;
+  background: #080605; border: 1px solid var(--line); touch-action: none;
 }
 .stage__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 11px; flex-wrap: wrap; }
 .stage__hint { font-family: var(--mono); font-size: .75rem; color: var(--faint); }

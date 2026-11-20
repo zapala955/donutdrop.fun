@@ -155,7 +155,8 @@ export function initHints() {
 export function initWallet() {
   const cash = $('#wCash');
   const paint = () => {
-    const next = money(state.balance);
+    // The coin beside it is the unit, so the figure drops money()'s "$".
+    const next = money(state.balance).replace('$', '');
     if (cash.textContent !== next) {
       cash.textContent = next;
       /* Restart the pop by removing the class, forcing a reflow, then re-adding it. Without the

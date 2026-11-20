@@ -124,7 +124,7 @@
   font-size: 0.5625rem;
   font-weight: 800;
   line-height: 1.4;
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--b-ramp);
   box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.8);
 }
@@ -171,7 +171,7 @@
   line-height: 1;
 }
 .btlslot[data-filled='1'] {
-  color: #0a0a0c;
+  color: #080605;
   background: var(--bt);
   box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.3);
 }
@@ -562,7 +562,7 @@
   font-size: 0.625rem;
   font-weight: 900;
   letter-spacing: 0.14em;
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--b-ramp);
   box-shadow: 0 0 18px -6px var(--b-gold);
 }
@@ -605,7 +605,7 @@
   font-size: 0.75rem;
   font-weight: 800;
   line-height: 1;
-  color: #0a0a0c;
+  color: #080605;
   background: var(--bt, #ffaa00);
   box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.35);
 }
@@ -637,7 +637,7 @@
   font-size: 0.5625rem;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: #0a0a0c;
+  color: #080605;
   background-image: var(--b-ramp);
 }
 .seat__crown {

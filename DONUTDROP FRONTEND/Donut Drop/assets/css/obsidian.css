@@ -55,9 +55,9 @@
   --ob-quick:    150ms ease-in-out;
   --ob-gap:      12px;   /* inside a component  */
   --ob-gap-lg:   16px;   /* between components  */
-  --ob-track:    #121216;
+  --ob-track:    #0e0c09;
   --ob-thumb:    #2a2a32;
-  --ob-thumb-hi: #3a3a45;
+  --ob-thumb-hi: #39342f;
 
   /* ── the radius scale ──
    *
@@ -589,7 +589,7 @@ html {
   width: 58px;
   height: 5px;
   border-radius: 999px;
-  background: #0a0a0c;
+  background: #080605;
   box-shadow: inset 0 0 0 1px rgba(255, 215, 0, .1);
   overflow: hidden;
 }
@@ -651,7 +651,7 @@ html {
   isolation: isolate;
   background:
     radial-gradient(120% 90% at 18% 0%, rgba(255, 170, 0, .09), transparent 62%),
-    linear-gradient(100deg, #121216 40%, #0a0a0c);
+    linear-gradient(100deg, #0e0c09 40%, #080605);
   border: 1px solid var(--ob-line);
   overflow: hidden;
 }
@@ -805,14 +805,14 @@ html {
    gains weight and a hard edge. Same geometry, four times the contrast. */
 .upg .wheel__ring {
   background:
-    radial-gradient(closest-side, #0a0a0c 66%, #121216 69%, #0a0a0c 100%);
+    radial-gradient(closest-side, #080605 66%, #0e0c09 69%, #080605 100%);
   box-shadow:
     inset 0 0 0 1px var(--ob-line),
     inset 0 0 40px -10px #000,
     0 24px 64px -30px rgba(0, 0, 0, .96);
 }
 .upg .wheel__track {
-  stroke: #1c1c22;
+  stroke: #171411;
   stroke-width: 8;
 }
 .upg .wheel__arc {
@@ -821,7 +821,7 @@ html {
     drop-shadow(0 0 4px rgba(255, 215, 0, .9))
     drop-shadow(0 0 14px rgba(255, 170, 0, .5));
 }
-.upg .wheel__ticks .tick    { stroke: #24242b; }
+.upg .wheel__ticks .tick    { stroke: #211d1a; }
 .upg .wheel__ticks .tick.on { stroke: #ffd700; }
 /* The pointer reads against the black face now, so it can be a hairline too. */
 .upg .wheel__needle i {

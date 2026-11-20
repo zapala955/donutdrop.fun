@@ -105,7 +105,7 @@
    the viewport so they never move with scroll and never repaint. */
 body {
   /* obsidian, warmed a shade toward the rose at the top where the key light is */
-  background: linear-gradient(178deg, #131013 0%, #0a0a0c 46%, #08080a 100%) fixed;
+  background: linear-gradient(178deg, #131013 0%, #080605 46%, #08080a 100%) fixed;
 }
 body::before {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;

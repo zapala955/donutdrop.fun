@@ -11,7 +11,7 @@
 :root {
   /* The default theme's tile: obsidian's raised surface, held here because --lx-3 itself changes
      with the theme and the tile must not. */
-  --lxs-obsidian: #24242b;
+  --lxs-obsidian: #211d1a;
   /* the tick on the chosen tile, drawn in --lx-on-gold */
   --lxs-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230a0a0c' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
 }

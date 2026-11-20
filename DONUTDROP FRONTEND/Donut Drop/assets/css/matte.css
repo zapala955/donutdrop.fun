@@ -32,13 +32,13 @@
         contrast a screen can produce, and this needs less than that.
 */
 :root {
-  --bg:       #0a0a0c;
+  --bg:       #080605;
   --bg2:      #0e0e11;
-  --panel:    #121216;
+  --panel:    #0e0c09;
   --panel2:   #16161b;
-  --panel3:   #1c1c22;
-  --line:     #24242b;
-  --line2:    #2f2f38;
+  --panel3:   #171411;
+  --line:     #211d1a;
+  --line2:    #2c2824;
 
   /* The bright stop is no longer a different colour from the body — it is the same metal catching
      light — so an active state reads as emphasis instead of as a second hue. */
@@ -55,9 +55,9 @@
   --cyan2:    #d4a303;
   --crimson:  #c0392b;
 
-  --text:     #d1d5db;
-  --muted:    #9096a0;
-  --faint:    #757b85;
+  --text:     #d0cdc8;
+  --muted:    #9c9792;
+  --faint:    #7e7a74;
 
   --win-lo:   #221802;
   --green-lo: #221802;

@@ -217,8 +217,8 @@
   content: '';
   width: 10px;
   height: 5px;
-  border-left: 2px solid #0a0a0c;
-  border-bottom: 2px solid #0a0a0c;
+  border-left: 2px solid #080605;
+  border-bottom: 2px solid #080605;
   transform: translateY(-1px) rotate(-45deg) scale(0.6);
   opacity: 0;
   transition:
@@ -335,7 +335,7 @@
   height: 14px;
   margin-right: 2px;
   border: 2px solid rgba(10, 10, 12, 0.35);
-  border-top-color: #0a0a0c;
+  border-top-color: #080605;
   border-radius: 50%;
   animation: auth-spin 0.7s linear infinite;
 }
@@ -404,6 +404,10 @@
   font-weight: 700;
   color: var(--gold);
 }
+/* The blank in a command: "/pay Bot <amount>", the amount muted and marked as a placeholder. */
+.auth__arg { color: var(--lx-mute, #9c9792); font-style: italic; }
+.auth__arg::before { content: "<"; }
+.auth__arg::after { content: ">"; }
 
 /* Max sits inside the field, because it is about the value in the field and nowhere else. */
 .auth__max {

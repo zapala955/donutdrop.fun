@@ -93,7 +93,7 @@
   border-radius: 999px;
   font: 800 .625rem/1 var(--mono);
   letter-spacing: .04em;
-  color: #0a0a0c;
+  color: #080605;
   background: linear-gradient(140deg, #ffd700, #ffaa00);
   box-shadow: inset 0 -1px 2px rgba(0, 0, 0, .35);
 }
@@ -135,7 +135,7 @@
 
 .duelnew__secret {
   padding: 10px 12px; border-radius: var(--r-soft);
-  background: #0a0a0c; border: 1px solid var(--ob-line);
+  background: #080605; border: 1px solid var(--ob-line);
   color: var(--text); font: 400 .875rem var(--body);
 }
 .duelnew__secret:focus { outline: none; border-color: var(--gold-bright); }
@@ -196,7 +196,7 @@
   background:
     repeating-linear-gradient(0deg, rgba(255, 215, 0, .04) 0 1px, transparent 1px 40px),
     repeating-linear-gradient(90deg, rgba(255, 215, 0, .04) 0 1px, transparent 1px 40px),
-    radial-gradient(80% 80% at 50% 50%, #121216, #0a0a0c);
+    radial-gradient(80% 80% at 50% 50%, #0e0c09, #080605);
   border: 1px solid var(--ob-line);
   cursor: pointer;
   user-select: none;
@@ -286,7 +286,7 @@
   transition: color .1s, border-color .1s, transform .1s;
 }
 .arena__key:hover { color: var(--text); border-color: var(--ob-line-hi); }
-.arena__key[data-hit="1"] { color: #0a0a0c; background: #ffd700; transform: scale(.94); }
+.arena__key[data-hit="1"] { color: #080605; background: #ffd700; transform: scale(.94); }
 
 /* ── the pot strip ── */
 .arena__pot {

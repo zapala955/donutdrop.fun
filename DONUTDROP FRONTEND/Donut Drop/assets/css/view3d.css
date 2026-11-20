@@ -17,7 +17,7 @@
   padding: 3px;
   border-radius: var(--lx-r-s, 6px);
   background: var(--lx-0, #0b0b0e);
-  box-shadow: inset 0 0 0 2px var(--lx-4, #2f2f38);
+  box-shadow: inset 0 0 0 2px var(--lx-4, #2c2824);
 }
 .view3d__seg button {
   min-width: 44px;
@@ -26,7 +26,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--lx-mute, #9096a0);
+  color: var(--lx-mute, #9c9792);
   font: 800 .75rem/1 var(--lx-ui, inherit);
   letter-spacing: .02em;
   cursor: pointer;
@@ -74,7 +74,7 @@
   align-content: center;
   gap: 12px;
   border-radius: inherit;
-  background: radial-gradient(ellipse at 50% 45%, var(--lx-2, #1c1c22), var(--lx-0, #0a0a0c) 75%);
+  background: radial-gradient(ellipse at 50% 45%, var(--lx-2, #171411), var(--lx-0, #080605) 75%);
   pointer-events: auto;
 }
 [data-render="loading"] .scene3d-load > * { animation: scene3d-in .15s linear .3s both; }
@@ -91,7 +91,7 @@
   overflow: hidden;
   width: 69px;
   height: 6px;
-  background: repeating-linear-gradient(90deg, var(--lx-3, #24242b) 0 6px, transparent 6px 9px);
+  background: repeating-linear-gradient(90deg, var(--lx-3, #211d1a) 0 6px, transparent 6px 9px);
 }
 .scene3d-load__bar::after {
   content: '';
@@ -103,7 +103,7 @@
   animation: scene3d-run 1.1s steps(11, end) infinite;
 }
 .scene3d-load__label {
-  color: var(--lx-mute, #9096a0);
+  color: var(--lx-mute, #9c9792);
   font: 700 .75rem/1.4 var(--lx-ui, inherit);
   letter-spacing: .02em;
 }

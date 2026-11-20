@@ -27,7 +27,7 @@
 <meta name="description" content="DonutLuxe is the DonutSMP casino: crash, mines, tower, chicken, plinko, dice, blackjack, roulette, coinflip and case battles. Deposit and withdraw in game." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="https://donutluxe.com/" />
-<meta name="theme-color" content="#0a0a0c" />
+<meta name="theme-color" content="#080605" />
 <!-- Dark from the parser on: the browser paints its own canvas dark while the stylesheets are still
      on the way, instead of a white page that turns obsidian a second later on a cold visit. Every
      theme the site has is dark, so the browser's own scrollbars and form controls follow suit. -->
@@ -379,12 +379,15 @@
                 aria-label="Top up play money" title="Top up play money" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
         </button>
-        <div class="cashpill lxbal" role="status" aria-atomic="true" title="Balance — in-game DonutSMP dollars">
-          <i class="cashpill__coin" aria-hidden="true"></i>
-          <span class="cashpill__lbl">Balance </span>
-          <b class="cashpill__n mono" id="wCash">$0</b>
+        <!-- The balance and Deposit joined into one control. The figure has no "$": the coin is the unit. -->
+        <div class="lxpurse">
+          <div class="cashpill lxbal" role="status" aria-atomic="true" title="Balance — in-game DonutSMP dollars">
+            <i class="cashpill__coin" aria-hidden="true"></i>
+            <span class="cashpill__lbl">Balance </span>
+            <b class="cashpill__n mono" id="wCash">0</b>
+          </div>
+          <button class="btn btn--go lxbtn lxbtn--gold" id="depositBtn" type="button"><span>Deposit</span></button>
         </div>
-        <button class="btn btn--go lxbtn lxbtn--gold" id="depositBtn" type="button"><span>Deposit</span></button>
         <button class="btn btn--withdraw lxbtn lxbtn--ghost" id="withdrawBtn" type="button"><span>Withdraw</span></button>
       </div>
 

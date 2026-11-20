@@ -69,7 +69,7 @@
 .msg:hover { border-color: var(--ob-line); background: var(--glass-hi); }
 .msg__top { gap: 6px; margin-bottom: 4px; }
 .msg__who { color: var(--text); font-size: .8125rem; }
-.msg__body { color: #d1d5db; line-height: 1.45; }
+.msg__body { color: #d0cdc8; line-height: 1.45; }
 .msg__t { font-size: .625rem; }
 
 /* Staff and whales get an edge, not a fill. */
@@ -379,7 +379,7 @@
 }
 .drops__stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .drops .what {
-  font-size: .8125rem; font-weight: 700; color: #d1d5db;
+  font-size: .8125rem; font-weight: 700; color: #d0cdc8;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .drops .who {
@@ -428,7 +428,7 @@
   border-radius: 999px;
   background: rgba(10, 10, 12, .74);
   border: 1px solid var(--ob-line);
-  font-size: .625rem; font-weight: 700; color: #d1d5db;
+  font-size: .625rem; font-weight: 700; color: #d0cdc8;
   white-space: nowrap;
 }
 .gamechip__ico { font-style: normal; font-size: .6875rem; line-height: 1; }

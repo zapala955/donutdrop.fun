@@ -1194,9 +1194,9 @@ body.lx .modal .auth__err[hidden] { display: none; }
    ramp; and every control sits on a lip and presses in, as the stages' tiles and the main button do.
    Colours are the tokens just below; nothing under them writes one. */
 :root:not([data-lxtheme]) body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
-  --lx-3: #24242b;
-  --lx-4: #2f2f38;
-  --lx-5: #3a3a45;
+  --lx-3: #211d1a;
+  --lx-4: #2c2824;
+  --lx-5: #39342f;
 }
 body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
   --dd-ramp: var(--lx-gold);

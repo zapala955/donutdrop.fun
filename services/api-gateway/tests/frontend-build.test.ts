@@ -72,7 +72,7 @@ describe('frontend build', () => {
     const at = (needle: string) => css.indexOf(needle);
     assert.ok(at('figtree-400-800-latin.woff2') >= 0 && at('figtree-400-800-latin.woff2') < at('.lxswitch'), 'fonts.css first, prefs.css last');
     // Custom property values are kept as written, leading space and all.
-    assert.ok(at('--lx-0: #0a0a0c') > 0 && at('--lx-0: #0a0a0c') < at('data-lxtheme'), 'luxe.css before prefs.css');
+    assert.ok(at('--lx-0: #080605') > 0 && at('--lx-0: #080605') < at('data-lxtheme'), 'luxe.css before prefs.css');
     assert.match(css, /url\(\/assets\/img\/luxe\/tnt\.svg\)/);
     assert.doesNotMatch(css, /url\(["']?\.\.\//);
     assert.equal(build.absoluteUrls('a{b:url("../img/x.png") url(#grad) url(data:image/png;base64,AA) url(/y.svg)}'),

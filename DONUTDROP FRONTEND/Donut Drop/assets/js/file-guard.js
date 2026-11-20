@@ -12,7 +12,7 @@
   document.addEventListener('DOMContentLoaded', function onReady() {
     var panel = document.createElement('div');
     panel.style.cssText =
-      'min-height:100vh;display:grid;place-items:center;background:#0a0a0c;color:#e8e4d8;' +
+      'min-height:100vh;display:grid;place-items:center;background:#080605;color:#e8e4d8;' +
       'font:15px/1.6 system-ui,sans-serif;padding:24px;text-align:center';
 
     var inner = document.createElement('div');

@@ -368,7 +368,7 @@ function buildWheel() {
   const stops = ORDER.map((number, index) => {
     const start = index * step;
     const end = (index + 1) * step;
-    const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#1c1c22';
+    const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#171411';
     return `${shade} ${start.toFixed(4)}deg ${(end - fret).toFixed(4)}deg, #8d8f97 ${(end - fret).toFixed(4)}deg ${end.toFixed(4)}deg`;
   });
   wheel.style.background = `conic-gradient(from -${step / 2}deg, ${stops.join(',')})`;

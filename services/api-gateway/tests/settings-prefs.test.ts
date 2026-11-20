@@ -27,7 +27,7 @@ type Prefs = {
 async function boot(stored?: unknown, { storageWorks = true } = {}) {
   const attrs = new Map<string, string>();
   const style = new Map<string, string>();
-  const meta = { content: '#0a0a0c', setAttribute: (_: string, value: string) => (meta.content = value) };
+  const meta = { content: '#080605', setAttribute: (_: string, value: string) => (meta.content = value) };
   const store = new Map<string, string>();
   if (stored !== undefined) store.set('lx:prefs', JSON.stringify(stored));
   const events: string[] = [];
@@ -86,7 +86,7 @@ describe('settings: themes', () => {
       const { attrs, style, meta } = await boot(stored);
       assert.equal(attrs.has('data-lxtheme'), false, JSON.stringify(stored));
       assert.equal(style.size, 0);
-      assert.equal(meta.content, '#0a0a0c');
+      assert.equal(meta.content, '#080605');
     }
   });
 

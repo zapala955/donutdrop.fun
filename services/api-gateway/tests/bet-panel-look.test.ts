@@ -21,7 +21,7 @@ describe('the betting panel', () => {
   it('stands on the stages’ cool obsidian, and leaves a picked theme its own ladder', async () => {
     const css = await block();
     assert.ok(css.length > 1000, 'the block is missing');
-    assert.ok(css.includes(`:root:not([data-lxtheme]) body.lx .view :is(${PANELS}) {\n  --lx-3: #24242b;\n  --lx-4: #2f2f38;\n  --lx-5: #3a3a45;\n}`));
+    assert.ok(css.includes(`:root:not([data-lxtheme]) body.lx .view :is(${PANELS}) {\n  --lx-3: #211d1a;\n  --lx-4: #2c2824;\n  --lx-5: #39342f;\n}`));
     assert.ok(css.includes(`body.lx .view :is(${PANELS}) {\n  --dd-ramp: var(--lx-gold);`));
     assert.match(css, /--bp-lip: rgba\(0, 0, 0, \.5\);\n\s*--bp-ease: cubic-bezier\(\.22, 1, \.36, 1\);\n\s*background: var\(--lx-2\);/);
     // The only raw colours are the tokens at the top.

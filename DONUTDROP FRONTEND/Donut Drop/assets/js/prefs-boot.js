@@ -157,7 +157,7 @@
     else root.style.removeProperty('--lx-backdrop');
     // The phone's browser bar takes the top bar's colour.
     var bar = document.querySelector('meta[name="theme-color"]');
-    if (bar) bar.setAttribute('content', theme ? oklch([0.183, theme.c, theme.h]) : '#0a0a0c');
+    if (bar) bar.setAttribute('content', theme ? oklch([0.183, theme.c, theme.h]) : '#080605');
 
     flag(root, 'data-motion', prefs.motion === 'reduce', 'reduce');
     flag(root, 'data-chat-size', SIZES[prefs.chatSize] === 1, prefs.chatSize);

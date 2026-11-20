@@ -783,9 +783,15 @@ async function openDepositModal() {
   }
   if (!host?.isConnected || !$('#modal').open) return;
 
+  /* The command with the amount left as a marked blank, so it reads as "any figure goes here"
+   * rather than a literal to type. Falls back to the server's own wording when `copy` is absent. */
+  const command = info.copy
+    ? `${escapeText(info.copy)}<span class="auth__arg">amount</span>`
+    : escapeText(info.command);
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Deposit</h3>
-    <p class="auth__lede">Pay the bot from your linked Minecraft account. It is credited
-      automatically when the bot sees the payment in chat — there is nothing to confirm here.</p>
+    <p class="auth__lede">Pay the bot <b>any amount</b> on DonutSMP from your linked Minecraft
+      account. It lands in your balance as soon as the bot sees the payment — there is nothing
+      to confirm here.</p>
     <hr class="auth__rule">
     <span class="auth__label">Bot IGN</span>
     <div class="auth__field auth__field--static">
@@ -793,7 +799,7 @@ async function openDepositModal() {
     </div>
     <span class="auth__label">Run this in game</span>
     <div class="auth__field auth__field--static">
-      <span class="auth__value auth__value--lg mono">${escapeText(info.command)}</span>
+      <span class="auth__value auth__value--lg mono">${command}</span>
     </div>
     <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
 
