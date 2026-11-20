@@ -774,6 +774,8 @@ function walletTabs(current) {
     tabs.append(button);
   }
   $('#modalBody').before(tabs);
+  // The preview's wallet sheet: its title in the bar, the tabs under it (preview.css).
+  $('#modal').dataset.wallet = current;
 }
 
 async function openDepositModal() {

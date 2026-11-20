@@ -52,6 +52,7 @@ export function openModal(title, build, opts = {}) {
   if (!dlg.open) restoreFocus = document.activeElement;
   dlg.dataset.variant = opts.variant || '';
   dlg.querySelector('.lxwtabs')?.remove();
+  delete dlg.dataset.wallet;
   $('#modalTitle').textContent = title;
   const body = $('#modalBody');
   body.innerHTML = '';

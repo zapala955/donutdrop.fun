@@ -325,6 +325,10 @@
         <img class="lxbrand__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="32" height="32" />
         <img class="lxbrand__word" src="assets/img/brand/wordmark.svg?v=1" alt="DonutLuxe" width="186" height="24" />
       </a>
+      <!-- Under 1024px the search is this magnifier beside the donut (the preview's phone bar). -->
+      <button class="lxicon" id="lxSearchBtn" type="button" aria-label="Search games" aria-keyshortcuts="Control+K">
+        <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
 
       <!-- Search, in the bar on a wide screen (2026-11-20, the preview's): typing filters the lobby,
            from any page (luxe.js). A phone keeps the lobby's own search box. -->
@@ -360,9 +364,6 @@
       </div>
 
       <div class="lxtop__end">
-        <button class="lxicon" id="lxSearchBtn" type="button" aria-label="Search games" aria-keyshortcuts="Control+K">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
-        </button>
         <button class="lvl" id="lvlPill" type="button" hidden>
           <span class="lvl__n mono" id="lvlNum">—</span>
           <span class="lvl__bar"><i id="lvlFill"></i></span>
@@ -1245,20 +1246,21 @@
 
 <!-- ══════════ phone bar ══════════ -->
 <nav class="lxdock" aria-label="Quick links">
+  <!-- The preview's bottom bar (2026-11-20): Menu, Lobby, Bets, Chat, Wallet. -->
   <button class="lxdock__btn" type="button" id="lxDockMenu" aria-controls="lxSide" aria-expanded="false">
-    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M228,128a12,12,0,0,1-12,12H40a12,12,0,0,1,0-24H216A12,12,0,0,1,228,128ZM40,76H216a12,12,0,0,0,0-24H40a12,12,0,0,0,0,24ZM216,180H40a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24Z"/></svg><span>Browse</span>
+    <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span>
   </button>
   <a class="lxdock__btn" href="/" data-dock="home">
-    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M128,20A108,108,0,1,0,236,128,108.12,108.12,0,0,0,128,20Zm0,144a36,36,0,1,1,36-36A36,36,0,0,1,128,164Zm33.06-86A59.51,59.51,0,0,0,140,69.21V44.87a83.55,83.55,0,0,1,38.28,15.88ZM116,69.21A59.51,59.51,0,0,0,94.94,78L77.72,60.75A83.55,83.55,0,0,1,116,44.87ZM78,94.94A59.51,59.51,0,0,0,69.21,116H44.87A83.59,83.59,0,0,1,60.75,77.72ZM69.21,140A59.51,59.51,0,0,0,78,161.06L60.75,178.28A83.59,83.59,0,0,1,44.87,140Zm25.73,38A59.51,59.51,0,0,0,116,186.79v24.34a83.55,83.55,0,0,1-38.28-15.88ZM140,186.79A59.51,59.51,0,0,0,161.06,178l17.22,17.22A83.55,83.55,0,0,1,140,211.13Zm38-25.73A59.51,59.51,0,0,0,186.79,140h24.34a83.59,83.59,0,0,1-15.88,38.28ZM186.79,116A59.51,59.51,0,0,0,178,94.94l17.22-17.22A83.59,83.59,0,0,1,211.13,116Z"/></svg><span>Casino</span>
+    <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span>Lobby</span>
   </a>
-  <a class="lxdock__btn" href="/crates" data-dock="crates">
-    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M184,36H72A60.07,60.07,0,0,0,12,96v96a20,20,0,0,0,20,20H224a20,20,0,0,0,20-20V96A60.07,60.07,0,0,0,184,36Zm36,60v4H192V60.91A36.05,36.05,0,0,1,220,96Zm-92,60a12,12,0,0,0,12-12V124h28v64H88V124h28v20A12,12,0,0,0,128,156Zm12-56V96a12,12,0,0,0-24,0v4H88V60h80v40ZM64,60.91V100H36V96A36.05,36.05,0,0,1,64,60.91ZM36,124H64v64H36Zm156,64V124h28v64Z"/></svg><span>Cases</span>
-  </a>
-  <a class="lxdock__btn" href="/rewards" data-dock="rewards">
-    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M216,68H190.06A33.82,33.82,0,0,0,196,49.69,36.62,36.62,0,0,0,158.31,12,33.44,33.44,0,0,0,134,23.25a54.65,54.65,0,0,0-6,8.3,54.65,54.65,0,0,0-6-8.3A33.44,33.44,0,0,0,97.69,12,36.62,36.62,0,0,0,60,49.69,33.82,33.82,0,0,0,65.94,68H40A20,20,0,0,0,20,88v32a20,20,0,0,0,16,19.6V200a20,20,0,0,0,20,20H200a20,20,0,0,0,20-20V139.6A20,20,0,0,0,236,120V88A20,20,0,0,0,216,68Zm-4,48H140V92h72ZM152,39.17A9.59,9.59,0,0,1,159,36h.35A12.62,12.62,0,0,1,172,49,9.59,9.59,0,0,1,168.83,56c-6.9,6.12-18.25,9.26-27.63,10.76C142.7,57.42,145.84,46.07,152,39.17ZM87.7,39.7A12.8,12.8,0,0,1,96.61,36H97A9.59,9.59,0,0,1,104,39.17c6.12,6.9,9.26,18.24,10.75,27.61C105.45,65.27,94,62.13,87.17,56A9.59,9.59,0,0,1,84,49,12.72,12.72,0,0,1,87.7,39.7ZM44,92h72v24H44Zm16,48h56v56H60Zm80,56V140h56v56Z"/></svg><span>Rewards</span>
+  <a class="lxdock__btn" href="/history" data-dock="history">
+    <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2zM9 8h6M9 12h6"/></svg><span>Bets</span>
   </a>
   <button class="lxdock__btn" type="button" id="lxDockChat" aria-controls="chat" aria-expanded="false">
-    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M120,128a16,16,0,1,1-16-16A16,16,0,0,1,120,128Zm32-16a16,16,0,1,0,16,16A16,16,0,0,0,152,112Zm84,16A108,108,0,0,1,78.77,224.15L46.34,235A20,20,0,0,1,21,209.66l10.81-32.43A108,108,0,1,1,236,128Zm-24,0A84,84,0,1,0,55.27,170.06a12,12,0,0,1,1,9.81l-9.93,29.79,29.79-9.93a12.1,12.1,0,0,1,3.8-.62,12,12,0,0,1,6,1.62A84,84,0,0,0,212,128Z"/></svg><span>Chat</span>
+    <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg><span>Chat</span>
+  </button>
+  <button class="lxdock__btn" type="button" id="lxDockWallet">
+    <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-4a2 2 0 0 0 0 4h4v2a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6"/></svg><span>Wallet</span>
   </button>
 </nav>
 
@@ -1267,7 +1269,7 @@
 <dialog class="modal" id="modal" aria-labelledby="modalTitle">
   <header class="modal__bar">
     <h2 id="modalTitle">—</h2>
-    <button class="modal__x" id="modalClose" aria-label="Close">✕</button>
+    <button class="modal__x" id="modalClose" aria-label="Close"><svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </header>
   <div class="modal__body" id="modalBody"></div>
 </dialog>

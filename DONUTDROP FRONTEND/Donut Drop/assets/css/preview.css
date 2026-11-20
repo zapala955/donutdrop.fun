@@ -573,6 +573,72 @@ body.lx .lxbets__title {
 .lxbrow--empty td { height: 64px; color: var(--lx-mute); text-align: center; }
 .lxbrow__team { margin-left: var(--lx-s2); color: var(--team, var(--lx-mute)); font: 700 .75rem/1 var(--lx-ui); font-style: normal; }
 
+/* ═════════ the phone and tablet frame, 1:1 with the preview ═════════
+   The bar: the donut and a magnifier on the left, the balance with an icon-only Wallet in the
+   middle, the bell and the head on the right. The lobby's search box folds away until the
+   magnifier opens it. The bottom bar: Menu, Lobby, Bets, Chat, Wallet in the same line icons as
+   the menu, the one you are on in gold. */
+@media (max-width: 1023px) {
+  body.lx .lxtop .lxbrand { display: inline-flex; }
+  body.lx .lxtop .lxbrand__word { display: none; }
+  body.lx .lxtop #lxSearchBtn { display: grid; place-items: center; color: var(--lx-text); }
+  body.lx .lxtop #lxSearchBtn .lxi { width: 22px; height: 22px; }
+  body.lx .lxwallet { margin: 0 auto; }
+  body.lx:not([data-find="open"]) .lxlobby .lxsearch { display: none; }
+  body.lx .lxdock { background: var(--lx-0); box-shadow: 0 -1px 0 var(--pv-rule); }
+  body.lx .lxdock__btn { gap: 4px; color: var(--lx-mute); font: 700 .6875rem/1 var(--lx-ui); }
+  body.lx .lxdock__btn .lxi { width: 22px; height: 22px; fill: none; stroke: currentColor; }
+  body.lx .lxdock__btn:is([aria-current="page"], [aria-expanded="true"]) { color: var(--lx-ink); }
+  body.lx .lxdock__btn:is([aria-current="page"], [aria-expanded="true"]) .lxi { fill: none; color: var(--lx-gold); }
+}
+@media (max-width: 639px) {
+  /* Wallet as its icon alone, as on the preview's phone. */
+  body.lx .lxpurse #depositBtn { padding: 0 var(--lx-s3); }
+  body.lx .lxpurse #depositBtn > span { display: none; }
+}
+
+/* ═════════ the Wallet window, as the preview's wallet sheet ═════════
+   "Wallet" in the bar with the close, a rule under it, Deposit and Withdraw as a pill inside the
+   body's margins. The tab says which it is, so the body's own big heading goes. */
+body.lx .modal__x .lxi { width: 20px; height: 20px; }
+body.lx .modal[data-wallet] .modal__bar {
+  justify-content: space-between; padding: 12px 12px 12px 24px; border-bottom: 1px solid var(--pv-rule);
+}
+body.lx .modal[data-wallet] .modal__bar h2 {
+  position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none;
+  color: var(--lx-ink); font: 800 1.125rem/1.2 var(--lx-display); letter-spacing: -.01em;
+}
+body.lx .modal[data-wallet] .lxwtabs { margin: 20px 28px 8px; border-radius: 999px; background: var(--lx-0); }
+body.lx .modal[data-wallet] .lxwtabs button { height: 36px; border-radius: 999px; }
+body.lx .modal[data-wallet] .auth__title { display: none; }
+
+/* ═════════ the chat's head and the rain card, 1:1 with the preview ═════════
+   "Chat" on its own in the head. The rain is one row: the pot over how many joined, the clock and
+   Join. A player a rule is stopping gets the rules and the step under it (chat.js). */
+body.lx .chat .chat__head span::before { content: none; }
+body.lx .chat .chat__head span { font: 800 1rem/1 var(--lx-ui); }
+body.lx .chat .chat__rain:not([hidden]) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "pool clock go" "meta clock go" "rules rules rules" "step step step";
+  align-items: center; gap: 2px 12px;
+  margin: 12px 12px 4px; padding: 12px 12px 12px 14px;
+  border-radius: 10px; background: var(--lx-2); box-shadow: none;
+}
+body.lx .chat .chat__rain:is([data-state="out"], [data-state="locked"], [data-state="ready"], [data-state="claimed"]) { background: var(--lx-2); }
+body.lx .chat .chat__rain[data-state]::before { content: none; display: none; }
+body.lx .chat .chat__rain :is(.rain__top, .rain__title) { display: contents; }
+body.lx .chat .chat__rain :is(.rain__art, .rain__bar) { display: none; }
+body.lx .chat .chat__rain:not([data-state="next"]) .rain__label { display: none; }
+body.lx .chat .chat__rain .rain__pool { grid-area: pool; color: var(--lx-ink); font: 900 1.125rem/1.15 var(--lx-display); letter-spacing: -.01em; }
+body.lx .chat .chat__rain .rain__meta { grid-area: meta; margin: 0; overflow: hidden; color: var(--lx-mute); font: 500 .75rem/1.3 var(--lx-ui); text-overflow: ellipsis; white-space: nowrap; }
+body.lx .chat .chat__rain[data-state="next"] .rain__label { grid-area: pool; color: var(--lx-ink); font: 900 1.125rem/1.15 var(--lx-display); letter-spacing: -.01em; text-transform: none; }
+body.lx .chat .chat__rain[data-state="next"] .rain__pool { grid-area: meta; color: var(--lx-mute); font: 500 .75rem/1.3 var(--lx-ui); }
+body.lx .chat .chat__rain .rain__clock { grid-area: clock; padding: 0; background: none; color: var(--lx-text); font: 800 .875rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .chat .chat__rain .rain__go { grid-area: go; height: 32px; padding: 0 12px; border-radius: 8px; box-shadow: none; font: 700 .8125rem/1 var(--lx-ui); }
+body.lx .chat .chat__rain .rain__go:active:not(:disabled) { transform: none; box-shadow: none; filter: brightness(.94); }
+body.lx .chat .chat__rain .rain__go[data-tone="step"] { grid-area: step; width: 100%; height: 36px; margin-top: 8px; box-shadow: none; }
+body.lx .chat .chat__rain .rain__rules { grid-area: rules; margin-top: 10px; }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

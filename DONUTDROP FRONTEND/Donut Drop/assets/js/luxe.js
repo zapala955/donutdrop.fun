@@ -236,6 +236,9 @@ if (find) {
 }
 
 function focusSearch() {
+  /* Under 1024px the lobby's box is folded away until the magnifier asks for it (the preview's
+   * phone bar); it folds again when it is left empty. */
+  document.body.dataset.find = 'open';
   if (find && find.offsetParent !== null) {
     find.focus();
     find.select();
@@ -255,6 +258,13 @@ function focusSearch() {
   }
 }
 $('#lxSearchBtn')?.addEventListener('click', focusSearch);
+$('#lobbySearch')?.addEventListener('blur', (event) => {
+  if (!event.target.value.trim()) delete document.body.dataset.find;
+});
+/* The bottom bar's Wallet: the Wallet window signed in, the sign-in signed out. */
+$('#lxDockWallet')?.addEventListener('click', () => {
+  $(document.body.dataset.auth === 'in' ? '#depositBtn' : '#loginBtn')?.click();
+});
 document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
     event.preventDefault();

@@ -20,10 +20,7 @@ const between = (text: string, start: string, end: string) => {
 describe('the menu icons', () => {
   it('draws every icon in the rail, the bottom bar and the lobby tabs from one family', async () => {
     const html = await read('index.html');
-    const surfaces = [
-      between(html, '<nav class="lxdock"', '</nav>'),
-      between(html, '<div class="lxtabs__track"', '</div>'),
-    ];
+    const surfaces = [between(html, '<div class="lxtabs__track"', '</div>')];
     let count = 0;
     for (const surface of surfaces) {
       for (const [svg] of surface.matchAll(/<svg[\s\S]*?<\/svg>/g)) {
@@ -31,14 +28,16 @@ describe('the menu icons', () => {
         assert.match(svg, /^<svg viewBox="0 0 256 256" aria-hidden="true"><path d="[^"]+"\/><\/svg>$/, svg.slice(0, 90));
       }
     }
-    // 5 in the bottom bar, 5 lobby tabs (Slots joined them on 2026-11-20).
-    assert.equal(count, 10);
-    /* The sidebar is the redesign preview's (2026-11-20): one line-icon family on a 24 grid, stroked
-     * in the text colour, 16 of them: the burger, Lobby and four categories, six rewards, four links. */
-    const side = between(html, '<aside class="lxside"', '</aside>');
-    const icons = [...side.matchAll(/<svg[\s\S]*?<\/svg>/g)].map(([svg]) => svg);
-    for (const svg of icons) assert.match(svg, /^<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true">/, svg.slice(0, 90));
-    assert.equal(icons.length, 16);
+    // 5 lobby tabs (Slots joined them on 2026-11-20).
+    assert.equal(count, 5);
+    /* The sidebar and the phone's bottom bar are the redesign preview's (2026-11-20): one line-icon
+     * family on a 24 grid, stroked in the text colour. 16 in the sidebar (the burger, Lobby and four
+     * categories, six rewards, four links) and 5 in the bottom bar (Menu, Lobby, Bets, Chat, Wallet). */
+    for (const [surface, expected] of [[between(html, '<aside class="lxside"', '</aside>'), 16], [between(html, '<nav class="lxdock"', '</nav>'), 5]] as const) {
+      const icons = [...surface.matchAll(/<svg[\s\S]*?<\/svg>/g)].map(([svg]) => svg);
+      for (const svg of icons) assert.match(svg, /^<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true">/, svg.slice(0, 90));
+      assert.equal(icons.length, expected);
+    }
   });
 
   it('fills them in the text colour, and gold when they are the page you are on', async () => {

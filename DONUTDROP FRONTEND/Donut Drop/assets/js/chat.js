@@ -488,10 +488,14 @@ function paintRain(board) {
    * window shuts moves the divisor. */
   const meta = el('p', 'rain__meta');
   const divisor = Math.max(1, active.claimants + (you?.claimed ? 0 : 1));
-  meta.textContent = `${active.claimants} in · about ${money(Number(active.poolMinor) / divisor)} each`;
+  // The preview's line under the pot; the share estimate is on hover and in the claim toast.
+  meta.textContent = `${active.claimants} joined the rain`;
+  meta.title = `About ${money(Number(active.poolMinor) / divisor)} each right now`;
   card.appendChild(meta);
 
-  if (!you?.claimed) card.appendChild(rainRules(board, you));
+  /* The card is the preview's one row (pot, clock, Join) for anyone who can join or has; the rules
+   * come out only for a signed-in player one of them is stopping. */
+  if (state.authenticated && !you?.claimed && !you?.eligible) card.appendChild(rainRules(board, you));
 
   const button = el('button', 'rain__go');
   button.type = 'button';
@@ -515,14 +519,14 @@ function paintRain(board) {
   rainCountdown = window.setInterval(paintClock, 1000);
 
   if (!state.authenticated) {
-    button.textContent = 'Log in to claim';
+    button.textContent = 'Join';
     button.addEventListener('click', () => document.querySelector('#loginBtn')?.click());
   } else if (you?.claimed) {
     button.textContent = "You're in";
     button.dataset.tone = 'in';
     button.disabled = true;
   } else if (you?.eligible) {
-    button.textContent = 'Claim';
+    button.textContent = 'Join';
     button.dataset.sfx = 'none';
     button.addEventListener('click', () => void claimRain(button));
   } else {
@@ -555,7 +559,8 @@ function paintNextRain(board) {
   const clockNode = el('span', 'rain__clock mono');
   const { top } = rainHead('Lava Rain', 'Next drop in', clockNode);
   card.appendChild(top);
-  card.appendChild(rainRules(board, board.you));
+  // Only what still stands in the way, and only for a signed-in player it does.
+  if (state.authenticated && missingStep(board, board.you)) card.appendChild(rainRules(board, board.you));
 
   const opensAt = new Date(next.at).getTime();
   const paintClock = () => {
