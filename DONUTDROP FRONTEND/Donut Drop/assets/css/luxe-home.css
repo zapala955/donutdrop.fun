@@ -11,14 +11,15 @@
    haze, a full field of Discord blurple) beside pixel-art game cards. Each offer now shows one
    sprite in an inventory slot, the way the game cards show theirs: the donut, a gift, the Discord
    mark. */
+/* One wide hero on the left, two compact tiles stacked on the right: hierarchy, not three equal
+   boxes (the owner, 2026-11-20). */
 .lxpromos {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s4);
-  margin: 0 0 var(--lx-s6);
+  display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); grid-template-rows: 1fr 1fr;
+  gap: var(--lx-s4); margin: 0 0 var(--lx-s6);
 }
 .lxpromo {
   position: relative;
-  display: grid; grid-template-columns: 132px minmax(0, 1fr);
-  min-height: 146px;
+  display: grid; align-items: center;
   border-radius: var(--lx-r);
   background: var(--lx-2);
   color: var(--lx-text);
@@ -26,6 +27,51 @@
   box-shadow: var(--lx-shade);
   transition: background var(--lx-quick) var(--lx-ease), transform var(--lx-quick) var(--lx-ease);
 }
+
+/* ── the hero ── */
+.lxpromo--lead {
+  grid-row: 1 / 3; grid-template-columns: minmax(0, 1fr) auto; min-height: 212px;
+  background: radial-gradient(135% 130% at 100% 0%, var(--lx-gold-wash), transparent 58%), var(--lx-2);
+  box-shadow: inset 0 0 0 1px var(--lx-3), var(--lx-shade);
+}
+.lxpromo--lead .lxpromo__copy { padding: var(--lx-s6); gap: var(--lx-s3); }
+.lxpromo--lead .lxpromo__h { color: var(--lx-ink); font: 800 clamp(1.6rem, 1rem + 1.6vw, 2.125rem)/1.08 var(--lx-display); letter-spacing: -.01em; }
+.lxpromo--lead .lxpromo__p { font-size: .9375rem; -webkit-line-clamp: 2; max-width: 36ch; }
+.lxpromo--lead .lxpromo__acts { margin-top: var(--lx-s3); }
+.lxpromo--lead .lxpromo__art--lead {
+  position: relative; place-self: center; width: 188px; height: 188px; margin-right: var(--lx-s5);
+  background: none; box-shadow: none; border-radius: 0; overflow: visible;
+}
+.lxpromo--lead .lxpromo__art--lead::before {
+  content: ""; position: absolute; inset: 4%;
+  background: radial-gradient(circle, var(--lx-gold-wash), transparent 66%);
+}
+.lxpromo--lead .lxpromo__art--lead img {
+  position: relative; width: 136px; height: 136px; image-rendering: pixelated;
+  filter: drop-shadow(0 8px 0 rgba(0, 0, 0, .4));
+}
+a.lxpromo--lead:hover .lxpromo__art--lead img, .lxpromo--lead:has(.lxpromo__cover:hover) .lxpromo__art--lead img { transform: translateY(-4px); }
+/* The hero's main action is a real gold button, not a text link — signed in (Explore games, a
+   .btn--go button) or signed out (Log in, #pbanLeadGo). */
+body.lx .lxpromo--lead .lxpromo__go.btn--go,
+body.lx .lxpromo--lead #pbanLeadGo {
+  height: 46px; min-width: 150px; padding: 0 var(--lx-s5); border-radius: var(--lx-r-s);
+  background: var(--lx-gold); color: var(--lx-on-gold); font: 800 .9375rem/46px var(--lx-ui);
+  text-align: center; box-shadow: var(--lx-shade);
+}
+body.lx .lxpromo--lead .lxpromo__go.btn--go::after,
+body.lx .lxpromo--lead #pbanLeadGo::after { content: none; }
+body.lx .lxpromo--lead .lxpromo__go.btn--go:hover,
+body.lx .lxpromo--lead #pbanLeadGo:hover { background: var(--lx-gold-hi); color: var(--lx-on-gold); text-decoration: none; }
+
+/* ── the two compact tiles ── */
+.lxpromo--side { grid-column: 2; grid-template-columns: 84px minmax(0, 1fr); }
+.lxpromo--side:nth-of-type(2) { grid-row: 1; }
+.lxpromo--side:nth-of-type(3) { grid-row: 2; }
+.lxpromo--side .lxpromo__h { font: 800 1.0625rem/1.2 var(--lx-ui); }
+.lxpromo--side .lxpromo__art { width: 56px; height: 56px; margin: var(--lx-s3) 0 var(--lx-s3) var(--lx-s4); }
+.lxpromo--side .lxpromo__art img { width: 40px; height: 40px; image-rendering: auto; filter: none; }
+.lxpromo--side .lxpromo__copy { padding: var(--lx-s3) var(--lx-s4); gap: 6px; }
 a.lxpromo:hover, .lxpromo:has(.lxpromo__cover:hover) { background: var(--lx-3); }
 a.lxpromo:active { transform: translateY(1px); }
 a.lxpromo:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
@@ -305,13 +351,17 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
 
 /* ═════════ narrower ═════════ */
 @media (max-width: 1279px) {
-  .lxpromos { grid-template-columns: repeat(3, minmax(260px, 1fr)); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 2px; }
-  .lxpromos::-webkit-scrollbar { display: none; }
-  .lxpromo { scroll-snap-align: start; }
+  /* Hero full width on top, the two tiles side by side below it. */
+  .lxpromos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto; }
+  .lxpromo--lead { grid-column: 1 / -1; grid-row: 1; min-height: 176px; }
+  .lxpromo--side:nth-of-type(2) { grid-column: 1; grid-row: 2; }
+  .lxpromo--side:nth-of-type(3) { grid-column: 2; grid-row: 2; }
 }
 @media (max-width: 1023px) {
-  .lxpromos { grid-template-columns: repeat(3, minmax(300px, 86%)); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
-  .lxpromo { grid-template-columns: 120px minmax(0, 1fr); min-height: 120px; }
+  .lxpromo--lead .lxpromo__art--lead { width: 150px; height: 150px; }
+  .lxpromo--lead .lxpromo__art--lead img { width: 104px; height: 104px; }
+  .lxpromo--side .lxpromo__art { margin: var(--lx-s2) 0 var(--lx-s2) var(--lx-s3); }
+  .lxpromo__copy { padding: var(--lx-s3) var(--lx-s4); }
   .lxpromo__art { margin: var(--lx-s2) 0 var(--lx-s2) var(--lx-s2); }
   .lxpromo__copy { padding: var(--lx-s3) var(--lx-s4); }
   .lxtag { font-size: .5625rem; letter-spacing: .08em; }
@@ -329,9 +379,16 @@ body.lx .lxdrops .drops__empty { grid-column: 1 / -1; justify-content: center; c
   .lxkbd { display: none; }
 
   /* the offers: a strip of short cards, the next one peeking in */
-  .lxpromos { grid-template-columns: repeat(3, 84%); gap: var(--lx-s2); margin-bottom: var(--lx-s4); }
-  .lxpromo { grid-template-columns: 84px minmax(0, 1fr); min-height: 96px; }
-  .lxpromo__art img { width: 48px; height: 48px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .45)); }
+  /* Phone: hero on top, the two tiles stacked under it, all full width. */
+  .lxpromos { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: var(--lx-s2); margin-bottom: var(--lx-s4); }
+  .lxpromo--lead { grid-column: 1; grid-row: 1; grid-template-columns: minmax(0, 1fr) auto; min-height: 150px; }
+  .lxpromo--side:nth-of-type(2) { grid-column: 1; grid-row: 2; }
+  .lxpromo--side:nth-of-type(3) { grid-column: 1; grid-row: 3; }
+  .lxpromo--lead .lxpromo__copy { padding: var(--lx-s4); }
+  .lxpromo--lead .lxpromo__art--lead { width: 120px; height: 120px; margin-right: var(--lx-s3); }
+  .lxpromo--lead .lxpromo__art--lead img { width: 88px; height: 88px; }
+  .lxpromo--side { grid-column: 1; grid-row: auto; grid-template-columns: 72px minmax(0, 1fr); min-height: 88px; }
+  .lxpromo--side .lxpromo__art img { width: 40px; height: 40px; }
   .lxpromo__copy { gap: 3px; padding: var(--lx-s2) var(--lx-s3); }
   .lxtag { padding: 3px 5px 2px; font-size: .5625rem; }
   .lxpromo__h { font-size: .9375rem; line-height: 1.2; }
