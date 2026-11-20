@@ -25,7 +25,8 @@ describe('the vault never introduces itself', () => {
     ]) {
       const source = await read(file);
       // A node of the pool or, without one, the teller: both public by design (lib/bot-nodes.ts).
-      assert.match(source, /pickReceivingBot\(\w+, config\)/, `${file} does not ask for a public bot`);
+      // The player's id, where there is one, picks their group's nodes (lib/bot-nodes.ts).
+      assert.match(source, /pickReceivingBot\(\w+, config(, [^)]+)?\)/, `${file} does not ask for a public bot`);
       /* And none of them may still be hand-rolling the "any online bot" query the role lookup
        * replaced, because that query cannot tell the two accounts apart. */
       assert.doesNotMatch(
@@ -57,7 +58,7 @@ describe('the public account a player is sent to', () => {
   it('is a node of the pool, or the teller, and never the vault', async () => {
     const nodes = await read('services/api-gateway/src/lib/bot-nodes.ts');
     const pick = nodes.slice(nodes.indexOf('export async function pickReceivingBot('));
-    assert.match(pick, /chooseReceivingNode\(await readPool\(client, config\)\)/);
+    assert.match(pick, /chooseReceivingNode\(groupPool\(await readPool\(client, config\), group\)\)/);
     assert.match(pick, /return pickBot\(client, config, 'teller'\);/);
     const pool = nodes.slice(nodes.indexOf('export async function readPool('));
     assert.match(pool, /b\.role = 'node' AND b\.status <> 'quarantined'/);

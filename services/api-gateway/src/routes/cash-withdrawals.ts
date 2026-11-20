@@ -10,7 +10,15 @@ import {
   reasonText,
   rulesFrom,
 } from '../lib/anti-drain.js';
-import { choosePayingNode, lockPool, pickReceivingBot, readPool } from '../lib/bot-nodes.js';
+import {
+  EVERYONE,
+  choosePayingNode,
+  groupPool,
+  lockPool,
+  pickReceivingBot,
+  playerBotGroup,
+  readPool,
+} from '../lib/bot-nodes.js';
 import { findVaultBot } from '../lib/bots.js';
 import { payoutAfterTax } from '../lib/pay-tax.js';
 import type { Database, DbClient } from '../lib/db.js';
@@ -291,7 +299,12 @@ async function routeThroughNodePool(
 
   // Read again under the lock, so two withdrawals cannot both be given the same node's money.
   await lockPool(client);
-  const plan = choosePayingNode(await readPool(client, config), amount);
+  // Paid by the player's own group of nodes (lib/bot-nodes.ts): a highroller by the highroller bots.
+  const owner = await client.query<{ user_id: string }>('SELECT user_id FROM cash_withdrawals WHERE id = $1', [
+    withdrawal.id,
+  ]);
+  const group = owner.rows[0] ? await playerBotGroup(client, config, owner.rows[0].user_id) : EVERYONE;
+  const plan = choosePayingNode(groupPool(await readPool(client, config), group), amount);
   if (!plan) return false;
 
   const funded = plan.source !== null && plan.shortfallMinor > 0n;

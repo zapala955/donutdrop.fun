@@ -483,7 +483,7 @@ export async function registerEmailRoutes(app: FastifyInstance, db: Database, co
       const body = parseWith(relinkStartSchema, request.body);
       const userId = realAccountId(request);
       // A code is spent below; make sure a bot is there to be paid before spending it.
-      if (!(await pickReceivingBot(db, config))) {
+      if (!(await pickReceivingBot(db, config, userId))) {
         throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
       }
 

@@ -34,7 +34,23 @@ import type { DbClient } from './db.js';
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * A node is a bot with role 'node' (migration 086). With none, every function here comes back
  * empty and the teller/vault path runs exactly as before.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * A POOL PER GROUP OF PLAYERS
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * Every node serves one group (bot_accounts.player_group, migration 103): 'everyone' unless an
+ * admin moves it, 'highroller' for the big players, or any other name an admin gives. A player's
+ * deposits go to, and withdrawals come from, the nodes of their own group (playerBotGroup), and a
+ * group is balanced only within itself. A group with no node online sends its players to
+ * 'everyone', so a group can never leave somebody without a bot.
  */
+
+/** The group every node and every player is in until an admin or the wager rule says otherwise. */
+export const EVERYONE = 'everyone';
+/** The group a player reaches by wagering highrollerWagerMinor. */
+export const HIGHROLLER = 'highroller';
+/** A group's name: lower-case words joined by hyphens, as the schema checks. */
+export const GROUP_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** A node in the pool, as the routing sees it. */
 export interface PoolNode {
@@ -46,6 +62,8 @@ export interface PoolNode {
   readonly trackedMinor: bigint;
   /** What it is already due to pay: payouts and transfers queued on it or in flight. */
   readonly owedMinor: bigint;
+  /** Which players it serves (migration 103). */
+  readonly group: string;
 }
 
 /** What a node holds that nothing has a claim on yet. Can be negative while a payout is queued. */
@@ -172,8 +190,9 @@ export async function readPool(client: DbClient, config: AppConfig): Promise<Poo
     tracked: string;
     online: boolean;
     owed: string;
+    player_group: string;
   }>(
-    `SELECT b.id, b.username, b.server_host, b.tracked_balance_minor::text AS tracked,
+    `SELECT b.id, b.username, b.server_host, b.tracked_balance_minor::text AS tracked, b.player_group,
             (b.status = 'online' AND b.last_heartbeat_at > now() - interval '45 seconds') AS online,
             COALESCE((SELECT SUM((j.payload->>'amountMinor')::numeric)
                         FROM bot_jobs j
@@ -203,7 +222,41 @@ export async function readPool(client: DbClient, config: AppConfig): Promise<Poo
       online: row.online,
       trackedMinor: BigInt(row.tracked),
       owedMinor: BigInt(row.owed),
+      group: row.player_group,
     }));
+}
+
+/**
+ * The nodes that serve `group`: its own while any of them is online, otherwise 'everyone''s. The
+ * fallback is what keeps a group from stranding its players when its nodes are all offline.
+ */
+export function groupPool(nodes: readonly PoolNode[], group: string): PoolNode[] {
+  const own = nodes.filter((node) => node.group === group);
+  if (group === EVERYONE || own.some((node) => node.online)) return own;
+  return nodes.filter((node) => node.group === EVERYONE);
+}
+
+/**
+ * Which group of bots a player is served by: an admin's choice for them if there is one, else
+ * 'highroller' once they have wagered highrollerWagerMinor (0 turns that off), else 'everyone'.
+ */
+export async function playerBotGroup(
+  client: DbClient,
+  config: AppConfig,
+  userId: string,
+): Promise<string> {
+  const result = await client.query<{ bot_group: string | null; wagered: string }>(
+    `SELECT u.bot_group, COALESCE(t.wagered_minor, 0)::text AS wagered
+       FROM users u LEFT JOIN user_wager_totals t ON t.user_id = u.id
+      WHERE u.id = $1`,
+    [userId],
+  );
+  const row = result.rows[0];
+  if (row?.bot_group) return row.bot_group;
+  if (row && config.highrollerWagerMinor > 0n && BigInt(row.wagered) >= config.highrollerWagerMinor) {
+    return HIGHROLLER;
+  }
+  return EVERYONE;
 }
 
 /**
@@ -219,7 +272,8 @@ export async function lockPool(client: DbClient): Promise<void> {
 }
 
 /**
- * The account a player is told to pay: the emptiest online node, or the teller without a pool.
+ * The account a player is told to pay: the emptiest online node of their group, or the teller
+ * without a pool. Without a player (a login payment, before there is an account) it is 'everyone'.
  *
  * Only ever a node or a teller, both of which are public by design. The vault's name cannot come
  * out of here.
@@ -227,8 +281,10 @@ export async function lockPool(client: DbClient): Promise<void> {
 export async function pickReceivingBot(
   client: DbClient,
   config: AppConfig,
+  userId: string | null = null,
 ): Promise<SelectedBot | null> {
-  const node = chooseReceivingNode(await readPool(client, config));
+  const group = userId ? await playerBotGroup(client, config, userId) : EVERYONE;
+  const node = chooseReceivingNode(groupPool(await readPool(client, config), group));
   if (node) return { id: node.id, username: node.username, trackedBalanceMinor: node.trackedMinor };
   return pickBot(client, config, 'teller');
 }
@@ -255,6 +311,7 @@ export async function describePool(client: DbClient, config: AppConfig) {
     nodes: nodes.map((node) => ({
       id: node.id,
       username: node.username,
+      group: node.group,
       online: node.online,
       trackedMinor: node.trackedMinor.toString(),
       owedMinor: node.owedMinor.toString(),
@@ -278,19 +335,21 @@ export interface SkewWatch {
 }
 
 /**
- * Queues one node-to-node transfer if the pool has been heavily skewed long enough.
+ * Queues one node-to-node transfer if a group's pool has been heavily skewed long enough.
  *
  * Returns what it queued, or null. Holds the pool lock, so a withdrawal being routed at the same
- * moment sees this transfer as owed by the sender.
+ * moment sees this transfer as owed by the sender. One group at a time, with its own watch: money
+ * never moves from one group's nodes to another's.
  */
 export async function rebalanceNodes(
   client: DbClient,
   config: AppConfig,
   watch: SkewWatch,
   now: number = Date.now(),
+  group: string = EVERYONE,
 ): Promise<RebalancePlan | null> {
   await lockPool(client);
-  const pool = await readPool(client, config);
+  const pool = (await readPool(client, config)).filter((node) => node.group === group);
   const plan = planRebalance(pool, {
     skewBps: config.nodeRebalanceSkewBps,
     minMinor: config.nodeRebalanceMinMinor,

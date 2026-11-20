@@ -924,6 +924,10 @@ const environmentSchema = z
      * (lib/wager-requirements.ts, RAIN MONEY): rains can be made big without paying every alt that
      * claims one, and only the rain money is held. 0 lets a share leave at once. Live setting. */
     RAIN_WAGER_MULTIPLIER: z.coerce.number().int().min(0).max(100).default(20),
+    /* A player who has wagered this much in all is served by the 'highroller' group of bots, if any
+     * of them is online (lib/bot-nodes.ts). 0 turns the rule off; an admin can still put a player
+     * in any group by hand. Live setting. */
+    HIGHROLLER_WAGER_MINOR: nonNegativeBigintString.default('10000000000'),
     /* A player who joins on an invite code gets a bigger signup bonus instead of the ordinary one,
      * credited when the account is created, with its own wager multiplier. 0 turns it off, and a
      * referred player then gets the ordinary bonus like anybody else. Live settings. */
@@ -1880,6 +1884,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     depositWagerMultiplier: env.DEPOSIT_WAGER_MULTIPLIER,
     questRewardWagerMultiplier: env.QUEST_REWARD_WAGER_MULTIPLIER,
     rainWagerMultiplier: env.RAIN_WAGER_MULTIPLIER,
+    highrollerWagerMinor: BigInt(env.HIGHROLLER_WAGER_MINOR),
     referralSignupBonusMinor: BigInt(env.REFERRAL_SIGNUP_BONUS_MINOR),
     referralSignupBonusWagerMultiplier: env.REFERRAL_SIGNUP_BONUS_WAGER_MULTIPLIER,
     referralBonusWagerMultiplier: env.REFERRAL_BONUS_WAGER_MULTIPLIER,

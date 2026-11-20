@@ -19,13 +19,13 @@ export async function registerCashDepositRoutes(
       preHandler: guards.authenticate,
       config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
     },
-    async () => {
-      /* A public account, and only ever a public one: the emptiest node of the pool, or the
+    async (request) => {
+      /* A public account, and only ever a public one: the emptiest node of the player's group, or the
        * teller without one. This endpoint's whole output is a username a player is told to send
        * money to, so it is the one place the vault's name must never be able to reach. Asking by
        * role rather than by "whichever is online" is what guarantees that, rather than the
        * ordering of a query. */
-      const bot = await pickReceivingBot(db, config);
+      const bot = await pickReceivingBot(db, config, request.authUser?.id ?? null);
       if (!bot) throw new AppError(503, 'BOT_OFFLINE', 'No payment bot is currently online');
 
       return {

@@ -18,13 +18,14 @@ const M = 1_000_000n;
 const node = (
   id: string,
   tracked: bigint,
-  options: { owed?: bigint; online?: boolean } = {},
+  options: { owed?: bigint; online?: boolean; group?: string } = {},
 ): PoolNode => ({
   id,
   username: `Node${id}`,
   online: options.online ?? true,
   trackedMinor: tracked,
   owedMinor: options.owed ?? 0n,
+  group: options.group ?? 'everyone',
 });
 const rules = { skewBps: 5000, minMinor: 10n * M };
 
@@ -166,7 +167,8 @@ describe('node pool: wiring', () => {
   it('checks every node against its /bal and rebalances from the sweeper', async () => {
     const sweeper = await read('../src/lib/teller-sweeper.ts');
     assert.match(sweeper, /for \(const node of pool\) \{/);
-    assert.match(sweeper, /rebalanceNodes\(client, config, skew\)/);
+    // Each group of nodes is balanced on its own, with its own watch.
+    assert.match(sweeper, /rebalanceNodes\(client, config, skew, Date\.now\(\), group\)/);
   });
 
   it('keeps the rebalance rules live in the admin panel', () => {

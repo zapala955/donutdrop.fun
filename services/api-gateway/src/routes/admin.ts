@@ -16,7 +16,7 @@ import { AppError, conflict } from '../lib/errors.js';
 import { publishLiveSoon } from '../lib/live-events.js';
 import { noticeSoon } from '../lib/notifications.js';
 import { parseWith, requireIdempotencyKey } from '../lib/validation.js';
-import { describePool } from '../lib/bot-nodes.js';
+import { describePool, playerBotGroup } from '../lib/bot-nodes.js';
 import { recordBotTransfer } from '../lib/bots.js';
 import {
   PROXY_SUMMARY_COLUMNS,
@@ -95,6 +95,11 @@ const botManualPlaySchema = z
   .strict();
 /* Teller, vault or node. The teller is the account players see; the vault holds the float behind
  * it; a node is both at once, one of a pool sharing the float equally (lib/bot-nodes.ts). */
+/* Which players a pool node serves, or which bots a player is served by (lib/bot-nodes.ts). A
+ * player's group may be null: decided from what they have wagered. */
+const groupName = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lower-case words joined by hyphens').max(24);
+const botGroupSchema = z.object({ group: groupName, reason: safeText(3, 256) }).strict();
+const userBotGroupSchema = z.object({ group: groupName.nullable(), reason: safeText(3, 256) }).strict();
 const botRoleSchema = z
   .object({
     role: z.enum(['teller', 'vault', 'node']),
@@ -238,7 +243,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
               b.last_snapshot_at, b.reconciliation_status, b.transfer_capable,
               b.role, b.tracked_balance_minor,
               b.observed_balance_low_minor, b.observed_balance_step_minor,
-              b.observed_balance_display, b.observed_balance_at, b.parked_at,
+              b.observed_balance_display, b.observed_balance_at, b.parked_at, b.player_group,
               ${PROXY_SUMMARY_COLUMNS},
               (SELECT count(*)::integer FROM bot_jobs j
                 WHERE j.bot_id = b.id AND j.status IN ('queued', 'leased', 'dead_letter')) AS open_jobs
@@ -422,6 +427,61 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
    * payout it is part-way through, logs out and stays out (migration 083). No job is handed to it
    * meanwhile and players are not sent to it to deposit. On: it logs back in within half a minute,
    * so the owner should be out of the account by then or DonutSMP calls it "already online". */
+  /* Which players a node serves. 'everyone' is the default pool; 'highroller' is where players
+   * who have wagered highrollerWagerMinor are sent; any other name is a pool an admin fills by hand.
+   * A group with no node online sends its players to 'everyone', so this cannot strand anybody. */
+  app.patch('/v1/admin/bots/:id/group', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(botGroupSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const before = await client.query<{ username: string; player_group: string }>(
+        'SELECT username, player_group FROM bot_accounts WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      const bot = before.rows[0];
+      if (!bot) throw new AppError(404, 'BOT_NOT_FOUND', 'Bot was not found');
+      await client.query('UPDATE bot_accounts SET player_group = $2, updated_at = now() WHERE id = $1', [
+        params.id,
+        body.group,
+      ]);
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'bot.group',
+        targetType: 'bot_account',
+        targetId: params.id,
+        details: { username: bot.username, from: bot.player_group, to: body.group, reason: body.reason },
+      });
+      return { bot: { id: params.id, username: bot.username, playerGroup: body.group } };
+    });
+  });
+
+  /* Which bots one player is served by. null hands the choice back to the wager rule. */
+  app.patch('/v1/admin/users/:id/bot-group', { preHandler: guards.requireAdmin }, async (request) => {
+    const params = parseWith(idSchema, request.params);
+    const body = parseWith(userBotGroupSchema, request.body);
+    const actor = requireActor(request.authUser?.id);
+    return db.transaction(async (client) => {
+      const before = await client.query<{ bot_group: string | null }>(
+        'SELECT bot_group FROM users WHERE id = $1 FOR UPDATE',
+        [params.id],
+      );
+      if (!before.rows[0]) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found');
+      await client.query('UPDATE users SET bot_group = $2, updated_at = now() WHERE id = $1', [
+        params.id,
+        body.group,
+      ]);
+      await appendAudit(client, config, {
+        actorUserId: actor,
+        action: 'user.bot_group',
+        targetType: 'user',
+        targetId: params.id,
+        details: { from: before.rows[0].bot_group, to: body.group, reason: body.reason },
+      });
+      return { botGroup: body.group, effective: await playerBotGroup(client, config, params.id) };
+    });
+  });
+
   app.patch(
     '/v1/admin/bots/:id/manual-play',
     { preHandler: guards.requireAdmin },
@@ -668,7 +728,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
     const [user, wallet, ledger, sessions, turnover, external, kindRows] = await Promise.all([
       db.query<AdminEntityRow>(
         `SELECT id, minecraft_identity, minecraft_username, normalized_username, role, status,
-                terms_accepted_at, created_at, updated_at, last_login_at
+                terms_accepted_at, created_at, updated_at, last_login_at, bot_group
            FROM users WHERE id = $1`,
         [params.id],
       ),

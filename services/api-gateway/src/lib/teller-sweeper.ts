@@ -50,7 +50,8 @@ export function startTellerSweeper(
   log: FastifyBaseLogger,
 ): () => void {
   let running = false;
-  const skew: SkewWatch = { since: null };
+  // One watch per group of nodes: each group is balanced on its own (lib/bot-nodes.ts).
+  const skews = new Map<string, SkewWatch>();
 
   /* One account's minute: its /bal against the books, an unanswered payout decided, the books
    * corrected, and -- for the teller only -- everything above its float swept to the vault. Run
@@ -135,8 +136,11 @@ export function startTellerSweeper(
     }
     /* After every node's books are corrected, so the shares are measured against /bal. See
      * lib/bot-nodes.ts for when a skewed pool moves money and why that is rare. */
-    if (pool.length > 1) {
-      const queued = await db.transaction((client) => rebalanceNodes(client, config, skew));
+    for (const group of new Set(pool.map((node) => node.group))) {
+      if (pool.filter((node) => node.group === group).length < 2) continue;
+      if (!skews.has(group)) skews.set(group, { since: null });
+      const skew = skews.get(group)!;
+      const queued = await db.transaction((client) => rebalanceNodes(client, config, skew, Date.now(), group));
       if (queued) {
         log.info(
           {

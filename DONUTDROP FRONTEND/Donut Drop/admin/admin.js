@@ -1567,6 +1567,25 @@ function renderPlayerActions(user, data) {
     );
   });
 
+  lever(`Bots: ${user.bot_group ?? 'by wager'}`, null, async () => {
+    const values = await editRecord({
+      title: `Which bots serve ${user.minecraft_username}`,
+      description:
+        "A group name (highroller, or one of your own), or empty to decide it from what they have " +
+        'wagered. Their deposits go to, and withdrawals come from, the bots of that group.',
+      fields: [{ name: 'group', label: 'Group', value: user.bot_group ?? '', required: false, wide: true }],
+      submitLabel: 'Next',
+    });
+    if (!values) return false;
+    const group = values.group.trim().toLowerCase() || null;
+    const reason = await confirmAction(
+      group ? `Serve ${user.minecraft_username} from the '${group}' bots?` : `Decide ${user.minecraft_username}'s bots by wager again?`,
+    );
+    if (!reason) return false;
+    const result = await api.patch(`/v1/admin/users/${id}/bot-group`, { group, reason });
+    toast(`Served by the '${result.effective}' bots.`, 'ok');
+  });
+
   lever('Refund', null, async () => {
     const answer = await confirmAmount(
       `Return ${user.minecraft_username}'s own money (a payout that never arrived, a round a bug ` +
@@ -1821,6 +1840,13 @@ async function loadBots() {
       roleButton.title = 'Teller, vault, or a node of the pool';
       roleButton.addEventListener('click', () => void changeBotRole(bot));
 
+      const groupButton = document.createElement('button');
+      groupButton.type = 'button';
+      groupButton.className = 'btn';
+      groupButton.textContent = `Players: ${bot.player_group ?? 'everyone'}`;
+      groupButton.title = 'Which players this bot serves: everyone, highroller, or a group of your own';
+      groupButton.addEventListener('click', () => void changeBotGroup(bot));
+
       const reconcile = document.createElement('button');
       reconcile.type = 'button';
       reconcile.className = 'btn';
@@ -1884,7 +1910,7 @@ async function loadBots() {
         }
       });
 
-      actions.append(manual, rejoin, pay, roleButton, reconcile, proxyButton);
+      actions.append(manual, rejoin, pay, roleButton, groupButton, reconcile, proxyButton);
 
       const quarantining = bot.status !== 'quarantined';
       const button = document.createElement('button');
@@ -2170,6 +2196,33 @@ const BOT_ROLES = {
       'and paid by whichever holds the most.',
   },
 };
+
+/* Which players a bot serves. A node only: deposits and payouts go to the nodes of the player's own
+ * group, and a group with no node online sends its players to 'everyone'. */
+async function changeBotGroup(bot) {
+  const values = await editRecord({
+    title: `Players served by ${bot.username}`,
+    description:
+      "'everyone' is the normal pool. 'highroller' gets every player who has wagered the highroller " +
+      'amount (System config > Limits). Any other name is a group you fill by hand from a player\'s page.',
+    fields: [
+      { name: 'group', label: 'Group', value: bot.player_group ?? 'everyone', wide: true },
+    ],
+    submitLabel: 'Next',
+  });
+  const group = values?.group?.trim().toLowerCase();
+  if (!group || group === bot.player_group) return;
+  const reason = await confirmAction(`Send ${bot.username} to serve the '${group}' players?`);
+  if (!reason) return;
+  try {
+    await api.patch(`/v1/admin/bots/${bot.id}/group`, { group, reason });
+    toast(`${bot.username} now serves '${group}'.`, 'ok');
+  } catch (error) {
+    toast(`${error.code}: ${error.message}`, 'bad');
+    return;
+  }
+  await loadBots();
+}
 
 async function changeBotRole(bot) {
   const values = await editRecord({

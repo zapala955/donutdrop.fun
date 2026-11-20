@@ -240,6 +240,13 @@ export const runtimeSettingDefinitions = {
     min: 0n,
     max: 100n,
   },
+  highrollerWagerMinor: {
+    kind: 'bigint',
+    group: 'limits',
+    label: 'Wagered in all before a player gets the highroller bots (0 = off)',
+    min: 0n,
+    max: BIGINT_MAX,
+  },
   rainWagerMultiplier: {
     kind: 'integer',
     group: 'rain',
