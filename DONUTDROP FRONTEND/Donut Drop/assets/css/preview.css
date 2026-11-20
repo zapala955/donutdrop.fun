@@ -1,0 +1,203 @@
+/* preview.css — the redesign preview (donutluxe.com/preview) on the live site, 2026-11-20.
+ *
+ * The owner: "i want the preview design to be on the main site". The preview is a separate
+ * prototype; this brings its look over the live markup and scripts, which keep doing the work.
+ * Loaded after the luxe skins (luxe, luxe-home, retro, dopamine, chat) so it wins without
+ * rewriting them, and before prefs.css so a player's theme keeps the last word. Spends luxe.css's
+ * tokens; the only raw colours are the three below.
+ *
+ * This pass: the lobby (the offers on Minecraft scenery, each game card on its own block, "Jump
+ * back in", section heads) and the top bar's search field. */
+:root {
+  --pv-well: rgba(8, 6, 5, .95);      /* the dark side of an offer, under its words */
+  --pv-shade: rgba(8, 6, 5, .55);     /* a sprite's or a name's hard shadow, one step straight down */
+  --pv-win: #40c786;                  /* a round that paid; the live dot */
+}
+
+/* ═════════ section heads ═════════ */
+.lxband__head { display: flex; align-items: center; gap: var(--lx-s3); min-width: 0; margin: 0 0 var(--lx-s3); }
+.lxband__head h2 { color: var(--lx-ink); font: 800 1.125rem/1.2 var(--lx-display); letter-spacing: -.01em; }
+.lxband__link {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  color: var(--lx-text); font: 700 .875rem/1 var(--lx-ui);
+}
+.lxband__link::after {
+  content: ""; width: 6px; height: 6px;
+  border: solid currentColor; border-width: 2px 2px 0 0; transform: rotate(45deg);
+}
+.lxband__link:hover { color: var(--lx-ink); }
+
+/* ═════════ the top bar's search field (wide screens) ═════════ */
+.lxfind {
+  display: none; flex: 0 1 280px; min-width: 160px; align-items: center; gap: var(--lx-s2);
+  height: 40px; padding: 0 6px 0 var(--lx-s3);
+  border-radius: 999px; background: var(--lx-2);
+  box-shadow: inset 0 0 0 1px var(--lx-3);
+  cursor: text;
+  transition: box-shadow var(--lx-quick) var(--lx-ease);
+}
+.lxfind:hover { box-shadow: inset 0 0 0 1px var(--lx-5); }
+.lxfind:focus-within { box-shadow: inset 0 0 0 2px var(--lx-gold); }
+.lxfind > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--lx-mute); stroke-width: 2; stroke-linecap: round; }
+.lxfind input {
+  flex: 1; min-width: 0; height: 100%;
+  border: 0; outline: 0; background: none;
+  color: var(--lx-ink); font: 500 .875rem/1 var(--lx-ui);
+}
+.lxfind input::placeholder { color: var(--lx-mute); }
+.lxfind input::-webkit-search-cancel-button { filter: grayscale(1) brightness(1.6); }
+.lxfind .lxkbd { flex: none; }
+.lxfind:focus-within .lxkbd { display: none; }
+@media (min-width: 1024px) {
+  .lxfind { display: flex; }
+  /* The field is the search here; the lobby's own box and the bar's magnifier step aside. */
+  body.lx .lxlobby .lxsearch, body.lx #lxSearchBtn { display: none; }
+  body.lx .lxtabs { margin-top: 0; }
+}
+
+/* ═════════ the three offers, on Minecraft scenery ═════════
+   The words on the dark left of the picture, the sprite on its right, the action a button at the
+   foot. The scenes are the title-screen panoramas the old site's background used. */
+body.lx .lxpromos { gap: var(--lx-s3); margin-bottom: var(--lx-s8); }
+body.lx .lxpromo {
+  --pv-scene: url("../img/bg/panorama_0.jpg");
+  --pv-scene-at: center;
+  display: block;
+  min-height: 228px; padding: var(--lx-s5);
+  background-color: var(--lx-2);
+  background-image: linear-gradient(90deg, var(--pv-well) 0%, var(--pv-well) 38%, rgba(8, 6, 5, .25) 100%), var(--pv-scene);
+  background-size: cover; background-position: var(--pv-scene-at);
+  image-rendering: pixelated;
+  box-shadow: none;
+}
+body.lx .lxpromo:nth-child(2) { --pv-scene: url("../img/bg/panorama_1.jpg"); }
+body.lx .lxpromo:nth-child(3) { --pv-scene: url("../img/bg/panorama_1.jpg"); --pv-scene-at: right; }
+/* luxe-home.css swaps the card's background for a flat one under the pointer; here the picture
+   stays and only brightens. */
+body.lx a.lxpromo:hover, body.lx .lxpromo:has(.lxpromo__cover:hover) { background-color: var(--lx-3); filter: brightness(1.08); }
+body.lx .lxpromo__art {
+  position: absolute; right: var(--lx-s5); top: 50%;
+  margin: 0; aspect-ratio: auto;
+  background: none; box-shadow: none; overflow: visible;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+body.lx .lxpromo__art img { width: 88px; height: 88px; filter: drop-shadow(0 6px 0 var(--pv-shade)); }
+body.lx .lxpromo__copy {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--lx-s1);
+  height: 100%; min-height: calc(228px - 2 * var(--lx-s5)); max-width: 62%; padding: 0;
+}
+body.lx .lxpromo .lxtag {
+  padding: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--lx-gold); font: 800 .6875rem/1.2 var(--lx-ui); letter-spacing: .1em;
+}
+body.lx .lxpromo__h { margin-top: 2px; color: var(--lx-ink); font: 900 1.375rem/1.1 var(--lx-display); letter-spacing: -.01em; }
+body.lx .lxpromo__p { color: var(--lx-text); font: 500 .75rem/1.5 var(--lx-ui); -webkit-line-clamp: 4; }
+body.lx .lxpromo__acts { margin-top: auto; padding-top: var(--lx-s3); }
+/* The action as a button. The first offer's main one is gold, the way it was the gold link. */
+body.lx .lxpromos .lxpromo__go,
+body.lx .lxpromos .lxpromo__go:is(.btn--go, .pban__more) {
+  display: inline-flex; align-items: center; height: 34px; padding: 0 var(--lx-s3);
+  border-radius: 6px; background: var(--lx-4); color: var(--lx-ink);
+  font: 700 .8125rem/1 var(--lx-ui); text-decoration: none;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .5);
+}
+body.lx .lxpromos .lxpromo__go::after { content: none; }
+body.lx .lxpromos .lxpromo__go:hover { background: var(--lx-5); color: var(--lx-ink); text-decoration: none; }
+body.lx .lxpromos :is(#pbanLeadGo, .lxpromo__go.btn--go) { background: var(--lx-gold); color: var(--lx-on-gold); box-shadow: 0 2px 0 var(--lx-gold-lo); }
+body.lx .lxpromos :is(#pbanLeadGo, .lxpromo__go.btn--go):hover { background: var(--lx-gold-hi); color: var(--lx-on-gold); }
+body.lx .lxpromos .lxpromo__go:active { transform: translateY(2px); box-shadow: none; }
+
+/* ═════════ "Jump back in" ═════════ */
+.lxback { margin: 0 0 var(--lx-s8); }
+.lxback[hidden] { display: none; }
+.lxback__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s3); }
+.lxback__g {
+  display: flex; align-items: center; gap: var(--lx-s3); min-width: 0;
+  padding: var(--lx-s3) var(--lx-s4);
+  border-radius: var(--lx-r); background: var(--lx-2); color: var(--lx-text);
+  transition: background var(--lx-quick) var(--lx-ease);
+}
+.lxback__g:hover { background: var(--lx-3); }
+.lxback__g:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.lxback__g img { flex: none; width: 40px; height: 40px; image-rendering: pixelated; filter: drop-shadow(0 3px 0 var(--pv-shade)); }
+.lxback__copy { display: grid; gap: 2px; min-width: 0; }
+.lxback__copy b { overflow: hidden; color: var(--lx-ink); font: 700 .9375rem/1.2 var(--lx-ui); text-overflow: ellipsis; white-space: nowrap; }
+.lxback__copy small { color: var(--lx-mute); font: 500 .75rem/1.2 var(--lx-ui); }
+.lxback__res { flex: none; margin-left: auto; color: var(--lx-text); font: 800 .9375rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
+.lxback__res.is-up { color: var(--pv-win); }
+
+/* ═════════ the game cards, each on its own block ═════════
+   The card is the game's Minecraft block, darkened towards the foot so the name reads on it; the
+   sprite stands on it with its hard shadow. */
+body.lx .lxcard {
+  --pv-block: linear-gradient(var(--lx-3), var(--lx-3));
+  background-color: var(--lx-3);
+  background-image: linear-gradient(180deg, rgba(8, 6, 5, .28) 0%, rgba(8, 6, 5, .48) 52%, rgba(8, 6, 5, .94) 100%), var(--pv-block);
+  background-size: 100% 100%, cover; background-position: center;
+  image-rendering: pixelated;
+  box-shadow: none;
+}
+body.lx .lxcard:hover { box-shadow: none; transform: translateY(-4px); }
+body.lx .lxcard__art.retroart { inset: 9% 0 auto; filter: drop-shadow(0 6px 0 var(--pv-shade)); }
+body.lx .lxcard__txt { bottom: 7%; gap: 8px; }
+body.lx .lxcard__name {
+  color: var(--lx-ink);
+  font: 900 min(12.5cqi, 1.5rem)/1.04 var(--lx-display);
+  letter-spacing: .005em;
+  text-shadow: .1em .1em 0 var(--pv-shade);
+}
+body.lx .lxcard__brand { color: var(--lx-text); opacity: .8; font: 800 min(5.6cqi, .6875rem)/1 var(--lx-ui); font-stretch: 100%; letter-spacing: .12em; }
+body.lx .lxlive i { background: var(--pv-win); }
+body.lx .lxlive b { color: var(--lx-text); }
+
+body.lx .lxcard[data-game="crash"]     { --pv-block: url("../img/block/netherrack.png"); }
+body.lx .lxcard[data-game="mines"]     { --pv-block: url("../img/block/deepslate_diamond_ore.png"); }
+body.lx .lxcard[data-game="tower"]     { --pv-block: url("../img/block/stone_bricks.png"); }
+body.lx .lxcard[data-game="chicken"]   { --pv-block: url("../img/block/hay_block_side.png"); }
+body.lx .lxcard[data-game="plinko"]    { --pv-block: url("../img/block/polished_deepslate.png"); }
+body.lx .lxcard[data-game="dice"]      { --pv-block: url("../img/block/dark_oak_planks.png"); }
+body.lx .lxcard[data-game="limbo"]     { --pv-block: url("../img/block/end_stone.png"); }
+body.lx .lxcard[data-game="stocks"]    { --pv-block: url("../img/block/emerald_block.png"); }
+body.lx .lxcard[data-game="fishing"]   { --pv-block: url("../img/block/tube_coral_block.png"); }
+body.lx .lxcard[data-game="derby"]     { --pv-block: url("../img/block/moss_block.png"); }
+body.lx .lxcard[data-game="blackjack"] { --pv-block: url("../img/block/green_wool.png"); }
+body.lx .lxcard[data-game="roulette"]  { --pv-block: url("../img/block/nether_bricks.png"); }
+body.lx .lxcard[data-game="upgrader"]  { --pv-block: url("../img/block/smithing_table_top.png"); }
+body.lx .lxcard[data-game="crates"]    { --pv-block: url("../img/block/purpur_block.png"); }
+body.lx .lxcard[data-game="battles"]   { --pv-block: url("../img/block/red_nether_bricks.png"); }
+body.lx .lxcard[data-game="coinflip"]  { --pv-block: url("../img/block/iron_block.png"); }
+body.lx .lxcard[data-game="mines-duel"] { --pv-block: url("../img/block/deepslate_redstone_ore.png"); }
+body.lx .lxcard[data-game="ore-rush"]  { --pv-block: url("../img/block/deepslate_gold_ore.png"); }
+body.lx .lxcard[data-game="monument"]  { --pv-block: url("../img/block/prismarine_bricks.png"); }
+
+/* As many cards to the row as fit at the preview's size, rather than seven however narrow the
+   column is (the sidebar and the chat both open take 600px of a laptop screen). */
+@media (min-width: 1024px) {
+  body.lx .lxrow { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: var(--lx-s4) var(--lx-s3); }
+}
+
+/* ═════════ narrower ═════════ */
+@media (max-width: 1023px) {
+  body.lx .lxpromo { min-height: 180px; padding: var(--lx-s4); }
+  body.lx .lxpromo__copy { min-height: calc(180px - 2 * var(--lx-s4)); }
+  body.lx .lxpromo__art { right: var(--lx-s4); }
+  body.lx .lxpromo__art img { width: 72px; height: 72px; }
+  .lxback__list { grid-template-columns: repeat(3, minmax(220px, 1fr)); overflow-x: auto; scrollbar-width: none; }
+  .lxback__list::-webkit-scrollbar { display: none; }
+}
+@media (max-width: 639px) {
+  body.lx .lxpromo { min-height: 164px; }
+  body.lx .lxpromo__copy { min-height: calc(164px - 2 * var(--lx-s4)); max-width: 66%; }
+  body.lx .lxpromo__h { font-size: 1.1875rem; }
+  body.lx .lxpromo__art img { width: 64px; height: 64px; }
+  .lxband__head { margin-bottom: var(--lx-s2); }
+  .lxback, body.lx .lxpromos { margin-bottom: var(--lx-s5); }
+  .lxback__list { grid-template-columns: repeat(3, 78%); gap: var(--lx-s2); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.lx .lxcard:hover { transform: none; }
+  body.lx .lxpromos .lxpromo__go:active { transform: none; }
+  .lxfind, .lxback__g { transition: none; }
+}

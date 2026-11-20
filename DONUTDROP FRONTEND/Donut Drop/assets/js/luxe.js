@@ -10,7 +10,8 @@
  */
 import { api } from './api.js';
 import { SPOTLIGHT_GAMES, isNewGame } from './data.js';
-import { $, $$, reduceMotion } from './util.js';
+import { $, $$, money, reduceMotion } from './util.js';
+import { bus, roundHistory, state } from './store.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
 
 const SIDE_KEY = 'lx:side';
@@ -59,7 +60,10 @@ function setDrawer(open) {
   if (open) $('.lxmode', side)?.focus();
 }
 
-body.dataset.side = recall(SIDE_KEY) === 'open' ? 'open' : 'closed';
+/* Open on a wide screen until the player closes it (2026-11-20, the redesign preview's layout); a
+ * remembered choice either way wins. */
+const sideSaved = recall(SIDE_KEY);
+body.dataset.side = (sideSaved ?? (matchMedia('(min-width: 1280px)').matches ? 'open' : 'closed')) === 'open' ? 'open' : 'closed';
 body.dataset.drawer = 'closed';
 paintSide();
 
@@ -190,7 +194,48 @@ new MutationObserver(() => {
 $('#lxRegister')?.addEventListener('click', () => $('#loginBtn').click());
 
 /* ═════════ search: Ctrl+K from anywhere ═════════ */
+const find = $('#lxFind');
+/* The bar's search field (2026-11-20). It types into the lobby's own box, which does the
+ * filtering, so there is one search with one set of rules; from another page it opens the lobby
+ * first. The lobby's box is hidden wherever this field shows. */
+function findInLobby() {
+  const run = () => {
+    const input = $('#lobbySearch');
+    if (!input) return;
+    input.value = find.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    // Results in sight: under the offers the grid can sit below the fold.
+    const lobbyBox = $('#lobby');
+    if (lobbyBox && lobbyBox.getBoundingClientRect().top > innerHeight * 0.6) {
+      lobbyBox.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+  };
+  if (currentRouteName() !== 'home') {
+    navigate('/');
+    requestAnimationFrame(run);
+  } else {
+    run();
+  }
+}
+if (find) {
+  find.addEventListener('input', findInLobby);
+  find.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && find.value) {
+      event.preventDefault();
+      find.value = '';
+      findInLobby();
+    }
+  });
+  // "Show every game" under an empty result clears the lobby's box; this one follows.
+  $('#lobbyReset')?.addEventListener('click', () => { find.value = ''; });
+}
+
 function focusSearch() {
+  if (find && find.offsetParent !== null) {
+    find.focus();
+    find.select();
+    return;
+  }
   const go = () => {
     const input = $('#lobbySearch');
     if (!input) return;
@@ -313,3 +358,91 @@ onRoute();
 
 /* Slides only from here on: the remembered layout is already in place (see .lx-anim in luxe.css). */
 requestAnimationFrame(() => requestAnimationFrame(() => body.classList.add('lx-anim')));
+
+/* ═════════ "Jump back in" (2026-11-20, the redesign preview's) ═════════
+ * The last three games the player had a round in, each linking back to it, with the last round's
+ * result: the multiplier when it paid, what was lost when it did not. From GET /v1/history, asked
+ * when the session is known and each time the lobby opens -- not on every settled round, which
+ * would be a request per bet for a row the player is not looking at. */
+const back = $('#lxBack');
+const backList = $('#lxBackList');
+let backAsked = 0;
+
+function whenText(iso) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const clock = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const day = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.round((day(new Date()) - day(at)) / 86_400_000);
+  if (days === 0) return `Today ${clock}`;
+  if (days === 1) return `Yesterday ${clock}`;
+  return at.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
+function backCard(round, card) {
+  const link = document.createElement('a');
+  link.className = 'lxback__g';
+  link.href = card.getAttribute('href');
+  const art = document.createElement('img');
+  art.src = card.querySelector('.lxcard__art')?.getAttribute('src') || '';
+  art.alt = '';
+  art.width = 40;
+  art.height = 40;
+  const copy = document.createElement('span');
+  copy.className = 'lxback__copy';
+  const name = document.createElement('b');
+  name.textContent = card.querySelector('.gcard__name')?.textContent || round.name;
+  const when = document.createElement('small');
+  when.textContent = whenText(round.at);
+  copy.append(name, when);
+  const result = document.createElement('span');
+  const wager = Number(round.wagerMinor);
+  const payout = Number(round.payoutMinor);
+  if (payout >= wager && wager > 0) {
+    result.className = 'lxback__res is-up';
+    result.textContent = `${(round.multiplier ?? payout / wager).toFixed(2)}×`;
+  } else {
+    result.className = 'lxback__res';
+    result.textContent = `-${money(wager - payout)}`;
+  }
+  link.append(art, copy, result);
+  return link;
+}
+
+async function paintBack() {
+  if (!back || !backList) return;
+  const asked = ++backAsked;
+  if (!state.authenticated) {
+    back.hidden = true;
+    return;
+  }
+  let rounds;
+  try {
+    rounds = (await roundHistory({ limit: 40 })).rounds || [];
+  } catch {
+    return; // A lobby row is not worth an error: it keeps what it showed.
+  }
+  if (asked !== backAsked || !state.authenticated) return;
+  const seen = new Set();
+  const picks = [];
+  for (const round of rounds) {
+    // The history calls the case room "cases"; its lobby card is "crates".
+    const key = round.game === 'cases' ? 'crates' : round.game;
+    if (seen.has(key)) continue;
+    const card = $(`#lobby .gcard[data-game="${CSS.escape(key)}"]`);
+    if (!card) continue;
+    seen.add(key);
+    picks.push(backCard(round, card));
+    if (picks.length === 3) break;
+  }
+  backList.replaceChildren(...picks);
+  back.hidden = picks.length === 0;
+}
+
+bus.addEventListener('change', (event) => {
+  if (['ready', 'login', 'logout', 'private'].includes(event.detail)) void paintBack();
+});
+onNavigate(() => {
+  if (currentRouteName() === 'home') void paintBack();
+});
+if (state.ready) void paintBack();

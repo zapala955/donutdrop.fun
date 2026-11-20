@@ -152,6 +152,11 @@
 <!-- The chat panel's own look (2026-11-14): after the skins above, before prefs.css, so the player's
      chat text size still has the last word. -->
 <link rel="stylesheet" href="assets/css/chat.css" />
+<!-- The redesign preview (donutluxe.com/preview) brought to the live site (2026-11-20): the lobby's
+     offers on Minecraft scenery, the cards on their blocks, the top bar's search field and "Jump
+     back in". After the skins above so it wins without rewriting them; before prefs.css, so a
+     player's theme still has the last word. -->
+<link rel="stylesheet" href="assets/css/preview.css" />
 <!-- The player's settings: the theme, reduced motion, chat and balance options, and the settings
      page. The script is a plain blocking one on purpose: it puts the saved theme on <html> before
      the first paint, so a themed page never flashes obsidian first. -->
@@ -367,6 +372,15 @@
         <img class="lxbrand__word" src="assets/img/brand/wordmark.svg?v=1" alt="DonutLuxe" width="186" height="24" />
       </a>
 
+      <!-- Search, in the bar on a wide screen (2026-11-20, the preview's): typing filters the lobby,
+           from any page (luxe.js). A phone keeps the lobby's own search box. -->
+      <label class="lxfind">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <input type="search" id="lxFind" placeholder="Search games" aria-label="Search games"
+               aria-keyshortcuts="Control+K" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+        <kbd class="lxkbd" aria-hidden="true">Ctrl K</kbd>
+      </label>
+
       <!-- Signed in: the balance and the two money actions, centred like the wallet it is. -->
       <div class="lxwallet">
         <!-- Media test mode (assets/js/testmode.js), shown only to approved creators and staff. On,
@@ -559,7 +573,8 @@
     <section class="view" data-view="home" hidden>
       <h1 class="lxsr">DonutLuxe: DonutSMP crash, mines, coinflip and cases</h1>
 
-      <section class="lxpromos" aria-label="Offers">
+      <div class="lxband__head"><h2 id="lxWeekH">This week</h2></div>
+      <section class="lxpromos" aria-labelledby="lxWeekH">
         <!-- Signed out: the sign-up bonus, and the card logs you in. Signed in: the whole lobby. -->
         <div class="lxpromo" id="pbanLead">
           <a class="lxpromo__cover" id="pbanLeadCover" href="/" tabindex="-1" aria-hidden="true"></a>
@@ -595,6 +610,13 @@
             <span class="lxpromo__acts"><span class="lxpromo__go">Join Discord</span></span>
           </span>
         </a>
+      </section>
+
+      <!-- "Jump back in": the last three games the player had a round in, with how it went
+           (GET /v1/history; luxe.js). Signed out, or before a first round, it is not there. -->
+      <section class="lxback" id="lxBack" aria-labelledby="lxBackH" hidden>
+        <div class="lxband__head"><h2 id="lxBackH">Jump back in</h2><a class="lxband__link" href="/history">History</a></div>
+        <div class="lxback__list" id="lxBackList"></div>
       </section>
 
       <section class="lxlobby" id="lobby" aria-labelledby="lobbyH" tabindex="-1">

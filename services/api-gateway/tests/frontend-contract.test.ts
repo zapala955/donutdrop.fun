@@ -504,8 +504,9 @@ describe('frontend/backend contract', () => {
     // (the crates page's material on every panel, paint only) after that. The player's own settings
     // (prefs.css: their theme, and the settings page) come last of all, over every skin. The chat
     // panel's own look (chat.css, 2026-11-14) sits just before them, so the chat text size still wins.
+    // The redesign preview's look (preview.css, 2026-11-20) comes after the skins and before prefs.css.
     const sheets = [...html.matchAll(/<link rel="stylesheet" href="assets\/css\/([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(sheets.slice(-7), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'dopamine.css', 'chat.css', 'prefs.css']);
+    assert.deepEqual(sheets.slice(-8), ['luxe.css', 'luxe-home.css', 'luxe-games.css', 'retro.css', 'dopamine.css', 'chat.css', 'preview.css', 'prefs.css']);
 
     // The drawer opens from the chat button only, closed on arrival, and a tap off it closes it.
     assert.match(html, /id="burger"[^>]*aria-label="Open chat"[^>]*aria-controls="chat"/);
