@@ -148,7 +148,9 @@ describe('mob derby: the page and the track', () => {
       front('assets/css/derby.css'),
     ]);
     assert.match(html, /<link rel="stylesheet" href="assets\/css\/derby\.css" \/>/);
-    assert.match(html, /<a class="lxnav" href="\/derby" data-route="derby" data-tip="Mob Derby">/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/derby" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /<a class="gcard lxcard" href="\/derby" data-cat="casino" data-game="derby"/);
     assert.match(html, /<section class="view" data-view="derby" hidden>[\s\S]*?<div class="derby" id="derbyRoot"><\/div>/);
     assert.match(app, /  derby: mountDerby,/);

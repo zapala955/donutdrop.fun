@@ -1,4 +1,10 @@
-/* ticker.js — the Live Feed.
+/* ticker.js — the Live Feed, as the redesign preview's "Live bets" (2026-11-20).
+ *
+ * A table under every page: the game, the player, the time, the bet, the multiplier and what it
+ * paid, with four lists: every bet, the high rollers ($50M and up), the lucky wins (10x and up)
+ * and, signed in, your own. All four are the same stream filtered, so nothing here asks the
+ * server for more than the feed already holds, and a round held back while its animation plays
+ * stays held back in every list.
  *
  * Three kinds of event share one chronological stream, newest first:
  *
@@ -30,7 +36,20 @@ import { API_BASE_URL } from './api.js';
 
 // Recovery-only fallback; normal updates are pushed by the shared live-event stream.
 const REFRESH_MS = 30_000;
-const MAX_ROWS = 40;
+const MAX_ROWS = 10;
+const HIGH_ROLLER = 50_000_000;
+const LUCKY = 10;
+const TABS = [['all', 'All bets'], ['high', 'High rollers'], ['lucky', 'Lucky wins'], ['mine', 'My bets']];
+let tab = 'all';
+
+/* Each game's lobby sprite, so a row reads as its game at a glance. */
+const ART = {
+  case: 'game-crates.svg', upgrade: 'game-upgrader.svg', roulette: 'game-roulette.svg', blackjack: 'game-blackjack.svg',
+  crash: 'game-crash.svg', mines: 'game-mines.svg', tower: 'game-tower.svg', chicken: 'chicken.svg', plinko: 'game-plinko.svg',
+  dice: 'dice.svg', limbo: 'game-limbo.svg', stocks: 'game-stocks.svg', fishing: 'game-fishing.svg',
+  icefishing: 'game-ice-fishing.svg', derby: 'game-derby.svg', slots: 'game-ore-rush.svg', coinflip: 'game-coinflip.svg',
+  minesduel: 'game-mines-duel.svg', battle: 'game-battles.svg',
+};
 
 /* Hex colours arrive from the factions table. The DB constrains the format, but a value that
  * reaches a style property is treated as untrusted regardless: anything that is not exactly six
@@ -46,18 +65,27 @@ export function initTicker(mount) {
   root.dataset.built = '1';
 
   root.innerHTML = `
-    <section class="feed" aria-label="Live feed">
-      <header class="feed__head">
-        <span class="feed__dot" aria-hidden="true"></span>
-        <h2 class="feed__title">Live Feed</h2>
-        <span class="feed__sub">Every settled round, win or lose</span>
-      </header>
-      <div class="feed__cols" aria-hidden="true">
-        <span>Game</span><span>Player</span><span>Time</span>
-        <span>Wager</span><span>Mult</span><span>Result</span>
+    <section class="lxbets" aria-labelledby="feedTitle">
+      <div class="lxbets__head">
+        <h2 class="lxbets__title" id="feedTitle"><span class="lxbets__dot" aria-hidden="true"></span>Live bets</h2>
+        <div class="lxbets__tabs" role="tablist" aria-label="Bet lists">
+          ${TABS.map(([code, label]) => `<button class="lxbets__tab" role="tab" type="button" data-btab="${code}" aria-selected="${code === tab}">${label}</button>`).join('')}
+        </div>
       </div>
-      <div class="feed__rows" id="feedRows" role="table" aria-label="Recent rounds"></div>
+      <div class="lxbets__wrap">
+        <table class="lxbtable">
+          <thead><tr><th scope="col">Game</th><th scope="col" class="c-user">Player</th><th scope="col" class="c-time">Time</th><th scope="col" class="r c-bet">Bet</th><th scope="col" class="r">Multiplier</th><th scope="col" class="r">Payout</th></tr></thead>
+          <tbody id="feedRows"></tbody>
+        </table>
+      </div>
     </section>`;
+  for (const button of root.querySelectorAll('[data-btab]')) {
+    button.addEventListener('click', () => {
+      tab = button.dataset.btab;
+      for (const other of root.querySelectorAll('[data-btab]')) other.setAttribute('aria-selected', String(other === button));
+      paint();
+    });
+  }
 
   paint();
   bus.addEventListener('change', (event) => {
@@ -85,15 +113,33 @@ function paint() {
   if (!root?.isConnected) return;
   const rows = $('#feedRows', root);
   if (!rows) return;
+  const mine = root.querySelector('[data-btab="mine"]');
+  if (mine) mine.hidden = !state.authenticated;
+  if (tab === 'mine' && !state.authenticated) tab = 'all';
 
-  const plays = (state.activities || []).slice(0, MAX_ROWS);
+  const plays = (state.activities || []).filter(inTab).slice(0, MAX_ROWS);
   rows.innerHTML = '';
 
   if (!plays.length) {
-    rows.appendChild(el('p', 'feed__empty', 'No rounds yet. The first play shows up here.'));
+    const empty = el('tr', 'lxbrow lxbrow--empty');
+    const note = el('td');
+    note.colSpan = 6;
+    note.textContent = tab === 'mine' ? 'No bets of yours yet. Your next round shows up here.' : 'No bets in this list yet.';
+    empty.append(note);
+    rows.appendChild(empty);
     return;
   }
   for (const play of plays) rows.appendChild(buildRow(play));
+}
+
+function inTab(play) {
+  if (tab === 'all') return true;
+  if (play.kind === 'faction') return false;
+  const wager = Number(play.wagerMinor ?? play.wager_minor ?? 0);
+  const payout = Number(play.payoutMinor ?? play.payout_minor ?? 0);
+  if (tab === 'high') return wager >= HIGH_ROLLER;
+  if (tab === 'lucky') return wager > 0 && payout / wager >= LUCKY;
+  return Boolean(state.user?.id) && (play.playerId ?? play.player_id) === state.user.id;
 }
 
 function buildRow(play) {
@@ -110,30 +156,18 @@ function buildRound(play) {
   const delta = payout - wager;
   const won = delta > 0;
 
-  const row = el('div', 'feedrow');
-  row.setAttribute('role', 'row');
+  const row = el('tr', 'lxbrow');
   row.dataset.won = won ? '1' : '0';
-
   row.append(
     gameCell(play),
     playerCell(play),
-    cell('feedrow__t mono', clock(play.createdAt ?? play.created_at)),
-    stakeCell(wager),
+    cell('c-time', clock(play.createdAt ?? play.created_at)),
+    cell('r c-bet', dollars(wager)),
+    cell('r', `${multiple.toFixed(2)}×`),
   );
-
-  const mult = cell('feedrow__mult mono', `${multiple.toFixed(2)}×`);
-  /* Three bands, not two. A round that returned less than the stake is a loss even when it paid
-   * something, and a big multiple is worth seeing from the other side of the page — so under 1x is
-   * red, over 1.5x glows, and the ordinary middle stays quiet. */
-  mult.dataset.band = multiple < 1 ? 'down' : multiple > 1.5 ? 'hot' : 'flat';
-  mult.dataset.up = multiple > 1 ? '1' : '0';
-
-  /* A round that paid back exactly its stake neither won nor lost: it reads as a plain 0, not as
-   * "−0" in the loss colour. */
-  const swing = money('feedrow__delta mono', Math.abs(delta), won ? '+' : delta < 0 ? '−' : '');
-  swing.dataset.up = won ? '1' : delta < 0 ? '0' : 'even';
-
-  row.append(mult, swing);
+  /* A round that paid back exactly its stake neither won nor lost: it reads as a plain $0. */
+  const swing = cell(`r ${won ? 'pos' : 'neg'}`, dollars(Math.abs(delta), won ? '+' : delta < 0 ? '−' : ''));
+  row.append(swing);
   return row;
 }
 
@@ -141,86 +175,53 @@ function buildRound(play) {
 function buildContribution(play) {
   const amount = Number(play.wagerMinor ?? play.wager_minor ?? 0);
 
-  const row = el('div', 'feedrow feedrow--team');
-  row.setAttribute('role', 'row');
+  const row = el('tr', 'lxbrow lxbrow--team');
   // The faction's own colour, but only if it really is a hex triplet.
   const accent = play.accent ?? play.color;
   if (typeof accent === 'string' && HEX.test(accent)) row.style.setProperty('--team', accent);
 
   const game = gameCell(play);
-  const badge = el('i', 'feedrow__team');
+  const badge = el('i', 'lxbrow__team');
   badge.textContent = play.sourceName ?? play.source_name ?? 'Team';
   game.appendChild(badge);
 
   row.append(
     game,
     playerCell(play),
-    cell('feedrow__t mono', clock(play.createdAt ?? play.created_at)),
-    money('feedrow__stake mono', amount),
+    cell('c-time', clock(play.createdAt ?? play.created_at)),
+    cell('r c-bet', dollars(amount)),
     /* No multiple and no result: a contribution is a wager credited to a side, not a round that
      * settled. Printing 0.00× here would read as a total loss, which is a different event. */
-    cell('feedrow__mult mono feedrow__na', '—'),
-    cell('feedrow__delta feedrow__na', 'contributed'),
+    cell('r neg', '—'),
+    cell('r neg', 'contributed'),
   );
   return row;
 }
 
 /* ─────────── bits ─────────── */
 function cell(className, text) {
-  const node = el('span', className);
-  node.setAttribute('role', 'cell');
+  const node = el('td', className);
   node.textContent = text;
   return node;
 }
 
-function money(className, value, sign = '') {
-  const node = el('span', className);
-  node.setAttribute('role', 'cell');
-  /* Uppercased like the wager chip beside it, so one row never prints 1M and −1m. */
-  node.append(coin(), document.createTextNode(`${sign}${compact(value).toUpperCase()}`));
-  return node;
+/** $480K, +$33.6K, −$140M: the preview's figures. */
+function dollars(value, sign = '') {
+  return `${sign}$${compact(value).toUpperCase()}`;
 }
 
-function coin() {
-  const mark = el('i', 'feedrow__coin');
-  mark.setAttribute('aria-hidden', 'true');
-  return mark;
-}
-
-/**
- * The game, as a badge with a glyph.
- *
- * A bare string in a column is a string somebody has to read; a glyph plus a short label is one a
- * player recognises without reading. The glyph is a character rather than an image so it costs no
- * request and cannot fail to load.
- */
+/** The game: its lobby sprite and its name. */
 function gameCell(play) {
   const kind = play.kind || '';
-  const glyph =
-    kind === 'case' ? '\u{1F4E6}'
-      : kind === 'upgrade' ? '\u26A1'
-        : kind === 'roulette' ? '\u25C9'
-          : kind === 'blackjack' ? '\u2660'
-            : kind === 'crash' ? '\u2197'
-              : kind === 'mines' ? '\u25C6'
-                : kind === 'tower' ? '\u25A4'
-                : kind === 'chicken' ? '\u25BA'
-                : kind === 'plinko' ? '\u25CF'
-                : kind === 'dice' ? '\u2684'
-                : kind === 'limbo' ? '\u2197'
-                : kind === 'stocks' ? '\u2195'
-                : kind === 'fishing' ? '\u2693'
-                : kind === 'icefishing' ? '\u2744'
-                : kind === 'derby' ? '\u265e'
-                : kind === 'slots' ? '\u25C8'
-                : kind === 'coinflip' ? '\u25D0'
-                : kind === 'minesduel' ? '\u25A6'
-                : '\u2694';
-  const node = cell('feedrow__game', '');
-  const chip = el('span', 'gamechip');
+  const node = cell('', '');
+  const chip = el('span', 'lxgcell');
   chip.dataset.kind = kind || 'other';
-  const icon = el('em', 'gamechip__ico');
-  icon.textContent = glyph;
+  const icon = document.createElement('img');
+  icon.alt = '';
+  icon.loading = 'lazy';
+  const source = play.sourceName || play.source_name;
+  const file = kind === 'slots' && source === 'Ocean Monument' ? 'game-monument.svg' : ART[kind] || 'game-battles.svg';
+  icon.src = `assets/img/items/${file}`;
   const label = el('span');
   label.textContent = gameLabel(play);
   chip.append(icon, label);
@@ -236,7 +237,7 @@ function gameCell(play) {
  * third-party avatar service which players appear in the feed.
  */
 function playerCell(play) {
-  const node = cell('feedrow__who', '');
+  const node = cell('c-user', '');
   const name = play.player || '???';
   const head = el('span', 'feedav');
   const playerId = play.playerId ?? play.player_id;
@@ -259,23 +260,11 @@ function playerCell(play) {
     paintInitial();
   }
   const label = el('span', 'mono');
-  label.textContent = name;
+  const you = Boolean(state.user?.id) && playerId === state.user.id;
+  label.textContent = you ? 'You' : name;
+  if (you) label.classList.add('you');
   node.append(head, label);
   linkPlayer(playerId, name, head, label);
-  return node;
-}
-
-/** The wager, as a coin chip rather than a bare figure. */
-function stakeCell(amount) {
-  const node = cell('feedrow__stake', '');
-  const chip = el('span', 'coinchip');
-  const coin = el('i', 'coinchip__coin');
-  coin.setAttribute('aria-hidden', 'true');
-  const label = el('b', 'mono');
-  /* The module's own compact(), uppercased: it returns `150m` and a chip reads better as `150M`. */
-  label.textContent = compact(amount).toUpperCase();
-  chip.append(coin, label);
-  node.append(chip);
   return node;
 }
 
@@ -309,11 +298,7 @@ function clock(value) {
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
 }
 
-/* 588.28k / 1.42m / 5.9m — the feed's own compact form.
- *
- * Deliberately not money(): this table has a coin glyph in front of every figure, so a currency
- * symbol as well would be saying it twice. Every cell that shows it uppercases it (150M), so the
- * wager and the result in one row are written the same way. */
+/* 588.28k / 1.42m / 5.9m — the feed's own compact form, uppercased with a "$" by dollars(). */
 function compact(value) {
   const n = Math.abs(Math.round(Number(value) || 0));
   if (n >= 1e12) return trim(n / 1e12) + 't';

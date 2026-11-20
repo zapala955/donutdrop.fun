@@ -603,7 +603,7 @@ function readPalette() {
     label: token('--crash-label', 'rgba(209, 213, 219, .42)'),
     rocket: token('--crash-rocket', '#efeae0'),
     band: token('--crash-rocket-band', '#e2453c'),
-    nose: token('--crash-rocket-nose', '#e3a13a'),
+    nose: token('--crash-rocket-nose', '#ffa903'),
     flame: token('--crash-flame', '#ffb02e'),
     spark: token('--crash-spark', '#ffd166'),
     ui: token('--lx-ui', 'system-ui, sans-serif'),

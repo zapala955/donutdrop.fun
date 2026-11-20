@@ -82,40 +82,30 @@ function mountHome(view) {
   if (view.dataset.built) return;
   view.dataset.built = '1';
 
-  /* The lobby. Every card is in the markup; this filters the grids, names the first after the tab
-   * and sets the "New" tags. A card shows when it is in the chosen category and its name or its
-   * keywords contain every word typed. The Originals come first; the slot machines have a section
-   * of their own under them, which goes when nothing in it matches. Every card that matches is in
-   * sight: the grids wrap, with no arrows and no "See all games" (2026-11-10). */
+  /* The lobby. Every card is in the markup, in its row: the Originals, then the slot machines, PvP
+   * and cases side by side (the redesign preview's, 2026-11-20). This filters every row and names the
+   * first after the kind of game. A card shows when it is of the chosen kind and its name or its
+   * keywords contain every word typed; a row with nothing left in it goes. */
   const search = $('#lobbySearch', view);
   const none = $('#lobbyNone', view);
   const tabs = $$('.lobby__tab', view);
   const cards = $$('.gcard', view);
-  const track = $('#lobbyTrack', view);
   const title = $('#lobbyTitle', view);
-  const mainHead = $('#lobbyH', view).closest('.lxrow__head');
-  const slotsRow = $('#slotsRow', view);
-  const slotsTrack = $('#slotsTrack', view);
+  const rows = $$('[data-lobby-group]', view);
   let category = 'all';
 
   const filterLobby = () => {
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
-    let slots = 0;
     for (const card of cards) {
       const inCategory = category === 'all' || card.dataset.cat.split(' ').includes(category);
       const text = `${$('.gcard__name', card).textContent} ${card.dataset.q}`.toLowerCase();
       const match = inCategory && words.every((word) => text.includes(word));
       card.parentElement.hidden = !match;
       if (match) shown += 1;
-      if (match && slotsTrack.contains(card)) slots += 1;
     }
-    const originals = shown - slots;
     none.hidden = shown > 0;
-    track.hidden = originals === 0;
-    // With only slots left, the Originals heading goes too; with nothing left it stays over the note.
-    mainHead.hidden = originals === 0 && slots > 0;
-    slotsRow.hidden = slots === 0;
+    for (const row of rows) row.hidden = !$$('.gcard', row).some((card) => !card.parentElement.hidden);
   };
   const pickCategory = (code) => {
     category = code;
@@ -292,7 +282,8 @@ function mountHome(view) {
       return;
     }
 
-    for (const entry of rounds.slice(0, 7)) {
+    // Two rows of four, as in the redesign preview (2026-11-20).
+    for (const entry of rounds.slice(0, 8)) {
       const { item, player, sourceName } = entry;
       const wager = BigInt(entry.wagerMinor ?? '0');
       const payout = BigInt(entry.payoutMinor ?? '0');
@@ -328,8 +319,13 @@ function mountHome(view) {
       const amount = el('span', 'amt mono');
       amount.textContent = `+${money(Number(payout - wager))}`;
       amount.title = `Won ${money(Number(payout))} on ${money(Number(wager))}`;
+      // Under it, the profit in green and what was staked, the preview's foot line.
+      const stake = el('span', 'drops__bet mono');
+      stake.textContent = `${money(Number(wager))} bet`;
+      const foot = el('span', 'drops__foot');
+      foot.append(amount, stake);
 
-      row.append(art, stack, amount);
+      row.append(art, stack, foot);
       drops.appendChild(row);
     }
   };
@@ -762,16 +758,35 @@ function cashStateText(withdrawal) {
   return CASH_STATE_TEXT[withdrawal.status] || withdrawal.status;
 }
 
+/* The Wallet window (2026-11-20, the redesign preview's): the bar's one Wallet button opens it on
+ * Deposit, and Withdraw is its second tab. Each tab is the window it always was. */
+function walletTabs(current) {
+  const tabs = document.createElement('div');
+  tabs.className = 'lxwtabs';
+  tabs.setAttribute('role', 'group');
+  tabs.setAttribute('aria-label', 'Wallet');
+  for (const [code, label, open] of [['deposit', 'Deposit', openDepositModal], ['withdraw', 'Withdraw', openWithdrawModal]]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-pressed', String(code === current));
+    if (code !== current) button.addEventListener('click', () => void open());
+    tabs.append(button);
+  }
+  $('#modalBody').before(tabs);
+}
+
 async function openDepositModal() {
   if (!state.authenticated) {
     openLoginModal();
     return;
   }
   let host;
-  openModal('Deposit', (body) => {
+  openModal('Wallet', (body) => {
     host = body;
     body.innerHTML = '<p class="auth__lede">Finding the payment bot…</p>';
   }, { variant: 'auth' });
+  walletTabs('deposit');
 
   let info;
   try {
@@ -874,10 +889,11 @@ async function openWithdrawModal() {
     return;
   }
   let host;
-  openModal('Withdraw', (body) => {
+  openModal('Wallet', (body) => {
     host = body;
     body.innerHTML = '<p class="auth__lede">Checking your account…</p>';
   }, { variant: 'auth' });
+  walletTabs('withdraw');
 
   let info;
   try {

@@ -57,7 +57,7 @@ function setSide(open) {
 function setDrawer(open) {
   body.dataset.drawer = open ? 'open' : 'closed';
   paintSide();
-  if (open) $('.lxmode', side)?.focus();
+  if (open) $('.lxnav', side)?.focus();
 }
 
 /* Open on a wide screen until the player closes it (2026-11-20, the redesign preview's layout); a
@@ -116,16 +116,21 @@ side.addEventListener('focusin', (event) => {
 side.addEventListener('focusout', hideTip);
 $('.lxside__nav', side).addEventListener('scroll', hideTip, { passive: true });
 
-/* ═════════ where you are ═════════ */
-const CASE_ROUTES = new Set(['crates', 'battles', 'studio']);
+/* ═════════ where you are ═════════
+ * The menu names kinds of game, not games (the redesign preview's, 2026-11-20): on a game's page its
+ * kind is lit, read from the game's card in the lobby; on the lobby, the kind picked (/?c=…) or
+ * Lobby itself. */
+const pickedKind = () => new URLSearchParams(location.search).get('c') || '';
+function routeKind(route) {
+  const card = $(`#lobby .gcard[href="/${route}"]`);
+  return card ? card.dataset.cat.split(' ').find((kind) => kind !== 'new') || '' : '';
+}
 function markRoute() {
   const route = currentRouteName();
-  for (const link of $$('.lxnav[data-route]', side)) {
-    link.setAttribute('aria-current', link.dataset.route === route ? 'page' : 'false');
-  }
-  const mode = CASE_ROUTES.has(route) ? 'cases' : route === 'home' ? 'casino' : '';
-  for (const tile of $$('.lxmode', side)) {
-    tile.setAttribute('aria-current', tile.dataset.mode === mode ? 'page' : 'false');
+  const kind = route === 'home' ? pickedKind() : routeKind(route);
+  for (const link of $$('.lxnav', side)) {
+    const on = link.dataset.cat ? link.dataset.cat === kind : link.dataset.route === route && !(route === 'home' && kind);
+    link.setAttribute('aria-current', on ? 'page' : 'false');
   }
   for (const link of $$('.lxdock [data-dock]')) {
     link.setAttribute('aria-current', link.dataset.dock === route ? 'page' : 'false');
@@ -306,6 +311,103 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') void paintPlaying();
 });
 
+/* ═════════ the lobby's rows (2026-11-20, the redesign preview's) ═════════
+ * How many games of each kind (the menu, each row's head), the search field's "Search 18 games", the
+ * Originals row's arrows, and a kind of game on its own page at /?c=casino, /?c=slots, /?c=pvp or
+ * /?c=cases: a heading, a line on it, the kinds as chips and every game of the kind in a grid. */
+const KINDS = {
+  casino: { name: 'Originals', icon: 'm12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
+    lede: 'Games made for DonutLuxe. Every result is committed before you bet and can be checked after.' },
+  slots: { name: 'Slots', icon: 'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM9 5v14M15 5v14',
+    lede: 'Five reels and free spins. Both paytables list every pay before you spin.' },
+  pvp: { name: 'PvP', icon: 'M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 6.5 6 3M14 10l6.5-6.5V3H21M5 14l4 4M7 17l-3 3M3 19l2 2',
+    lede: 'Play other players head to head.' },
+  cases: { name: 'Cases', icon: 'M3 8 12 3l9 5v8l-9 5-9-5zm0 0 9 5 9-5M12 13v8',
+    lede: 'Open cases for DonutSMP items and upgrade what you own. Every drop table shows its odds first.' },
+};
+const chipIcon = (d) => `<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+
+function paintCounts() {
+  const cards = $$('.gcard', lobby);
+  for (const line of $$('[data-count]')) {
+    const n = cards.filter((card) => card.dataset.cat.split(' ').includes(line.dataset.count)).length;
+    line.textContent = line.closest('#origRow') ? `${n} games` : String(n);
+  }
+  find?.setAttribute('placeholder', `Search ${cards.length} games`);
+}
+
+function paintKind() {
+  if (currentRouteName() !== 'home' || !lobby) return;
+  const asked = pickedKind();
+  const kind = KINDS[asked] ? asked : '';
+  body.dataset.kind = kind;
+  const head = $('#lxCat');
+  head.hidden = !kind;
+  if (kind) {
+    $('#lxCatH').textContent = KINDS[kind].name;
+    $('#lxCatP').textContent = KINDS[kind].lede;
+    $('#lxChips').innerHTML = `<a class="lxchip" href="/">${chipIcon('M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z')}Lobby</a>`
+      + Object.entries(KINDS).map(([code, entry]) => `<a class="lxchip" href="/?c=${code}"${code === kind ? ' aria-current="page"' : ''}>${chipIcon(entry.icon)}${entry.name}</a>`).join('');
+  }
+  // The lobby's own tabs do the filtering (app.js); they are hidden, and this presses one.
+  const tab = $(`.lobby__tab[data-cat="${kind || 'all'}"]`, lobby);
+  if (tab && tab.getAttribute('aria-pressed') !== 'true') tab.click();
+}
+
+function wireRails() {
+  for (const button of $$('[data-rail-prev], [data-rail-next]', lobby)) {
+    const track = $(`#${button.dataset.railPrev || button.dataset.railNext}`);
+    if (!track) continue;
+    const step = button.dataset.railPrev ? -1 : 1;
+    button.addEventListener('click', () => {
+      track.scrollBy({ left: step * track.clientWidth * 0.9, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    });
+  }
+  for (const track of $$('.lxrail', lobby)) {
+    const sync = () => {
+      const max = track.scrollWidth - track.clientWidth - 2;
+      const prev = $(`[data-rail-prev="${track.id}"]`);
+      const next = $(`[data-rail-next="${track.id}"]`);
+      if (prev) prev.disabled = track.scrollLeft <= 2;
+      if (next) next.disabled = track.scrollLeft >= max;
+    };
+    track.addEventListener('scroll', sync, { passive: true });
+    new ResizeObserver(sync).observe(track);
+    sync();
+  }
+}
+if (lobby) {
+  paintCounts();
+  wireRails();
+}
+
+/* The account button wears the player's head, as the preview's does: the same picture the sign-in
+ * button carries (app.js), and the outline figure until it loads or if it cannot. */
+function paintAcctHead() {
+  const button = $('#acctBtn');
+  const src = $('#loginHead')?.getAttribute('src');
+  if (!button) return;
+  let img = $('.acct__head', button);
+  if (!state.authenticated || !src) {
+    img?.remove();
+    delete button.dataset.head;
+    return;
+  }
+  if (!img) {
+    img = document.createElement('img');
+    img.className = 'acct__head';
+    img.alt = '';
+    img.width = 36;
+    img.height = 36;
+    img.addEventListener('error', () => { img.remove(); delete button.dataset.head; });
+    img.addEventListener('load', () => { button.dataset.head = '1'; });
+    button.appendChild(img);
+  }
+  if (img.getAttribute('src') !== src) img.src = src;
+}
+bus.addEventListener('change', () => requestAnimationFrame(paintAcctHead));
+requestAnimationFrame(paintAcctHead);
+
 /* ═════════ links under /test ═════════
  * A click is already routed (app.js reads the path through appPath). What has to be right before
  * the browser takes over is the address a middle click, a new tab or "copy link" uses: point it
@@ -348,6 +450,7 @@ armGates($('#main'));
 /* ═════════ on every route ═════════ */
 function onRoute() {
   markRoute();
+  paintKind();
   hideTip();
   if (body.dataset.drawer === 'open') setDrawer(false);
   if (currentRouteName() === 'home') syncNewTab();

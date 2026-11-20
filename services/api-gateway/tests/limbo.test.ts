@@ -98,7 +98,9 @@ describe('limbo: the page', () => {
       front('index.html'), front('assets/js/app.js'), front('assets/js/data.js'),
       read('infra/nginx/nginx.conf'), front('sitemap.xml'),
     ]);
-    assert.match(html, /<a class="lxnav" href="\/limbo" data-route="limbo"/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/limbo" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /<a class="gcard lxcard" href="\/limbo" data-cat="casino" data-game="limbo"/);
     assert.match(html, /<section class="view" data-view="limbo" hidden>/);
     assert.match(html, /<link rel="stylesheet" href="assets\/css\/limbo\.css" \/>/);

@@ -81,17 +81,21 @@ describe('the lobby', () => {
     assert.match(phone, /\.lxperk__copy span \{ display: none; \}/);
   });
 
-  it('keeps sixteen Originals (Stocks joined 2026-11-13, Coinflip came back against the house 2026-11-20) and two slot machines, Ice Fishing and Mines Duel out', async () => {
+  it('keeps thirteen Originals (Coinflip came back against the house 2026-11-20), two slot machines, Battles and two cases games, Ice Fishing and Mines Duel out', async () => {
     const html = await read('index.html');
-    const main = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
-    const slots = html.slice(html.indexOf('<ul class="lxrow" id="slotsTrack"'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
-    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 16);
+    const track = (id: string) => html.slice(html.indexOf(`id="${id}"`), html.indexOf('</ul>', html.indexOf(`id="${id}"`)));
+    const main = track('lobbyTrack');
+    const slots = track('slotsTrack');
+    assert.match(html, /<ul class="lxrow lxrail" id="lobbyTrack">/);
+    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 13);
     assert.equal(slots.match(/<a class="gcard lxcard"/g)?.length, 2);
-    assert.doesNotMatch(main + slots, /ice-fishing|mines-duel/);
+    assert.equal(track('pvpTrack').match(/<a class="gcard lxcard"/g)?.length, 1);
+    assert.equal(track('casesTrack').match(/<a class="gcard lxcard"/g)?.length, 2);
+    assert.doesNotMatch(html.slice(html.indexOf('data-view="home"'), html.indexOf('id="lobbyNone"')), /href="\/(ice-fishing|mines-duel)"/);
     assert.match(main, /<a class="gcard lxcard" href="\/coinflip" data-cat="casino" data-game="coinflip"/);
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
     assert.doesNotMatch(side, /href="\/(mines-duel|ice-fishing)"/);
-    assert.match(side, /<a class="lxnav" href="\/coinflip" data-route="coinflip"/);
+    assert.match(side, /<a class="lxnav" href="\/\?c=casino" data-cat="casino" data-tip="Originals">/);
     assert.match(html, /<span class="lxpromo__p" id="pbanLeadP">Crash, Mines, Plinko, Blackjack and more\.<\/span>/);
     const app = await read('assets/js/app.js');
     assert.match(app, /: 'Crash, Mines, Plinko, Blackjack and more\.';/);
@@ -103,12 +107,18 @@ describe('the lobby', () => {
     }
   });
 
-  it('drops the scripts that drove the arrows and the "See all games" toggle', async () => {
+  it('scrolls the Originals with the preview\'s arrows, and hides a row the search empties', async () => {
+    /* The arrows came back with the redesign preview (2026-11-20): one pair on the Originals rail,
+     * driven by luxe.js, and "See all" is a link to the category, not a toggle. */
     const app = await read('assets/js/app.js');
     const home = app.slice(app.indexOf('function mountHome(view)'), app.indexOf('/* The three offers at the top.'));
     assert.doesNotMatch(home, /wireRow|paintArrows|lobbyPrev|lobbyNext|slotsPrev|\.lxmore|scrollLeft/);
-    assert.match(home, /mainHead\.hidden = originals === 0 && slots > 0;\n\s*slotsRow\.hidden = slots === 0;\n\s*\};/);
+    assert.match(home, /for \(const row of rows\) row\.hidden = !\$\$\('\.gcard', row\)\.some\(\(card\) => !card\.parentElement\.hidden\);/);
     const luxe = await read('assets/js/luxe.js');
     assert.doesNotMatch(luxe, /lxMore|See all games|Show fewer/);
+    assert.match(luxe, /function wireRails\(\)/);
+    const html = await read('index.html');
+    assert.match(html, /data-rail-prev="lobbyTrack"/);
+    assert.match(html, /<a class="lxband__see" href="\/\?c=casino">See all/);
   });
 });

@@ -107,7 +107,9 @@ describe('dice: the page', () => {
     const app = await read('DONUTDROP FRONTEND/Donut Drop/assets/js/app.js');
     const nginx = await read('infra/nginx/nginx.conf');
     assert.match(html, /<section class="view" data-view="dice" hidden>/);
-    assert.match(html, /<a class="lxnav" href="\/dice" data-route="dice"/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/dice" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /<img class="lxcard__art retroart" src="assets\/img\/items\/dice\.svg"/);
     assert.match(app, /dice: mountDice/);
     assert.match(nginx, /\|plinko\|dice\|/);

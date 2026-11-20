@@ -205,7 +205,9 @@ describe('the chicken page', () => {
     assert.match(html, /<div class="chicken" id="chickenRoot"><\/div>/);
     assert.match(html, /<a class="gcard lxcard" href="\/chicken" data-cat="casino" data-game="chicken"/);
     assert.match(html, /<img class="lxcard__art retroart" src="assets\/img\/items\/chicken\.svg"/);
-    assert.match(html, /<a class="lxnav" href="\/chicken" data-route="chicken" data-tip="Chicken">/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/chicken" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /href="assets\/css\/chicken\.css"/);
     assert.match(app, /chicken: mountChicken,/);
     assert.match(app, /chicken: \{ name: 'Chicken', art: 'assets\/img\/items\/chicken\.svg' \}/);

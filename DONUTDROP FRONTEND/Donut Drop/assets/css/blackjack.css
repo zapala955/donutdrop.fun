@@ -19,12 +19,12 @@
   --bj-felt: #100d08;
   --bj-felt-hi: #1b170f;
   --bj-felt-lo: #070605;
-  --bj-lamp: color-mix(in srgb, var(--lx-gold, #e3a13a) 9%, transparent);
-  --bj-inlay: color-mix(in srgb, var(--lx-gold, #e3a13a) 34%, transparent);
-  --bj-print: color-mix(in srgb, var(--lx-gold, #e3a13a) 78%, transparent);
-  --bj-hair: color-mix(in srgb, var(--lx-gold, #e3a13a) 16%, transparent);
-  --bj-hair-hi: color-mix(in srgb, var(--lx-gold, #e3a13a) 42%, transparent);
-  --bj-glow: color-mix(in srgb, var(--lx-gold, #e3a13a) 55%, transparent);
+  --bj-lamp: color-mix(in srgb, var(--lx-gold, #ffa903) 9%, transparent);
+  --bj-inlay: color-mix(in srgb, var(--lx-gold, #ffa903) 34%, transparent);
+  --bj-print: color-mix(in srgb, var(--lx-gold, #ffa903) 78%, transparent);
+  --bj-hair: color-mix(in srgb, var(--lx-gold, #ffa903) 16%, transparent);
+  --bj-hair-hi: color-mix(in srgb, var(--lx-gold, #ffa903) 42%, transparent);
+  --bj-glow: color-mix(in srgb, var(--lx-gold, #ffa903) 55%, transparent);
   --bj-well: rgba(0, 0, 0, .42);
 
   --bj-card: #f6f1e7;
@@ -34,11 +34,11 @@
   --bj-red: #b11f2b;
   --bj-court: #b8862c;
   --bj-back: #15110a;
-  --bj-back-lattice: color-mix(in srgb, var(--lx-gold, #e3a13a) 15%, transparent);
-  --bj-back-line: color-mix(in srgb, var(--lx-gold, #e3a13a) 70%, transparent);
+  --bj-back-lattice: color-mix(in srgb, var(--lx-gold, #ffa903) 15%, transparent);
+  --bj-back-line: color-mix(in srgb, var(--lx-gold, #ffa903) 70%, transparent);
   --bj-shadow: 0 2px 3px rgba(0, 0, 0, .35), 0 12px 22px -10px rgba(0, 0, 0, .9);
   --bj-veil: rgba(8, 7, 5, .5);
-  --bj-foil: linear-gradient(180deg, var(--lx-gold-hi, #f0c35a) 25%, var(--lx-gold, #e3a13a) 62%, var(--lx-gold-lo, #b97c22));
+  --bj-foil: linear-gradient(180deg, var(--lx-gold-hi, #f0c35a) 25%, var(--lx-gold, #ffa903) 62%, var(--lx-gold-lo, #b97c22));
 
   --bj-card-w: clamp(56px, 14vw, 92px);
   --bj-card-h: calc(var(--bj-card-w) * 1.4);
@@ -154,7 +154,7 @@
   white-space: nowrap;
 }
 .bj__total[hidden] { display: none; }
-.bj__total[data-state="twentyone"] { background: var(--lx-gold, #e3a13a); color: var(--lx-on-gold, #080605); box-shadow: none; }
+.bj__total[data-state="twentyone"] { background: var(--lx-gold, #ffa903); color: var(--lx-on-gold, #080605); box-shadow: none; }
 .bj__total[data-state="bust"] { background: var(--lx-red, #c0392b); color: var(--lx-ink, #f2eee6); box-shadow: none; }
 
 /* The bet: a chip and the figure, the one gold thing on your side of the table. */
@@ -164,7 +164,7 @@
   gap: 6px;
   padding: 3px 10px 3px 3px;
   border-radius: 999px;
-  background: var(--lx-gold-wash, rgba(227, 161, 58, .12));
+  background: var(--lx-gold-wash, rgba(255, 169, 3, .12));
   box-shadow: inset 0 0 0 1px var(--bj-hair-hi);
   color: var(--lx-gold-hi, #f0c35a);
   font: 800 .75rem/1 var(--lx-ui, sans-serif);
@@ -179,8 +179,8 @@
   border-radius: 50%;
   /* a gold chip: eight ivory notches round the rim, a plain gold centre */
   background:
-    radial-gradient(circle, var(--lx-gold, #e3a13a) 0 44%, var(--lx-gold-lo, #b97c22) 45% 52%, transparent 53%),
-    repeating-conic-gradient(var(--lx-gold, #e3a13a) 0 30deg, var(--bj-card) 0 45deg);
+    radial-gradient(circle, var(--lx-gold, #ffa903) 0 44%, var(--lx-gold-lo, #b97c22) 45% 52%, transparent 53%),
+    repeating-conic-gradient(var(--lx-gold, #ffa903) 0 30deg, var(--bj-card) 0 45deg);
   box-shadow: 0 0 0 1px var(--lx-gold-lo, #b97c22), 0 1px 2px rgba(0, 0, 0, .6);
 }
 .bj__bet[hidden] { display: none; }
@@ -214,7 +214,7 @@
 }
 /* The result sits where the print is. While it shows, the print steps back so neither is read
    through the other. */
-.bj__rules-tie { display: none; color: var(--lx-gold, #e3a13a); font-weight: 800; }
+.bj__rules-tie { display: none; color: var(--lx-gold, #ffa903); font-weight: 800; }
 .bj__felt,
 .bj__rules { transition: opacity 240ms var(--bj-ease); }
 .bj__table[data-result] .bj__felt,
@@ -312,7 +312,7 @@
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  box-shadow: 0 0 0 2px var(--lx-gold, #e3a13a), 0 0 26px -4px var(--bj-glow);
+  box-shadow: 0 0 0 2px var(--lx-gold, #ffa903), 0 0 26px -4px var(--bj-glow);
   pointer-events: none;
   animation: bj-win 900ms var(--bj-ease) 1 both;
 }
@@ -366,7 +366,7 @@
   font: 800 .9375rem/1 var(--lx-ui, sans-serif);
   font-variant-numeric: tabular-nums;
 }
-.bj__result[data-tone="win"] { box-shadow: inset 0 0 0 1px var(--lx-gold, #e3a13a), 0 0 34px -10px var(--bj-glow), 0 24px 48px -18px rgba(0, 0, 0, .95); }
+.bj__result[data-tone="win"] { box-shadow: inset 0 0 0 1px var(--lx-gold, #ffa903), 0 0 34px -10px var(--bj-glow), 0 24px 48px -18px rgba(0, 0, 0, .95); }
 .bj__result[data-tone="win"] :is(b, span) { color: var(--lx-gold-hi, #f0c35a); }
 /* A natural: the title in gold foil, lit from above. */
 .bj__result[data-outcome="blackjack"] b {
@@ -400,8 +400,8 @@
   background: var(--panel);
   transition: border-color 150ms var(--bj-ease), box-shadow 150ms var(--bj-ease);
 }
-.bj__stake:focus-within { border-color: var(--lx-gold, #e3a13a); }
-.bj__stake span { color: var(--lx-gold, #e3a13a); font-weight: 800; }
+.bj__stake:focus-within { border-color: var(--lx-gold, #ffa903); }
+.bj__stake span { color: var(--lx-gold, #ffa903); font-weight: 800; }
 .bj__stake input {
   flex: 1;
   min-width: 0;

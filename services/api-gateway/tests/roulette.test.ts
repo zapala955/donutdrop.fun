@@ -129,7 +129,9 @@ describe('roulette persistence and client contract', () => {
     assert.match(client, /Reconnecting… bets are locked/);
     assert.match(client, /donut:roulette/);
     assert.doesNotMatch(client, /<span>DONUT<\/span>/);
-    assert.match(html, /href="\/roulette" data-route="roulette"/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/roulette" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /data-view="roulette"/);
     assert.match(nginx, /\|roulette\|/);
   });

@@ -157,7 +157,9 @@ describe('what search engines are given', () => {
      * heading, and the head still describes the site to search engines. */
     const html = await readFrontend('index.html');
     const home = html.slice(html.indexOf('data-view="home"'), html.indexOf('<!-- ─────── CRATES'));
-    assert.match(home, /<span id="lobbyTitle">DonutLuxe Originals<\/span>/);
+    // The row's heading is "Originals" since the redesign preview (2026-11-20); the name stays on every card.
+    assert.match(home, /<span id="lobbyTitle">Originals<\/span>/);
+    assert.match(home, /<span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals<\/span>/);
     assert.match(html, /<meta name="description" content="[^"]*DonutSMP[^"]*"/);
   });
 

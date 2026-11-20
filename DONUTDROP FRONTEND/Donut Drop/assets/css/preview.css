@@ -12,6 +12,7 @@
   --pv-well: rgba(8, 6, 5, .95);      /* the dark side of an offer, under its words */
   --pv-shade: rgba(8, 6, 5, .55);     /* a sprite's or a name's hard shadow, one step straight down */
   --pv-win: #40c786;                  /* a round that paid; the live dot */
+  --pv-rule: #24211e;                 /* the hairline between the frame's parts */
 }
 
 /* ═════════ section heads ═════════ */
@@ -365,6 +366,212 @@ body.lx .prof__avatar { image-rendering: pixelated; }
   .lxback, body.lx .lxpromos { margin-bottom: var(--lx-s5); }
   .lxback__list { grid-template-columns: repeat(3, 78%); gap: var(--lx-s2); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
 }
+
+/* ═════════ the frame, 1:1 with the preview (2026-11-20) ═════════
+   The owner: "I WANT THE SITE TO LOOK LIKE THE PREVIEW 1:1". The menu is the preview's three groups on
+   the well, each group a card; the bar is the well with a hairline under it, the search a pill, the
+   balance and the Wallet button one control in the middle, plain icon buttons and the player's head
+   on the right. The preview's icons are drawn in lines (.lxi). */
+.lxi { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+body.lx .lxside { background: var(--lx-0); box-shadow: 1px 0 0 var(--pv-rule); }
+body.lx .lxside__head {
+  flex-direction: row; justify-content: center; height: var(--lx-top); padding: 0;
+  box-shadow: 0 1px 0 var(--pv-rule);
+}
+body.lx[data-side="open"] .lxside__head { justify-content: flex-start; gap: var(--lx-s2); padding: 0 var(--lx-s3); box-shadow: 0 1px 0 var(--pv-rule); }
+body.lx .lxside__burger { width: 40px; height: 40px; border-radius: var(--lx-r); color: var(--lx-mute); }
+body.lx[data-side="open"] .lxside__burger { width: 40px; height: 40px; }
+body.lx .lxside__burger:hover { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .lxside__burger .lxi { width: 20px; height: 20px; fill: none; }
+.lxside__brand { display: none; align-items: center; gap: var(--lx-s2); min-width: 0; }
+body[data-side="open"] .lxside__brand { display: flex; }
+.lxside__brand img { display: block; flex: none; image-rendering: pixelated; }
+.lxside__word { width: 124px; height: 16px; }
+
+body.lx .lxside__nav { display: grid; align-content: start; gap: var(--lx-s3); padding: var(--lx-s3) var(--lx-s2); }
+body.lx[data-side="open"] .lxside__nav { padding: var(--lx-s3); }
+.lxgroup { display: grid; gap: 2px; }
+body[data-side="open"] .lxgroup { padding: var(--lx-s1); border-radius: 10px; background: var(--lx-1); }
+body.lx[data-side="open"] .lxnavs { padding: 0; border-radius: 0; background: none; }
+body.lx .lxnav {
+  justify-content: center; gap: var(--lx-s3); height: 40px; padding: 0;
+  border-radius: var(--lx-r); color: var(--lx-text); font-weight: 600;
+}
+body.lx[data-side="open"] .lxnav { justify-content: flex-start; padding: 0 var(--lx-s3); }
+body.lx .lxnav .lxi { width: 20px; height: 20px; fill: none; stroke: currentColor; }
+body.lx[data-side="open"] .lxnav span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+body.lx .lxnav:hover, body.lx .lxnav[aria-current="page"] { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .lxnav[aria-current="page"] .lxi { color: var(--lx-gold); }
+body.lx[data-side="open"] .lxnav[aria-current="page"] span { color: var(--lx-ink); }
+.lxnav__n { display: none; color: var(--lx-mute); font: 500 .75rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body[data-side="open"] .lxnav__n { display: inline; }
+body.lx .lxside__label { margin: 0; padding: var(--lx-s2) var(--lx-s3) var(--lx-s1); }
+
+/* the bar */
+body.lx .lxtop { background: var(--lx-0); box-shadow: 0 1px 0 var(--pv-rule); }
+body.lx .lxtop__in { max-width: none; gap: var(--lx-s2); padding: 0 var(--lx-s4); }
+body.lx .lxbrand { gap: var(--lx-s2); }
+body.lx .lxbrand__mark { width: 28px; height: 28px; }
+body.lx .lxbrand__word { width: 124px; height: 16px; }
+@media (min-width: 1024px) {
+  /* The menu carries the name while it is open; the bar carries it while the menu is a rail. */
+  body.lx[data-side="open"] .lxtop .lxbrand { display: none; }
+}
+body.lx .lxfind {
+  flex: 0 1 272px; height: 40px; gap: var(--lx-s2); padding: 0 var(--lx-s2) 0 var(--lx-s3);
+  background: var(--lx-2); box-shadow: inset 0 0 0 1px var(--pv-rule);
+}
+body.lx .lxfind:hover { box-shadow: inset 0 0 0 1px var(--lx-5); }
+body.lx .lxfind > svg { width: 20px; height: 20px; stroke-width: 1.8; }
+body.lx .lxfind input { font: 500 .9375rem/1 var(--lx-ui); }
+body.lx .lxfind .lxkbd {
+  padding: 2px 4px; border: 0; border-radius: 6px; background: var(--lx-4); box-shadow: none;
+  color: var(--lx-mute); font: 700 .6875rem/1.2 var(--lx-ui);
+}
+body.lx .lxpurse { height: 40px; border-radius: var(--lx-r); background: var(--lx-2); overflow: hidden; }
+body.lx .lxpurse .lxbal { min-width: 0; height: 100%; padding: 0 var(--lx-s3) 0 10px; border-radius: 0; }
+body.lx .lxpurse .lxbal .cashpill__n { margin-left: 0; font: 800 .875rem/1 var(--lx-ui); }
+body.lx .lxpurse #depositBtn {
+  display: inline-flex; align-items: center; gap: var(--lx-s2); height: 100%; padding: 0 var(--lx-s3);
+  border-radius: 0; background: var(--lx-gold); color: var(--lx-on-gold); font: 700 1rem/1 var(--lx-ui);
+}
+body.lx .lxpurse #depositBtn:hover { background: var(--lx-gold-hi); }
+body.lx .lxpurse #depositBtn .lxi { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; }
+/* Withdraw is the Wallet window's second tab, as in the preview. */
+body.lx .lxtop #withdrawBtn { display: none; }
+body.lx .lxtop :is(#lvlPill, #lvlTip, #view3dBtn) { display: none; }
+body.lx .lxtop .lxicon { width: 40px; height: 40px; border-radius: var(--lx-r); }
+/* The sound button stays in the bar as in the preview; only a narrow bar lets it go. */
+@container lxtop (min-width: 700px) { body.lx .lxtop .lxtop__end #muteBtn.mute { display: grid; } }
+body.lx .lxtop .lxicon svg { width: 20px; height: 20px; }
+body.lx .lxtop .lxicon[aria-pressed="true"], body.lx .lxtop .lxicon[aria-expanded="true"] { color: var(--lx-ink); }
+body.lx .lxtop #acctBtn { width: 36px; height: 36px; overflow: hidden; background: var(--lx-4); }
+body.lx .lxtop #acctBtn .acct__head { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+body.lx .lxtop #acctBtn[data-head="1"] > svg { display: none; }
+body.lx .lxtop #acctBtn .acct__head:not([src]) { display: none; }
+
+/* the wallet window's two tabs */
+.lxwtabs { display: flex; gap: 2px; margin: 0 0 var(--lx-s4); padding: 2px; border-radius: var(--lx-r); background: var(--lx-1); }
+.lxwtabs button {
+  flex: 1; height: 36px; border: 0; border-radius: 6px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui);
+}
+.lxwtabs button:hover { color: var(--lx-ink); }
+.lxwtabs button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
+
+/* ═════════ the lobby, 1:1 with the preview ═════════
+   The Originals in a row that scrolls, five cards to the width (seven on a wide column), with two
+   arrows and "See all"; then the slot machines, PvP and cases side by side at the same card size. */
+body.lx #lobby { container: lxlobby / inline-size; display: grid; gap: var(--lx-s6); }
+body.lx #lobby > * { --tile-w: calc((100cqi - 2 * 12px) / 3.3); }
+@container lxlobby (min-width: 40rem) { body.lx #lobby > * { --tile-w: calc((100cqi - 4 * 12px) / 5); } }
+@container lxlobby (min-width: 60rem) { body.lx #lobby > * { --tile-w: calc((100cqi - 6 * 12px) / 7); } }
+body.lx .lxtabs[hidden] { display: none; }
+body.lx #lobby .lxband__head { margin: 0; }
+body.lx #lobby .lxrow__h { display: block; margin: 0; color: var(--lx-ink); font: 800 1.125rem/1.2 var(--lx-display); letter-spacing: -.01em; }
+.lxband__count { color: var(--lx-mute); font: 600 .75rem/1 var(--lx-ui); white-space: nowrap; }
+.lxband__tools { display: flex; align-items: center; gap: var(--lx-s1); margin-left: auto; }
+.lxband__btn {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: var(--lx-r); background: var(--lx-2); color: var(--lx-text); cursor: pointer;
+}
+.lxband__btn:hover { background: var(--lx-4); }
+.lxband__btn:disabled { opacity: .35; cursor: default; }
+.lxband__see { display: inline-flex; align-items: center; gap: var(--lx-s1); padding-left: var(--lx-s2); color: var(--lx-ink); font: 700 .875rem/1 var(--lx-ui); white-space: nowrap; }
+.lxband__see:hover { color: var(--lx-gold); }
+.lxband { display: grid; gap: var(--lx-s3); min-width: 0; }
+.lxband[hidden], .lxgrp[hidden] { display: none; }
+body.lx #lobby :is(#lobbyTrack, .lxgrp .lxrow) {
+  grid-auto-flow: column; grid-auto-columns: var(--tile-w); grid-template-columns: none;
+  gap: var(--lx-s3); padding: 4px 0 0;
+}
+body.lx #lobbyTrack { overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+body.lx #lobbyTrack::-webkit-scrollbar { display: none; }
+body.lx #lobbyTrack > li { scroll-snap-align: start; }
+.lxgroups { display: flex; flex-wrap: wrap; gap: var(--lx-s6) var(--lx-s3); }
+.lxgrp { display: grid; gap: var(--lx-s3); flex: none; max-width: 100%; }
+
+/* A kind of game on its own (/?c=…): the heading, its line and the chips, then every game in a grid. */
+body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) .view[data-view="home"] > :is(.lxband__head, .lxpromos, .lxback, .lxpulls) { display: none !important; }
+body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) #lobby .lxrow__head { display: none; }
+body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) #lobby :is(#lobbyTrack, .lxgrp .lxrow) {
+  grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(min(8.5rem, 100%), 1fr));
+  gap: var(--lx-s4) var(--lx-s3); overflow: visible;
+}
+body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) .lxgrp { flex: 1 1 100%; }
+.lxcat { display: grid; gap: var(--lx-s2); }
+.lxcat[hidden] { display: none; }
+body.lx .lxcat__h { margin: 0; color: var(--lx-ink); font: 900 2.25rem/1.05 var(--lx-display); letter-spacing: -.025em; }
+.lxcat__p { max-width: 58ch; margin: 0; color: var(--lx-mute); font-size: 1rem; }
+.lxchips { display: flex; gap: var(--lx-s1); margin-top: var(--lx-s4); overflow-x: auto; scrollbar-width: none; }
+.lxchip {
+  display: inline-flex; align-items: center; gap: var(--lx-s2); height: 36px; padding: 0 var(--lx-s4);
+  border-radius: 999px; background: var(--lx-2); color: var(--lx-text); font-weight: 700; white-space: nowrap;
+}
+.lxchip:hover { background: var(--lx-3); color: var(--lx-ink); }
+.lxchip[aria-current="page"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxchip[aria-current="page"] .lxi { color: var(--lx-gold); }
+
+/* ═════════ biggest wins and live bets, 1:1 with the preview ═════════
+   Wins: cards four to the width, the sprite and the game over who and the multiple, then the profit
+   in green and the stake. Live bets: a table on the page's own colour, every other row a step up,
+   with the lists as a pill of tabs; the time column only where there is room. */
+body.lx .lxpulls { margin-top: var(--lx-s8); }
+body.lx .lxpulls .lxrow__head { margin: 0 0 var(--lx-s3); }
+body.lx .lxpulls .lxrow__h { display: block; margin: 0; color: var(--lx-ink); font: 800 1.125rem/1.2 var(--lx-display); letter-spacing: -.01em; }
+body.lx .lxpulls .lxrow__h svg { display: none; }
+body.lx .lxdrops { grid-template-columns: repeat(auto-fill, minmax(min(10.5rem, 100%), 1fr)); gap: var(--lx-s2); }
+body.lx .lxdrops li {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--lx-s2) var(--lx-s3);
+  min-height: 0; padding: var(--lx-s3); border-radius: 10px; background: var(--lx-2); box-shadow: none;
+}
+body.lx .lxdrops li:hover { background: var(--lx-3); }
+body.lx .lxdrops img { width: 40px; height: 40px; }
+.drops__foot { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--lx-s2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+body.lx .lxdrops .drops__foot .amt { margin: 0; padding: 0; background: none; color: var(--pv-win); font: 800 .875rem/1.2 var(--lx-ui); }
+body.lx .lxdrops .drops__bet { color: var(--lx-text); font: 800 .875rem/1.2 var(--lx-ui); }
+
+body.lx .feedwrap { container: lxbets / inline-size; }
+.lxbets { display: grid; gap: var(--lx-s3); }
+.lxbets__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lx-s3); min-width: 0; }
+body.lx .lxbets__title {
+  display: flex; align-items: center; gap: var(--lx-s2); margin: 0 auto 0 0;
+  color: var(--lx-ink); font: 800 1.125rem/1.2 var(--lx-display); letter-spacing: -.01em;
+}
+.lxbets__dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--pv-win); }
+.lxbets__tabs {
+  display: flex; gap: 2px; max-width: 100%; min-width: 0; padding: 2px;
+  border-radius: 999px; background: var(--lx-0); overflow-x: auto; scrollbar-width: none;
+}
+.lxbets__tab {
+  height: 32px; padding: 0 var(--lx-s3); border: 0; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .75rem/1 var(--lx-ui); white-space: nowrap;
+}
+.lxbets__tab:hover { color: var(--lx-ink); }
+.lxbets__tab[aria-selected="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxbets__tab[hidden] { display: none; }
+.lxbets__wrap { overflow-x: auto; border-radius: 10px; }
+.lxbtable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .875rem; }
+.lxbtable th { padding: var(--lx-s2) var(--lx-s3); text-align: left; color: var(--lx-mute); font: 700 .75rem/1.2 var(--lx-ui); white-space: nowrap; }
+.lxbtable td { height: 44px; padding: 0 var(--lx-s3); color: var(--lx-text); white-space: nowrap; }
+.lxbtable tbody tr:nth-child(odd) td { background: var(--lx-2); }
+.lxbtable tbody td:first-child { border-radius: var(--lx-r) 0 0 var(--lx-r); }
+.lxbtable tbody td:last-child { border-radius: 0 var(--lx-r) var(--lx-r) 0; }
+.lxbtable .r { text-align: right; }
+.lxbtable :is(.c-user, .c-time, .c-bet) { display: none; }
+@container lxbets (min-width: 30rem) { .lxbtable .c-bet { display: table-cell; } }
+@container lxbets (min-width: 40rem) { .lxbtable .c-user { display: table-cell; } }
+@container lxbets (min-width: 54rem) { .lxbtable .c-time { display: table-cell; } }
+.lxbtable .pos { color: var(--pv-win); font-weight: 700; }
+.lxbtable .neg { color: var(--lx-mute); }
+.lxbtable .you { color: var(--lx-gold); font-weight: 800; }
+.lxgcell { display: inline-flex; align-items: center; gap: var(--lx-s2); color: var(--lx-ink); font-weight: 600; }
+.lxgcell img { width: 20px; height: 20px; flex: none; image-rendering: pixelated; }
+.lxgcell span { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; }
+.lxbtable .feedav { display: none; }
+.lxbrow--empty td { height: 64px; color: var(--lx-mute); text-align: center; }
+.lxbrow__team { margin-left: var(--lx-s2); color: var(--team, var(--lx-mute)); font: 700 .75rem/1 var(--lx-ui); font-style: normal; }
 
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }

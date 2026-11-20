@@ -170,8 +170,10 @@ describe('settings: the page and what it changes', () => {
     assert.match(head, /<script src="assets\/js\/prefs-boot\.js"><\/script>/);
     assert.doesNotMatch(head, /prefs-boot\.js"[^>]*(?:defer|async|type="module")/);
     // Reachable signed out: the theme is this browser's, not the account's.
-    const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>', html.indexOf('<aside class="lxside"')));
-    assert.match(side, /<a class="lxnav" href="\/settings" data-route="settings" data-tip="Settings">/);
+    // In the footer, which is there signed out, and the account menu (the preview's sidebar has no Settings, 2026-11-20).
+    const foot = html.slice(html.indexOf('<footer class="sitefoot"'), html.indexOf('</footer>'));
+    assert.match(foot, /<a href="\/settings">Settings<\/a>/);
+    assert.match(html, /<a class="menu__row" href="\/settings" role="menuitem">/);
   });
 
   it('derives every step of the ladder from one hue and paints the backdrop under the page', async () => {

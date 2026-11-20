@@ -291,10 +291,14 @@ describe('frontend/backend contract', () => {
     // The platform runs on cash: there is no inventory to route to any more.
     assert.doesNotMatch(html, /data-route="inventory"/);
     assert.doesNotMatch(html, /data-view="inventory"/);
-    // Linked from the menu AND reachable.
+    // Linked from the menu AND reachable: the cases games by the sidebar's Cases category (2026-11-20).
+    assert.match(html, /data-route="fairness"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=cases" data-cat="cases"/);
     for (const route of ['crates', 'upgrader', 'fairness']) {
-      assert.match(html, new RegExp(`data-route="${route}"`));
       assert.match(html, new RegExp(`data-view="${route}"`));
+    }
+    for (const route of ['crates', 'upgrader']) {
+      assert.match(html, new RegExp(`<a class="gcard lxcard" href="/${route}" data-cat="cases"`));
     }
     /* Reachable, but no longer on the menu. Skill Duels and Faction War were taken off the board
      * together; their views stay so an existing link or bookmark still resolves, and so restoring
@@ -420,29 +424,27 @@ describe('frontend/backend contract', () => {
     assert.match(app, /state\.promotions\?\.signupBonus/);
   });
 
-  it('lists every live game in the sidebar and on a lobby card', async () => {
+  it('lists every live game on a lobby card, under a category the sidebar links to', async () => {
     const html = await source('index.html');
     const app = await source('assets/js/app.js');
-    /* The casino-lobby shell has no Casino drop-down: the games are the sidebar's "DonutLuxe
-     * Originals" list, each one an ordinary routed link, and a card in the lobby row. */
+    /* The redesign preview's sidebar (2026-11-20): Lobby, then the four categories, each a link to
+     * the lobby filtered to it (/?c=casino and so on). Every game is a card in its category's row. */
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
-    const lobby = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
-    // Coinflip and Mines Duel are hidden for now (2026-11-10): home-look.test.ts holds them out.
-    for (const route of ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'stocks', 'fishing', 'upgrader', 'battles']) {
-      assert.match(side, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the sidebar`);
-      assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
-      assert.match(lobby, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no lobby card`);
+    const track = (id: string) => html.slice(html.indexOf(`id="${id}"`), html.indexOf('</ul>', html.indexOf(`id="${id}"`)));
+    const rows: Record<string, [string, string[]]> = {
+      casino: ['lobbyTrack', ['roulette', 'blackjack', 'crash', 'mines', 'tower', 'chicken', 'plinko', 'dice', 'limbo', 'stocks', 'fishing', 'derby', 'coinflip']],
+      slots: ['slotsTrack', ['ore-rush', 'monument']],
+      pvp: ['pvpTrack', ['battles']],
+      cases: ['casesTrack', ['crates', 'upgrader']],
+    };
+    for (const [cat, [id, routes]] of Object.entries(rows)) {
+      assert.match(side, new RegExp(`<a class="lxnav" href="/\\?c=${cat}" data-cat="${cat}"`), `${cat} is missing from the sidebar`);
+      for (const route of routes) {
+        assert.match(track(id), new RegExp(`<a class="gcard lxcard" href="/${route}" data-cat="${cat}"`), `${route} has no card in ${id}`);
+        assert.doesNotMatch(side, new RegExp(`href="/${route}"`), `${route} has a sidebar link of its own again`);
+      }
     }
-    // The slot machines are a category of their own: a sidebar group and a row under the Originals.
-    const slotsSide = side.slice(side.indexOf('<p class="lxside__label">Slots</p>'));
-    const slotsRow = html.slice(html.indexOf('<ul class="lxrow" id="slotsTrack"'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
     assert.ok(html.indexOf('id="slotsRow"') > html.indexOf('id="lobbyTrack"'), 'the slots row sits under the Originals');
-    for (const route of ['ore-rush', 'monument']) {
-      assert.match(slotsSide, new RegExp(`<a class="lxnav" href="/${route}" data-route="${route}"`), `${route} is missing from the Slots group`);
-      assert.equal(side.split(`href="/${route}"`).length - 1, 1, `${route} is in the sidebar twice`);
-      assert.match(slotsRow, new RegExp(`<a class="gcard lxcard" href="/${route}"`), `${route} has no card in the Slots row`);
-      assert.doesNotMatch(lobby, new RegExp(`href="/${route}"`), `${route} is still among the Originals`);
-    }
     // A game still to come would be announced, readable and never a link; none is, today.
     assert.doesNotMatch(side, /tabdrop__row--soon|aria-disabled="true"/);
     // The page exists, is routed, and is served for a direct visit.

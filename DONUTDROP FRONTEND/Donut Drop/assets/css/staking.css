@@ -12,7 +12,7 @@
   font-size: 1.05rem;
   letter-spacing: .04em;
   text-transform: uppercase;
-  color: var(--lx-gold-hi, #f0c35a);
+  color: var(--lx-gold-hi, #fec348);
 }
 .pool .pool__lede, .pool .pool__note {
   margin: 0;
@@ -32,14 +32,14 @@
   padding: 12px;
   border-radius: 10px;
   background: var(--dd-panel, linear-gradient(180deg, rgba(31, 26, 16, .7), rgba(12, 11, 8, .9)));
-  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(227, 161, 58, .09));
+  box-shadow: var(--dd-edge, inset 0 0 0 1px rgba(255, 169, 3, .09));
   min-width: 0;
 }
 .pool .pool__sub { margin: 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--lx-ink, #f2eee6); }
-.pool .pool__big { font-family: var(--mono, ui-monospace, monospace); font-size: 1.15rem; font-weight: 800; color: var(--lx-gold-hi, #f0c35a); }
+.pool .pool__big { font-family: var(--mono, ui-monospace, monospace); font-size: 1.15rem; font-weight: 800; color: var(--lx-gold-hi, #fec348); }
 
 .pool .pool__bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .07); overflow: hidden; }
-.pool .pool__fill { display: block; height: 100%; border-radius: inherit; background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a)); }
+.pool .pool__fill { display: block; height: 100%; border-radius: inherit; background: var(--dd-ramp, linear-gradient(135deg, #a86a00, #ffa903, #fec348)); }
 
 .pool .pool__form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
 .pool .pool__input {
@@ -60,7 +60,7 @@
   cursor: pointer;
 }
 .pool .pool__chip { border: 1px solid rgba(255, 255, 255, .14); background: transparent; color: var(--lx-ink, #f2eee6); }
-.pool .pool__go { border: 0; color: #1a1306; background: var(--dd-ramp, linear-gradient(135deg, #8f5a17, #e3a13a, #f0c35a)); }
+.pool .pool__go { border: 0; color: #1a1306; background: var(--dd-ramp, linear-gradient(135deg, #a86a00, #ffa903, #fec348)); }
 .pool .pool__chip:disabled, .pool .pool__go:disabled { opacity: .5; cursor: default; }
 
 .pool .pool__chart { display: flex; align-items: flex-end; gap: 4px; height: 70px; padding-top: 4px; }

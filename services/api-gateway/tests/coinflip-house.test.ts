@@ -72,7 +72,9 @@ describe('coinflip against the house: the server', () => {
 describe('coinflip against the house: the page', () => {
   it('is on the menu, in the lobby, routed and framed like every table', async () => {
     const [html, app, luxe] = await Promise.all([front('index.html'), front('assets/js/app.js'), front('assets/js/luxe.js')]);
-    assert.match(html, /<a class="lxnav" href="\/coinflip" data-route="coinflip"/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/coinflip" data-cat="casino"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=casino" data-cat="casino"/);
     assert.match(html, /<a class="gcard lxcard" href="\/coinflip" data-cat="casino" data-game="coinflip"/);
     assert.match(html, /<div class="cflip" id="coinflipRoot"><\/div>/);
     assert.match(app, /coinflip: mountCoinflip/);

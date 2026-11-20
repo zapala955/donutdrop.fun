@@ -416,10 +416,12 @@ describe('the slots page', () => {
     assert.match(html, /<section class="view" data-view="ore-rush" hidden>/);
     assert.match(html, /<h1>Ore Rush<\/h1>\s*<span class="phead__tag">DonutLuxe Slots<\/span>/);
     assert.match(html, /<div class="slots" id="slotsRoot"><\/div>/);
-    assert.match(html, /<a class="gcard lxcard" href="\/ore-rush" data-cat="casino" data-game="ore-rush"/);
+    assert.match(html, /<a class="gcard lxcard" href="\/ore-rush" data-cat="slots" data-game="ore-rush"/);
     // Its player count is still keyed by the game id the server counts it under.
     assert.match(html, /<p class="lxlive" data-live="slots" hidden>/);
-    assert.match(html, /<a class="lxnav" href="\/ore-rush" data-route="ore-rush" data-tip="Ore Rush">/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/ore-rush" data-cat="slots"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=slots" data-cat="slots"/);
     assert.match(html, /href="assets\/css\/slots\.css"/);
     assert.match(html, /<link rel="modulepreload" href="assets\/js\/slots\.js" \/>/);
     assert.match(app, /'ore-rush': mountSlots,/);
@@ -556,9 +558,11 @@ describe('the slots page', () => {
     ]);
     assert.match(html, /<section class="view" data-view="monument" hidden>/);
     assert.match(html, /<div class="slots" id="monumentRoot"><\/div>/);
-    assert.match(html, /<a class="gcard lxcard" href="\/monument" data-cat="casino" data-game="monument"/);
+    assert.match(html, /<a class="gcard lxcard" href="\/monument" data-cat="slots" data-game="monument"/);
     assert.match(html, /<p class="lxlive" data-live="monument" hidden>/);
-    assert.match(html, /<a class="lxnav" href="\/monument" data-route="monument" data-tip="Ocean Monument">/);
+    // On the menu by its category, not a link of its own (the preview's sidebar, 2026-11-20).
+    assert.match(html, /<a class="gcard lxcard" href="\/monument" data-cat="slots"/);
+    assert.match(html, /<a class="lxnav" href="\/\?c=slots" data-cat="slots"/);
     for (const module of ['slots3d-bastion', 'slots3d-monument']) {
       assert.match(html, new RegExp(`<link rel="modulepreload" href="assets/js/${module}\\.js" />`));
     }

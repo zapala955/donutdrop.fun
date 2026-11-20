@@ -48,8 +48,10 @@ let restoreFocus = null;
 
 export function openModal(title, build, opts = {}) {
   const dlg = $('#modal');
-  restoreFocus = document.activeElement;
+  // Switching the Wallet window's tab reopens it in place: keep what had focus before it opened.
+  if (!dlg.open) restoreFocus = document.activeElement;
   dlg.dataset.variant = opts.variant || '';
+  dlg.querySelector('.lxwtabs')?.remove();
   $('#modalTitle').textContent = title;
   const body = $('#modalBody');
   body.innerHTML = '';
