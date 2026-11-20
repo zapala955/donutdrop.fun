@@ -620,7 +620,7 @@ describe('the slots page', () => {
 
   it('draws the machine in its own tokens, in the shared frame, with reduced motion honoured', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/slots.css')]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.limbo, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.limbo, \.cflip, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
     const rules = css.slice(css.indexOf('/* ─────────── the machine'));
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

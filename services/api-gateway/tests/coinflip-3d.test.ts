@@ -27,11 +27,11 @@ describe('coinflip in 3D', () => {
     assert.match(coin, /const SETTLE_MS = 500;/);
   });
 
-  it('plays the settled game in the dialog, and spins the flat coin when it cannot', async () => {
+  it('is flat since Coinflip became a flip against the house (2026-11-20): no scene, the flat coin lands the result', async () => {
     const [page, css] = await Promise.all([front('assets/js/coinflip.js'), front('assets/css/coinflip.css')]);
-    assert.match(page, /await import\('\.\/coin3d\.js'\)/);
-    assert.match(page, /if \(!wants3d\(\) \|\| no3dCoin\) \{\n\s*spinFlat\(\);\n\s*return;\n\s*\}/);
-    assert.match(page, /if \(tossed\) \{\n\s*land\(\);\n\s*return;\n\s*\}\n\s*delete coin\.dataset\.render;\n\s*spinFlat\(\);/);
-    assert.match(css, /\.cfcoin:is\(\[data-render='3d'\], \[data-render='loading'\]\) \.cfcoin__body \{ display: none; \}/);
+    assert.doesNotMatch(page, /coin3d|view3d/);
+    // Five turns, and a half more when the side changes: the face at rest is the result.
+    assert.match(page, /const end = turn \+ 5 \* 360 \+ \(\(target - turn \+ 360\) % 360\);/);
+    assert.match(css, /\.cflip__face--tails \{\n  transform: rotateX\(180deg\);/);
   });
 });

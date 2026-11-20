@@ -25,7 +25,7 @@ const read = async (relative: string) =>
 describe('the rounds behind the statistics and history pages', () => {
   it('reads every game table, the player\'s own rows only', () => {
     const sql = allRoundsSql();
-    for (const table of ['upgrader_rounds', 'case_rounds', 'battle_players', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'dice_bets', 'slots_spins', 'coinflip_games', 'mines_duel_games']) {
+    for (const table of ['upgrader_rounds', 'case_rounds', 'battle_players', 'roulette_bets', 'blackjack_hands', 'crash_bets', 'mines_games', 'tower_games', 'chicken_games', 'plinko_bets', 'dice_bets', 'slots_spins', 'coinflip_games', 'coinflip_bets', 'mines_duel_games']) {
       assert.ok(sql.includes(`FROM ${table}`), table);
     }
     for (const source of ROUND_SOURCES) assert.match(source.where, /\$1/, source.key);

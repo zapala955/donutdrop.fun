@@ -198,7 +198,7 @@ const RIDES: Record<string, string> = {
   'routes/roulette.ts': 'roulette_bets',
 };
 const ONE_TRANSACTION = new Set([
-  'routes/dice.ts', 'routes/limbo.ts', 'routes/plinko.ts', 'routes/slots.ts', 'routes/derby.ts',
+  'routes/dice.ts', 'routes/limbo.ts', 'routes/coinflip-house.ts', 'routes/plinko.ts', 'routes/slots.ts', 'routes/derby.ts',
   'routes/cases.ts', 'routes/upgrades.ts',
 ]);
 

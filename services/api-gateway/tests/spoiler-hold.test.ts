@@ -259,7 +259,7 @@ describe('the pages that hold for their own rounds', LIMIT, () => {
       'blackjack.js': /const release = holdLiveFigures\(\);\s*try \{[\s\S]*?api\.post\(\s*'\/v1\/blackjack\/hands'/,
       'plinko.js': /release: holdLiveFigures\(\)/,
       'slots.js': /const release = holdLiveFigures\(\);[\s\S]*?await send\(stake\)/,
-      'coinflip.js': /hold = holdLiveFigures\(\)/,
+      'coinflip.js': /const release = holdLiveFigures\(\);\s*try \{[\s\S]*?'\/v1\/coinflip\/bets'/,
       'mines-duel.js': /hold = holdLiveFigures\(\)/,
       'battles.js': /seatHold = holdLiveFigures\(\)/,
       'crates.js': /requestCaseOpen\(crate, \{ defer: true \}\)/,

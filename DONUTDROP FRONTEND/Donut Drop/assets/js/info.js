@@ -172,7 +172,7 @@ function articles(f) {
     ] },
     { id: 'lost-everything', group: 'wager', title: 'I lost my balance. Does the old requirement stay?', blocks: [
       { p: 'No. If your balance is under $1,000 and you have no game or bet still running, your next deposit clears whatever requirement was left, and only adds its own.' },
-      { tip: 'Finish or cash out any open game first (mines, tower, blackjack, a coinflip waiting for an opponent). A bet still running keeps the old requirement in place.' },
+      { tip: 'Finish or cash out any open game first (mines, tower, blackjack). A bet still running keeps the old requirement in place.' },
     ] },
 
     // ── bonuses & rewards ──

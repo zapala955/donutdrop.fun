@@ -1,591 +1,449 @@
-/* coinflip.js — 1v1 Coinflip: the board, opening a game, and the flip.
+/* coinflip.js — Coinflip: call heads or tails, the coin is flipped, a right call pays 1.8x.
  *
- * The browser never decides anything here. The coin is flipped server-side in the same request
- * that takes a game, and the answer arrives already settled; this file only animates the coin
- * onto the side the server named and shows the seeds that prove it. The host learns their result
- * from the live stream: when one of their open games leaves the board, it is re-read and played.
+ * 2026-11-20, the owner: "just make coinflip a normal coinflip game". It was a board of player
+ * against player games; it is now one player against the house, like Dice and Limbo. The server
+ * owns the coin: one request takes the stake, reads the coin from the player's committed fairness
+ * seed and pays a right call, all at once (routes/coinflip-house.ts, lib/coinflip.ts houseFlip);
+ * this page shows a coin that has already landed.
  *
- * The flip is tossed in WebGL where the browser can (coin3d.js, its own chunk): a gold-and-iron
- * coin off an anvil in a smithy. Without WebGL, or for a player who has chosen 2D (view3d.js), the
- * flat coin spins instead, for the same 2.2 seconds.
+ * The look is the redesign preview's: a flat coin, gold ingot for heads and iron for tails, that
+ * jumps, turns end over end and drops onto the side the server named, its shadow shrinking as it
+ * rises. The strip of the player's last flips sits above it. A right call bursts out of a win card;
+ * a wrong one puffs red. Flat, no glow. With reduced motion the coin simply shows its side.
+ *
+ * A game still open on the old board (opened before the change) is listed under the button with a
+ * Cancel; the board refunds it by itself once it lapses anyway.
  */
-import {
-  state,
-  bus,
-  refreshBalance,
-  refreshActivity,
-  holdLiveFigures,
-  showBalance,
-} from './store.js';
-import { onNavigate } from './routing.js';
-import { $, el, money, clamp, reduceMotion } from './util.js';
-import { toast, openModal, closeModal } from './ui.js';
-import { playSound } from './audio-engine.js';
 import { api, clientSeed } from './api.js';
-import { onViewSwitch, paintViewSwitch, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
-
-let root = null;
-
-/** The board plus the platform's coinflip configuration, as last read. */
-let board = { games: [], recent: [], rakeBps: 1000, minStakeMinor: '0', maxStakeMinor: '0' };
-
-/** Codes of games this player is hosting and has not seen land yet. */
-const watching = new Set();
-/** Codes already animated, so a refresh never replays a flip. */
-const shown = new Set();
-
-let pollTimer = 0;
-/** Set once this browser has shown it cannot draw the 3D coin: the flat one from then on. */
-let no3dCoin = false;
-let refreshing = false;
-
-/* ─────────── holding the wallet still ───────────
- *
- * The coin is flipped and paid in the request that takes a game, so the server's balance event
- * reaches the wallet pill before the coin has left the hand: the joiner watched their win pop in the
- * header and then sat through the spin, and so did a host whose game was taken. The live figures are
- * therefore held while this player has anything in the air on the board in front of them — an open
- * game of theirs, a join on its way, a flip that has not landed — and stakes and wins are applied to
- * the pill locally, from figures the server already confirmed. Leaving the page, or the last flip
- * landing, releases the hold and refreshes for real. */
-let hold = null;
-let inFlight = 0;
-
-function onScreen() {
-  return Boolean(root?.isConnected) && !root.closest('.view')?.hidden;
-}
-
-function syncHold() {
-  const needed = onScreen() && (watching.size > 0 || inFlight > 0);
-  if (needed && !hold) hold = holdLiveFigures();
-  if (!needed && hold) {
-    hold();
-    hold = null;
-    refreshBalance().catch(() => undefined);
-    refreshActivity().catch(() => undefined);
-  }
-}
-
-function moveBalance(deltaMinor) {
-  showBalance(BigInt(state.balanceMinor || '0') + BigInt(deltaMinor));
-}
+import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
+import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
+import { toast } from './ui.js';
+import { playSound } from './audio-engine.js';
+import { clearWin, fxColors, makeFx, winCard } from './pvfx.js';
 
 const SIDE = {
   heads: { label: 'Heads', art: 'assets/img/items/gold_ingot.png' },
   tails: { label: 'Tails', art: 'assets/img/items/iron_ingot.png' },
 };
+const RECENT = 12;
+/** The whole flip: up, over five times and down, in milliseconds. */
+const FLIP_MS = 1_300;
 
-/* ═════════════════════════ entry ═════════════════════════ */
+let root = null;
+let config = null;
+let seedHash = null;
+let busy = false;
+let stakeText = '1m';
+let call = 'heads';
+let recent = []; // newest first
+let leftovers = []; // this player's games still open on the old board
+let fx = null; // the preview's effects over the stage (pvfx.js)
+let turn = 0; // the coin's resting angle: 0 shows heads, 180 tails
 
-export function mountCoinflip(view) {
-  root = $('#coinflipRoot', view);
-  if (!root) return;
+/* ─────────── the maths, mirrored from lib/coinflip.ts ─────────── */
 
-  if (!root.dataset.built) {
-    root.dataset.built = '1';
-    bus.addEventListener('change', (event) => {
-      if (!root.isConnected) return;
-      if (['login', 'logout', 'ready'].includes(event.detail)) void refresh();
-    });
-    window.addEventListener('donut:coinflip', () => {
-      if (onScreen()) void refresh();
-    });
-    onNavigate(syncHold);
-  }
-  /* The live stream is the real trigger; this is the recovery path for a stream that dropped.
-   * Views are hidden rather than removed on navigation, so "connected" alone kept this polling on
-   * every other page of the site; it now runs only while the board is actually on screen. */
-  if (!pollTimer) {
-    pollTimer = window.setInterval(() => {
-      if (!root?.isConnected) {
-        window.clearInterval(pollTimer);
-        pollTimer = 0;
-        return;
-      }
-      if (!document.hidden && onScreen()) void refresh();
-    }, 15_000);
-  }
-  void refresh();
+const payoutBps = () => BigInt(config?.payoutBps ?? 18_000);
+const times = () => `${(Number(payoutBps()) / 10_000).toFixed(2)}×`;
+
+function stakeMinor() {
+  const value = parseAmount(stakeText);
+  return value === null ? null : BigInt(value);
 }
 
-async function refresh() {
-  if (refreshing) return;
-  refreshing = true;
+function payoutMinor(stake) {
+  return (stake * payoutBps()) / 10_000n;
+}
+
+function largestBet() {
+  return config ? BigInt(config.maxStakeMinor) : 0n;
+}
+
+function betProblem() {
+  if (!config) return 'Coinflip is not answering';
+  if (!config.enabled) return 'Coinflip is closed right now';
+  const stake = stakeMinor();
+  if (stake === null || stake <= 0n) return 'Enter a stake, for example 1m';
+  if (stake < BigInt(config.minStakeMinor)) return `The smallest flip is ${money(Number(config.minStakeMinor))}`;
+  if (stake > BigInt(config.maxStakeMinor)) return `The largest flip is ${money(Number(config.maxStakeMinor))}`;
+  if (state.authenticated && stake > BigInt(state.balanceMinor || '0')) return 'That is more than your balance';
+  return '';
+}
+
+/* ─────────── talking to the server ─────────── */
+
+async function load() {
   try {
-    board = await api.get('/v1/coinflip');
-  } catch (error) {
-    root.replaceChildren(
-      notice(
-        error?.code === 'COINFLIP_DISABLED'
-          ? 'Coinflip is not switched on yet.'
-          : 'The coinflip board could not be loaded.',
-      ),
-    );
-    return;
-  } finally {
-    refreshing = false;
+    config = await api.get('/v1/coinflip/config');
+  } catch {
+    config = null;
   }
-
-  /* A game of ours that has left the board was either taken or closed. Taken means a flip to
-   * show, so it is re-read rather than guessed from its absence. */
-  const stillOpen = new Set(board.games.map((game) => game.code));
-  for (const game of board.games) {
-    if (game.host.isYou) watching.add(game.code);
-  }
-  for (const code of [...watching]) {
-    if (stillOpen.has(code)) continue;
-    watching.delete(code);
-    /* Counted before the read, so the hold outlives the gap between "my game left the board" and
-     * the flip that tells me how it went. */
-    inFlight += 1;
-    void api
-      .get(`/v1/coinflip/${code}`)
-      .then((game) => {
-        if (game.status === 'settled') showFlip(game, { counted: true });
-        else landed();
-      })
-      .catch(() => landed());
-  }
-  syncHold();
-  render();
-}
-
-/** One thing that was in the air has come down. */
-function landed() {
-  inFlight = Math.max(0, inFlight - 1);
-  syncHold();
-}
-
-/* ═════════════════════════ the board ═════════════════════════ */
-
-function notice(text) {
-  const box = el('p', 'empty');
-  box.textContent = text;
-  return box;
-}
-
-function avatar(name) {
-  const node = el('span', 'duelav duelav--md');
-  node.textContent = (name || '?').slice(0, 2).toUpperCase();
-  return node;
-}
-
-function sideChip(side) {
-  const chip = el('span', 'cfside');
-  chip.dataset.side = side;
-  const img = el('img');
-  img.src = SIDE[side].art;
-  img.alt = '';
-  chip.append(img, Object.assign(el('b'), { textContent: SIDE[side].label }));
-  return chip;
-}
-
-/** What the winner gets, as a multiple of one stake: the pot less the server's cut, e.g. "1.9×". */
-function winnerX(cutBps) {
-  return `${((20_000 - 2 * cutBps) / 10_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}×`;
-}
-
-function render() {
-  const wrap = el('div', 'duel cf');
-
-  const badges = el('div', 'duel__badges');
-  for (const [value, label] of [
-    [winnerX(board.rakeBps), 'WINNER GETS'],
-    ['50/50', 'EXACT ODDS'],
-    ['HMAC', 'PROVABLY FAIR'],
-  ]) {
-    const badge = el('span', 'duel__badge');
-    badge.append(
-      Object.assign(el('b'), { textContent: value }),
-      Object.assign(el('i'), { textContent: label }),
-    );
-    badges.append(badge);
-  }
-  wrap.append(badges);
-
-  const head = el('div', 'duel__head');
-  const title = el('h2', 'duel__h');
-  title.textContent = 'Open flips';
-  const create = el('button', 'btn btn--go');
-  create.type = 'button';
-  create.textContent = 'Create flip';
-  create.addEventListener('click', () => {
-    if (!state.authenticated) {
-      $('#loginBtn')?.click();
-      return;
-    }
-    openCreate();
-  });
-  head.append(title, create);
-  wrap.append(head);
-
-  if (!board.games.length) {
-    wrap.append(notice('No open flips. Create one and pick your side.'));
-  } else {
-    const table = el('div', 'duel__table');
-    const header = el('div', 'duel__row duel__row--head cf__row');
-    for (const [label, cls] of [
-      ['PLAYER', 'who'],
-      ['SIDE', 'mode'],
-      ['STAKE', 'stake'],
-      ['WINNER TAKES', 'take'],
-      ['', 'go'],
-    ]) {
-      const cell = el('span', `duel__c duel__c--${cls}`);
-      cell.textContent = label;
-      header.append(cell);
-    }
-    table.append(header);
-
-    for (const game of board.games) {
-      const row = el('div', 'duel__row cf__row');
-      row.dataset.mine = game.host.isYou ? '1' : '0';
-
-      const who = el('span', 'duel__c duel__c--who');
-      who.append(
-        avatar(game.host.name),
-        Object.assign(el('b'), {
-          textContent: game.host.name || 'Player',
-        }),
-      );
-
-      const side = el('span', 'duel__c duel__c--mode');
-      side.append(sideChip(game.host.side));
-
-      const stake = el('span', 'duel__c duel__c--stake mono');
-      stake.textContent = money(Number(game.stakeMinor));
-
-      const take = el('span', 'duel__c duel__c--take mono');
-      take.textContent = money(Number(game.payoutMinor));
-
-      const go = el('span', 'duel__c duel__c--go');
-      if (game.host.isYou) {
-        const cancel = el('button', 'btn btn--tiny');
-        cancel.type = 'button';
-        cancel.textContent = 'Cancel';
-        cancel.addEventListener('click', () => void cancelGame(game, cancel));
-        go.append(cancel);
-      } else {
-        const join = el('button', 'btn btn--go btn--tiny');
-        join.type = 'button';
-        const theirs = game.host.side === 'heads' ? 'tails' : 'heads';
-        join.textContent = `TAKE ${SIDE[theirs].label.toUpperCase()}`;
-        join.addEventListener('click', () => void takeGame(game, join));
-        go.append(join);
-      }
-
-      row.append(who, side, stake, take, go);
-      table.append(row);
-    }
-    wrap.append(table);
-  }
-
-  if (board.recent?.length) {
-    const recentHead = el('h2', 'duel__h cf__recenth');
-    recentHead.textContent = 'Recent flips';
-    const strip = el('div', 'cf__recent');
-    for (const game of board.recent) {
-      const card = el('button', 'cf__flip');
-      card.type = 'button';
-      card.dataset.side = game.result;
-      card.title = 'Show this flip and its proof';
-      const img = el('img');
-      img.src = SIDE[game.result]?.art ?? SIDE.heads.art;
-      img.alt = SIDE[game.result]?.label ?? '';
-      const winner = game.winner === 'host' ? game.host : game.opponent;
-      card.append(
-        img,
-        Object.assign(el('b', 'mono'), { textContent: money(Number(game.payoutMinor)) }),
-        Object.assign(el('i'), { textContent: winner?.name || 'Player' }),
-      );
-      card.addEventListener('click', () => showFlip(game, { replay: true }));
-      strip.append(card);
-    }
-    wrap.append(recentHead, strip);
-  }
-
-  root.replaceChildren(wrap);
-}
-
-/* ═════════════════════════ open a game ═════════════════════════ */
-
-function openCreate() {
-  const min = Number(board.minStakeMinor);
-  const max = Number(board.maxStakeMinor);
-  let stake = clamp(1_000_000, min, max);
-  let side = 'heads';
-
-  const body = el('div', 'duelnew');
-
-  const figure = el('div', 'duelnew__fig');
-  const amount = el('b', 'duelnew__amt mono');
-  const breakdown = el('span', 'duelnew__split mono');
-  figure.append(amount, breakdown);
-
-  const paint = () => {
-    stake = clamp(Math.floor(stake), min, max);
-    amount.textContent = money(stake);
-    const pot = stake * 2;
-    const rake = Math.floor((pot * board.rakeBps) / 10_000);
-    breakdown.textContent = `POT ${money(pot)} · WINNER GETS ${money(pot - rake)}`;
-  };
-
-  const chips = el('div', 'qchips');
-  const step = (label, fn) => {
-    const chip = el('button', 'qchip', label);
-    chip.type = 'button';
-    chip.addEventListener('click', () => {
-      stake = fn(stake);
-      paint();
-    });
-    chips.append(chip);
-  };
-  step('+$1M', (v) => v + 1_000_000);
-  step('+$10M', (v) => v + 10_000_000);
-  step('+$100M', (v) => v + 100_000_000);
-  step('&frac12;x', (v) => Math.floor(v / 2));
-  step('2x', (v) => v * 2);
-  const maxChip = el('button', 'qchip qchip--max', 'MAX');
-  maxChip.type = 'button';
-  maxChip.addEventListener('click', () => {
-    stake = clamp(Number(state.balance ?? 0), min, max);
-    paint();
-  });
-  chips.append(maxChip);
-
-  const sides = el('div', 'duelnew__seg duelnew__seg--two');
-  for (const value of ['heads', 'tails']) {
-    const button = el('button', 'duelnew__opt cf__pick');
-    button.type = 'button';
-    button.dataset.on = value === side ? '1' : '0';
-    button.dataset.side = value;
-    const img = el('img');
-    img.src = SIDE[value].art;
-    img.alt = '';
-    button.append(img, Object.assign(el('b'), { textContent: SIDE[value].label }));
-    button.addEventListener('click', () => {
-      side = value;
-      [...sides.children].forEach((node) => {
-        node.dataset.on = node === button ? '1' : '0';
-      });
-    });
-    sides.append(button);
-  }
-
-  const go = el('button', 'btn btn--go btn--wide btn--lg');
-  go.type = 'button';
-  go.textContent = 'OPEN FLIP';
-  go.addEventListener('click', async () => {
-    go.disabled = true;
+  if (state.authenticated) {
+    await refreshSeed();
     try {
-      const created = await api.post('/v1/coinflip', {
-        stakeMinor: String(stake),
-        side,
-        clientSeed: clientSeed(),
-      });
-      watching.add(created.code);
-      syncHold();
-      /* The stake is the whole of what opening a game does to the wallet. */
-      moveBalance(-BigInt(stake));
-      closeModal();
-      playSound('coin');
-      await refresh();
-    } catch (error) {
-      toast({ kind: 'red', title: 'NOT OPENED', body: error?.message || 'Try again' });
-      go.disabled = false;
+      const { bets } = await api.get(`/v1/coinflip/bets?limit=${RECENT}`);
+      recent = bets || [];
+    } catch {
+      /* The strip stays as it was; the next flip fills it. */
     }
-  });
-
-  body.append(figure, chips, sides, go);
+    await loadLeftovers();
+  } else {
+    recent = [];
+    leftovers = [];
+  }
   paint();
-  openModal('New coinflip', (host) => host.append(body));
+  if (recent[0] && !busy) rest(recent[0].result, recent[0].win ? 'won' : 'lost');
 }
 
-/* ═════════════════════════ take / cancel ═════════════════════════ */
+async function loadLeftovers() {
+  try {
+    const board = await api.get('/v1/coinflip');
+    leftovers = (board.games || []).filter((game) => game.host?.isYou);
+  } catch {
+    leftovers = [];
+  }
+}
 
-async function takeGame(game, button) {
+async function refreshSeed() {
+  try {
+    seedHash = (await api.get('/v1/fairness/current')).serverSeedHash;
+  } catch {
+    seedHash = null;
+  }
+}
+
+async function flip() {
   if (!state.authenticated) {
     $('#loginBtn')?.click();
     return;
   }
-  button.disabled = true;
-  /* Held before the request: the flip is decided and paid inside it, and the balance event can
-   * beat its answer here. Only the stake is shown leaving; the win waits for the coin. */
-  inFlight += 1;
-  syncHold();
+  if (busy || betProblem()) return;
+  busy = true;
+  paintControls();
+  clearWin($('.cflip__stage', root));
+  /* Held from the click: the server's balance event can outrun its own answer, and the pill must
+   * not move before the coin lands. */
+  const release = holdLiveFigures();
   try {
-    const settled = await api.post(`/v1/coinflip/${game.code}/join`, { clientSeed: clientSeed() });
-    moveBalance(-BigInt(game.stakeMinor));
-    showFlip(settled, { counted: true });
-    void refresh();
+    const stake = stakeMinor().toString();
+    // Sent once more against a fresh commitment if another game or tab spent this one.
+    const response = await betOnCommitment(seedHash, (serverSeedHash, key) => api.post(
+      '/v1/coinflip/bets',
+      { stakeMinor: stake, side: call, clientSeed: clientSeed(), serverSeedHash },
+      { idempotencyKey: key },
+    ));
+    seedHash = response.nextServerSeedHash || null;
+    const placed = response.bet;
+    await land(placed);
+    showBalance(response.balanceMinor);
+    release();
+    recent = [placed, ...recent.filter((row) => row.id !== placed.id)].slice(0, RECENT);
+    const landed = SIDE[placed.result].label;
+    say(placed.win
+      ? `${landed}. You called it: ${money(Number(placed.payoutMinor))}.`
+      : `${landed}. You called ${SIDE[placed.side].label.toLowerCase()}, and lost ${money(Number(placed.stakeMinor))}.`);
   } catch (error) {
-    landed();
-    toast({ kind: 'red', title: 'NOT JOINED', body: error?.message || 'Try again' });
-    button.disabled = false;
-    void refresh();
+    release();
+    if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
+    toast({ kind: 'lose', title: 'Coinflip', body: error?.message || 'That flip did not go through' });
+    void refreshBalance();
+  } finally {
+    busy = false;
+    paint();
   }
 }
 
-async function cancelGame(game, button) {
+async function cancelLeftover(game, button) {
   button.disabled = true;
   try {
     await api.post(`/v1/coinflip/${game.code}/cancel`, {});
-    watching.delete(game.code);
-    moveBalance(BigInt(game.stakeMinor));
-    syncHold();
-    toast({ kind: 'gold', title: 'CANCELLED', body: 'Your stake is back in your wallet' });
-    await refresh();
+    toast({ kind: 'gold', title: 'Cancelled', body: 'Your stake is back in your wallet' });
   } catch (error) {
-    toast({ kind: 'red', title: 'NOT CANCELLED', body: error?.message || 'Try again' });
-    button.disabled = false;
-    void refresh();
+    toast({ kind: 'lose', title: 'Not cancelled', body: error?.message || 'Try again' });
   }
+  void refreshBalance();
+  await loadLeftovers();
+  paintLeftovers();
 }
 
-/* ═════════════════════════ the flip ═════════════════════════ */
+/* ─────────── motion ─────────── */
+
+/** The coin at rest on a side, and the word under it in a tone: '' neutral, 'won', 'lost'. */
+function rest(side, tone) {
+  const body = $('#cflipBody', root);
+  const word = $('#cflipWord', root);
+  if (!body || !word) return;
+  turn = side === 'tails' ? 180 : 0;
+  body.style.transform = `rotateX(${turn}deg)`;
+  word.textContent = tone ? SIDE[side].label : '';
+  word.dataset.tone = tone;
+}
 
 /**
- * Plays a settled game: the coin spins and lands on the side the server already chose.
- *
- * The spin is decoration with a fixed length. The number of half-turns is picked so the face
- * that ends up showing is the result, which is the only thing about the animation that matters.
+ * The flip: the coin jumps, turns over five times and a half if the side changes, and drops onto
+ * the side the server named; it ticks as it turns. Resolves when it has landed.
  */
-function showFlip(game, { replay = false, counted = false } = {}) {
-  if (!replay) {
-    if (shown.has(game.code)) {
-      if (counted) landed();
-      return;
-    }
-    shown.add(game.code);
-  }
-
-  const youPlayed = game.host.isYou || game.opponent?.isYou;
-  const winner = game.winner === 'host' ? game.host : game.opponent;
-
-  const body = el('div', 'cfstage');
-  const players = el('div', 'cfstage__players');
-  for (const player of [game.host, game.opponent]) {
-    const side = el('div', 'cfstage__player');
-    side.dataset.side = player?.side ?? '';
-    side.append(
-      avatar(player?.name),
-      Object.assign(el('b'), { textContent: player?.isYou ? 'You' : player?.name || 'Player' }),
-      sideChip(player?.side ?? 'heads'),
-    );
-    players.append(side);
-  }
-
-  const coin = el('div', 'cfcoin');
-  const faces = el('div', 'cfcoin__body');
-  for (const value of ['heads', 'tails']) {
-    const face = el('div', `cfcoin__face cfcoin__face--${value}`);
-    const img = el('img');
-    img.src = SIDE[value].art;
-    img.alt = SIDE[value].label;
-    face.append(img);
-    faces.append(face);
-  }
-  coin.append(faces);
-
-  const verdict = el('div', 'cfstage__verdict');
-  verdict.textContent = 'Flipping…';
-
-  const proof = el('details', 'cfproof');
-  const summary = el('summary');
-  summary.textContent = 'Verify this flip';
-  const formula = el('code', 'cfproof__formula');
-  formula.textContent =
-    'HMAC_SHA256(serverSeed, "coinflip:" + hostSeed + ":" + opponentSeed) — first byte < 128 = Heads';
-  const list = el('dl', 'cfproof__list');
-  for (const [label, value] of [
-    ['Server seed hash', game.serverSeedHash],
-    ['Server seed', game.serverSeed],
-    ['Host seed', game.hostClientSeed],
-    ['Opponent seed', game.opponentClientSeed],
-  ]) {
-    list.append(
-      Object.assign(el('dt'), { textContent: label }),
-      Object.assign(el('dd', 'mono'), { textContent: value ?? '—' }),
-    );
-  }
-  proof.append(summary, formula, list);
-
-  // The 2D/3D switch, for the next flip: this one is already in the air.
-  const switchRow = el('div', 'cfstage__view');
-  switchRow.innerHTML = viewSwitch('cfView');
-  const group = switchRow.firstElementChild;
-  // With 3D off across the site (view3d.js) there is no switch, and no row for it.
-  switchRow.hidden = !group;
-  if (group) group.hidden = no3dCoin;
-  paintViewSwitch(null, group);
-  onViewSwitch(group, (on) => {
-    setWants3d(on);
-    playSound('click');
-    paintViewSwitch(null, group);
-  });
-
-  body.append(players, coin, verdict, switchRow, proof);
-  openModal('Coinflip', (host) => host.append(body));
-
-  const land = () => {
-    // The card whose side came up lights; the other dims.
-    for (const card of players.children) {
-      card.dataset.result = card.dataset.side === game.result ? 'won' : 'lost';
-    }
-    verdict.dataset.state = !youPlayed ? 'neutral' : game.youWon ? 'won' : 'lost';
-    const name = winner?.isYou ? 'You' : winner?.name || 'Player';
-    verdict.textContent = `${SIDE[game.result].label} — ${name} ${winner?.isYou ? 'win' : 'wins'} ${money(Number(game.payoutMinor))}`;
-    if (youPlayed) {
-      playSound(game.youWon ? 'win' : 'lose');
-      /* The pot reaches the pill now, on the frame the coin lands; a real refresh follows as soon
-       * as nothing else of this player's is still in the air. */
-      if (game.youWon && !replay) moveBalance(BigInt(game.payoutMinor));
-    }
-    if (counted) landed();
+function land(placed) {
+  const body = $('#cflipBody', root);
+  const lift = $('#cflipLift', root);
+  const shadow = $('#cflipShadow', root);
+  const word = $('#cflipWord', root);
+  const won = placed.win;
+  const finish = () => {
+    rest(placed.result, won ? 'won' : 'lost');
+    playSound(won ? 'win' : 'lose');
+    landFx(placed);
   };
-
-  /* Whole turns plus a half for tails: the face showing at rest is the result. */
-  const turns = 5 + (game.result === 'tails' ? 0.5 : 0);
-  if (reduceMotion()) {
-    faces.style.transform = `rotateY(${turns * 360}deg)`;
-    land();
-    return;
+  word.textContent = '';
+  word.dataset.tone = '';
+  if (reduceMotion() || !body.animate) {
+    finish();
+    return Promise.resolve();
   }
+  const target = placed.result === 'tails' ? 180 : 0;
+  const end = turn + 5 * 360 + ((target - turn + 360) % 360);
   playSound('coin');
-  const spinFlat = () => {
-    faces.style.setProperty('--cf-turns', `${turns * 360}deg`);
-    coin.dataset.spin = '1';
-    window.setTimeout(land, 2_200);
-  };
-  if (!wants3d() || no3dCoin) {
-    spinFlat();
-    return;
+  const spin = body.animate(
+    [{ transform: `rotateX(${turn}deg)` }, { transform: `rotateX(${end}deg)` }],
+    { duration: FLIP_MS * 0.82, easing: 'cubic-bezier(.3, .55, .35, 1)', fill: 'forwards' },
+  );
+  lift.animate(
+    [
+      { transform: 'none' },
+      { transform: 'translateY(-95%) scale(1.18)', offset: 0.42, easing: 'ease-in' },
+      { transform: 'none', offset: 0.82, easing: 'ease-out' },
+      { transform: 'translateY(-12%)', offset: 0.9, easing: 'ease-in' },
+      { transform: 'none' },
+    ],
+    { duration: FLIP_MS },
+  );
+  shadow.animate(
+    [
+      { transform: 'scale(1)', opacity: 1 },
+      { transform: 'scale(.45)', opacity: 0.35, offset: 0.42 },
+      { transform: 'scale(1)', opacity: 1, offset: 0.82 },
+      { transform: 'scale(.85)', offset: 0.9 },
+      { transform: 'scale(1)' },
+    ],
+    { duration: FLIP_MS },
+  );
+  for (let i = 0; i < 8; i += 1) {
+    setTimeout(() => playSound('tick', { rate: 0.9 + i * 0.06 }), 60 + i * 120);
   }
-  sceneLoading(coin, coin);
-  void toss3d(coin, game.result).then((tossed) => {
-    if (tossed) {
-      land();
-      return;
-    }
-    delete coin.dataset.render;
-    spinFlat();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      spin.cancel();
+      finish();
+      resolve();
+    }, FLIP_MS);
   });
 }
 
-/** The coin tossed off the anvil (coin3d.js); false when it could not be drawn. */
-async function toss3d(coin, result) {
-  try {
-    const { createCoin3d } = await import('./coin3d.js');
-    const built = await createCoin3d(coin);
-    if (!built) {
-      no3dCoin = true;
-      return false;
-    }
-    built.onCue = (name) => { if (name === 'land') playSound('anvil', { rate: 1.6 }); };
-    coin.dataset.render = '3d';
-    await built.flip(result);
-    return true;
-  } catch {
-    return false;
+/** The preview's landing: a right call bursts out of a win card; a wrong one puffs red. */
+function landFx(placed) {
+  if (!fx) return;
+  const stage = $('.cflip__stage', root);
+  if (placed.win) {
+    winCard(stage, fx, Number(payoutBps()) / 10_000, Number(placed.payoutMinor));
+    return;
   }
+  const [x, y] = fx.at($('#cflipCoin', root));
+  fx.puff(x, y + 30, { n: 4, color: fxColors().loss, size: 12 });
+}
+
+/* One polite, whole sentence per flip. */
+function say(text) {
+  const node = $('#cflipSay', root);
+  if (!node) return;
+  node.textContent = '';
+  requestAnimationFrame(() => { node.textContent = text; });
+}
+
+/* ─────────── painting ─────────── */
+
+function paint() {
+  if (!root) return;
+  paintRecent();
+  paintCall();
+  paintControls();
+  paintLeftovers();
+}
+
+function paintRecent() {
+  const list = $('#cflipRecent', root);
+  const ids = recent.map((row) => row.id).join(',');
+  if (list.dataset.ids === ids) return;
+  const first = list.dataset.ids ? list.dataset.ids.split(',')[0] : null;
+  list.dataset.ids = ids;
+  list.replaceChildren(...recent.map((row) => {
+    const item = el('li', 'cflip__chip');
+    item.dataset.tone = row.win ? 'won' : 'lost';
+    item.dataset.side = row.result;
+    if (first && row.id !== first && row === recent[0]) item.dataset.fresh = '1';
+    const img = el('img');
+    img.src = SIDE[row.result].art;
+    img.alt = '';
+    item.append(img);
+    item.setAttribute('aria-label', `${SIDE[row.result].label}, ${row.win ? 'won' : 'lost'}`);
+    return item;
+  }));
+}
+
+function paintCall() {
+  for (const button of root.querySelectorAll('.cflip__side')) {
+    button.setAttribute('aria-checked', String(button.dataset.side === call));
+  }
+}
+
+function paintControls() {
+  const go = $('#cflipGo', root);
+  const label = $('#cflipGoLabel', root);
+  const hint = $('#cflipHint', root);
+  const stake = stakeMinor();
+  let text;
+  if (!state.authenticated) text = 'Log in to play';
+  else if (busy) text = 'Flipping…';
+  else text = `Flip ${SIDE[call].label.toLowerCase()} · ${money(Number(stake ?? 0n))}`;
+  if (label.textContent !== text) label.textContent = text;
+  const problem = state.authenticated ? betProblem() : '';
+  go.disabled = busy || Boolean(problem);
+  go.setAttribute('aria-busy', String(busy));
+  hint.textContent = problem;
+
+  $('#cflipProfit', root).value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
+  $('#cflipProfitX', root).textContent = times();
+
+  for (const node of root.querySelectorAll('.cflip__panel input, .cflip__adj, .cflip__side')) {
+    node.disabled = busy;
+  }
+}
+
+function paintLeftovers() {
+  const box = $('#cflipOld', root);
+  box.hidden = leftovers.length === 0;
+  if (!leftovers.length) {
+    box.replaceChildren();
+    return;
+  }
+  const head = el('p', 'cflip__oldhead');
+  head.textContent = 'Still open on the old board';
+  const rows = leftovers.map((game) => {
+    const row = el('div', 'cflip__oldrow');
+    const text = el('span');
+    text.textContent = `${money(Number(game.stakeMinor))} on ${SIDE[game.host.side]?.label ?? game.host.side}`;
+    const cancel = el('button', 'cflip__oldcancel');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => void cancelLeftover(game, cancel));
+    row.append(text, cancel);
+    return row;
+  });
+  box.replaceChildren(head, ...rows);
+}
+
+/* ─────────── building ─────────── */
+
+function build() {
+  const face = (side) => `<div class="cflip__face cflip__face--${side}"><img src="${SIDE[side].art}" alt="" draggable="false" /></div>`;
+  const pick = (side) => `<button type="button" class="cflip__side" role="radio" data-side="${side}" aria-checked="false"><img src="${SIDE[side].art}" alt="" /><b>${SIDE[side].label}</b></button>`;
+  root.innerHTML = `
+    <section class="cflip__stage" aria-label="The coin">
+      <div class="cflip__top">
+        <ol class="cflip__recent" id="cflipRecent" aria-label="Your last flips, newest first"></ol>
+      </div>
+      <div class="cflip__show">
+        <div class="cflip__coin" id="cflipCoin" aria-hidden="true">
+          <div class="cflip__shadow" id="cflipShadow"></div>
+          <div class="cflip__lift" id="cflipLift">
+            <div class="cflip__body" id="cflipBody">${face('heads')}${face('tails')}</div>
+          </div>
+        </div>
+        <b class="cflip__word" id="cflipWord" data-tone=""></b>
+      </div>
+    </section>
+
+    <aside class="cflip__panel" aria-label="Your flip">
+      <form class="cflip__form" id="cflipForm" novalidate>
+        <label class="cflip__label" for="cflipStake">Stake</label>
+        <div class="cflip__field">
+          <span aria-hidden="true">$</span>
+          <input id="cflipStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
+          <button type="button" class="cflip__adj" data-adj="half" aria-label="Halve the stake">½</button>
+          <button type="button" class="cflip__adj" data-adj="double" aria-label="Double the stake">2×</button>
+          <button type="button" class="cflip__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
+        </div>
+        <span class="cflip__label" id="cflipCallLabel">Your call</span>
+        <div class="cflip__sides" role="radiogroup" aria-labelledby="cflipCallLabel">${pick('heads')}${pick('tails')}</div>
+        <label class="cflip__label cflip__label--row" for="cflipProfit"><span>Profit on win</span><span class="cflip__profitx" id="cflipProfitX"></span></label>
+        <div class="cflip__field cflip__field--read">
+          <output id="cflipProfit" for="cflipStake">—</output>
+        </div>
+        <button class="btn cflip__go" id="cflipGo" type="submit" data-sfx="none">
+          <span id="cflipGoLabel">Loading…</span>
+        </button>
+        <p class="cflip__hint" id="cflipHint" aria-live="polite"></p>
+      </form>
+      <div class="cflip__old" id="cflipOld" hidden></div>
+    </aside>
+    <div class="cflip__say" id="cflipSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.cflip__stage', root));
+
+  const stake = $('#cflipStake', root);
+  stake.value = stakeText;
+  stake.addEventListener('input', () => { stakeText = stake.value; paintControls(); });
+  root.querySelectorAll('.cflip__adj').forEach((button) => button.addEventListener('click', () => {
+    const current = stakeMinor() ?? 0n;
+    stakeText = formatAmountInput(Number(adjustStake(button.dataset.adj, current, state.balanceMinor, largestBet())));
+    stake.value = stakeText;
+    paintControls();
+  }));
+
+  const sides = $('.cflip__sides', root);
+  sides.addEventListener('click', (event) => {
+    const button = event.target.closest('.cflip__side');
+    if (!button || busy) return;
+    call = button.dataset.side;
+    playSound('click');
+    paintCall();
+    paintControls();
+  });
+  // A radio group: the arrow keys move the call.
+  sides.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) || busy) return;
+    event.preventDefault();
+    call = call === 'heads' ? 'tails' : 'heads';
+    paintCall();
+    paintControls();
+    $(`.cflip__side[data-side="${call}"]`, root)?.focus();
+  });
+
+  $('#cflipForm', root).addEventListener('submit', (event) => {
+    event.preventDefault();
+    void flip();
+  });
+}
+
+export function mountCoinflip(section) {
+  root = $('#coinflipRoot', section);
+  if (!root) return;
+  if (!root.dataset.built) {
+    root.dataset.built = '1';
+    build();
+    /* A refresh mounts this page before the session check has answered; ready and login are the
+     * moments the player's own flips can first be asked for. */
+    bus.addEventListener('change', (event) => {
+      if (['ready', 'login'].includes(event.detail)) {
+        if (!busy) void load();
+        return;
+      }
+      if (event.detail === 'logout') {
+        recent = [];
+        leftovers = [];
+        seedHash = null;
+        rest('heads', '');
+      }
+      if (!busy) paint();
+    });
+  }
+  void load();
 }

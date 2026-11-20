@@ -53,6 +53,9 @@ describe('biggest wins today', () => {
       assert.match(branch, today, `${kind} is not kept to today`);
       assert.match(branch, won, `${kind} lets a loss in`);
     }
+    // Coinflip against the house, after the board's own branch: a right call today.
+    const house = top.slice(top.indexOf('FROM coinflip_bets b, day, users u'));
+    assert.match(house, /^FROM coinflip_bets b, day, users u\n\s*WHERE u\.id = b\.user_id AND b\.created_at >= day\.at\n\s*AND b\.payout_minor > b\.stake_minor/);
     // A duel's winner only, and never a draw; a blackjack double counts what was risked.
     assert.match(top, /u\.id = g\.winner_user_id AND g\.status = 'settled' AND g\.outcome <> 'draw'/);
     // Biggest profit first: a big stake at 1.01x is not a big win.

@@ -81,19 +81,21 @@ describe('the lobby', () => {
     assert.match(phone, /\.lxperk__copy span \{ display: none; \}/);
   });
 
-  it('keeps fifteen Originals (Stocks joined 2026-11-13) and two slot machines, Ice Fishing, Coinflip and Mines Duel out', async () => {
+  it('keeps sixteen Originals (Stocks joined 2026-11-13, Coinflip came back against the house 2026-11-20) and two slot machines, Ice Fishing and Mines Duel out', async () => {
     const html = await read('index.html');
     const main = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="lobbyTrack"')));
     const slots = html.slice(html.indexOf('<ul class="lxrow" id="slotsTrack"'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
-    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 15);
+    assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 16);
     assert.equal(slots.match(/<a class="gcard lxcard"/g)?.length, 2);
-    assert.doesNotMatch(main + slots, /ice-fishing|coinflip|mines-duel/);
+    assert.doesNotMatch(main + slots, /ice-fishing|mines-duel/);
+    assert.match(main, /<a class="gcard lxcard" href="\/coinflip" data-cat="casino" data-game="coinflip"/);
     const side = html.slice(html.indexOf('<aside class="lxside"'), html.indexOf('</aside>'));
-    assert.doesNotMatch(side, /href="\/(coinflip|mines-duel|ice-fishing)"/);
+    assert.doesNotMatch(side, /href="\/(mines-duel|ice-fishing)"/);
+    assert.match(side, /<a class="lxnav" href="\/coinflip" data-route="coinflip"/);
     assert.match(html, /<span class="lxpromo__p" id="pbanLeadP">Crash, Mines, Plinko, Blackjack and more\.<\/span>/);
     const app = await read('assets/js/app.js');
     assert.match(app, /: 'Crash, Mines, Plinko, Blackjack and more\.';/);
-    assert.doesNotMatch(await read('assets/js/data.js'), /route: '\/(coinflip|mines-duel|ice-fishing)'/);
+    assert.doesNotMatch(await read('assets/js/data.js'), /route: '\/(mines-duel|ice-fishing)'/);
     // Hidden, not gone: a game in play can still be finished at its own address.
     for (const [view, mount] of [['coinflip', 'coinflip: mountCoinflip'], ['mines-duel', "'mines-duel': mountMinesDuel"]] as const) {
       assert.match(html, new RegExp(`<section class="view" data-view="${view}" hidden>`));

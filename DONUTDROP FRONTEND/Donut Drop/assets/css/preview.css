@@ -190,6 +190,7 @@ body.lx .view[data-view="chicken"]     { --pv-stage: url("../img/block/hay_block
 body.lx .view[data-view="plinko"]      { --pv-stage: url("../img/block/polished_deepslate.png"); }
 body.lx .view[data-view="dice"]        { --pv-stage: url("../img/block/dark_oak_planks.png"); }
 body.lx .view[data-view="limbo"]       { --pv-stage: url("../img/block/end_stone.png"); }
+body.lx .view[data-view="coinflip"]    { --pv-stage: url("../img/block/gold_block.png"); --pv-wash-in: .9; --pv-wash-out: .96; }
 /* A chart reads its candles by colour: the bright emerald sits further back. */
 body.lx .view[data-view="stocks"]      { --pv-stage: url("../img/block/emerald_block.png"); --pv-wash-in: .93; --pv-wash-out: .97; }
 body.lx .view[data-view="fishing"]     { --pv-stage: url("../img/block/tube_coral_block.png"); }
@@ -199,14 +200,14 @@ body.lx .view[data-view="ore-rush"]    { --pv-stage: url("../img/block/deepslate
 body.lx .view[data-view="monument"]    { --pv-stage: url("../img/block/prismarine_bricks.png"); }
 body.lx .view[data-view="upgrader"]    { --pv-stage: url("../img/block/smithing_table_top.png"); }
 
-body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) {
+body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .cflip__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) {
   background-color: var(--lx-0);
   background-image: radial-gradient(130% 100% at 50% 38%, rgba(8, 6, 5, var(--pv-wash-in, .8)) 0%, rgba(8, 6, 5, var(--pv-wash-out, .95)) 72%), var(--pv-stage, none);
   background-size: 100% 100%, 64px;
   image-rendering: pixelated;
 }
 /* image-rendering is inherited: the stage's own picture is pixel art, what is drawn on it is not. */
-body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) > * { image-rendering: auto; }
+body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .cflip__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) > * { image-rendering: auto; }
 
 /* the bar: the game's sprite, its name, the chip */
 body.lx .view > .phead--game .phead__ico {

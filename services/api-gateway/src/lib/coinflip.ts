@@ -52,3 +52,30 @@ export function flipCoin(
 export function otherSide(side: CoinSide): CoinSide {
   return side === 'heads' ? 'tails' : 'heads';
 }
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * AGAINST THE HOUSE (2026-11-20)
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * The owner: "just make coinflip a normal coinflip game". One player, one stake, heads or tails,
+ * settled in one request like Dice (routes/coinflip-house.ts). The coin is read the same way as
+ * above, from the message every seeded house game signs:
+ *
+ *     digest = HMAC_SHA256(serverSeed, clientSeed + ":" + nonce)
+ *     side   = digest[0] < 128 ? "heads" : "tails"
+ *
+ * so the fairness page checks it with the reading it already has. A call that matches the coin pays
+ * the stake times HOUSE_FLIP_PAYOUT_BPS / 10,000, floored: 1.8x.
+ */
+export const HOUSE_FLIP_PAYOUT_BPS = 18_000;
+
+export function houseFlip(serverSeed: string, clientSeed: string, nonce: number): FlipResult {
+  const digest = createHmac('sha256', serverSeed).update(`${clientSeed}:${nonce}`).digest();
+  return { side: digest[0]! < 128 ? 'heads' : 'tails', digestHex: digest.toString('hex') };
+}
+
+/** What a winning call pays, floored. */
+export function houseFlipPayout(stakeMinor: bigint): bigint {
+  if (stakeMinor <= 0n) throw new RangeError('stake must be positive');
+  return (stakeMinor * BigInt(HOUSE_FLIP_PAYOUT_BPS)) / 10_000n;
+}

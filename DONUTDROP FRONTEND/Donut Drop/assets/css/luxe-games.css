@@ -16,12 +16,12 @@
 /* ═════════ the frame ═════════ */
 /* Only a single table gets the bar under it. A lobby (Coinflip, Mines Duel, Cases, Case Battles)
    is a list of tables, and its name goes on top like any page's. */
-body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) { display: flex; flex-direction: column; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > * { order: 1; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game { order: 2; }
+body.lx .view:not([hidden]):has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) { display: flex; flex-direction: column; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > * { order: 1; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game { order: 2; }
 
 /* the bar under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game {
   display: flex; align-items: center; gap: var(--lx-s3);
   height: 56px; margin: 0; padding: 0 var(--lx-s2) 0 var(--lx-s5);
   border: 0; border-top: 2px solid var(--lx-2);
@@ -52,16 +52,16 @@ body.lx .phead--game .phead__how {
 body.lx .phead--game .phead__how:hover { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .phead--game .phead__how[aria-expanded="true"] { color: var(--lx-gold); }
 /* the bubble opens upward when the bar is under the game */
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how::after {
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how::after {
   top: auto; bottom: calc(100% + 10px); left: auto; right: 0;
   width: min(360px, 80vw);
   transform: translateY(3px);
 }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:hover::after,
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:hover::after,
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game .phead__how:focus-visible::after { transform: translateY(0); }
 
 /* ═════════ the single-player tables: Crash · Mines · Plinko ═════════ */
-body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko) {
+body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .fishing, .icefish, .derby, .slots, .plinko) {
   grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
   grid-template-areas: "panel stage";
   gap: 0;
@@ -239,7 +239,7 @@ body.lx .roulette__stage { background: var(--lx-0); }
 
 /* a lobby's title reads as a page title */
 body.lx .phead--game h1 { font-size: 1.375rem; }
-body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game h1 { font-size: 1.0625rem; }
+body.lx .view:has(> :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates)) > .phead--game h1 { font-size: 1.0625rem; }
 
 /* ═════════ Blackjack: controls left, the felt right ═════════ */
 body.lx .bj {
@@ -603,7 +603,7 @@ body.lx .feedrow__mult { text-shadow: none; }
 
 /* ═════════ phones ═════════ */
 @media (max-width: 1023px) {
-  body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .fishing, .icefish, .derby, .slots, .plinko) {
+  body.lx :is(.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .fishing, .icefish, .derby, .slots, .plinko) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "stage" "panel";
   }
@@ -1193,12 +1193,12 @@ body.lx .modal .auth__err[hidden] { display: none; }
    cool ones (a theme brings its own ladder and keeps it); whatever is picked is flat gold, never the
    ramp; and every control sits on a lip and presses in, as the stages' tiles and the main button do.
    Colours are the tokens just below; nothing under them writes one. */
-:root:not([data-lxtheme]) body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
+:root:not([data-lxtheme]) body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .cflip__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
   --lx-3: #211d1a;
   --lx-4: #2c2824;
   --lx-5: #39342f;
 }
-body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
+body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .cflip__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel, .ug__panel, .bj__controls) {
   --dd-ramp: var(--lx-gold);
   --bp-lip: rgba(0, 0, 0, .5);
   --bp-ease: cubic-bezier(.22, 1, .36, 1);
@@ -1206,13 +1206,13 @@ body.lx .view :is(.crash__panel, .crash__players, .mines__panel, .tower__panel, 
 }
 
 /* The stake well: ½, 2× and Max are keys set into it, each on its own lip, not slabs bolted on. */
-body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake):has(> button) {
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .cflip__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake):has(> button) {
   padding-right: 4px;
 }
-body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake) {
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .cflip__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake) {
   border-radius: 6px;
 }
-body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step) {
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step) {
   align-self: center;
   height: 32px; min-width: 42px; margin: 0 0 2px 4px; padding: 0 var(--lx-s2);
   border: 0; border-radius: 4px;
@@ -1221,7 +1221,7 @@ body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__a
   box-shadow: 0 2px 0 var(--bp-lip);
   transition: transform 80ms var(--bp-ease), box-shadow 80ms var(--bp-ease), background 120ms;
 }
-body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step):active:not(:disabled) {
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step):active:not(:disabled) {
   transform: translateY(2px); box-shadow: 0 0 0 var(--bp-lip);
 }
 
@@ -1250,23 +1250,23 @@ body.lx .view :is(.crash__pick, .stocks__pick, .mines__pick, .ug__bands .bandchi
 body.lx .view :is(.tower__modes, .chicken__modes, .plinko__risks)::before { box-shadow: 0 2px 0 var(--lx-gold-lo); }
 
 /* What a win pays: a read-out, not a field to type in. */
-body.lx .view :is(.dice__field--read, .limbo__field--read, .stocks__field--read) { background: var(--lx-1); border-color: var(--lx-3); }
+body.lx .view :is(.dice__field--read, .limbo__field--read, .cflip__field--read, .stocks__field--read) { background: var(--lx-1); border-color: var(--lx-3); }
 
 /* The panel meets the stage along a hairline: beside it on a desktop, above it on a phone. */
-body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
+body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .cflip__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
   box-shadow: inset -1px 0 0 var(--lx-3);
 }
 body.lx .view .crash__players { box-shadow: inset -1px 0 0 var(--lx-3), inset 0 1px 0 var(--lx-3); }
 @media (max-width: 1023px) {
-  body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
+  body.lx .view :is(.crash__panel, .mines__panel, .tower__panel, .chicken__panel, .dice__panel, .limbo__panel, .cflip__panel, .stocks__panel, .fishing__panel, .icefish__panel, .derby__panel, .slots__panel, .plinko__panel) {
     box-shadow: inset 0 1px 0 var(--lx-3);
   }
   body.lx .view .crash__players { box-shadow: inset 0 1px 0 var(--lx-3); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .stocks__pick, .mines__pick, .ug__add, .ug__bands .bandchip) { transition: none; }
-  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .stocks__pick, .mines__pick, .ug__add, .ug__bands .bandchip):active:not(:disabled) { transform: none; }
+  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .stocks__pick, .mines__pick, .ug__add, .ug__bands .bandchip) { transition: none; }
+  body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj, .mines__step, .crash__pick, .stocks__pick, .mines__pick, .ug__add, .ug__bands .bandchip):active:not(:disabled) { transform: none; }
 }
 
 /* ═════════ the help centre (assets/js/info.js, /support) ═════════

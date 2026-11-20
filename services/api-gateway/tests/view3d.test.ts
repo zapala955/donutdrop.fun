@@ -79,7 +79,8 @@ describe('the 2D/3D switch', () => {
     assert.match(css, /#view3dBtn \{ display: none; \}/);
     assert.match(settings, /\.\.\.\(SCENES_ON \? \[games3d\.line\] : \[\]\)/);
     assert.match(blackjack, /group\.hidden = no3d \|\| !SCENES_ON;/);
-    assert.match(coinflip, /switchRow\.hidden = !group;\n  if \(group\) group\.hidden = no3dCoin;/);
+    // Coinflip has no scene and so no switch (a flip against the house since 2026-11-20).
+    assert.doesNotMatch(coinflip, /viewSwitch|switchRow/);
     // Slots keeps its machine, and its graphics setting; Mob Derby, Fishing and Ice Fishing never asked.
     assert.match(slots, /else if \(root\.dataset\.scene !== '3d'\) root\.dataset\.scene = '3d';/);
     assert.ok(derby.includes('sceneLoading(root, host, true);') && !derby.includes('wants3d'));
@@ -160,13 +161,12 @@ describe('the 2D/3D switch', () => {
     assert.ok(blackjack.includes(`function stop3d() {\n  // Still on its way: the flat table at once, and the scene is put away when it arrives.\n  sceneLoaded($('.bj__table', root));`));
     // Every opening builds the table if 3D is wanted, not only the first.
     assert.ok(blackjack.includes(`    root.dataset.built = '1';\n  }\n  // Every opening`));
-    const coinflip = await front('assets/js/coinflip.js');
-    assert.ok(coinflip.includes('sceneLoading(coin, coin);\n  void toss3d(coin, game.result)'));
-    assert.ok(coinflip.includes(`coin.dataset.render = '3d';\n    await built.flip(result);`));
+    // Coinflip has no scene at all since it became a flip against the house (2026-11-20).
+    assert.doesNotMatch(await front('assets/js/coinflip.js'), /sceneLoading|wants3d/);
   });
 
   it('lays a loading game out as its scene, so nothing jumps when the scene arrives', async () => {
-    for (const sheet of ['blackjack', 'chicken', 'coinflip', 'crash', 'derby', 'dice', 'fishing', 'icefishing', 'mines', 'plinko', 'roulette', 'slots', 'tower']) {
+    for (const sheet of ['blackjack', 'chicken', 'crash', 'derby', 'dice', 'fishing', 'icefishing', 'mines', 'plinko', 'roulette', 'slots', 'tower']) {
       const css = await front(`assets/css/${sheet}.css`);
       const rules = css.match(/\[data-render=["']3d["']\]/g) ?? [];
       const paired = css.match(/\[data-render=(["'])3d\1\], \[data-render=\1loading\1\]/g) ?? [];

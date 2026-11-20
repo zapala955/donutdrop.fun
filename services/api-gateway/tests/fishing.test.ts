@@ -413,7 +413,7 @@ describe('fishing: the page and the dive', () => {
 
   it('draws the sea’s page in its own tokens, in the shared frame, with reduced motion honoured', async () => {
     const [frame, css] = await Promise.all([front('assets/css/luxe-games.css'), front('assets/css/fishing.css')]);
-    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.limbo, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
+    assert.match(frame, /body\.lx :is\(\.crash, \.mines, \.tower, \.chicken, \.dice, \.limbo, \.cflip, \.fishing, \.icefish, \.derby, \.slots, \.plinko\) \{/);
     const rules = css.slice(css.indexOf('/* ─────────── the lake'));
     assert.ok(rules.length > 1000);
     assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'a raw colour outside the token block');

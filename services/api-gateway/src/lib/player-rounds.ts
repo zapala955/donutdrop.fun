@@ -226,6 +226,18 @@ export const ROUND_SOURCES: readonly RoundSource[] = [
     where: `(g.host_user_id = $1 OR g.opponent_user_id = $1) AND g.status = 'settled'`,
   },
   {
+    game: 'coinflip',
+    key: `'coinflip'`,
+    time: 'b.created_at',
+    id: 'b.id',
+    wager: 'b.stake_minor',
+    payout: 'coalesce(b.payout_minor, 0)',
+    // A flip against the house: the call, and where the coin landed.
+    detail: `'Called ' || b.side || ' · landed ' || b.result`,
+    from: 'coinflip_bets b',
+    where: 'b.user_id = $1',
+  },
+  {
     game: 'mines-duel',
     key: `'mines-duel'`,
     time: 'g.created_at',

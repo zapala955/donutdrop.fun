@@ -195,7 +195,7 @@ describe('frontend/backend contract', () => {
     const art = [...html.matchAll(/<img class="lxcard__art retroart" src="assets\/img\/items\/([a-z-]+\.svg)" alt="" width="96" height="96"/g)];
     // Every card in the lobby, the slot machines' row included (2026-10-19: they wore item textures until then).
     assert.equal(art.length, html.match(/<a class="gcard lxcard"/g)?.length);
-    assert.equal(art.length, 17);
+    assert.equal(art.length, 18);
     for (const [, file] of art) {
       assert.match(await source(`assets/img/items/${file}`), /viewBox="0 0 16 16" shape-rendering="crispEdges"/, file);
     }

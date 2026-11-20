@@ -315,6 +315,8 @@
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M192,28H64A36,36,0,0,0,28,64V192a36,36,0,0,0,36,36H192a36,36,0,0,0,36-36V64A36,36,0,0,0,192,28Zm12,164a12,12,0,0,1-12,12H64a12,12,0,0,1-12-12V64A12,12,0,0,1,64,52H192a12,12,0,0,1,12,12ZM104,88A16,16,0,1,1,88,72,16,16,0,0,1,104,88Zm40,40a16,16,0,1,1-16-16A16,16,0,0,1,144,128Zm40-40a16,16,0,1,1-16-16A16,16,0,0,1,184,88Zm-80,80a16,16,0,1,1-16-16A16,16,0,0,1,104,168Zm80,0a16,16,0,1,1-16-16A16,16,0,0,1,184,168Z"/></svg><span>Dice</span></a></li>
       <li><a class="lxnav" href="/limbo" data-route="limbo" data-tip="Limbo">
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M244,56v64a12,12,0,0,1-24,0V85l-75.51,75.52a12,12,0,0,1-17,0L96,129,32.49,192.49a12,12,0,0,1-17-17l72-72a12,12,0,0,1,17,0L136,135l67-67H168a12,12,0,0,1,0-24h64A12,12,0,0,1,244,56Z"/></svg><span>Limbo</span></a></li>
+      <li><a class="lxnav" href="/coinflip" data-route="coinflip" data-tip="Coinflip">
+        <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,184a80,80,0,1,1,80-80A80.09,80.09,0,0,1,128,208Zm0-136a56,56,0,1,0,56,56A56.06,56.06,0,0,0,128,72Zm0,88a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z"/></svg><span>Coinflip</span></a></li>
       <li><a class="lxnav" href="/stocks" data-route="stocks" data-tip="Stocks">
         <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M52,40h8v48h12v88H60v40H52V176H40V88H52Zm72-16h8V56h12v80H132v64h-8V136H112V56h12Zm72,48h8v48h12v80H204v32h-8V200H184V120h12Z"/></svg><span>Stocks</span></a></li>
       <li><a class="lxnav" href="/fishing" data-route="fishing" data-tip="Fishing">
@@ -662,8 +664,9 @@
         </div>
 
         <!-- Every game in sight: the cards wrap into a grid, nothing behind an arrow or a "See all"
-             (2026-11-10). Coinflip and Mines Duel are hidden for now (2026-11-10): no card here and no
-             sidebar link, but their pages still open at /coinflip and /mines-duel for a game in play. "N playing" under each card is the server's count of distinct players with
+             (2026-11-10). Mines Duel is hidden for now (2026-11-10): no card here and no sidebar link,
+             but its page still opens at /mines-duel for a game in play. Coinflip came back on
+             2026-11-20 as a flip against the house. "N playing" under each card is the server's count of distinct players with
              a round in that game in the last fifteen minutes (GET /v1/activity/playing); a game
              nobody is in says nothing rather than zero. -->
         <ul class="lxrow" id="lobbyTrack">
@@ -695,6 +698,10 @@
             <img class="lxcard__art retroart" src="assets/img/items/game-limbo.svg" alt="" width="96" height="96" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Limbo</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
           </a><p class="lxlive" data-live="limbo" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
+          <li><a class="gcard lxcard" href="/coinflip" data-cat="casino" data-game="coinflip" data-q="coinflip coin flip heads tails 50/50 double">
+            <img class="lxcard__art retroart" src="assets/img/items/game-coinflip.svg" alt="" width="96" height="96" />
+            <span class="lxcard__txt"><span class="gcard__name lxcard__name">Coinflip</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
+          </a><p class="lxlive" data-live="coinflip" hidden><i aria-hidden="true"></i><b></b> playing</p></li>
           <li><a class="gcard lxcard" href="/stocks" data-cat="casino" data-game="stocks" data-q="stocks trading chart long short leverage crypto market donut candle">
             <img class="lxcard__art retroart" src="assets/img/items/game-stocks.svg" alt="" width="96" height="96" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Stocks</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>
@@ -1108,10 +1115,10 @@
           <span class="phead__tag">DonutLuxe Originals</span>
         </div>
         <button class="ihint phead__how" type="button"
-          aria-label="How it works: Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the payout shown on the board. It is an exact 50/50 you can verify from the revealed seeds."
-          data-tip="Open a flip on heads or tails, or take someone else's. Both players stake the same, the coin is flipped the moment a game is taken, and the winner gets the payout shown on the board. It is an exact 50/50 you can verify from the revealed seeds."><span class="phead__howtxt">How it works</span></button>
+          aria-label="How it works: Call heads or tails and flip. If the coin lands on your call, you win 1.8× your stake. Every flip is an exact 50/50 you can check from the revealed seed."
+          data-tip="Call heads or tails and flip. If the coin lands on your call, you win 1.8× your stake. Every flip is an exact 50/50 you can check from the revealed seed."><span class="phead__howtxt">How it works</span></button>
       </header>
-      <div class="duelwrap" id="coinflipRoot"></div>
+      <div class="cflip" id="coinflipRoot"></div>
     </section>
 
     <!-- ─────── 1v1 SKILL DUEL ─────── -->

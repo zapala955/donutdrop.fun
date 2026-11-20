@@ -135,7 +135,7 @@ export const ROUTE_META = {
   },
   coinflip: {
     title: 'DonutLuxe Coinflip — DonutSMP Coinflip',
-    description: 'Coinflip against other players for DonutSMP money on DonutLuxe.',
+    description: 'Flip a coin for DonutSMP money on DonutLuxe: call heads or tails, and a right call pays 1.8x.',
   },
   'mines-duel': {
     title: 'DonutLuxe Mines Duel — DonutSMP 1v1 Mines',

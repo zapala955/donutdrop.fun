@@ -43,7 +43,8 @@ export function notDemoPredicate(alias: string): string {
  *
  * Only house games, whose payouts come from the house and land in the twin's own wallet. Crash and
  * roulette share a round with real players but pay each bet from the house, so a play-money bet
- * cannot take anything from a real one. Coinflip, duels, Mines Duel and battles are player against
+ * cannot take anything from a real one. A coinflip against the house is a house game too. The coinflip
+ * board, duels, Mines Duel and battles are player against
  * player and are not here: a real player would win play money, or lose real money to it.
  */
 export const TEST_MODE_ROUTES: ReadonlySet<string> = new Set([
@@ -66,6 +67,7 @@ export const TEST_MODE_ROUTES: ReadonlySet<string> = new Set([
   'POST /v1/slots/spins',
   'POST /v1/dice/bets',
   'POST /v1/limbo/bets',
+  'POST /v1/coinflip/bets',
   'POST /v1/fishing/casts',
   'POST /v1/fishing/casts/:id/land',
   'POST /v1/ice-fishing/games',

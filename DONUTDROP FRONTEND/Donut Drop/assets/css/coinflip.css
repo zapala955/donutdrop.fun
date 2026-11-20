@@ -1,297 +1,280 @@
-/* coinflip.css — 1v1 Coinflip.
+/* coinflip.css — Coinflip against the house (2026-11-20).
  *
- * The board reuses the duel lobby wholesale (duel.css: .duel, .duel__table, .duel__row, .duelnew)
- * so the two PvP modes read as one family; this sheet adds only what a coin needs — the side
- * chips, the five-column row, the recent strip and the coin itself. Tokens only, no new colours
- * beyond the two coin metals, which take their tones from the gold and iron ingot art.
+ * layout: the site's game frame, as Limbo's: the panel on the left (stake with ½ 2× Max, the call,
+ *         profit on win, the one button), the stage on the right (the strip of the last flips, the
+ *         coin, the side it landed on). On a phone, the stage first, the panel under it.
+ * states: the coin -- at rest on a side, flipping (coinflip.js animates it), landed won (green word)
+ *         or lost (red word); the call -- chosen, hover, :focus-visible, disabled (a flip in the air);
+ *         the strip -- won, lost, fresh; the one button -- default, hover, :focus-visible, :active
+ *         (pressed into its lip), disabled, busy.
+ * signature: the preview's coin, gold ingot on gold for heads and iron on silver for tails, flipped
+ *         end over end. Flat, no glow: a rim and a lip, never a shadow that blurs.
  */
 
-/* ── the row: player, side, stake, winner takes, action ── */
-.cf__row {
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
-}
+.cflip {
+  --cflip-win: oklch(0.77 0.17 152);
+  --cflip-lose: #ff4d5e;
+  --cflip-win-wash: color-mix(in oklab, var(--cflip-win) 16%, transparent);
+  --cflip-lose-wash: color-mix(in oklab, var(--cflip-lose) 14%, transparent);
+  --cflip-go-lip: var(--lx-gold-lo);
+  --cflip-ease: cubic-bezier(.16, 1, .3, 1);
+  --cflip-heads: #f2c14e;
+  --cflip-heads-rim: #b7862a;
+  --cflip-tails: #c9ced8;
+  --cflip-tails-rim: #7c828f;
 
-/* ── a side, as a chip ── */
-.cfside {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  border: 1px solid var(--ob-line);
-  background: rgba(14, 12, 9, 0.7);
-  font-size: 0.75rem;
-}
-.cfside img {
-  width: 18px;
-  height: 18px;
-  image-rendering: pixelated;
-}
-.cfside b {
-  font-weight: 700;
-}
-.cfside[data-side='heads'] {
-  border-color: rgba(255, 215, 0, 0.35);
-  color: var(--gold-bright);
-}
-.cfside[data-side='tails'] {
-  border-color: rgba(200, 205, 215, 0.35);
-  color: #d6d9e0;
-}
-
-/* ── picking a side in the create dialog ── */
-.cf__pick {
-  flex-direction: row;
-  justify-content: center;
-  gap: 8px;
-}
-.cf__pick img {
-  width: 22px;
-  height: 22px;
-  image-rendering: pixelated;
-}
-
-/* ── recent flips ── */
-.cf__recenth {
-  margin-top: var(--ob-gap);
-}
-.cf__recent {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: thin;
-}
-.cf__flip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-  width: 104px;
-  padding: 10px 8px;
-  border-radius: var(--r-soft);
-  border: 1px solid var(--ob-line);
-  background: rgba(8, 6, 5, 0.6);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  transition:
-    border-color 0.15s var(--ob-ease),
-    background 0.15s var(--ob-ease);
-}
-.cf__flip:hover {
-  border-color: var(--ob-line-hi);
-  background: rgba(22, 22, 27, 0.7);
-}
-.cf__flip img {
-  width: 26px;
-  height: 26px;
-  image-rendering: pixelated;
-}
-.cf__flip b {
-  font-size: 0.8125rem;
-  color: var(--gold-bright);
-}
-.cf__flip i {
-  font-style: normal;
-  font-size: 0.625rem;
-  color: var(--faint);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cf__flip[data-side='tails'] b {
-  color: #d6d9e0;
-}
-
-/* ═════════════════════════ the flip ═════════════════════════ */
-
-.cfstage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--ob-gap);
-  min-width: 0;
-}
-.cfstage__players {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--ob-gap);
-  width: 100%;
-}
-.cfstage__player {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 8px;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas: "panel stage";
   min-width: 0;
-  border-radius: var(--r-soft);
-  border: 1px solid var(--ob-line);
-  background: rgba(14, 12, 9, 0.7);
-  transition:
-    border-color 0.3s var(--ob-ease),
-    box-shadow 0.3s var(--ob-ease),
-    opacity 0.3s var(--ob-ease);
-}
-.cfstage__player[data-result='won'] {
-  border-color: var(--gold-bright);
-  box-shadow: 0 0 24px -6px rgba(255, 170, 0, 0.55);
-}
-.cfstage__player[data-result='lost'] {
-  opacity: 0.5;
-}
-.cfstage__player b {
-  font-size: 0.875rem;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* The coin: two faces back to back, spun about the Y axis. The spin's length lands it on the
-   result (see coinflip.js), so the animation only has to end where it is told to. */
-.cfcoin {
-  width: 132px;
-  height: 132px;
-  perspective: 700px;
-  margin: 6px 0;
-}
-/* The 3D coin (coin3d.js): the smithy across the dialog, the flat coin out of the way. */
-  .cfcoin:is([data-render='3d'], [data-render='loading']) {
+/* ─────────── the stage ─────────── */
+.cflip__stage {
+  grid-area: stage;
   position: relative;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 2 / 1;
   overflow: hidden;
-  border-radius: 12px;
-  perspective: none;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--lx-s5);
+  min-width: 0;
+  padding: var(--lx-s6) 28px 28px;
 }
-.cfcoin:is([data-render='3d'], [data-render='loading']) .cfcoin__body { display: none; }
-.cfcoin__gl { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-.cfstage__view { width: 100%; }
-.cfstage__view .view3d { margin-top: 0; }
+body.lx .cflip .cflip__stage {
+  min-height: 600px;
+  border-radius: 0 var(--lx-r) 0 0;
+  background-color: var(--lx-0);
+}
 
-.cfcoin__body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
+.cflip__top { display: flex; justify-content: flex-end; min-height: 36px; min-width: 0; }
+/* The last flips, newest first: the side each landed on, ringed in how the call went. */
+.cflip__recent {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
 }
-.cfcoin[data-spin='1'] .cfcoin__body {
-  animation: cf-spin 2.2s cubic-bezier(0.18, 0.72, 0.2, 1) forwards;
+.cflip__chip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--cflip-lose-wash);
+  box-shadow: inset 0 -3px 0 var(--cflip-lose);
 }
-@keyframes cf-spin {
-  0% {
-    transform: translateY(0) rotateY(0deg);
-  }
-  35% {
-    transform: translateY(-28px) rotateY(calc(var(--cf-turns) * 0.55));
-  }
-  100% {
-    transform: translateY(0) rotateY(var(--cf-turns));
-  }
+.cflip__chip[data-tone="won"] { background: var(--cflip-win-wash); box-shadow: inset 0 -3px 0 var(--cflip-win); }
+.cflip__chip img { width: 22px; height: 22px; image-rendering: pixelated; }
+.cflip__chip:nth-child(n + 7) { opacity: .7; }
+.cflip__chip:nth-child(n + 10) { opacity: .45; }
+.cflip__chip[data-fresh="1"] { animation: cflip-chip-in var(--lx-slide) var(--cflip-ease) both; }
+@keyframes cflip-chip-in {
+  from { opacity: 0; transform: translateX(-10px) scale(.92); }
+  to { opacity: 1; transform: none; }
 }
-.cfcoin__face {
+
+/* The coin, and the side it landed on under it. */
+.cflip__show { display: grid; place-content: center; justify-items: center; gap: var(--lx-s6); min-width: 0; }
+.cflip__coin { position: relative; width: clamp(7.5rem, 22vw, 10rem); aspect-ratio: 1; perspective: 800px; }
+.cflip__lift,
+.cflip__body { position: absolute; inset: 0; transform-style: preserve-3d; }
+.cflip__face {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
+  background: var(--cflip-heads);
+  box-shadow: inset 0 -8px 0 rgba(8, 6, 5, .28), inset 0 0 0 8px var(--cflip-heads-rim);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
-.cfcoin__face img {
-  width: 52%;
-  height: 52%;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+.cflip__face--tails {
+  transform: rotateX(180deg);
+  background: var(--cflip-tails);
+  box-shadow: inset 0 -8px 0 rgba(8, 6, 5, .28), inset 0 0 0 8px var(--cflip-tails-rim);
 }
-.cfcoin__face--heads {
-  background: radial-gradient(circle at 35% 30%, #fff2a8, #ffd700 38%, #c98a00 100%);
-  box-shadow:
-    inset 0 0 0 6px rgba(150, 95, 0, 0.55),
-    0 10px 30px -8px rgba(255, 170, 0, 0.6);
+.cflip__face img { width: 52%; height: 52%; image-rendering: pixelated; }
+/* The coin's shadow on the floor: a hard flat oval, smaller as the coin rises. */
+.cflip__shadow {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: -16%;
+  height: 11%;
+  border-radius: 50%;
+  background: rgba(8, 6, 5, .55);
 }
-.cfcoin__face--tails {
-  transform: rotateY(180deg);
-  background: radial-gradient(circle at 35% 30%, #ffffff, #c9ced8 40%, #7c828f 100%);
-  box-shadow:
-    inset 0 0 0 6px rgba(70, 76, 88, 0.55),
-    0 10px 30px -8px rgba(200, 205, 215, 0.45);
+.cflip__word {
+  min-height: 1em;
+  color: var(--lx-ink);
+  font: 900 clamp(2.25rem, 5vw, 3.25rem)/1 var(--lx-display);
+  letter-spacing: -.02em;
+  text-transform: uppercase;
 }
+.cflip__word[data-tone="won"] { color: var(--cflip-win); }
+.cflip__word[data-tone="lost"] { color: var(--cflip-lose); }
 
-.cfstage__verdict {
-  font-size: 1rem;
-  font-weight: 800;
-  text-align: center;
-  color: var(--muted);
-  min-height: 1.5em;
-}
-.cfstage__verdict[data-state='won'] {
-  color: var(--gold-bright);
-}
-.cfstage__verdict[data-state='lost'] {
-  color: var(--red);
-}
-.cfstage__verdict[data-state='neutral'] {
-  color: var(--text);
-}
+/* ─────────── the panel ─────────── */
+.cflip__panel { grid-area: panel; min-width: 0; padding: var(--lx-s3) var(--lx-s3) var(--lx-s4); }
+.cflip__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--lx-s2); }
+.cflip__label { margin-top: var(--lx-s2); color: var(--lx-mute); font: 600 .8125rem/1.2 var(--lx-ui); }
+.cflip__label--row { display: flex; justify-content: space-between; gap: var(--lx-s2); }
+.cflip__profitx { color: var(--lx-faint); font-variant-numeric: tabular-nums; }
 
-/* ── the proof ── */
-.cfproof {
-  width: 100%;
-  border-radius: var(--r-soft);
-  border: 1px solid var(--ob-line);
-  background: rgba(8, 6, 5, 0.6);
-  padding: 8px 12px;
-  font-size: 0.75rem;
-}
-.cfproof summary {
-  cursor: pointer;
-  color: var(--muted);
-}
-.cfproof__formula {
-  display: block;
-  margin: 8px 0;
-  color: var(--faint);
-  font-size: 0.6875rem;
-  overflow-wrap: anywhere;
-}
-.cfproof__list {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 10px;
-  margin: 0;
-}
-.cfproof__list dt {
-  color: var(--faint);
-}
-.cfproof__list dd {
+/* A field: a dark well, its buttons bolted to its right edge, as in every game. */
+.cflip__field {
+  display: flex;
+  align-items: center;
+  height: 44px;
   min-width: 0;
-  margin: 0;
-  /* A 64-character seed has no break opportunities, and the shared .mono rule keeps text on one
-     line; without this the proof widens the whole dialog into a sideways scroll. */
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-all;
-  color: var(--text);
+  padding: 0 0 0 var(--lx-s3);
+  overflow: hidden;
+  border: 2px solid var(--lx-4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-0);
+}
+.cflip__field:hover { border-color: var(--lx-5); }
+.cflip__field:focus-within { border-color: var(--lx-gold); }
+.cflip__field span { padding-right: var(--lx-s2); color: var(--lx-gold); font: 700 .9375rem var(--lx-ui); }
+.cflip__field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--lx-ink);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+}
+.cflip__field input:focus { outline: none; }
+.cflip__field input:disabled { color: var(--lx-mute); cursor: progress; }
+.cflip__adj {
+  align-self: stretch;
+  min-width: 46px;
+  border: 0;
+  border-left: 2px solid var(--lx-2);
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .875rem var(--lx-ui);
+  cursor: pointer;
+}
+.cflip__adj:hover:not(:disabled) { background: var(--lx-5); }
+.cflip__adj:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+.cflip__adj:disabled { cursor: progress; opacity: .5; }
+
+/* The call: two big buttons, the chosen one gold-edged. */
+.cflip__sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lx-s2); }
+.cflip__side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  min-width: 0;
+  border: 2px solid var(--lx-4);
+  border-radius: var(--lx-r-s);
+  background: var(--lx-2);
+  color: var(--lx-mute);
+  font: 800 .9375rem var(--lx-ui);
+  cursor: pointer;
+  transition: border-color var(--lx-quick) var(--cflip-ease), color var(--lx-quick) var(--cflip-ease);
+}
+.cflip__side img { width: 22px; height: 22px; image-rendering: pixelated; }
+.cflip__side:hover:not(:disabled) { border-color: var(--lx-5); color: var(--lx-ink); }
+.cflip__side[aria-checked="true"] { border-color: var(--lx-gold); background: var(--lx-3); color: var(--lx-ink); }
+.cflip__side:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 2px; }
+.cflip__side:disabled { cursor: progress; opacity: .6; }
+
+/* What a win would add; not a field anybody types in. */
+.cflip__field--read { background: var(--lx-1); }
+.cflip__field--read:hover { border-color: var(--lx-4); }
+.cflip__field--read output {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--lx-s3);
+  overflow: hidden;
+  color: var(--lx-gold-hi);
+  font: 700 .9375rem var(--lx-ui);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 760px) {
-  .cf__row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'who who' 'stake take' 'mode mode' 'go go';
-  }
+/* The one button: gold, with a lip it presses into, as every game's. */
+.cflip .cflip__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+body.lx #cflipGo {
+  height: 52px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-gold);
+  color: var(--lx-on-gold);
+  font: 800 1rem/1 var(--lx-ui);
+  box-shadow: 0 4px 0 var(--cflip-go-lip);
+  filter: none;
+  transition: background-color var(--lx-quick) var(--cflip-ease), transform 120ms var(--cflip-ease);
+}
+body.lx #cflipGo:hover:not(:disabled) { background: var(--lx-gold-hi); box-shadow: 0 4px 0 var(--cflip-go-lip); }
+body.lx #cflipGo:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--cflip-go-lip); }
+body.lx #cflipGo:focus-visible { outline: 2px solid var(--lx-ink); outline-offset: 3px; }
+body.lx #cflipGo:disabled { cursor: not-allowed; opacity: .5; filter: none; }
+body.lx #cflipGo[aria-busy="true"] { cursor: progress; opacity: 1; }
+
+.cflip__hint { min-height: 1.1em; margin: 0; color: var(--lx-faint); font: 500 .75rem var(--lx-ui); text-align: center; }
+
+/* A game still open on the old board, with its Cancel. */
+.cflip__old { display: grid; gap: 6px; margin-top: var(--lx-s4); padding: var(--lx-s3); border-radius: 8px; background: var(--lx-2); }
+.cflip__oldhead { margin: 0; color: var(--lx-mute); font: 600 .75rem var(--lx-ui); }
+.cflip__oldrow { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-s2); color: var(--lx-ink); font: 700 .8125rem var(--lx-ui); font-variant-numeric: tabular-nums; }
+.cflip__oldcancel {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--lx-4);
+  color: var(--lx-ink);
+  font: 700 .75rem var(--lx-ui);
+  cursor: pointer;
+}
+.cflip__oldcancel:hover:not(:disabled) { background: var(--lx-5); }
+.cflip__oldcancel:disabled { cursor: progress; opacity: .5; }
+
+.cflip__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─────────── narrower screens ─────────── */
+@media (max-width: 1023px) {
+  .cflip { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "panel"; }
+  body.lx .cflip .cflip__stage { min-height: 0; border-radius: var(--lx-r) var(--lx-r) 0 0; }
+  .cflip__stage { gap: var(--lx-s4); padding: var(--lx-s4) var(--lx-s3) var(--lx-s6); }
+  .cflip__show { min-height: 280px; }
+}
+@media (max-width: 560px) {
+  .cflip__chip:nth-child(n + 7) { display: none; }
+  .cflip__show { min-height: 240px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cfcoin[data-spin='1'] .cfcoin__body {
-    animation: none;
-  }
-  .cf__flip {
-    transition: none;
-  }
+  .cflip__chip[data-fresh="1"] { animation: none; }
+  .cflip__side,
+  body.lx #cflipGo { transition: none; }
 }

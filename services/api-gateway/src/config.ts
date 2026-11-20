@@ -654,6 +654,10 @@ const environmentSchema = z
     COINFLIP_MIN_STAKE_MINOR: positiveBigintString.default('100000'),
     COINFLIP_MAX_STAKE_MINOR: positiveBigintString.default('10000000000'),
     COINFLIP_LOBBY_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
+    /* A flip against the house (2026-11-20): one stake, heads or tails, settled like Dice. The
+     * house's own money is at stake there, so it has its own ceiling, Dice's and Limbo's default;
+     * the board's minimum and on/off switch apply to it too. */
+    COINFLIP_HOUSE_MAX_STAKE_MINOR: positiveBigintString.default('1000000000'),
     /* Mines Duel. Player against player on one shared field; the house holds no side, so the rake
      * is its whole margin and faces the same checks a duel's and a coinflip's do. PLAY_SECONDS is
      * the clock both players share once a game is taken, snapshot onto the game. */
@@ -1788,6 +1792,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     coinflipRakeBps: env.COINFLIP_RAKE_BPS,
     coinflipMinStakeMinor: BigInt(env.COINFLIP_MIN_STAKE_MINOR),
     coinflipMaxStakeMinor: BigInt(env.COINFLIP_MAX_STAKE_MINOR),
+    coinflipHouseMaxStakeMinor: BigInt(env.COINFLIP_HOUSE_MAX_STAKE_MINOR),
     minesDuelEnabled: env.MINES_DUEL_ENABLED,
     minesDuelRakeBps: env.MINES_DUEL_RAKE_BPS,
     minesDuelMinStakeMinor: BigInt(env.MINES_DUEL_MIN_STAKE_MINOR),

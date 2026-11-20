@@ -38,6 +38,7 @@ import { registerDiscordControlRoutes } from './routes/discord-control.js';
 import { registerEngagementRoutes } from './routes/engagement.js';
 import { registerCaseRoutes } from './routes/cases.js';
 import { registerCoinflipRoutes } from './routes/coinflip.js';
+import { registerCoinflipHouseRoutes } from './routes/coinflip-house.js';
 import { registerMinesDuelRoutes } from './routes/mines-duel.js';
 import { registerDuelRoutes } from './routes/duels.js';
 import { registerEconomyRoutes } from './routes/economy.js';
@@ -260,6 +261,7 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
   await registerBattleRoutes(app, db, config);
   await registerDuelRoutes(app, db, config);
   await registerCoinflipRoutes(app, db, config);
+  await registerCoinflipHouseRoutes(app, db, config);
   await registerMinesDuelRoutes(app, db, config);
   await registerSocialRoutes(app, db, config);
   await registerSideBetRoutes(app, db, config);

@@ -451,7 +451,7 @@ if (state.ready) void paintBack();
  * Under each single table: a "Provably fair" chip on the bar, and a card with two tabs, how the
  * game works (the bar's own hint text, so the words stay where the game's author wrote them) and
  * how a result is checked. Built once, from the markup that is already there. */
-const TABLES = '.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates';
+const TABLES = '.crash, .mines, .tower, .chicken, .dice, .limbo, .cflip, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates';
 const FAIR_TEXT = 'Every result comes from a server seed that is committed before you bet, your own client seed and a round number. Once a seed is revealed, you can check any round yourself.';
 
 function fairChip() {

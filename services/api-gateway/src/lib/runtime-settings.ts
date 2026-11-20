@@ -823,6 +823,13 @@ export const runtimeSettingDefinitions = {
     min: 1n,
     max: BIGINT_MAX,
   },
+  coinflipHouseMaxStakeMinor: {
+    kind: 'bigint',
+    group: 'coinflip',
+    label: 'Coinflip maximum stake against the house',
+    min: 1n,
+    max: BIGINT_MAX,
+  },
   coinflipLobbyTtlMinutes: {
     kind: 'integer',
     group: 'coinflip',
@@ -1504,6 +1511,7 @@ function assertInvariants(view: AppConfig): void {
     ],
     ['Duel minimum stake', view.skillDuelMinStakeMinor, 'the maximum', view.skillDuelMaxStakeMinor],
     ['Coinflip minimum stake', view.coinflipMinStakeMinor, 'the maximum', view.coinflipMaxStakeMinor],
+    ['Coinflip minimum stake', view.coinflipMinStakeMinor, 'the maximum against the house', view.coinflipHouseMaxStakeMinor],
     ['Mines Duel minimum stake', view.minesDuelMinStakeMinor, 'the maximum', view.minesDuelMaxStakeMinor],
     ['Side bet minimum stake', view.sideBetMinStakeMinor, 'the maximum', view.sideBetMaxStakeMinor],
     ['Minimum tip', view.tipMinMinor, 'the maximum', view.tipMaxMinor],

@@ -60,7 +60,7 @@ const RECIPES = [
   ['Slots', '"client:nonce:spin:reel"', 'One draw per reel of every spin, free spins included.'],
   ['Fishing', '"client:nonce"', 'The first 52 bits decide where the line snaps.'],
   ['Mob Derby', '"client:nonce"', 'The first byte picks the winner by the racers\' weights; the next 16 bytes lay out the track.'],
-  ['Coinflip', '"coinflip:host:opponent"', 'Both players\' client seeds. Heads when the first byte of the digest is below 128.'],
+  ['Coinflip', '"client:nonce"', 'Heads when the first byte of the digest is below 128.'],
   ['Mines Duel', '"minesduel:host:opponent:i"', 'Both players\' client seeds, one draw per mine.'],
   ['Case Battles', 'every player\'s seed', 'The battle\'s server seed with every seat\'s client seed and the battle\'s nonce.'],
   ['Stocks', '"epoch:tick"', 'A shared chart: each tick\'s moves come from its epoch\'s seed. The epochs are listed at the bottom of this page.'],

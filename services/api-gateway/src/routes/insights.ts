@@ -438,6 +438,8 @@ async function playerCard(db: Database, config: AppConfig, userId: string): Prom
          UNION ALL
          SELECT 'Limbo', stake_minor, payout_minor FROM limbo_bets WHERE user_id = $1
          UNION ALL
+         SELECT 'Coinflip', stake_minor, payout_minor FROM coinflip_bets WHERE user_id = $1
+         UNION ALL
          SELECT 'Fishing', stake_minor, payout_minor FROM fishing_casts WHERE user_id = $1 AND status <> 'open'
          UNION ALL
          SELECT 'Ice Fishing', stake_minor, payout_minor FROM ice_fishing_games WHERE user_id = $1 AND status = 'settled'
