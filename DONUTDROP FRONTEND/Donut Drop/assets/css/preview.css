@@ -274,12 +274,15 @@ body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="
   background: var(--pv-win); color: #0b2419; box-shadow: 0 4px 0 #1f7a4f;
 }
 body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="cash"]:hover:not(:disabled) { background: #52d496; }
-body.lx #minesGo[data-tone="cash"] { background: var(--pv-win); color: #0b2419; box-shadow: 0 4px 0 #1f7a4f; }
-body.lx #minesGo[data-tone="cash"]:hover:not(:disabled) { background: #52d496; box-shadow: 0 4px 0 #1f7a4f; }
-body.lx #minesGo[data-tone="cash"]:active:not(:disabled) { box-shadow: 0 1px 0 #1f7a4f; }
+body.lx :is(#minesGo, #towerGo)[data-tone="cash"] { background: var(--pv-win); color: #0b2419; box-shadow: 0 4px 0 #1f7a4f; }
+body.lx :is(#minesGo, #towerGo)[data-tone="cash"]:hover:not(:disabled) { background: #52d496; box-shadow: 0 4px 0 #1f7a4f; }
+body.lx :is(#minesGo, #towerGo)[data-tone="cash"]:active:not(:disabled) { box-shadow: 0 1px 0 #1f7a4f; }
 
 /* Limbo's stage carries the effects canvas (Crash's and Dice's already are positioned). */
 body.lx .limbo .limbo__stage { position: relative; overflow: hidden; }
+/* Tower's and Plinko's too, on their flat boards (the 3D scenes keep their own anchors). */
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__stage,
+body.lx .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__stage { position: relative; }
 
 /* Mines: the stage carries the effects; a turned tile sits recessed, its find on the dark. */
 body.lx .mines .mines__stage { position: relative; }

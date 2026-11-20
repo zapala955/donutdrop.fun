@@ -30,6 +30,7 @@ import { bus, commitmentMoved, holdLiveFigures, refreshBalance, showBalance, sta
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { fallAt, simulateFall } from './plinko-fall.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
@@ -82,6 +83,7 @@ let boardTried = null;
 let introAt = 0; // when the flat board last changed shape
 let tipSlot = null; // the slot whose card is open
 let lastLand = 0;
+let fx = null; // the preview's effects over the flat board (pvfx.js)
 
 /* ─────────── numbers ─────────── */
 
@@ -363,6 +365,15 @@ function landFlat(bet, x) {
     lastLand = now;
     const cue = x >= 100 ? 'jackpot' : x >= 10 ? 'plinkoBig' : x >= 2 ? 'plinkoWin' : x >= 1 ? 'plinkoEven' : 'plinkoLow';
     playSound(cue, { rate: x < 2 ? 0.92 + heat(bet.slot, bet.rows) * 0.25 : 1 });
+  }
+  const slot = root?.querySelector(`.plinko__slot[data-slot="${bet.slot}"]`);
+  if (fx && slot) {
+    const c = fxColors();
+    const [sx, sy] = fx.at(slot);
+    // Even or better rises off its slot; a pile of small losses stays quiet.
+    if (x >= 1) fx.text(sx, sy - 20, times(bet.multiplierBps), { color: x >= 2 ? c.gold : c.ink, size: 13, life: 0.8 });
+    if (x >= 2) fx.burst(sx, sy, { n: 14, colors: [x >= 10 ? c.gold : c.win, c.ink], speed: 220, size: 4 });
+    if (x >= 10) fx.coins(26);
   }
 }
 
@@ -848,6 +859,8 @@ function build() {
 
   canvas = $('#plinkoCanvas', root);
   ctx = canvas.getContext('2d');
+
+  fx = makeFx($('.plinko__stage', root));
 
   const stake = $('#plinkoStake', root);
   stake.value = stakeText;

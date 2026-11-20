@@ -24,6 +24,7 @@ import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, hitFlash, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -73,6 +74,7 @@ let stakeText = '1m';
 let mode = 'easy';
 let road3d = null; // the meadow, once it is up
 let roadTried = null;
+let fx = null; // the preview's effects over the flat road (pvfx.js)
 
 /* ─────────── the maths, mirrored from lib/chicken.ts ─────────── */
 
@@ -267,6 +269,13 @@ function finished() {
     ],
     { duration: 380, easing: EASE },
   );
+  if (fx) {
+    const c = fxColors();
+    const big = game.multiplierBps >= 100_000;
+    const [x, y] = fx.at(banner);
+    fx.burst(x, y, { n: big ? 48 : 26, colors: [c.win, c.ink, c.gold], speed: big ? 480 : 330, size: 6, g: 800, life: 0.95 });
+    if (big) fx.coins(36);
+  }
   countUp($('span', banner), Number(game.payoutMinor), 650);
   rollCartIn(game.crossed === LANES ? 0 : 260);
 }
@@ -300,6 +309,15 @@ function hop(lane) {
   if (reduceMotion()) return;
   $('#chickenHen img', root)?.animate(HOP, { duration: HOP_MS, easing: 'linear' });
   pressBlock(laneNode(lane), LAND_MS);
+  // The preview's landing: a gold nugget jumps off the block, with a glint.
+  const block = $('.clane__x', laneNode(lane) ?? undefined);
+  if (fx && block) {
+    setTimeout(() => {
+      const [x, y] = fx.at(block);
+      fx.pop(x, y + 10, 'gold_nugget', 22);
+      fx.sparkle(x, y, { color: fxColors().gold, n: 6, spread: 14, size: 10 });
+    }, LAND_MS);
+  }
 }
 
 /** The block under the chicken's feet, pressed into its lip. */
@@ -329,6 +347,17 @@ function hit(lane) {
   );
   $('#chickenHen img', root)?.animate(KNOCKED, { duration: 900, easing: 'linear' });
   feathers(lane, CART_HITS_MS);
+  // The preview's hit: real feathers thrown out, and the stage washing red.
+  const hen = $('#chickenHen', root);
+  if (fx && hen) {
+    setTimeout(() => {
+      const c = fxColors();
+      const [x, y] = fx.at(hen);
+      fx.feathers(x, y, 16);
+      fx.burst(x, y, { n: 12, colors: [c.ink, c.loss], speed: 280 });
+      hitFlash($('.chicken__stage', root));
+    }, CART_HITS_MS);
+  }
   $('#chickenRoad', root)?.animate(
     [
       { transform: 'none' },
@@ -712,6 +741,8 @@ function build() {
       </form>
     </aside>
     <div class="chicken__say" id="chickenSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.chicken__stage', root));
 
   const stake = $('#chickenStake', root);
   stake.value = stakeText;

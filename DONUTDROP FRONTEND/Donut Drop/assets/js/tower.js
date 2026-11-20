@@ -27,6 +27,7 @@ import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, hitFlash, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -54,6 +55,7 @@ let mode = 'easy';
 let focusTile = 0;
 let tower3d = null; // the 3D tower, once it is up
 let towerTried = null;
+let fx = null; // the preview's effects over the flat tower (pvfx.js)
 
 /* ─────────── the maths, mirrored from lib/tower.ts ─────────── */
 
@@ -248,6 +250,13 @@ function finished() {
     ],
     { duration: 380, easing: EASE },
   );
+  if (fx) {
+    const c = fxColors();
+    const big = game.multiplierBps >= 100_000;
+    const [x, y] = fx.at(banner);
+    fx.burst(x, y, { n: big ? 48 : 26, colors: [c.win, c.ink, c.gold], speed: big ? 480 : 330, size: 6, g: 800, life: 0.95 });
+    if (big) fx.coins(36);
+  }
   countUp($('span', banner), Number(game.payoutMinor), 650);
   revealRest(game.picks.length, 160);
 }
@@ -413,6 +422,12 @@ function gem(floor, tile) {
   playSound('towerGem', { rate: 1 + floor * 0.07 });
   if (reduceMotion()) return;
   tileNode(floor, tile)?.animate(FLIP, { duration: 340, easing: EASE });
+  const node = tileNode(floor, tile);
+  if (fx && node) {
+    const [x, y] = fx.at(node);
+    fx.sparkle(x, y, { color: fxColors().gem });
+    if (game?.multiplierBps) fx.text(x, y - 28, times(game.multiplierBps), { color: fxColors().ink, size: 15 });
+  }
   if (!inPlay()) return;
   setTimeout(() => playSound('towerClimb', { rate: 1 + floor * 0.05 }), 150);
   floorNode(game.floor)?.querySelectorAll('.ttile').forEach((node, index) => {
@@ -429,6 +444,12 @@ async function boom(floor, tile) {
   try { navigator.vibrate?.(80); } catch { /* not every browser lets a page vibrate */ }
   if (reduceMotion()) return;
   tileNode(floor, tile)?.animate(FLIP, { duration: 300, easing: EASE });
+  const node = tileNode(floor, tile);
+  if (fx && node) {
+    const [x, y] = fx.at(node);
+    fx.explode(x, y);
+    hitFlash($('.tower__stage', root));
+  }
   $('.tower__pit', root)?.animate(
     [{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(7px)' },
       { transform: 'translateX(-4px)' }, { transform: 'translateX(2px)' }, { transform: 'translateX(0)' }],
@@ -673,6 +694,8 @@ function build() {
       </form>
     </aside>
     <div class="tower__say" id="towerSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.tower__stage', root));
 
   const stake = $('#towerStake', root);
   stake.value = stakeText;
