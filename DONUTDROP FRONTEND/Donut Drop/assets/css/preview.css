@@ -177,6 +177,73 @@ body.lx .lxcard[data-game="monument"]  { --pv-block: url("../img/block/prismarin
   body.lx .lxrow { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: var(--lx-s4) var(--lx-s3); }
 }
 
+/* ═════════ the game pages ═════════
+   Each stage stands on its game's block, tiled at four times its 16 pixels under a dark wash that
+   is lightest where the game is played, so the scene is felt more than seen. The bar under the
+   game gets its sprite back and a "Provably fair" chip, and under it a card says how the game
+   works and how a result can be checked (luxe.js builds the chip and the card from the bar's
+   own "How it works" text). */
+body.lx .view[data-view="crash"]       { --pv-stage: url("../img/block/netherrack.png"); }
+body.lx .view[data-view="mines"]       { --pv-stage: url("../img/block/deepslate_diamond_ore.png"); }
+body.lx .view[data-view="tower"]       { --pv-stage: url("../img/block/stone_bricks.png"); }
+body.lx .view[data-view="chicken"]     { --pv-stage: url("../img/block/hay_block_side.png"); }
+body.lx .view[data-view="plinko"]      { --pv-stage: url("../img/block/polished_deepslate.png"); }
+body.lx .view[data-view="dice"]        { --pv-stage: url("../img/block/dark_oak_planks.png"); }
+body.lx .view[data-view="limbo"]       { --pv-stage: url("../img/block/end_stone.png"); }
+/* A chart reads its candles by colour: the bright emerald sits further back. */
+body.lx .view[data-view="stocks"]      { --pv-stage: url("../img/block/emerald_block.png"); --pv-wash-in: .93; --pv-wash-out: .97; }
+body.lx .view[data-view="fishing"]     { --pv-stage: url("../img/block/tube_coral_block.png"); }
+body.lx .view[data-view="ice-fishing"] { --pv-stage: url("../img/block/blue_ice.png"); }
+body.lx .view[data-view="derby"]       { --pv-stage: url("../img/block/moss_block.png"); }
+body.lx .view[data-view="ore-rush"]    { --pv-stage: url("../img/block/deepslate_gold_ore.png"); }
+body.lx .view[data-view="monument"]    { --pv-stage: url("../img/block/prismarine_bricks.png"); }
+body.lx .view[data-view="upgrader"]    { --pv-stage: url("../img/block/smithing_table_top.png"); }
+
+body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) {
+  background-color: var(--lx-0);
+  background-image: radial-gradient(130% 100% at 50% 38%, rgba(8, 6, 5, var(--pv-wash-in, .8)) 0%, rgba(8, 6, 5, var(--pv-wash-out, .95)) 72%), var(--pv-stage, none);
+  background-size: 100% 100%, 64px;
+  image-rendering: pixelated;
+}
+/* image-rendering is inherited: the stage's own picture is pixel art, what is drawn on it is not. */
+body.lx .view :is(.crash__stage, .mines__stage, .tower__stage, .chicken__stage, .dice__stage, .plinko__stage, .limbo__stage, .stocks__stage, .fishing__stage, .icefish__stage, .derby__stage, .slots__stage) > * { image-rendering: auto; }
+
+/* the bar: the game's sprite, its name, the chip */
+body.lx .view > .phead--game .phead__ico {
+  display: grid; width: 28px; height: 28px;
+  border: 0; border-radius: 0; background: none;
+}
+body.lx .view > .phead--game .phead__ico img { width: 28px; height: 28px; filter: drop-shadow(0 2px 0 var(--pv-shade)); }
+.pvfair {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 32px; margin-left: auto; padding: 0 var(--lx-s3);
+  border-radius: 999px; background: rgba(64, 199, 134, .14); color: var(--pv-win);
+  font: 700 .75rem/1 var(--lx-ui); white-space: nowrap;
+}
+.pvfair svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pvfair:hover { background: rgba(64, 199, 134, .22); }
+.pvfair:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+/* The card below says how it works, so the bar's own hint button steps aside. */
+body.lx .view.has-pvhow > .phead--game .phead__how { display: none; }
+
+/* "How it works" / "Fairness" under the game */
+body.lx .view > .pvhow { order: 3; }
+.pvhow {
+  display: grid; gap: var(--lx-s3); justify-items: start;
+  margin-top: var(--lx-s5); padding: var(--lx-s4);
+  border-radius: var(--lx-r); background: var(--lx-2);
+}
+.pvhow__tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--lx-0); }
+.pvhow__tabs button {
+  height: 32px; padding: 0 var(--lx-s3); border: 0; border-radius: 999px;
+  background: none; color: var(--lx-mute); font: 700 .8125rem/1 var(--lx-ui); cursor: pointer;
+}
+.pvhow__tabs button[aria-selected="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.pvhow__tabs button:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 1px; }
+.pvhow__body { max-width: 72ch; color: var(--lx-text); font: 500 1rem/1.55 var(--lx-ui); }
+.pvhow__body a { color: var(--lx-gold); font-weight: 700; }
+.pvhow__body a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
 /* ═════════ narrower ═════════ */
 @media (max-width: 1023px) {
   body.lx .lxpromo { min-height: 180px; padding: var(--lx-s4); }
@@ -187,6 +254,10 @@ body.lx .lxcard[data-game="monument"]  { --pv-block: url("../img/block/prismarin
   .lxback__list::-webkit-scrollbar { display: none; }
 }
 @media (max-width: 639px) {
+  .pvfair span { display: none; }
+  .pvfair { padding: 0 var(--lx-s2); }
+  .pvhow { margin-top: var(--lx-s3); }
+  .pvhow__body { font-size: .9375rem; }
   body.lx .lxpromo { min-height: 164px; }
   body.lx .lxpromo__copy { min-height: calc(164px - 2 * var(--lx-s4)); max-width: 66%; }
   body.lx .lxpromo__h { font-size: 1.1875rem; }

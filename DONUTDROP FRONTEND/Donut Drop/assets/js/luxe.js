@@ -446,3 +446,72 @@ onNavigate(() => {
   if (currentRouteName() === 'home') void paintBack();
 });
 if (state.ready) void paintBack();
+
+/* ═════════ the game pages (2026-11-20, the redesign preview's) ═════════
+ * Under each single table: a "Provably fair" chip on the bar, and a card with two tabs, how the
+ * game works (the bar's own hint text, so the words stay where the game's author wrote them) and
+ * how a result is checked. Built once, from the markup that is already there. */
+const TABLES = '.crash, .mines, .tower, .chicken, .dice, .limbo, .stocks, .fishing, .icefish, .derby, .slots, .plinko, .bj, .roulette, .upg, .crates';
+const FAIR_TEXT = 'Every result comes from a server seed that is committed before you bet, your own client seed and a round number. Once a seed is revealed, you can check any round yourself.';
+
+function fairChip() {
+  const chip = document.createElement('a');
+  chip.className = 'pvfair';
+  chip.href = '/fairness';
+  chip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>Provably fair</span>';
+  return chip;
+}
+
+function howCard(view, how) {
+  const card = document.createElement('section');
+  card.className = 'pvhow';
+  card.setAttribute('aria-label', 'About this game');
+  const tabs = document.createElement('div');
+  tabs.className = 'pvhow__tabs';
+  tabs.setAttribute('role', 'tablist');
+  const body = document.createElement('p');
+  body.className = 'pvhow__body';
+  body.setAttribute('role', 'tabpanel');
+  body.id = `pvhow-${view.dataset.view}`;
+  const show = (which) => {
+    for (const tab of tabs.children) tab.setAttribute('aria-selected', String(tab.dataset.tab === which));
+    if (which === 'how') {
+      body.textContent = how;
+    } else {
+      const check = document.createElement('a');
+      check.href = '/fairness';
+      check.textContent = 'Check a round';
+      body.replaceChildren(`${FAIR_TEXT} `, check);
+    }
+  };
+  for (const [key, label] of [['how', 'How it works'], ['fair', 'Fairness']]) {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.dataset.tab = key;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-controls', body.id);
+    tab.textContent = label;
+    tab.addEventListener('click', () => show(key));
+    tabs.appendChild(tab);
+  }
+  tabs.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    const next = tabs.querySelector('[aria-selected="false"]');
+    show(next.dataset.tab);
+    next.focus();
+  });
+  card.append(tabs, body);
+  show('how');
+  return card;
+}
+
+for (const view of $$('.view')) {
+  const head = view.querySelector(':scope > .phead--game');
+  if (!head || !view.querySelector(`:scope > :is(${TABLES})`)) continue;
+  head.appendChild(fairChip());
+  const how = head.querySelector('.phead__how')?.dataset.tip;
+  if (how) {
+    view.appendChild(howCard(view, how));
+    view.classList.add('has-pvhow');
+  }
+}
