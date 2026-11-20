@@ -116,14 +116,15 @@ const COMMAND_GAP_MS = 1_500;
  * once heard nothing from the server for hours until an operator reconnected it by hand -- and a
  * regular fresh login bounds how long that can last without waiting for a payout to go unanswered.
  *
- * 40-60 minutes, not 10-30 (the owner, 2026-11-18: "make jacob relog every 40-60 mins to avoid the
- * connection issues"). Each relog is a fresh login, and Mojang's login service rate-limits them: a
+ * 200-300 minutes (the owner, 2026-11-20: "relog every 200-300 minutes"; was 40-60, and 10-30 before
+ * that). Each relog is a fresh login, and Microsoft's login service rate-limits them with a 429: a
  * relog that lands on the limit is kicked (encryptionLoginError) and the account sits out ~5 minutes
- * before it gets back in. Relogging less often means fewer logins and fewer of those outages, while
- * still bounding a deaf session to about an hour.
+ * before it gets back in. Relogging far less often is the cure -- fewer logins, fewer 429s. A deaf
+ * session is still caught between relogs by the idle /bal (every 20-40 min) and the unanswered-command
+ * reconnect, so stretching the relog does not leave a silent session hanging for hours.
  */
-const RELOG_MIN_MS = 40 * 60_000;
-const RELOG_MAX_MS = 60 * 60_000;
+const RELOG_MIN_MS = 200 * 60_000;
+const RELOG_MAX_MS = 300 * 60_000;
 /**
  * How long a relog stays logged out. The gateway counts a bot as gone after 45 seconds without a
  * heartbeat; beats go every fifteen, so up to fifteen seconds out plus the login stays inside it

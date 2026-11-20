@@ -805,10 +805,10 @@ describe('scheduled relog', () => {
     assert.equal(claims, 1);
   });
 
-  it('is armed on every login at a random 40-60 minutes and comes back on its own', async () => {
+  it('is armed on every login at a random 200-300 minutes and comes back on its own', async () => {
     const source = await readFile(new URL('../src/worker.ts', import.meta.url), 'utf8');
-    assert.match(source, /const RELOG_MIN_MS = 40 \* 60_000;/);
-    assert.match(source, /const RELOG_MAX_MS = 60 \* 60_000;/);
+    assert.match(source, /const RELOG_MIN_MS = 200 \* 60_000;/);
+    assert.match(source, /const RELOG_MAX_MS = 300 \* 60_000;/);
     assert.match(source, /randomBetween\(RELOG_MIN_MS, RELOG_MAX_MS\)/);
     const spawn = source.slice(
       source.indexOf("'Mineflayer bot spawned'"),
