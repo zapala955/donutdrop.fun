@@ -283,6 +283,7 @@ body.lx .limbo .limbo__stage { position: relative; overflow: hidden; }
 /* Tower's and Plinko's too, on their flat boards (the 3D scenes keep their own anchors). */
 body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__stage,
 body.lx .plinko:not([data-render="3d"], [data-render="loading"]) .plinko__stage { position: relative; }
+body.lx .roulette .roulette__stage { position: relative; }
 
 /* Mines: the stage carries the effects; a turned tile sits recessed, its find on the dark. */
 body.lx .mines .mines__stage { position: relative; }

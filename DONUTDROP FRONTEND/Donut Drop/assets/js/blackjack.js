@@ -21,6 +21,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, state } from './
 import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, hitFlash, makeFx } from './pvfx.js';
 import { SCENES_ON, onViewChange, sceneLoaded, sceneLoading, setWants3d, wants3d as wantsScenes } from './view3d.js';
 
 const DEAL_MS = 340; // shoe to seat
@@ -60,6 +61,7 @@ let shown = { player: 0, dealer: 0 };
 let table3d = null; // the WebGL table, while it is up
 let starting3d = null;
 let no3d = false; // this browser cannot draw it
+let fx = null; // the preview's effects over the flat table (pvfx.js)
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -305,6 +307,23 @@ function paintResult(current, { animate }) {
     box.animate([{ opacity: 0, transform: `${at} scale(.94)` }, { opacity: 1, transform: `${at} scale(1)` }], {
       duration: 240, easing: EASE,
     });
+    resultFx(current, result.tone, box);
+  }
+}
+
+/** The preview's ending, on the flat table: a win bursts from the result, a natural in gold with
+ * coins; a bust shakes the hand and the felt washes red. */
+function resultFx(current, tone, box) {
+  if (!fx || table3d) return;
+  const c = fxColors();
+  if (tone === 'win') {
+    const natural = current.outcome === 'blackjack';
+    const [x, y] = fx.at(box);
+    fx.burst(x, y, { n: natural ? 44 : 26, colors: natural ? [c.gold, c.ink, c.win] : [c.win, c.ink, c.gold], speed: natural ? 440 : 330, size: 6, g: 800, life: 0.95 });
+    if (natural) fx.coins(30);
+  } else if (current.outcome === 'bust') {
+    fx.shake($('#bjPlayerCards', root), 6);
+    hitFlash($('.bj__table', root));
   }
 }
 
@@ -599,6 +618,8 @@ function build() {
         <button class="btn" id="bjDouble" type="button" aria-keyshortcuts="D"><span id="bjDoubleLabel">Double</span> <kbd>D</kbd></button>
       </div>
     </div>`;
+
+  fx = makeFx($('.bj__table', root));
 
   const input = $('#bjStake', root);
   input.value = stakeText;

@@ -26,6 +26,7 @@ import { linkPlayer } from './player-link.js';
 import { $, money, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -98,6 +99,7 @@ let spinHold = null;
 let chipsRoundId = null;
 let wheel3d = null; // the fortress's wheel, once it is up
 let wheelTried = null;
+let fx = null; // the preview's effects over the flat stage (pvfx.js)
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -285,6 +287,7 @@ function build() {
         </div>
       </section>
     </section>`;
+  fx = makeFx($('.roulette__stage', root));
 
   buildWheel();
   const numbers = $('#rouletteNumbers', root);
@@ -1085,6 +1088,14 @@ function announceResult(result, bets) {
       [{ opacity: 0, transform: 'translate(-50%, -50%) scale(.82)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1.04)', offset: 0.6 }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }],
       { duration: 380, easing: POP_EASE },
     );
+    // The preview's win, on the flat wheel: the card bursts, and 10x the stake or more rains gold.
+    if (fx && !wheel3d) {
+      const c = fxColors();
+      const big = paid >= staked * 10n;
+      const [x, y] = fx.at(card);
+      fx.burst(x, y, { n: big ? 48 : 26, colors: [c.win, c.ink, c.gold], speed: big ? 480 : 330, size: 6, g: 800, life: 0.95 });
+      if (big) fx.coins(36);
+    }
     const started = performance.now();
     const step = (now) => {
       const t = Math.min(1, (now - started) / 650);
