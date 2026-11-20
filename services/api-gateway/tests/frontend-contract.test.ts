@@ -406,10 +406,10 @@ describe('frontend/backend contract', () => {
     assert.match(store, /api\.get\('\/v1\/promotions'\)/);
 
     // The home page's offer banners: the figures arrive from the server, never in the markup.
-    const invite = /<a class="lxpromo lxpromo--side" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
+    const invite = /<a class="lxpromo" id="pbanInvite" href="\/referrals">[\s\S]*?<\/a>/.exec(html)?.[0];
     assert.ok(invite, 'the home invite banner is missing');
     assert.doesNotMatch(invite, /\$\d/);
-    const lead = /<div class="lxpromo lxpromo--lead" id="pbanLead">[\s\S]*?\n {8}<\/div>/.exec(html)?.[0];
+    const lead = /<div class="lxpromo" id="pbanLead">[\s\S]*?\n {8}<\/div>/.exec(html)?.[0];
     assert.ok(lead, 'the home lead banner is missing');
     assert.doesNotMatch(lead, /\$\d/);
     assert.match(app, /state\.promotions\?\.referral/);

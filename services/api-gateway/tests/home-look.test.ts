@@ -43,17 +43,12 @@ describe('the lobby', () => {
 
     const html = await read('index.html');
     const offers = html.slice(html.indexOf('<section class="lxpromos"'), html.indexOf('</section>', html.indexOf('<section class="lxpromos"')));
-    // One wide hero (its art swaps by sign-in state, set by app.js) and two compact side tiles.
-    assert.match(offers, /<div class="lxpromo lxpromo--lead" id="pbanLead">/);
-    assert.match(offers, /<span class="lxpromo__art lxpromo__art--lead">\s*<img id="pbanLeadArt" src="assets\/img\/items\/ender_chest.png"/);
-    const sideArt = [...offers.matchAll(/<a class="lxpromo lxpromo--side"[\s\S]*?<img src="([^"]+)" alt="" width="56" height="56" \/>/g)].map((m) => m[1]);
-    assert.deepEqual(sideArt, ['assets/img/luxe/promo-gift.svg', 'assets/img/luxe/discord-mark.svg']);
-    for (const file of ['assets/img/items/ender_chest.png', 'assets/img/items/gold_block.png', ...sideArt]) await readFile(path.join(frontend, file));
+    const art = [...offers.matchAll(/<span class="lxpromo__art"><img src="([^"]+)" alt="" width="80" height="80" \/><\/span>/g)].map((m) => m[1]);
+    assert.deepEqual(art, ['assets/img/brand/donut.svg', 'assets/img/luxe/promo-gift.svg', 'assets/img/luxe/discord-mark.svg']);
+    for (const file of art) await readFile(path.join(frontend, file!));
     assert.doesNotMatch(offers, /lxtag--gold/);
     const home = await read('assets/css/luxe-home.css');
-    // The hero's main action is a real gold button; the side tiles keep the text-link action.
-    assert.match(home, /body\.lx \.lxpromo--lead \.lxpromo__go\.btn--go,\n\s*body\.lx \.lxpromo--lead #pbanLeadGo \{/);
-    assert.match(home, /background: var\(--lx-gold\); color: var\(--lx-on-gold\);/);
+    assert.match(home, /\.lxpromo__art img \{\n\s*display: block; width: 80px; height: 80px; object-fit: contain;\n\s*image-rendering: pixelated;/);
 
     assert.doesNotMatch(html, /gcard__badge|lxcard__badge/);
     const cards = html.slice(html.indexOf('<ul class="lxrow" id="lobbyTrack">'), html.indexOf('</ul>', html.indexOf('id="slotsTrack"')));
@@ -70,10 +65,8 @@ describe('the lobby', () => {
      * "N playing". The first card now starts about 130px higher. */
     const css = await read('assets/css/luxe-home.css');
     const phone = css.slice(css.indexOf('@media (max-width: 599px) {'), css.indexOf('@media (prefers-reduced-motion: reduce) {'));
-    // Phone: the hero on top, the two tiles stacked under it, all full width (no 3-across scroll).
-    assert.match(phone, /\.lxpromos \{ grid-template-columns: minmax\(0, 1fr\); grid-template-rows: none;/);
-    assert.match(phone, /\.lxpromo--lead \{ grid-column: 1; grid-row: 1;/);
-    assert.match(phone, /\.lxpromo--side:nth-of-type\(3\) \{ grid-column: 1; grid-row: 3; \}/);
+    assert.match(phone, /\.lxpromos \{ grid-template-columns: repeat\(3, 84%\);/);
+    assert.match(phone, /\.lxpromo \{ grid-template-columns: 84px minmax\(0, 1fr\); min-height: 96px; \}/);
     assert.match(phone, /\.lxpromo__p \{[^}]*-webkit-line-clamp: 1; \}/);
     assert.match(phone, /\.lxsearch \{ height: 42px;/);
     assert.match(phone, /\.lxtabs__track \{ width: 100%; padding: 3px; \}/);
