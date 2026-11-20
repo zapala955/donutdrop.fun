@@ -334,7 +334,7 @@
   width: 14px;
   height: 14px;
   margin-right: 2px;
-  border: 2px solid rgba(10, 10, 12, 0.35);
+  border: 2px solid rgba(8, 6, 5, 0.35);
   border-top-color: #080605;
   border-radius: 50%;
   animation: auth-spin 0.7s linear infinite;

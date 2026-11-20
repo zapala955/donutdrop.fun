@@ -19,7 +19,7 @@
   padding: 3px 10px 3px 4px;
   border-radius: 999px;
   border: 1px solid var(--ob-line);
-  background: rgba(18, 18, 22, 0.7);
+  background: rgba(14, 12, 9, 0.7);
   font-size: 0.75rem;
 }
 .cfside img {
@@ -72,7 +72,7 @@
   padding: 10px 8px;
   border-radius: var(--r-soft);
   border: 1px solid var(--ob-line);
-  background: rgba(10, 10, 12, 0.6);
+  background: rgba(8, 6, 5, 0.6);
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -130,7 +130,7 @@
   min-width: 0;
   border-radius: var(--r-soft);
   border: 1px solid var(--ob-line);
-  background: rgba(18, 18, 22, 0.7);
+  background: rgba(14, 12, 9, 0.7);
   transition:
     border-color 0.3s var(--ob-ease),
     box-shadow 0.3s var(--ob-ease),
@@ -245,7 +245,7 @@
   width: 100%;
   border-radius: var(--r-soft);
   border: 1px solid var(--ob-line);
-  background: rgba(10, 10, 12, 0.6);
+  background: rgba(8, 6, 5, 0.6);
   padding: 8px 12px;
   font-size: 0.75rem;
 }

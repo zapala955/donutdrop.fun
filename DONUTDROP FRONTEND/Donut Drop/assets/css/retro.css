@@ -10,7 +10,7 @@
    glow each game used to cast blurred the pixel art into a smudge, so the icon now stands on the
    flat panel as a sprite does in an inventory slot. */
 :root {
-  --home-shade: rgba(10, 10, 12, .8);
+  --home-shade: rgba(8, 6, 5, .8);
   --card-drop: rgba(0, 0, 0, .45);
 }
 

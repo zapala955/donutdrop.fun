@@ -137,7 +137,7 @@
   border-radius: 14px;
   overflow: hidden;
   /* Obsidian glass: a dark pane with a lit top edge, over a blur of whatever is behind it. */
-  background: linear-gradient(180deg, rgba(28, 24, 16, .82), rgba(10, 10, 12, .94));
+  background: linear-gradient(180deg, rgba(28, 24, 16, .82), rgba(8, 6, 5, .94));
   border: 1px solid rgba(255, 170, 0, .14);
   box-shadow: inset 0 1px 0 rgba(255, 225, 160, .1), 0 20px 46px -34px rgba(0, 0, 0, .95);
   backdrop-filter: blur(14px) saturate(1.1);
@@ -1592,7 +1592,7 @@ html, body { overflow-x: clip; }
   min-width: 0;
   padding: 16px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(10, 10, 12, .94));
+  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(8, 6, 5, .94));
   border: 1px solid var(--b-line);
   box-shadow: inset 0 1px 0 rgba(255, 225, 160, .08), 0 18px 40px -30px rgba(0, 0, 0, .95);
   backdrop-filter: blur(14px) saturate(1.1);
@@ -1863,7 +1863,7 @@ html, body { overflow-x: clip; }
   min-width: 0;
   padding: 12px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(26, 23, 15, .78), rgba(10, 10, 12, .95));
+  background: linear-gradient(180deg, rgba(26, 23, 15, .78), rgba(8, 6, 5, .95));
   border: 1px solid rgba(255, 255, 255, .06);
   transition: border-color .25s ease, box-shadow .25s ease;
 }
@@ -2107,7 +2107,7 @@ html, body { overflow-x: clip; }
 .build__left, .build__right {
   display: flex; flex-direction: column; gap: 12px; min-width: 0;
   padding: 16px; border-radius: 14px;
-  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(10, 10, 12, .94));
+  background: linear-gradient(180deg, rgba(30, 26, 16, .72), rgba(8, 6, 5, .94));
   border: 1px solid rgba(255, 170, 0, .18);
   backdrop-filter: blur(14px) saturate(1.1);
   -webkit-backdrop-filter: blur(14px) saturate(1.1);
@@ -2270,7 +2270,7 @@ html, body { overflow-x: clip; }
   min-width: 260px;
   padding: 6px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(26, 22, 14, .97), rgba(10, 10, 12, .99));
+  background: linear-gradient(180deg, rgba(26, 22, 14, .97), rgba(8, 6, 5, .99));
   border: 1px solid rgba(255, 170, 0, .25);
   box-shadow: 0 24px 50px -20px rgba(0, 0, 0, .95);
   backdrop-filter: blur(16px) saturate(1.1);
@@ -2554,7 +2554,7 @@ html, body { overflow-x: clip; }
   min-width: 0;
   padding: 16px;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(30, 26, 16, .74), rgba(10, 10, 12, .94));
+  background: linear-gradient(180deg, rgba(30, 26, 16, .74), rgba(8, 6, 5, .94));
   border: 1px solid rgba(255, 170, 0, .18);
   backdrop-filter: blur(14px) saturate(1.1);
   -webkit-backdrop-filter: blur(14px) saturate(1.1);

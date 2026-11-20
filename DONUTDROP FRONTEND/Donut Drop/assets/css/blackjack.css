@@ -492,7 +492,7 @@
   gap: 2px;
   padding: 3px;
   border-radius: var(--lx-r, 8px);
-  background: var(--bj-hud, rgba(10, 10, 12, .72));
+  background: var(--bj-hud, rgba(8, 6, 5, .72));
 }
 .bj__view[hidden] { display: none; }
 .bj__view button {
@@ -524,7 +524,7 @@
 }
 .bj__gl:active { cursor: grabbing; }
 .bj__table:is([data-render="3d"], [data-render="loading"]) {
-  --bj-hud: rgba(10, 10, 12, .72);
+  --bj-hud: rgba(8, 6, 5, .72);
   padding: 0;
   background: var(--lx-0, #080605);
 }

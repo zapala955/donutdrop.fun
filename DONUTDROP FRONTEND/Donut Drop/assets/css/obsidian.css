@@ -192,7 +192,7 @@ html {
 }
 
 .card {
-  background: linear-gradient(180deg, rgba(22, 22, 27, .82), rgba(10, 10, 12, .92));
+  background: linear-gradient(180deg, rgba(22, 22, 27, .82), rgba(8, 6, 5, .92));
   border: 1px solid var(--ob-line);
   box-shadow:
     inset 0 1px 0 rgba(255, 225, 160, .07),
@@ -446,7 +446,7 @@ html {
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
 
 .top {
-  background: linear-gradient(180deg, rgba(10, 10, 12, .96), rgba(10, 10, 12, .88));
+  background: linear-gradient(180deg, rgba(8, 6, 5, .96), rgba(8, 6, 5, .88));
   border-bottom: 1px solid var(--ob-line);
 }
 /* The blur is desktop-only, and that is not a taste decision.
@@ -724,7 +724,7 @@ html {
   min-width: 0;
   padding: 5px 9px;
   border-radius: 8px;
-  background: rgba(10, 10, 12, .55);
+  background: rgba(8, 6, 5, .55);
   border: 1px solid rgba(255, 215, 0, .1);
 }
 .statstrip__v {
@@ -754,7 +754,7 @@ html {
   font-weight: 800;
   letter-spacing: .14em;
   color: var(--ac, var(--gold-bright));
-  background: rgba(10, 10, 12, .62);
+  background: rgba(8, 6, 5, .62);
   border: 1px solid color-mix(in srgb, var(--ac, #ffd700) 28%, transparent);
   white-space: nowrap;
 }

@@ -32,7 +32,7 @@
   --dice-ink: #22232a;
   --dice-ink-won: #0f7a41;
   --dice-ink-lost: #c22339;
-  --dice-grip: rgba(10, 10, 12, .5);
+  --dice-grip: rgba(8, 6, 5, .5);
   --dice-handle: var(--lx-gold-hi);
   --dice-handle-hi: #ffe14d;
   --dice-handle-lip: var(--lx-gold-lo);
