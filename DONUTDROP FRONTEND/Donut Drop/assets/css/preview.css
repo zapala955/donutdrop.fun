@@ -244,6 +244,53 @@ body.lx .view > .pvhow { order: 3; }
 .pvhow__body a { color: var(--lx-gold); font-weight: 700; }
 .pvhow__body a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
+/* ═════════ games: the preview's effects and feel ═════════
+   pvfx.js lays one canvas over a game's stage for its particles; it never takes a click. */
+.pvfx {
+  position: absolute; inset: 0; z-index: 30; width: 100%; height: 100%;
+  pointer-events: none; image-rendering: pixelated;
+}
+.pv-hit { animation: pv-hit 560ms cubic-bezier(.16, 1, .3, 1); }
+@keyframes pv-hit {
+  from { box-shadow: inset 0 0 0 100vmax rgba(229, 83, 75, .18); }
+  to { box-shadow: inset 0 0 0 100vmax transparent; }
+}
+/* The preview's win card: a dark plate in a green frame, the multiplier big in the display face. */
+.pvwin {
+  position: absolute; inset: 0; z-index: 25; display: grid; justify-items: center; gap: 4px;
+  width: max-content; height: max-content; margin: auto; padding: var(--lx-s3) var(--lx-s8);
+  border: 3px solid var(--pv-win); border-radius: var(--lx-r); background: var(--lx-1);
+  box-shadow: 0 6px 0 rgba(8, 6, 5, .55); pointer-events: none;
+  animation: pv-winpop 460ms cubic-bezier(.2, 1.45, .4, 1);
+}
+.pvwin b { color: var(--pv-win); font: 900 2.25rem/1 var(--lx-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pvwin span { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+.pvwin--big { border-color: var(--lx-gold); }
+.pvwin--big b { color: var(--lx-gold); }
+@keyframes pv-winpop { from { transform: scale(.6); opacity: 0; } }
+
+/* A cash-out on offer is green, as in the preview: the button says you are ahead. */
+body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="cash"] {
+  background: var(--pv-win); color: #0b2419; box-shadow: 0 4px 0 #1f7a4f;
+}
+body.lx :is(.crash .crash__go, .mines .mines__go, .tower .tower__go)[data-tone="cash"]:hover:not(:disabled) { background: #52d496; }
+body.lx #minesGo[data-tone="cash"] { background: var(--pv-win); color: #0b2419; box-shadow: 0 4px 0 #1f7a4f; }
+body.lx #minesGo[data-tone="cash"]:hover:not(:disabled) { background: #52d496; box-shadow: 0 4px 0 #1f7a4f; }
+body.lx #minesGo[data-tone="cash"]:active:not(:disabled) { box-shadow: 0 1px 0 #1f7a4f; }
+
+/* Mines: the stage carries the effects; a turned tile sits recessed, its find on the dark. */
+body.lx .mines .mines__stage { position: relative; }
+body.lx .mines .mtile:is([data-kind="gem"], [data-kind="tnt"], [data-kind="dim-gem"]) {
+  background: var(--lx-1); box-shadow: inset 0 3px 0 rgba(8, 6, 5, .45);
+}
+body.lx .mines .mtile[data-kind="boom"] { background: rgba(229, 83, 75, .16); box-shadow: inset 0 0 0 2px var(--lx-loss); }
+body.lx .mines .mines__banner {
+  border: 3px solid var(--pv-win); border-radius: var(--lx-r); background: var(--lx-1);
+  box-shadow: 0 6px 0 rgba(8, 6, 5, .55);
+}
+body.lx .mines .mines__banner b { color: var(--pv-win); font: 900 2.25rem/1 var(--lx-display); letter-spacing: -.02em; }
+body.lx .mines .mines__banner span { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); }
+
 /* ═════════ sidebar: the preview's group titles ═════════ */
 body.lx .lxside__label {
   margin: 0 0 var(--lx-s1); padding: var(--lx-s2) var(--lx-s3) 0;

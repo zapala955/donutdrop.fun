@@ -24,6 +24,7 @@ import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, hitFlash, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -43,6 +44,7 @@ let mineCount = 3;
 let focusTile = 12;
 let field = null; // the 3D cave, once it is up
 let fieldTried = null;
+let fx = null; // the preview's effects over the flat field (pvfx.js)
 
 const times = (bps) => `${(Math.floor(bps / 100) / 100).toFixed(2)}×`;
 
@@ -168,7 +170,7 @@ async function reveal(tile) {
       say(`TNT. You lost ${money(Number(game.stakeMinor))}.`);
     } else {
       if (field) await field.dig(tile, false);
-      else gem(tile, game.revealed.length);
+      else gem(tile, game.revealed.length, game.multiplierBps);
       if (game.status === 'settled') {
         finished();
       } else {
@@ -228,6 +230,13 @@ function finished() {
     ],
     { duration: 380, easing: EASE },
   );
+  if (fx) {
+    const c = fxColors();
+    const big = game.multiplierBps >= 100_000;
+    const [x, y] = fx.at(banner);
+    fx.burst(x, y, { n: big ? 48 : 26, colors: [c.win, c.ink, c.gold], speed: big ? 480 : 330, size: 6, g: 800, life: 0.95 });
+    if (big) fx.coins(36);
+  }
   countUp($('span', banner), Number(game.payoutMinor), 650);
   revealRest(game.revealed.at(-1) ?? 12, 160);
 }
@@ -376,10 +385,16 @@ function wake() {
 }
 
 /** A diamond: the tile turns over and rings, a step higher for every diamond found. */
-function gem(index, found) {
+function gem(index, found, bps) {
   playSound('minesGem', { rate: 1 + Math.min(found - 1, 20) * 0.045 });
   if (reduceMotion()) return;
   tileNode(index)?.animate(FLIP, { duration: 340, easing: EASE });
+  const node = tileNode(index);
+  if (fx && node) {
+    const [x, y] = fx.at(node);
+    fx.sparkle(x, y, { color: fxColors().gem });
+    if (bps) fx.text(x, y - 30, times(bps), { color: fxColors().ink, size: 15 });
+  }
 }
 
 /** TNT: the tile turns over, the field shakes, and the rest of it turns over from there. */
@@ -387,7 +402,13 @@ async function boom(index) {
   playSound('minesBoom');
   try { navigator.vibrate?.(80); } catch { /* not every browser lets a page vibrate */ }
   if (reduceMotion()) return;
-  tileNode(index)?.animate(FLIP, { duration: 300, easing: EASE });
+  const node = tileNode(index);
+  node?.animate(FLIP, { duration: 300, easing: EASE });
+  if (fx && node) {
+    const [x, y] = fx.at(node);
+    fx.explode(x, y);
+    hitFlash($('.mines__stage', root));
+  }
   $('.mines__board', root)?.animate(
     [{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(7px)' },
       { transform: 'translateX(-4px)' }, { transform: 'translateX(2px)' }, { transform: 'translateX(0)' }],
@@ -610,6 +631,8 @@ function build() {
       </form>
     </aside>
     <div class="mines__say" id="minesSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.mines__stage', root));
 
   const stake = $('#minesStake', root);
   stake.value = stakeText;
