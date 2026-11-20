@@ -1132,7 +1132,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Database, co
               a.minecraft_username AS actor_username
          FROM admin_payouts p
          JOIN bot_accounts b ON b.id = p.bot_id
-         JOIN users a ON a.id = p.actor_user_id
+         LEFT JOIN users a ON a.id = p.actor_user_id
         ORDER BY p.created_at DESC LIMIT 100`,
     );
     return { payouts: result.rows };

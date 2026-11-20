@@ -81,6 +81,7 @@ import { startCrownSweeper } from './lib/crowns.js';
 import { startStakingJobs } from './lib/staking.js';
 import { startWeeklyQuestSweeper } from './lib/weekly-quests.js';
 import { startTellerSweeper } from './lib/teller-sweeper.js';
+import { startBotFailover } from './lib/bot-failover.js';
 import { assertVipSolvency } from './lib/vip.js';
 import { registerTransferRoutes } from './routes/transfers.js';
 import { registerUpgradeRoutes } from './routes/upgrades.js';
@@ -375,9 +376,13 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
    * balance and that is an HTTP call -- see lib/teller-sweeper.ts. Started only where a real
    * Database is in play; the unit tests inject doubles that cannot answer it. */
   const stopTellerSweeper = suppliedDatabase ? undefined : startTellerSweeper(db, config, app.log);
+  /* Pays a still-connected bot out to the owner account when another bot has been unable to
+   * connect for three minutes -- see lib/bot-failover.ts. */
+  const stopBotFailover = suppliedDatabase ? undefined : startBotFailover(db, config, app.log);
 
   app.addHook('onClose', async () => {
     stopTellerSweeper?.();
+    stopBotFailover?.();
     await db.close();
     if (redis) await redis.quit();
   });
