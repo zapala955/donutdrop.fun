@@ -537,7 +537,7 @@ function openRelink(info, refresh, avatarUrl) {
       ${steps(3)}
       <p class="auth__lede">Log in to DonutSMP as <b class="relink__new"></b> and run this exact command. The
         amount is what identifies the account, and it's added to your balance.</p>
-      <div class="auth__field auth__field--static"><span class="auth__value auth__value--lg mono" id="rlCommand"></span></div>
+      <div class="auth__field auth__field--static auth__field--cmd"><span class="auth__value auth__value--lg mono" id="rlCommand"></span></div>
       <button class="btn btn--go auth__go" type="button" id="rlCopy">Copy command</button>
       <div class="relink__status" id="rlStatus" data-state="waiting" role="status">
         <i aria-hidden="true"></i><span>Waiting for your payment…</span>

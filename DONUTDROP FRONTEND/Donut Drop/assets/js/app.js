@@ -638,7 +638,7 @@ function openLoginModal() {
        * — see pollLink. The block below stays hidden until something actually fails. */
       $('#linkProgress', body).innerHTML = `<p class="auth__lede">Log in to DonutSMP as
           <b class="signin__name"></b> and run this exact command:</p>
-        <div class="auth__field auth__field--static">
+        <div class="auth__field auth__field--static auth__field--cmd">
           <span class="auth__value auth__value--lg mono">${escapeText(challenge.instruction)}</span>
         </div>
         <button class="btn btn--go auth__go" type="button" id="linkCopy">Copy command</button>
@@ -798,7 +798,7 @@ async function openDepositModal() {
       <span class="auth__value mono">${escapeText(info.botUsername)}</span>
     </div>
     <span class="auth__label">Run this in game</span>
-    <div class="auth__field auth__field--static">
+    <div class="auth__field auth__field--static auth__field--cmd">
       <span class="auth__value auth__value--lg mono">${command}</span>
     </div>
     <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
