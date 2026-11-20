@@ -250,6 +250,19 @@ body.lx .lxside__label {
   color: var(--lx-mute); font-size: .6875rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
 }
 
+/* ═════════ sign-up window: the preview's offer box ═════════
+   A gold wash from the left, the tag as plain gold capitals, the amount big and white. */
+body.lx .modal .auth__bonus {
+  background: linear-gradient(90deg, rgba(255, 170, 0, .14), transparent 85%), var(--lx-3); box-shadow: none;
+}
+body.lx .modal .auth__bonusslot { box-shadow: none; }
+body.lx .modal .auth__bonus .lxtag {
+  padding: 0; border: 0; background: none; box-shadow: none;
+  color: var(--lx-gold); font: 800 .6875rem/1.2 var(--lx-ui); letter-spacing: .1em; text-transform: uppercase;
+}
+body.lx .modal .auth__bonushead { color: var(--lx-text); }
+body.lx .modal .auth__bonusamt { color: var(--lx-ink); font: 900 1.375rem/1.1 var(--lx-display); }
+
 /* ═════════ footer: the preview's mast, links and notice ═════════ */
 body.lx .sitefoot { gap: var(--lx-s4); padding-top: var(--lx-s8); }
 body.lx .sitefoot__mast { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lx-s2) var(--lx-s6); }
