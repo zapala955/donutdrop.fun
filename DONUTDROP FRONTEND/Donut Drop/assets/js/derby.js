@@ -478,7 +478,6 @@ function say(text) {
 
 function paytableHtml() {
   if (!config) return '<p class="derbypay__sub">The field loads with the track.</p>';
-  const rtp = ((10_000 - config.houseEdgeBps) / 100).toFixed(0);
   const rows = racers().map((r) => `
       <tr><th scope="row"><span class="derbypay__item"><img src="${faces[r.id] ?? ''}" alt="" />${r.name}</span></th>
       <td>${r.weight} of ${config.span} · ${((r.weight / config.span) * 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%</td>
@@ -486,7 +485,7 @@ function paytableHtml() {
   return `
       <p class="derbypay__sub">Six farm mobs race down the track. Back one; if it crosses the line first your bet pays its odds, times your stake. The odds are fixed: the favourite wins most often and pays least.</p>
       <div class="derbypay__scroll"><table class="derbypay__table"><thead><tr><th scope="col">Racer</th><th scope="col">Wins</th><th scope="col">Pays</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="derbypay__sub">Every racer pays ${rtp}% over its chance, so every bet returns ${rtp}% over the long run whichever you back. The winner is the first byte of your race's fairness hash (0 to 255, the racers' shares laid end to end down the table); the next sixteen bytes only say how the field runs on the way. The seed is revealed with the race; check any race on the Fairness page.</p>`;
+      <p class="derbypay__sub">The winner is the first byte of your race's fairness hash (0 to 255, the racers' shares laid end to end down the table); the next sixteen bytes only say how the field runs on the way. The seed is revealed with the race; check any race on the Fairness page.</p>`;
 }
 function openPaytable() {
   openModal('Mob Derby: how it works', (body) => {

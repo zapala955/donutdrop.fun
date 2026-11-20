@@ -197,7 +197,7 @@ function summary(rake, refer, tag) {
   const stats = el('div', 'rw__herostats');
   for (const [label, value] of [
     ['Claimed all time', money(claimed)],
-    ['Rakeback rate', rake ? `${(rake.rateBps / 100).toFixed(rake.rateBps % 100 ? 2 : 0)}%` : '—'],
+    ['Rakeback claimed', rake ? money(rake.claimed) : '—'],
     ['Tag rewards', tag ? String(tag.days) : '—'],
   ]) {
     const cell = el('div', 'rw__stat');
@@ -263,8 +263,8 @@ function claimButton(key, label, enabled, onClick) {
 }
 
 function rakebackCard(rake) {
-  const node = card('rakeback', 'coins', 'Rakeback', 'Part of the house edge back on every bet, any time.', rake.ready);
-  const rows = [['Rate', `${(rake.rateBps / 100).toFixed(rake.rateBps % 100 ? 2 : 0)}% of the edge`], ['Claimed', money(rake.claimed)]];
+  const node = card('rakeback', 'coins', 'Rakeback', 'A share of every bet back, any time.', rake.ready);
+  const rows = [['Claimed', money(rake.claimed)]];
   if (rake.availableAt && !rake.ready) {
     rows.unshift(['Next claim', clock(new Date(rake.availableAt).getTime() - Date.now()), rake.availableAt, '']);
   }

@@ -180,13 +180,17 @@ function sideChip(side) {
   return chip;
 }
 
+/** What the winner gets, as a multiple of one stake: the pot less the server's cut, e.g. "1.9×". */
+function winnerX(cutBps) {
+  return `${((20_000 - 2 * cutBps) / 10_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}×`;
+}
+
 function render() {
   const wrap = el('div', 'duel cf');
 
   const badges = el('div', 'duel__badges');
   for (const [value, label] of [
-    [`${(board.rakeBps / 100).toFixed(board.rakeBps % 100 === 0 ? 0 : 1)}%`, 'HOUSE RAKE'],
-    ['0%', 'HOUSE EDGE'],
+    [winnerX(board.rakeBps), 'WINNER GETS'],
     ['50/50', 'EXACT ODDS'],
     ['HMAC', 'PROVABLY FAIR'],
   ]) {
@@ -323,7 +327,7 @@ function openCreate() {
     amount.textContent = money(stake);
     const pot = stake * 2;
     const rake = Math.floor((pot * board.rakeBps) / 10_000);
-    breakdown.textContent = `POT ${money(pot)} · RAKE ${money(rake)} · WIN ${money(pot - rake)}`;
+    breakdown.textContent = `POT ${money(pot)} · WINNER GETS ${money(pot - rake)}`;
   };
 
   const chips = el('div', 'qchips');

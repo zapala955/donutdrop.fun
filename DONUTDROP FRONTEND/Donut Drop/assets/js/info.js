@@ -187,7 +187,7 @@ function articles(f) {
       { go: ['/daily-rewards', 'Open Daily Rewards'] },
     ] },
     { id: 'vip-rakeback', group: 'rewards', title: 'VIP levels and rakeback', blocks: [
-      { p: 'Everything you wager raises your VIP level. Each level pays rakeback: a share of the house’s edge on your bets, paid back to you. Claim it on the Rewards page whenever it builds up.' },
+      { p: 'Everything you wager raises your VIP level. Each level pays rakeback: a share of your wagers, paid back to you. Claim it on the Rewards page whenever it builds up.' },
       { go: ['/vip', 'See the VIP levels'] },
     ] },
     { id: 'quests', group: 'rewards', title: 'Quests', blocks: [
@@ -243,7 +243,7 @@ function articles(f) {
       ] },
     ] },
     { id: 'play-responsibly', group: 'safe', title: 'Playing responsibly', blocks: [
-      { p: 'Casino games are random, and the house has an edge, so over time you lose more than you win. Only play with money you are happy to lose, and take breaks.' },
+      { p: 'Casino games are random, and over time you lose more than you win. Only play with money you are happy to lose, and take breaks.' },
       { p: 'If you want your account closed, open a ticket and we will do it.' },
     ] },
 

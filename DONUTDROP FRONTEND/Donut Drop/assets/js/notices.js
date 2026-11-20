@@ -101,7 +101,7 @@ const KINDS = {
 };
 
 const READY = {
-  rakeback: { title: 'Rakeback ready', detail: 'A share of the house edge on your play' },
+  rakeback: { title: 'Rakeback ready', detail: 'A share of your bets, paid back' },
   referrals: { title: 'Referral earnings ready', detail: 'Your share of what your invites played' },
 };
 

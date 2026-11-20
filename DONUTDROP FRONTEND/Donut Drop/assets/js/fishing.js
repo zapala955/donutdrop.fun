@@ -776,7 +776,6 @@ function say(text) {
 
 function paytableHtml() {
   if (!config) return '<p class="fishpay__sub">The ladder loads with the sea.</p>';
-  const rtp = ((10_000 - config.houseEdgeBps) / 100).toFixed(0);
   const holds = (x100) => `${Math.min(100, (100 - config.houseEdgeBps / 100) / (x100 / 100)).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
   const rows = ladder().map((step) => `
       <tr data-kind="${config.catches[step.id]?.kind ?? 'fish'}">
@@ -796,7 +795,7 @@ function paytableHtml() {
         </table>
       </div>
       <p class="fishpay__sub">The sinker is the pace, the odds are the same with all three: to 2× takes ${pace}. Set an auto reel and the line comes up there by itself. The line goes no deeper than 1000×; it is cut as the lure goes under about one cast in nine.</p>
-      <p class="fishpay__sub">Every cast returns at most ${rtp}% over the long run, whenever you reel up. Where the line is cut is drawn from your fairness seed the moment you cast and revealed when the cast ends; check any cast on the Fairness page.</p>`;
+      <p class="fishpay__sub">Where the line is cut is drawn from your fairness seed the moment you cast and revealed when the cast ends; check any cast on the Fairness page.</p>`;
 }
 
 function openPaytable() {

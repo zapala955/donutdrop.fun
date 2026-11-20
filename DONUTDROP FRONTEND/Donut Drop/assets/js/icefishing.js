@@ -477,7 +477,6 @@ function say(text) {
 
 function paytableHtml() {
   if (!config) return '<p class="icepay__sub">The table loads with the lake.</p>';
-  const rtp = ((10_000 - config.houseEdgeBps) / 100).toFixed(0);
   const counts = [1, 3, 5, 10, 20];
   const rows = [1, 2, 3, 5, 8, 12].map((fish) => `
       <tr><th scope="row">${fish} fish</th>${counts.map((thin) => `<td>${fish <= HOLES - thin ? `<b>${times(multiplierBps(thin, fish))}</b>` : '—'}</td>`).join('')}</tr>`).join('');
@@ -486,7 +485,7 @@ function paytableHtml() {
       <p class="icepay__sub">Twenty-five holes on a frozen lake; you choose how many of them are thin ice. Drill a hole: a fish raises the multiplier, thin ice loses the stake. Pull out after any fish for your stake times the multiplier.</p>
       <div class="icepay__scroll"><table class="icepay__table"><thead><tr><th scope="col">Pull out after</th>${counts.map((thin) => `<th scope="col">${thin} thin</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
       <p class="icepay__sub">The more thin ice, the faster the multiplier climbs. What comes up is named by how far the game has got: ${catches}.</p>
-      <p class="icepay__sub">It is Mines on the ice, with the same maths: whenever you pull out, the game returns ${rtp}% over the long run. The thin ice is laid from your fairness seed the moment you start, by the same shuffle as Mines, and revealed when the game ends; check any game on the Fairness page.</p>`;
+      <p class="icepay__sub">It is Mines on the ice, with the same maths. The thin ice is laid from your fairness seed the moment you start, by the same shuffle as Mines, and revealed when the game ends; check any game on the Fairness page.</p>`;
 }
 function openPaytable() {
   openModal('Ice Fishing: how it works', (body) => {

@@ -499,9 +499,8 @@ function paintTarget() {
 function hintText() {
   const config = state.upgradeConfig;
   if (!config) return 'The server recalculates every roll from locked values after you commit.';
-  const edge = (Number(config.houseEdgeBps) / 100).toFixed(2);
   const cap = (Number(config.maxWinChancePpm) / 10_000).toFixed(2);
-  return `Chance = (stake ÷ payout) × (1 − ${edge}% edge), capped at ${cap}%.`;
+  return `The bigger the payout, the smaller your chance, up to ${cap}%.`;
 }
 
 /**

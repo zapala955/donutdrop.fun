@@ -779,7 +779,6 @@ function createSlotsGame(game) {
     const book = symbolOf(config.scatter);
     const x = config.scatterPayX;
     const n = config.scatterSpins;
-    const rtp = ((10_000 - config.houseEdgeBps) / 100).toFixed(2);
     return `
       <p class="slotspay__sub">Line pays are multiples of the line bet (the stake ÷ 10), left to right from reel one. The best win on each line pays.</p>
       <ul class="slotspay__pays">${pays}</ul>
@@ -795,7 +794,7 @@ function createSlotsGame(game) {
       </div>
       <h3 class="slotspay__h3">The ten lines</h3>
       <ol class="slotspay__minis">${minis}</ol>
-      <p class="slotspay__sub">Returns ${rtp}% of the stake over the long run. A round pays at most ${config.maxWinX.toLocaleString('en-US')}× the stake and plays at most ${config.maxFreeSpins} free spins. Every spin comes from your fairness seed and can be checked on the Fairness page.</p>`;
+      <p class="slotspay__sub">A round pays at most ${config.maxWinX.toLocaleString('en-US')}× the stake and plays at most ${config.maxFreeSpins} free spins. Every spin comes from your fairness seed and can be checked on the Fairness page.</p>`;
   }
 
   function openPaytable() {

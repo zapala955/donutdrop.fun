@@ -218,6 +218,11 @@ function avatar(name, size = 'md') {
   return node;
 }
 
+/** What the winner gets, as a multiple of one stake: the pot less the server's cut, e.g. "1.9×". */
+function winnerX(cutBps) {
+  return `${((20_000 - 2 * cutBps) / 10_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}×`;
+}
+
 function render() {
   if (active) { renderArena(); return; }
 
@@ -226,8 +231,7 @@ function render() {
   /* ── the rules, as metric badges ── */
   const badges = el('div', 'duel__badges');
   for (const [value, label] of [
-    [`${(board.rakeBps / 100).toFixed(board.rakeBps % 100 === 0 ? 0 : 1)}%`, 'HOUSE RAKE'],
-    ['0%', 'HOUSE EDGE'],
+    [winnerX(board.rakeBps), 'WINNER GETS'],
     ['10s', 'ROUND LIMIT'],
     ['SERVER', 'VALIDATED'],
   ]) {
@@ -260,7 +264,7 @@ function render() {
   const header = el('div', 'duel__row duel__row--head');
   for (const [label, cls] of [
     ['CHALLENGER', 'who'], ['STAKE', 'stake'], ['MODE', 'mode'],
-    ['RAKE', 'rake'], ['WINNER TAKES', 'take'], ['', 'go'],
+    ['POT', 'rake'], ['WINNER TAKES', 'take'], ['', 'go'],
   ]) {
     const cell = el('span', `duel__c duel__c--${cls}`);
     cell.textContent = label;
@@ -289,7 +293,7 @@ function render() {
     mode.textContent = VARIANT_LABEL[duel.variant] ?? duel.variant;
 
     const rake = el('span', 'duel__c duel__c--rake mono');
-    rake.textContent = money(Number(duel.rakeMinor));
+    rake.textContent = money(Number(duel.stakeMinor) * 2);
 
     const take = el('span', 'duel__c duel__c--take mono');
     take.textContent = money(Number(duel.payoutMinor));
@@ -336,7 +340,7 @@ function openCreate() {
     amount.textContent = money(stake);
     const pot = stake * 2;
     const rake = Math.floor((pot * board.rakeBps) / 10_000);
-    breakdown.textContent = `POT ${money(pot)} · RAKE ${money(rake)} · WIN ${money(pot - rake)}`;
+    breakdown.textContent = `POT ${money(pot)} · WINNER GETS ${money(pot - rake)}`;
   };
 
   /* ── quick stake ── */
@@ -497,7 +501,7 @@ function renderArena() {
   const pot = el('div', 'arena__pot');
   pot.append(
     Object.assign(el('b', 'mono'), { textContent: money(Number(active.potMinor)) }),
-    Object.assign(el('i'), { textContent: `POT · RAKE ${(active.rakeBps / 100).toFixed(1)}%` }),
+    Object.assign(el('i'), { textContent: `POT · WINNER GETS ${winnerX(active.rakeBps)}` }),
   );
 
   wrap.append(

@@ -88,9 +88,9 @@ function payoutFor(stakeMinor, rakeBps) {
   return pot - (pot * BigInt(rakeBps)) / 10_000n;
 }
 
-/** The rake as players read it: "10%", or "2.5%" for a fractional one. */
-function rakeLabel(rakeBps) {
-  return `${(rakeBps / 100).toFixed(rakeBps % 100 ? 1 : 0)}%`;
+/** What the winner gets, as a multiple of one stake: the pot less the server's cut, e.g. "1.9×". */
+function winnerX(cutBps) {
+  return `${((20_000 - 2 * cutBps) / 10_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}×`;
 }
 
 /** What each player got back from a drawn game: the returned pot, split two ways. A draw settled
@@ -226,7 +226,7 @@ function renderLobby() {
 
   const badges = el('div', 'duel__badges');
   badges.append(
-    badge(rakeLabel(board.rakeBps), 'House rake'),
+    badge(winnerX(board.rakeBps), 'Winner gets'),
     badge('Same', 'Field for both'),
     badge(`${board.playSeconds}s`, 'To play'),
     badge('Hidden', 'Scores until the end'),
@@ -531,7 +531,7 @@ function renderCreate() {
   form.append(
     Object.assign(el('p', 'mduel__fine'), {
       textContent:
-        `A draw returns both stakes less the ${rakeLabel(board.rakeBps)} rake. A duel nobody takes is refunded in full.`,
+        `A draw splits the winner's payout between you. A duel nobody takes is refunded in full.`,
     }),
   );
 
@@ -540,7 +540,7 @@ function renderCreate() {
     const ok = stake !== null && stake > 0n;
     total.textContent = ok ? money(Number(payoutFor(stake, board.rakeBps))) : '—';
     split.textContent = ok
-      ? `${money(Number(stake * 2n))} pot − ${rakeLabel(board.rakeBps)}`
+      ? `${winnerX(board.rakeBps)} your stake`
       : '';
     const issue = state.authenticated ? createProblem() : '';
     go.textContent = !state.authenticated
