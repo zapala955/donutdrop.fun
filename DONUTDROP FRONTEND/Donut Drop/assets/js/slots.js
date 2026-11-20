@@ -854,7 +854,7 @@ function createSlotsGame(game) {
 
       <aside class="slots__panel" aria-label="Your spin">
         <form class="slots__form" id="${P}Form" novalidate>
-          <label class="slots__label" for="${P}Stake">Stake</label>
+          <label class="slots__label" for="${P}Stake">Bet amount</label>
           <div class="slots__field">
             <span aria-hidden="true">$</span>
             <input id="${P}Stake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

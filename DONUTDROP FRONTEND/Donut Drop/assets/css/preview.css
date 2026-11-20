@@ -639,6 +639,79 @@ body.lx .chat .chat__rain .rain__go:active:not(:disabled) { transform: none; box
 body.lx .chat .chat__rain .rain__go[data-tone="step"] { grid-area: step; width: 100%; height: 36px; margin-top: 8px; box-shadow: none; }
 body.lx .chat .chat__rain .rain__rules { grid-area: rules; margin-top: 10px; }
 
+/* ═════════ the bet panel, 1:1 with the preview ═════════
+   "Bet amount" over a well with ½ and 2× joined to its right edge, flush, split by a hairline, and
+   no Max; a suffix (×, %) in the muted ink, the "$" in gold. The button sits under the stake and
+   what a win pays under the button (dice.js, limbo.js). */
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .cflip__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake) { border-radius: 8px; }
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .cflip__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake):has(> button) { padding-right: 0; }
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj) {
+  align-self: stretch; height: auto; min-width: 44px; margin: 0; padding: 0 8px;
+  border: 0; border-left: 1px solid var(--lx-0); border-radius: 0;
+  background: var(--lx-4); color: var(--lx-ink); font: 800 .875rem/1 var(--lx-ui);
+  box-shadow: none;
+}
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj):hover:not(:disabled) { background: var(--lx-5); }
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj):active:not(:disabled) { transform: none; box-shadow: none; filter: brightness(.94); }
+body.lx .view :is(.crash__adj, .mines__adj, .tower__adj, .chicken__adj, .dice__adj, .limbo__adj, .cflip__adj, .stocks__adj, .fishing__adj, .icefish__adj, .derby__adj, .slots__adj, .plinko__adj, .ug__adj, .bj__adj)[data-adj="max"] { display: none; }
+body.lx .view :is(.crash__field, .mines__field, .tower__field, .chicken__field, .dice__field, .limbo__field, .cflip__field, .stocks__field, .fishing__field, .icefish__field, .derby__field, .slots__field, .plinko__field, .ug__field, .bj__stake) input ~ span { color: var(--lx-mute); }
+body.lx .view :is(.dice__field--read, .limbo__field--read, .cflip__field--read, .stocks__field--read) { background: var(--lx-0); border-color: var(--lx-4); }
+
+/* ═════════ Manual and Auto (autobet.js), as in the preview ═════════ */
+.lxauto__seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px;
+  border-radius: 999px; background: var(--lx-0);
+}
+.lxauto__seg button {
+  height: 36px; border: 0; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui); white-space: nowrap;
+}
+.lxauto__seg button:hover:not(:disabled) { color: var(--lx-ink); }
+.lxauto__seg button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxauto__seg button:disabled { cursor: not-allowed; }
+.lxauto__seg button:disabled:not([aria-pressed="true"]) { opacity: .45; }
+.lxauto { display: grid; gap: 12px; }
+.lxauto[hidden] { display: none; }
+.lxauto__field { display: grid; gap: 4px; min-width: 0; }
+.lxauto__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); white-space: nowrap; }
+.lxauto__inp {
+  display: flex; align-items: stretch; height: 44px; overflow: hidden;
+  border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-0);
+  transition: border-color var(--lx-quick) var(--lx-ease);
+}
+.lxauto__inp:hover { border-color: var(--lx-5); }
+.lxauto__inp:focus-within { border-color: var(--lx-gold); }
+.lxauto__inp input {
+  flex: 1; min-width: 0; width: 100%; padding: 0 12px; border: 0; outline: 0; background: none;
+  color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+.lxauto__inp input:disabled { color: var(--lx-mute); }
+.lxauto__pre { display: grid; place-items: center; padding-left: 12px; color: var(--lx-gold); font: 900 .9375rem/1 var(--lx-ui); }
+.lxauto__suf { display: grid; place-items: center; padding: 0 12px; color: var(--lx-mute); font: 700 .8125rem/1 var(--lx-ui); white-space: nowrap; }
+.lxauto__minis { display: flex; flex: none; gap: 2px; padding: 2px; }
+.lxauto__minis button {
+  padding: 0 8px; border: 0; border-radius: 6px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .75rem/1 var(--lx-ui); white-space: nowrap;
+}
+.lxauto__minis button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxauto__minis button:disabled { cursor: not-allowed; }
+.lxauto__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+
+/* Crash's panel as the preview's: no rows of quick stakes or targets, no key hint on the button
+   (Space still bets and cashes out). */
+body.lx .view .crash__picks { display: none; }
+body.lx .view .crash__go kbd { display: none; }
+
+/* The bar's sound key, beside "Provably fair", as in the preview. */
+.pvsound {
+  display: grid; place-items: center; flex: none; width: 36px; height: 36px; margin-left: auto;
+  border: 0; border-radius: 8px; background: var(--lx-3); color: var(--lx-text); cursor: pointer;
+}
+.pvsound:hover { background: var(--lx-4); color: var(--lx-ink); }
+.pvsound:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.pvsound svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pvsound + .pvfair { margin-left: 8px; }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

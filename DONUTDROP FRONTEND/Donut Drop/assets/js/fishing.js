@@ -847,7 +847,7 @@ function build() {
 
     <aside class="fishing__panel" aria-label="Your cast">
       <form class="fishing__form" id="fishingForm" novalidate>
-        <label class="fishing__label" for="fishingStake">Stake</label>
+        <label class="fishing__label" for="fishingStake">Bet amount</label>
         <div class="fishing__field">
           <span aria-hidden="true">$</span>
           <input id="fishingStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

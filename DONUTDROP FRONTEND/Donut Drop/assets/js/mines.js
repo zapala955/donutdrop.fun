@@ -597,7 +597,7 @@ function build() {
 
     <aside class="mines__panel" aria-label="Your game">
       <form class="mines__form" id="minesForm" novalidate>
-        <label class="mines__label" for="minesStake">Stake</label>
+        <label class="mines__label" for="minesStake">Bet amount</label>
         <div class="mines__field">
           <span aria-hidden="true">$</span>
           <input id="minesStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

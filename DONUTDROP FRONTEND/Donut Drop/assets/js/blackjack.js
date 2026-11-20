@@ -601,7 +601,7 @@ function build() {
 
     <div class="bj__controls">
       <form class="bj__betting" id="bjBetting" novalidate>
-        <label class="bj__stakelabel" for="bjStake">Stake</label>
+        <label class="bj__stakelabel" for="bjStake">Bet amount</label>
         <div class="bj__stake">
           <span aria-hidden="true">$</span>
           <input id="bjStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

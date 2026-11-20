@@ -192,7 +192,7 @@ function build() {
 
     <aside class="ug__panel" aria-label="Your upgrade">
       <div class="ug__form">
-        <label class="ug__label ug__label--row" for="stakeIn"><span>Stake</span><span class="ug__bal mono" id="upgBalance"></span></label>
+        <label class="ug__label ug__label--row" for="stakeIn"><span>Bet amount</span><span class="ug__bal mono" id="upgBalance"></span></label>
         <div class="ug__field">
           <span aria-hidden="true">$</span>
           <input id="stakeIn" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off"

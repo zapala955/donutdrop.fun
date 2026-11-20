@@ -933,7 +933,7 @@ function build() {
           <button type="button" class="stocks__side" role="radio" data-side-pick="long" aria-checked="true"><i aria-hidden="true">▲</i>Long</button>
           <button type="button" class="stocks__side" role="radio" data-side-pick="short" aria-checked="false"><i aria-hidden="true">▼</i>Short</button>
         </div>
-        <label class="stocks__label stocks__label--row" for="stocksStake"><span>Stake</span><span class="stocks__labelx" id="stocksMaxWin"></span></label>
+        <label class="stocks__label stocks__label--row" for="stocksStake"><span>Bet amount</span><span class="stocks__labelx" id="stocksMaxWin"></span></label>
         <div class="stocks__field">
           <span aria-hidden="true">$</span>
           <input id="stocksStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" placeholder="0" />

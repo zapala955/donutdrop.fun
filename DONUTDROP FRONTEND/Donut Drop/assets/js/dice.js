@@ -28,6 +28,7 @@ import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } f
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { fxColors, makeFx } from './pvfx.js';
+import { autoFields, autoSwitch, wireAuto } from './autobet.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -54,6 +55,7 @@ let rangeTried = null;
 let tickPoint = null; // the whole point the line last ticked at
 let tickAt = 0;
 let fx = null; // the preview's effects over the flat range (pvfx.js)
+let auto = null; // Manual or Auto (autobet.js)
 
 /* ─────────── the maths, mirrored from lib/dice.ts ─────────── */
 
@@ -160,6 +162,7 @@ async function roll() {
     say(bet.win
       ? `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)}. A win: ${money(Number(bet.payoutMinor))}, ${money(Number(profit))} profit.`
       : `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)} needed. Lost ${money(Number(bet.stakeMinor))}.`);
+    return bet;
   } catch (error) {
     release();
     if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
@@ -486,10 +489,12 @@ function paintControls() {
   let text;
   if (!state.authenticated) text = 'Log in to play';
   else if (busy) text = 'Rolling…';
-  else text = `Roll · ${money(Number(stake ?? 0n))}`;
+  else text = 'Bet';
+  if (auto && state.authenticated) text = auto.label(text);
   if (label.textContent !== text) label.textContent = text;
   const problem = state.authenticated ? rollProblem() : '';
-  go.disabled = busy || Boolean(problem);
+  // A run in Auto can always be stopped, mid-roll included.
+  go.disabled = auto?.running ? false : busy || Boolean(problem);
   go.setAttribute('aria-busy', String(busy));
   hint.textContent = problem;
 
@@ -497,8 +502,9 @@ function paintControls() {
   profit.value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
   $('#diceProfitX', root).textContent = times(multiplierBps(chanceOf(direction, target)));
 
-  for (const node of root.querySelectorAll('.dice__panel input, .dice__panel .dice__adj, .dice__stage input, .dice__swap')) {
-    node.disabled = busy;
+  const locked = busy || Boolean(auto?.running);
+  for (const node of root.querySelectorAll('.dice__field input, .dice__panel .dice__adj, .dice__stage input, .dice__swap')) {
+    node.disabled = locked;
   }
 }
 
@@ -579,7 +585,8 @@ function build() {
 
     <aside class="dice__panel" aria-label="Your roll">
       <form class="dice__form" id="diceForm" novalidate>
-        <label class="dice__label" for="diceStake">Stake</label>
+        ${autoSwitch('dice')}
+        <label class="dice__label" for="diceStake">Bet amount</label>
         <div class="dice__field">
           <span aria-hidden="true">$</span>
           <input id="diceStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -587,13 +594,14 @@ function build() {
           <button type="button" class="dice__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="dice__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
+        ${autoFields('dice')}
+        <button class="btn dice__go" id="diceGo" type="submit" data-sfx="none">
+          <span id="diceGoLabel">Loading…</span>
+        </button>
         <label class="dice__label dice__label--row" for="diceProfit"><span>Profit on win</span><span class="dice__profitx" id="diceProfitX"></span></label>
         <div class="dice__field dice__field--read">
           <output id="diceProfit" for="diceStake diceLine">—</output>
         </div>
-        <button class="btn dice__go" id="diceGo" type="submit" data-sfx="none">
-          <span id="diceGoLabel">Loading…</span>
-        </button>
         <p class="dice__hint" id="diceHint" aria-live="polite"></p>
         ${viewSwitch('diceView')}
         <label class="dice__gfx" for="diceGfx">
@@ -646,9 +654,20 @@ function build() {
   }
   $('#diceSwap', root).addEventListener('click', swapSide);
 
+  auto = wireAuto(root, 'dice', {
+    betOnce: roll,
+    getStake: stakeMinor,
+    setStake: (minor) => {
+      stakeText = formatAmountInput(Number(minor));
+      stake.value = stakeText;
+      paintControls();
+    },
+    paint: paintControls,
+  });
   $('#diceForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
-    void roll();
+    if (auto.mode === 'auto') auto.toggle();
+    else void roll();
   });
   $('#diceGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#diceView', root), setView);

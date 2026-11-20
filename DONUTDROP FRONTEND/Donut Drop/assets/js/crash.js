@@ -28,6 +28,7 @@ import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { fxColors, hitFlash, makeFx } from './pvfx.js';
+import { autoFields, autoSwitch, wireAuto } from './autobet.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -63,6 +64,8 @@ let lastDraw = 0;
 let palette = null;
 let canvas = null;
 let fx = null; // the preview's effects over the stage (pvfx.js)
+let autoRun = null; // Manual or Auto (autobet.js)
+let autoRound = null; // Auto's bet: { resolve, roundId, bet } -- placed when a round opens, settled when it busts
 let head = null; // where the rocket is: [x, y, angle] on the curve's canvas
 let puffAt = 0;
 let ctx = null;
@@ -178,14 +181,63 @@ function apply(next) {
     };
     if (frozen?.roundId === showing) frozen = null;
     onBust(lastBust);
+    if (autoRound?.roundId === showing) {
+      const wait = autoRound;
+      autoRound = null;
+      const mine = lastBust.mine;
+      const stake = mine?.stakeMinor ?? wait.bet.stakeMinor;
+      const paid = mine?.status === 'cashed_out'
+        ? mine.payoutMinor ?? ((BigInt(stake) * BigInt(mine.cashoutX100)) / 100n).toString()
+        : '0';
+      wait.resolve({ stakeMinor: stake, payoutMinor: paid });
+    }
   }
   if (queued && next.round && roundPhase() === 'betting' && !myBet()) {
     queued = false;
     void placeBet();
   }
+  autoStep();
   paintHistory();
   paintPlayers();
   paintControls();
+}
+
+/* ─────────── Auto (autobet.js) ───────────
+ *
+ * One round at a time: the bet goes in the moment a round takes bets, at the cash-out set, and the
+ * run hears how it went when that round busts. Auto needs a cash-out, so no round rides on a press
+ * that is not coming. */
+function betForAuto() {
+  if (autoX100() === null || Number.isNaN(autoX100())) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    autoRound = { resolve, roundId: null, bet: null };
+    autoStep();
+  });
+}
+
+function autoStep() {
+  const wait = autoRound;
+  if (!wait || wait.roundId || busy || !snap?.round) return;
+  if (roundPhase() !== 'betting' || myBet()) return;
+  wait.roundId = 'placing';
+  void placeBet().then((bet) => {
+    if (autoRound !== wait) return;
+    if (!bet) {
+      autoRound = null;
+      wait.resolve(null);
+      return;
+    }
+    wait.roundId = bet.roundId;
+    wait.bet = bet;
+  });
+}
+
+/** Stop pressed before Auto's bet went in: nothing to wait for. A bet already in rides its round. */
+function cancelAuto() {
+  const wait = autoRound;
+  if (!wait || (wait.roundId && wait.roundId !== 'placing')) return;
+  autoRound = null;
+  wait.resolve(null);
 }
 
 function onBust(bust) {
@@ -286,7 +338,8 @@ function betProblem() {
 }
 
 async function placeBet() {
-  if (busy || betProblem() || !snap?.round) return;
+  if (busy || betProblem() || !snap?.round) return null;
+  let placed = null;
   busy = true;
   pressed = 'bet';
   paintControls();
@@ -302,6 +355,7 @@ async function placeBet() {
       { idempotencyKey: idempotencyKey() },
     );
     snap.yourBet = response.bet;
+    placed = response.bet;
     playSound('crashBet');
     announce(`Bet placed: ${money(Number(response.bet.stakeMinor))}.`);
   } catch (error) {
@@ -317,6 +371,7 @@ async function placeBet() {
     paintControls();
     void refresh();
   }
+  return placed;
 }
 
 async function cashOut() {
@@ -354,6 +409,7 @@ function primary() {
   const action = $('#crashGo', root)?.dataset.action;
   if (action === 'bet') void placeBet();
   else if (action === 'cashout') void cashOut();
+  else if (action === 'auto') autoRun?.toggle();
   else if (action === 'queue') { queued = true; paintControls(); }
   else if (action === 'unqueue') { queued = false; paintControls(); }
 }
@@ -367,11 +423,17 @@ function buttonState() {
   const phase = roundPhase();
   const bet = myBet();
   if (phase === 'closed') return { action: '', label: 'Crash is closed', tone: 'idle', disabled: true };
+  // Auto: Start or Stop, except that a bet in the air can always be cashed out by hand.
+  if (autoRun?.mode === 'auto' && !(phase === 'running' && bet?.status === 'active')) {
+    if (autoRun.running) return { action: 'auto', label: 'Stop autobet', tone: 'idle' };
+    const target = autoX100();
+    return { action: 'auto', label: 'Start autobet', tone: 'go', disabled: Boolean(betProblem()) || target === null || Number.isNaN(target) };
+  }
   if (phase === 'betting') {
     if (bet) return { action: '', label: 'Bet placed', tone: 'idle', disabled: true };
     if (busy && pressed === 'bet') return { action: 'bet', label: 'Placing…', tone: 'go', disabled: true, busy: true };
     const problem = betProblem();
-    return { action: 'bet', label: `Bet ${money(Number(stakeMinor() ?? 0n))}`, tone: 'go', disabled: Boolean(problem) };
+    return { action: 'bet', label: 'Bet', tone: 'go', disabled: Boolean(problem) };
   }
   if (phase === 'running' && bet?.status === 'active') {
     const payout = (BigInt(bet.stakeMinor) * BigInt(liveX100())) / 100n;
@@ -404,13 +466,14 @@ function paintControls() {
   paintButton();
   const hint = $('#crashHint', root);
   const phase = roundPhase();
-  const problem = state.authenticated && phase === 'betting' && !myBet() ? betProblem() : '';
+  let problem = state.authenticated && phase === 'betting' && !myBet() ? betProblem() : '';
+  if (!problem && state.authenticated && autoRun?.mode === 'auto' && autoX100() === null) problem = 'Set a cash-out to bet on Auto';
   hint.textContent = problem;
   const bet = myBet();
 
   // A bet already in this round cannot be changed; between rounds the fields set up the next one.
-  const lockInputs = busy || (phase === 'betting' && Boolean(bet));
-  for (const input of root.querySelectorAll('.crash__form input, .crash__form .crash__pick, .crash__form .crash__adj')) {
+  const lockInputs = busy || (phase === 'betting' && Boolean(bet)) || Boolean(autoRun?.running);
+  for (const input of root.querySelectorAll('.crash__field input, .crash__form .crash__pick, .crash__form .crash__adj')) {
     input.disabled = lockInputs;
   }
   root.querySelectorAll('.crash__pick[data-target]').forEach((pick) => {
@@ -994,7 +1057,8 @@ function build() {
 
     <aside class="crash__panel" aria-label="Your bet">
       <form class="crash__form" id="crashForm" novalidate>
-        <label class="crash__label" for="crashStake">Bet</label>
+        ${autoSwitch('crash')}
+        <label class="crash__label" for="crashStake">Bet amount</label>
         <div class="crash__field">
           <span aria-hidden="true">$</span>
           <input id="crashStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -1005,14 +1069,15 @@ function build() {
         <div class="crash__picks" role="group" aria-label="Quick bets">
           ${QUICK_STAKES.map((amount) => `<button type="button" class="crash__pick" data-stake="${amount}">${money(amount)}</button>`).join('')}
         </div>
-        <label class="crash__label" for="crashAuto">Auto cash-out</label>
+        <label class="crash__label" for="crashAuto">Cash out at</label>
         <div class="crash__field">
-          <input id="crashAuto" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="Off" />
+          <input id="crashAuto" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="By hand" />
           <span aria-hidden="true">×</span>
         </div>
         <div class="crash__picks" role="group" aria-label="Auto cash-out targets">
           ${QUICK_TARGETS.map(([target, label]) => `<button type="button" class="crash__pick" data-target="${target ?? ''}" aria-pressed="false">${label}</button>`).join('')}
         </div>
+        ${autoFields('crash')}
         <button class="btn crash__go" id="crashGo" type="submit" aria-keyshortcuts="Space" data-sfx="none">
           <span id="crashGoLabel">Loading…</span><kbd aria-hidden="true">Space</kbd>
         </button>
@@ -1054,6 +1119,17 @@ function build() {
     auto.value = autoText;
     paintControls();
   }));
+  autoRun = wireAuto(root, 'crash', {
+    betOnce: betForAuto,
+    getStake: stakeMinor,
+    setStake: (minor) => {
+      stakeText = formatAmountInput(Number(minor));
+      stake.value = stakeText;
+      paintControls();
+    },
+    paint: paintControls,
+    cancel: cancelAuto,
+  });
   $('#crashForm', root).addEventListener('submit', (event) => { event.preventDefault(); primary(); });
   $('#crashGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#crashView', root), setView);

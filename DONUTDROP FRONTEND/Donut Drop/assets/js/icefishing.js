@@ -525,7 +525,7 @@ function build() {
 
     <aside class="icefish__panel" aria-label="Your game">
       <form class="icefish__form" id="icefishForm" novalidate>
-        <label class="icefish__label" for="icefishStake">Stake</label>
+        <label class="icefish__label" for="icefishStake">Bet amount</label>
         <div class="icefish__field">
           <span aria-hidden="true">$</span>
           <input id="icefishStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

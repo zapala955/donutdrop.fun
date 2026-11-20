@@ -716,7 +716,7 @@ function build() {
 
     <aside class="chicken__panel" aria-label="Your run">
       <form class="chicken__form" id="chickenForm" novalidate>
-        <label class="chicken__label" for="chickenStake">Stake</label>
+        <label class="chicken__label" for="chickenStake">Bet amount</label>
         <div class="chicken__field">
           <span aria-hidden="true">$</span>
           <input id="chickenStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

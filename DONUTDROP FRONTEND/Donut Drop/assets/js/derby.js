@@ -521,7 +521,7 @@ function build() {
 
     <aside class="derby__panel" aria-label="Your bet">
       <form class="derby__form" id="derbyForm" novalidate>
-        <label class="derby__label" for="derbyStake">Stake</label>
+        <label class="derby__label" for="derbyStake">Bet amount</label>
         <div class="derby__field">
           <span aria-hidden="true">$</span>
           <input id="derbyStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

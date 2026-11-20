@@ -363,7 +363,7 @@ function build() {
 
     <aside class="cflip__panel" aria-label="Your flip">
       <form class="cflip__form" id="cflipForm" novalidate>
-        <label class="cflip__label" for="cflipStake">Stake</label>
+        <label class="cflip__label" for="cflipStake">Bet amount</label>
         <div class="cflip__field">
           <span aria-hidden="true">$</span>
           <input id="cflipStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />

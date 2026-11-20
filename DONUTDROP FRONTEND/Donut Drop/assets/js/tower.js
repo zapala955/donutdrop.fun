@@ -669,7 +669,7 @@ function build() {
 
     <aside class="tower__panel" aria-label="Your climb">
       <form class="tower__form" id="towerForm" novalidate>
-        <label class="tower__label" for="towerStake">Stake</label>
+        <label class="tower__label" for="towerStake">Bet amount</label>
         <div class="tower__field">
           <span aria-hidden="true">$</span>
           <input id="towerStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
