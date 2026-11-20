@@ -27,6 +27,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, sta
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -52,6 +53,7 @@ let range3d = null; // the 3D range, once it is up
 let rangeTried = null;
 let tickPoint = null; // the whole point the line last ticked at
 let tickAt = 0;
+let fx = null; // the preview's effects over the flat range (pvfx.js)
 
 /* ─────────── the maths, mirrored from lib/dice.ts ─────────── */
 
@@ -191,6 +193,21 @@ function landSound(bet) {
   playSound(bet.win ? (bet.multiplierBps >= 100_000 ? 'diceBig' : 'diceWin') : 'diceLose');
 }
 
+/** The preview's landing: a win bursts from the die with its profit rising; a miss puffs red. */
+function landFx(bet, marker) {
+  if (!fx) return;
+  const c = fxColors();
+  const [x, y] = fx.at(marker);
+  if (bet.win) {
+    fx.burst(x, y, { n: 20, colors: [c.win, c.ink], speed: 280, size: 5, g: 800, life: 0.7 });
+    const profit = Number(BigInt(bet.payoutMinor) - BigInt(bet.stakeMinor));
+    fx.text(x, y - 44, `+${money(profit)}`, { color: c.win, size: 15 });
+    if (bet.multiplierBps >= 100_000) fx.coins(24);
+  } else {
+    fx.puff(x, y + 20, { n: 4, color: c.loss, size: 10 });
+  }
+}
+
 /** The side of the line the roll landed on flashes once. */
 function flashSide(bet) {
   if (reduceMotion()) return;
@@ -254,6 +271,7 @@ async function land(bet) {
   paintMarker();
   landSound(bet);
   flashSide(bet);
+  landFx(bet, marker);
   $('.dice__die', marker).animate(
     [{ transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: 0.35 }, { transform: 'scale(1)' }],
     { duration: 280, easing: 'cubic-bezier(.2, .8, .3, 1)' },
@@ -585,6 +603,8 @@ function build() {
       </form>
     </aside>
     <div class="dice__say" id="diceSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.dice__stage', root));
 
   const stake = $('#diceStake', root);
   stake.value = stakeText;

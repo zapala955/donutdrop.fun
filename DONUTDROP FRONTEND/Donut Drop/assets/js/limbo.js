@@ -20,6 +20,7 @@ import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, sta
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, makeFx } from './pvfx.js';
 
 /* Mirrors lib/limbo.ts, so a target is priced before the server is asked. */
 const EDGE_BPS = 1_000;
@@ -34,6 +35,7 @@ let busy = false;
 let stakeText = '1m';
 let target = 200; // 2.00x
 let recent = []; // newest first
+let fx = null; // the preview's effects over the stage (pvfx.js)
 
 /* ─────────── the maths, mirrored from lib/limbo.ts ─────────── */
 
@@ -183,11 +185,22 @@ function land(placed) {
       const eased = 1 - (1 - t) ** 3;
       node.textContent = times(Math.round(100 * Math.exp(span * eased)));
       if (t < 1) {
+        if (fx && t < 0.9) {
+          const c = fxColors();
+          fx.streak(c.ink);
+          fx.streak(c.gold, 0.5);
+        }
         requestAnimationFrame(step);
         return;
       }
       showNumber(placed.result, won ? 'won' : 'lost');
       sound();
+      if (fx && won) {
+        const c = fxColors();
+        const [x, y] = fx.at(node);
+        fx.burst(x, y, { n: 26, colors: [c.win, c.ink, c.gold], speed: 340, size: 6, g: 800, life: 0.8 });
+        if (placed.target >= 1_000) fx.coins(24);
+      }
       node.animate(
         [{ transform: 'scale(1)' }, { transform: 'scale(1.12)', offset: 0.35 }, { transform: 'scale(1)' }],
         { duration: 300, easing: 'cubic-bezier(.16, 1, .3, 1)' },
@@ -325,6 +338,8 @@ function build() {
       </form>
     </aside>
     <div class="limbo__say" id="limboSay" role="status" aria-atomic="true"></div>`;
+
+  fx = makeFx($('.limbo__stage', root));
 
   const stake = $('#limboStake', root);
   stake.value = stakeText;

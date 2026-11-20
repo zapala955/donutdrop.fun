@@ -27,6 +27,7 @@ import { bus, refreshBalance, state } from './store.js';
 import { $, adjustStake, el, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
+import { fxColors, hitFlash, makeFx } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -61,6 +62,9 @@ let frame = 0;
 let lastDraw = 0;
 let palette = null;
 let canvas = null;
+let fx = null; // the preview's effects over the stage (pvfx.js)
+let head = null; // where the rocket is: [x, y, angle] on the curve's canvas
+let puffAt = 0;
 let ctx = null;
 let size = { w: 0, h: 0, dpr: 1 };
 let sky = null; // the 3D round, once it is up
@@ -195,10 +199,34 @@ function onBust(bust) {
   );
 }
 
+/** The rocket's place in the stage's own coordinates (the effects canvas covers the stage). */
+function headInStage() {
+  const stage = $('.crash__stage', root);
+  if (!head || !canvas || !stage || root.dataset.render === '3d') return null;
+  const c = canvas.getBoundingClientRect();
+  const s = stage.getBoundingClientRect();
+  return [c.left - s.left + head[0], c.top - s.top + head[1], head[2]];
+}
+
+/** Smoke left behind the rocket in flight, a puff every few frames. */
+function trail(seconds) {
+  if (!fx || seconds <= 0) return;
+  const now = performance.now();
+  if (now - puffAt < 70) return;
+  puffAt = now;
+  const at = headInStage();
+  if (!at) return;
+  const [x, y, angle] = at;
+  fx.puff(x, y, { color: '#8a8580', size: 15, vx: -Math.cos(angle) * 50, vy: -Math.sin(angle) * 50 + 25, life: 0.95 });
+}
+
 /** The stage has just shown a bust: the sound, the number popping red, one shake. */
 function bustFx() {
   playSound('crashBust');
   if (reduceMotion()) return;
+  const at = headInStage();
+  if (fx && at) fx.explode(at[0], at[1], { scale: 1.1 });
+  hitFlash($('.crash__stage', root));
   $('#crashBig', root)?.animate(
     [{ transform: 'scale(1.18)' }, { transform: 'scale(.96)', offset: 0.55 }, { transform: 'none' }],
     { duration: 420, easing: EASE },
@@ -688,12 +716,14 @@ function drawCurve(seconds, topX100, { bust = false, markers = [] } = {}) {
   const [hx, hy] = points[points.length - 1];
   const tip = Math.min(Math.exp(g * seconds), top);
   const angle = Math.atan2((-g * tip * (h - pad.t - pad.b)) / spanY, (w - pad.l - pad.r) / spanX);
+  head = [hx, hy, angle];
   if (bust) {
     sparks = [];
     drawBurst(hx, hy, Date.now() - bustAt);
   } else {
     drawSparks(hx, hy, angle);
     drawRocket(hx, hy, angle);
+    trail(seconds);
   }
 }
 
@@ -914,6 +944,12 @@ function paintCard() {
   if (quiet) return;
   playSound('crashCash');
   if (reduceMotion()) return;
+  if (fx) {
+    const c = fxColors();
+    const [x, y] = fx.at(card);
+    fx.burst(x, y, { n: 26, colors: [c.win, c.ink, c.gold], speed: 340, size: 6, g: 800, life: 0.95 });
+    if (out.cashoutX100 >= 1_000) fx.coins(30);
+  }
   card.animate(
     [{ opacity: 0, transform: 'scale(.82)' }, { opacity: 1, transform: 'scale(1.04)', offset: 0.6 }, { opacity: 1, transform: 'none' }],
     { duration: 380, easing: EASE },
@@ -1036,6 +1072,7 @@ function build() {
 
   canvas = $('#crashCanvas', root);
   ctx = canvas.getContext('2d');
+  fx = makeFx($('.crash__stage', root));
   readPalette();
   new ResizeObserver(resize).observe(canvas.parentElement);
   resize();

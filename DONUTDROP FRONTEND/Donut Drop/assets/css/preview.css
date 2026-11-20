@@ -278,6 +278,9 @@ body.lx #minesGo[data-tone="cash"] { background: var(--pv-win); color: #0b2419; 
 body.lx #minesGo[data-tone="cash"]:hover:not(:disabled) { background: #52d496; box-shadow: 0 4px 0 #1f7a4f; }
 body.lx #minesGo[data-tone="cash"]:active:not(:disabled) { box-shadow: 0 1px 0 #1f7a4f; }
 
+/* Limbo's stage carries the effects canvas (Crash's and Dice's already are positioned). */
+body.lx .limbo .limbo__stage { position: relative; overflow: hidden; }
+
 /* Mines: the stage carries the effects; a turned tile sits recessed, its find on the dark. */
 body.lx .mines .mines__stage { position: relative; }
 body.lx .mines .mtile:is([data-kind="gem"], [data-kind="tnt"], [data-kind="dim-gem"]) {

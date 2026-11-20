@@ -101,6 +101,10 @@ export function makeFx(host) {
     if (p.kind === 'sq') {
       g.fillStyle = p.color;
       g.fillRect(-s / 2, -s / 2, s, s);
+    } else if (p.kind === 'rect') {
+      g.globalAlpha *= p.alpha;
+      g.fillStyle = p.color;
+      g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
     } else if (p.kind === 'text') {
       g.font = p.font;
       g.textAlign = 'center';
@@ -227,6 +231,10 @@ export function makeFx(host) {
     /** A label that rises from a point and fades: a multiplier, a profit. */
     text(x, y, text, { color = '#fff', size = 16, life = 0.9 } = {}) {
       add({ kind: 'text', text, x, y, vy: -110, drag: 2.6, font: `900 ${size}px Archivo, Figtree, sans-serif`, color, life, size: 1 });
+    },
+    /** A thin line falling past: speed, while a number climbs. `chance` thins them out (0 to 1). */
+    streak(color = '#fff', chance = 1) {
+      if (W && Math.random() < chance) add({ kind: 'rect', x: R(0, W), y: -60, vy: R(900, 1600), w: R(1.5, 3), h: R(30, 90), color, alpha: R(0.08, 0.22), life: 0.9 });
     },
     shake(node, mag = 7, ms = 420) {
       if (reduceMotion() || !node?.animate) return;
