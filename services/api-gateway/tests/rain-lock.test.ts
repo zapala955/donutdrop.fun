@@ -104,7 +104,9 @@ describe('Lava Rain money, held on its own', () => {
     assert.doesNotMatch(social, /addWagerRequirement/);
     assert.match(withdrawals, /rainHeldMinor: rain\.heldMinor\.toString\(\),/);
     assert.match(app, /const most = Math\.max\(0, state\.balance - rainHeld\);/);
-    assert.match(app, /input\.value = String\(most\);/);
+    /* Max fills exactly that figure. Written short since the preview's Wallet (2026-11-21), as "250m":
+       formatAmountInput only shortens a figure that parses back to the same number. */
+    assert.match(app, /input\.value = formatAmountInput\(most\);/);
     assert.match(migration, /CREATE TABLE user_rain_locks/);
     assert.match(migration, /GRANT SELECT, INSERT, UPDATE ON TABLE user_rain_locks TO donut_api_runtime;/);
   });

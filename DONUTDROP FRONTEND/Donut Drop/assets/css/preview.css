@@ -1260,6 +1260,112 @@ body.lx .roulette .roulette__table td { border-top-color: var(--lx-3); }
   body.lx .roulette .roulette__hub { transition: none; }
 }
 
+/* ═════════ the Wallet's Deposit and Withdraw, as the preview's (2026-11-21) ═════════
+   The owner: "deposit and withdraw modal". The sheet's own margins (16px), the wallet icon by the
+   title, the tabs across the top. Deposit: two numbered steps, the /pay command big in a well with
+   its copy key (on a phone the key goes under it, full width), and a line watching for the
+   payment. Withdraw: Amount with the balance over it and Max joined to the box, the Minecraft name,
+   then what is withdrawn, the /pay tax and what arrives, the total under a rule. */
+body.lx .modal[data-wallet] .modal__bar h2 { display: flex; align-items: center; gap: 8px; }
+body.lx .modal[data-wallet] .modal__bar h2 .lxi { flex: none; width: 20px; height: 20px; }
+body.lx .modal[data-wallet] .lxwtabs { margin: 16px 16px 0; }
+body.lx .modal[data-wallet] .modal__body { padding: 16px; }
+.lxwpane { display: grid; gap: 16px; }
+
+.lxsteps { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; counter-reset: lxstep; }
+.lxsteps > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; counter-increment: lxstep; }
+.lxsteps > li::before {
+  content: counter(lxstep); grid-row: 1 / span 3; align-self: start; display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%; background: var(--lx-4); color: var(--lx-ink); font: 800 .75rem/1 var(--lx-ui);
+}
+.lxsteps > li > * { grid-column: 2; }
+.lxsteps > li > b { color: var(--lx-ink); font: 700 .875rem/1.5 var(--lx-ui); }
+.lxsteps p { margin: 0; color: var(--lx-mute); font: 500 .875rem/1.5 var(--lx-ui); }
+.lxsteps p b { color: var(--lx-ink); font-weight: 700; }
+
+.lxcmd {
+  display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 8px; padding: 4px 4px 4px 12px;
+  border-radius: 8px; background: var(--lx-0);
+}
+.lxcmd__text {
+  flex: 1; min-width: 0; padding: 0; background: none; color: var(--lx-ink);
+  font: 800 1.125rem/1.3 var(--lx-ui); letter-spacing: .01em; overflow-wrap: anywhere;
+}
+.lxcmd__copy {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; height: 32px; padding: 0 12px;
+  border: 0; border-radius: 6px; background: var(--lx-4); color: var(--lx-ink); font: 700 .75rem/1 var(--lx-ui); cursor: pointer;
+  box-shadow: inset 0 -2px 0 rgba(8, 6, 5, .32);
+}
+.lxcmd__copy:hover { background: var(--lx-5); }
+.lxcmd__copy:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.lxcmd__copy[data-state="success"] { color: var(--pv-win); }
+.lxcmd__copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.lxstatus {
+  display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: 8px; background: var(--lx-0);
+  color: var(--lx-mute); font: 600 .875rem/1.4 var(--lx-ui);
+}
+.lxstatus b { color: var(--lx-ink); }
+.lxstatus__spin {
+  flex: none; width: 16px; height: 16px; border: 2px solid var(--lx-5); border-top-color: var(--lx-gold); border-radius: 50%;
+  animation: lxw-spin 900ms linear infinite;
+}
+@keyframes lxw-spin { to { transform: rotate(360deg); } }
+.lxstatus__tick { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--pv-win); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.lxstatus[data-state="seen"] { color: var(--lx-ink); }
+
+.lxwd { gap: 12px; }
+.lxwd__field { display: grid; gap: 4px; min-width: 0; }
+.lxwd__label { display: flex; justify-content: space-between; gap: 8px; color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); white-space: nowrap; }
+.lxwd__label label { color: inherit; font: inherit; }
+.lxwd__label b { color: var(--lx-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+body.lx .modal[data-wallet] .lxwd .auth__field {
+  height: 44px; padding: 0; overflow: hidden; align-items: stretch;
+  border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-0); box-shadow: none;
+}
+body.lx .modal[data-wallet] .lxwd .auth__field:hover { border-color: var(--lx-5); }
+body.lx .modal[data-wallet] .lxwd .auth__field:focus-within { border-color: var(--lx-gold); box-shadow: none; }
+body.lx .modal[data-wallet] .lxwd .auth__field.is-error { border-color: var(--lx-loss); }
+body.lx .modal[data-wallet] .lxwd .auth__prefix { display: grid; place-items: center; margin: 0; padding-left: 12px; color: var(--lx-gold); font: 900 .9375rem/1 var(--lx-ui); }
+body.lx .modal[data-wallet] .lxwd .auth__input { height: auto; padding: 0 8px; color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .modal[data-wallet] .lxwd .auth__max {
+  min-width: 44px; margin: 0; padding: 0 12px; border: 0; border-left: 1px solid var(--lx-0); border-radius: 0;
+  background: var(--lx-4); color: var(--lx-ink); font: 800 .875rem/1 var(--lx-ui); letter-spacing: 0;
+}
+body.lx .modal[data-wallet] .lxwd .auth__max:hover { background: var(--lx-5); color: var(--lx-ink); }
+body.lx .modal[data-wallet] .lxwd .auth__max:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: -2px; }
+body.lx .modal[data-wallet] .lxwd .auth__field--static { align-items: center; padding: 0 12px; }
+body.lx .modal[data-wallet] .lxwd .auth__field--static:hover { border-color: var(--lx-4); }
+body.lx .modal[data-wallet] .lxwd .auth__value { color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); }
+body.lx .modal[data-wallet] .lxwd .auth__err { margin: 2px 0 0; }
+body.lx .modal[data-wallet] .lxwd .auth__note { margin: 0; color: var(--lx-mute); }
+body.lx .modal[data-wallet] .lxwd .auth__go { margin-top: 4px; }
+
+/* what is withdrawn and what arrives; the confirmation reads the same way */
+.lxsum,
+body.lx .modal[data-wallet] .auth__confirm {
+  display: grid; gap: 4px; padding: 12px; border: 0; border-radius: 8px; background: var(--lx-0);
+  font: 500 .875rem/1.4 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+.lxsum div { display: flex; justify-content: space-between; gap: 12px; color: var(--lx-mute); }
+.lxsum div:last-child { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--pv-rule); color: var(--lx-ink); font-weight: 800; }
+body.lx .modal[data-wallet] .auth__crow { padding: 2px 0; border: 0; font-size: .875rem; }
+body.lx .modal[data-wallet] .auth__crow span { color: var(--lx-mute); }
+body.lx .modal[data-wallet] .auth__crow b { color: var(--lx-ink); font-weight: 700; }
+body.lx .modal[data-wallet] .auth__crow:first-child b { color: var(--lx-ink); font-size: .875rem; }
+body.lx .modal[data-wallet] .auth__crow--total { margin: 2px 0; padding: 6px 0 4px; border-top: 1px solid var(--pv-rule); }
+body.lx .modal[data-wallet] .auth__crow--total span,
+body.lx .modal[data-wallet] .auth__crow--total b { color: var(--lx-ink); font-size: .875rem; font-weight: 800; }
+
+@media (max-width: 640px) {
+  .lxcmd { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; }
+  .lxcmd__text { padding: 4px 0; font-size: 1.3125rem; text-align: center; }
+  .lxcmd__copy { height: 44px; font-size: .875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lxstatus__spin { animation: none; border-color: var(--lx-gold); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

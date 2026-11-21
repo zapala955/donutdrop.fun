@@ -9,7 +9,7 @@ import {
   refreshUpgradeConfig, refreshPromotions,
 } from './store.js';
 import {
-  $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount,
+  $, $$, el, money, itemTile, reduceMotion, safeImage, parseAmount, formatAmountInput,
 } from './util.js';
 import {
   toast, initModal, initWallet, initHints, initHeaderFit, broadcast,
@@ -774,8 +774,37 @@ function walletTabs(current) {
     tabs.append(button);
   }
   $('#modalBody').before(tabs);
-  // The preview's wallet sheet: its title in the bar, the tabs under it (preview.css).
+  // The preview's wallet sheet: its icon and title in the bar, the tabs under it (preview.css).
+  $('#modalTitle').innerHTML = `${WALLET_ICON}<span>Wallet</span>`;
   $('#modal').dataset.wallet = current;
+}
+
+const WALLET_ICON = '<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-4a2 2 0 0 0 0 4h4v2a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6"/></svg>';
+const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
+
+/* The Deposit tab's line under the steps. Deposits are checked all the while the page is open
+ * (checkDeposits), so while this window is up it says it is watching, and when one lands it says
+ * what came in (paintDepositSeen) before it goes back to watching. */
+function paintDepositWatching(status) {
+  if (!status) return;
+  const name = state.user?.minecraftUsername;
+  status.dataset.state = 'watching';
+  status.innerHTML = `<span class="lxstatus__spin" aria-hidden="true"></span>
+    <span>Watching for payments from ${name ? `<b>${escapeText(name)}</b>` : 'your account'}…</span>`;
+}
+
+let depositSeenTimer = 0;
+function paintDepositSeen(credited) {
+  const status = $('#modal').open ? $('#depStatus', $('#modalBody')) : null;
+  if (!status) return;
+  const total = credited.reduce((sum, row) => sum + Number(row.amountMinor ?? row.amount_minor ?? 0), 0);
+  status.dataset.state = 'seen';
+  status.innerHTML = `<svg class="lxstatus__tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+    <span>${escapeText(money(total))} added to your balance.</span>`;
+  clearTimeout(depositSeenTimer);
+  depositSeenTimer = setTimeout(() => {
+    if (status.isConnected) paintDepositWatching(status);
+  }, 5000);
 }
 
 async function openDepositModal() {
@@ -805,38 +834,50 @@ async function openDepositModal() {
   const command = info.copy
     ? `${escapeText(info.copy)}<span class="auth__arg">amount</span>`
     : escapeText(info.command);
+  /* The preview's Deposit (2026-11-21): two steps, the command in a well with its copy key, and a
+     line that watches for the payment. The payer is the account this player is signed in with; the
+     bot's name is in the command, and that is the only name to pay. */
+  const payer = state.user?.minecraftUsername;
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Deposit</h3>
-    <p class="auth__lede">Pay the bot <b>any amount</b> on DonutSMP from your linked Minecraft
-      account. It lands in your balance as soon as the bot sees the payment — there is nothing
-      to confirm here.</p>
-    <hr class="auth__rule">
-    <span class="auth__label">Bot IGN</span>
-    <div class="auth__field auth__field--static">
-      <span class="auth__value mono">${escapeText(info.botUsername)}</span>
-    </div>
-    <span class="auth__label">Run this in game</span>
-    <div class="auth__field auth__field--static auth__field--cmd">
-      <span class="auth__value auth__value--lg mono">${command}</span>
-    </div>
-    <button class="btn btn--go auth__go" type="button" id="depositCopy">Copy command</button>`;
+    <div class="lxwpane">
+      <ol class="lxsteps">
+        <li>
+          <b>Pay the bot any amount on DonutSMP</b>
+          <p>From the account you play with${payer ? `, <b>${escapeText(payer)}</b>` : ''}. Type the
+            amount you want to deposit at the end.</p>
+          <div class="lxcmd">
+            <code class="lxcmd__text">${command}</code>
+            <button class="lxcmd__copy" type="button" id="depositCopy">${COPY_ICON}<span>Copy command</span></button>
+          </div>
+        </li>
+        <li>
+          <b>It lands in your balance</b>
+          <p>As soon as the bot sees the payment, with nothing to confirm here. Every deposit counts,
+            however big or small.</p>
+        </li>
+      </ol>
+      <div class="lxstatus" id="depStatus" role="status"></div>
+    </div>`;
+  paintDepositWatching($('#depStatus', host));
 
   $('#depositCopy', host).addEventListener('click', async (event) => {
     const button = event.currentTarget;
+    const label = $('span', button);
     try {
       /* `copy` is the command with no amount on it, so the paste lands with the cursor where
          the figure goes. It used to copy `example`, which pasted a literal 1000000 that had to be
          deleted first — and the failure mode when somebody forgot was depositing exactly one
          million by accident. */
       await navigator.clipboard.writeText(info.copy || info.command);
-      button.textContent = 'Copied';
+      label.textContent = 'Copied';
       button.dataset.state = 'success';
     } catch {
       // Clipboard access is refused in plenty of ordinary situations. The command is on screen.
-      button.textContent = 'Select it above';
+      label.textContent = 'Select it';
     }
     setTimeout(() => {
       if (!button.isConnected) return;
-      button.textContent = 'Copy command';
+      label.textContent = 'Copy command';
       button.dataset.state = '';
     }, 1800);
   });
@@ -933,33 +974,38 @@ async function openWithdrawModal() {
   const rainOwed = Number(info.rainRemainingMinor ?? 0);
   const most = Math.max(0, state.balance - rainHeld);
 
+  /* The preview's Withdraw (2026-11-21): the amount with the balance over it and Max joined to the
+     box, the Minecraft name it goes to, what is withdrawn, what DonutSMP's /pay takes and what
+     arrives, to the dollar. The name is the linked account's: the bot pays nobody else, so it is
+     shown, not asked for. Withdraw still leads to the confirmation (confirmWithdraw). */
+  const taxBps = Number(info.payTaxBps ?? 0);
   host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Withdraw</h3>
-    <p class="auth__lede">The bot pays you in game with <span class="mono">/pay</span>. Your site
-      balance is taken now and sent to your linked account.</p>
-    <hr class="auth__rule">
-    <form id="wdForm" novalidate>
-      <label class="auth__label" for="wdAmount">Amount</label>
-      <div class="auth__field" id="wdField">
-        <span class="auth__prefix">$</span>
-        <input id="wdAmount" class="auth__input" type="text" inputmode="text" autocapitalize="off" autocorrect="off"
-               autocomplete="off" spellcheck="false" placeholder="1m">
-        <button class="auth__max" type="button" id="wdMax">Max</button>
+    <form id="wdForm" class="lxwpane lxwd" novalidate>
+      <div class="lxwd__field">
+        <div class="lxwd__label"><label for="wdAmount">Amount</label><span>Balance <b>${escapeText(money(state.balance))}</b></span></div>
+        <div class="auth__field" id="wdField">
+          <span class="auth__prefix">$</span>
+          <input id="wdAmount" class="auth__input" type="text" inputmode="text" autocapitalize="off" autocorrect="off"
+                 autocomplete="off" spellcheck="false" placeholder="1m">
+          <button class="auth__max" type="button" id="wdMax">Max</button>
+        </div>
+        <p class="auth__err" id="wdError" role="alert" hidden></p>
       </div>
-      <p class="auth__err" id="wdError" role="alert" hidden></p>
-      <p class="auth__note auth__net" id="wdNet" hidden></p>
-      <p class="auth__note" id="wdHint">Balance ${escapeText(money(state.balance))} ·
-        minimum ${escapeText(money(minimum))}. Over ${escapeText(money(threshold))} an operator
+      <div class="lxwd__field">
+        <div class="lxwd__label"><span>Minecraft name</span></div>
+        <div class="auth__field auth__field--static">
+          <span class="auth__value">${escapeText(info.payeeUsername || state.user?.minecraftUsername || '—')}</span>
+        </div>
+      </div>
+      <div class="lxsum" id="wdSum"></div>
+      <p class="auth__note" id="wdHint">The bot pays you in game${taxBps > 0
+        ? `. DonutSMP takes ${escapeText(String(taxBps / 100))}% of every /pay`
+        : ''}. Minimum ${escapeText(money(minimum))}; over ${escapeText(money(threshold))} an operator
         approves it first.</p>
       ${rainHeld > 0 ? `<p class="auth__note" id="wdRain">${escapeText(money(rainHeld))} of it is Lava Rain money:
         wager ${escapeText(money(rainOwed))} more to free it. You can withdraw up to
         <b class="mono">${escapeText(money(most))}</b> now.</p>` : ''}
-
-      <span class="auth__label">Paying</span>
-      <div class="auth__field auth__field--static">
-        <span class="auth__value mono">${escapeText(info.payeeUsername || state.user?.minecraftUsername || '—')}</span>
-      </div>
-
-      <button class="btn btn--go auth__go" type="submit" id="wdGo" disabled>Continue</button>
+      <button class="btn btn--go auth__go" type="submit" id="wdGo" disabled>Withdraw</button>
     </form>`;
 
   const form = $('#wdForm', host);
@@ -974,18 +1020,18 @@ async function openWithdrawModal() {
     inlineError.hidden = !message;
     field.classList.toggle('is-error', Boolean(message));
   };
-  const taxBps = Number(info.payTaxBps ?? 0);
-  const net = $('#wdNet', host);
+  const sum = $('#wdSum', host);
   const sync = () => {
     const amount = amountOf();
     go.disabled = !(amount !== null && amount >= minimum && amount <= most);
-    // What arrives in game, once the amount is one the form would send.
-    const shown = taxBps > 0 && amount !== null && amount >= minimum;
-    net.hidden = !shown;
-    if (shown) {
-      net.innerHTML = `You get <b class="mono">${escapeText(exactMoney(withdrawalSplit(amount, taxBps).receive))}</b>
-        in game. DonutSMP takes ${escapeText(String(taxBps / 100))}% tax on every /pay.`;
-    }
+    // What is withdrawn, what the /pay tax takes and what arrives in game, as the server works it out.
+    const known = amount !== null && amount > 0;
+    const split = known ? withdrawalSplit(amount, taxBps) : null;
+    sum.innerHTML = `<div><span>You withdraw</span><span>${known ? escapeText(exactMoney(amount)) : '–'}</span></div>
+      ${taxBps > 0
+        ? `<div><span>DonutSMP /pay tax (${escapeText(String(taxBps / 100))}%)</span><span>${known ? `−${escapeText(exactMoney(split.tax))}` : '–'}</span></div>`
+        : ''}
+      <div><span>Arrives in game</span><span>${known ? escapeText(exactMoney(split.receive)) : '–'}</span></div>`;
   };
 
   input.addEventListener('input', () => {
@@ -1002,7 +1048,7 @@ async function openWithdrawModal() {
     setError('');
   });
   $('#wdMax', host).addEventListener('click', () => {
-    input.value = String(most);
+    input.value = formatAmountInput(most);
     setError('');
     sync();
     input.focus();
@@ -1721,6 +1767,7 @@ async function announceDeposits() {
   if (hidden > 0) {
     toast({ kind: 'win', title: 'More deposits credited', body: `and ${hidden} more` });
   }
+  paintDepositSeen(credited);
   playSound('coin');
 }
 
