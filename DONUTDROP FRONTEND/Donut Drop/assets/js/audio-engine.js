@@ -1,8 +1,9 @@
-/* audio-engine.js — synthesized interface sound.
+/* audio-engine.js — the site's interface and game sound.
  *
- * Every cue is generated from oscillators and noise at call time. No sample files: a dozen short
- * clips is a dozen network requests and a megabyte of payload for sounds that are, in the end,
- * a few sine waves and an envelope.
+ * The redesign preview's engine (2026-11-21, the owner: "now do the sounds from the preview"):
+ * cues built at call time from FM bells, inharmonic coins and filtered noise, through one
+ * compressed bus with a small room on it, plus five short Minecraft clips (about 50 KB of MP3 in
+ * all, fetched once on the first sound) where a clip fits. Every cue still plays without them.
  *
  * THREE RULES THIS FILE KEEPS
  * --------------------------
@@ -28,7 +29,8 @@ let muted = readMutePreference();
 let volume = readVolume();
 
 const MUTE_KEY = 'donutdrop.muted';
-const MASTER_GAIN = 0.22;
+/* The preview's bus level: its cues are mixed for 0.9 into the compressor. */
+const MASTER_GAIN = 0.9;
 
 function readVolume() {
   const stored = Number(globalThis.DonutPrefs?.get?.().volume);
@@ -66,10 +68,12 @@ function ensureContext() {
   if (!context) {
     const Ctor = window.AudioContext || window.webkitAudioContext;
     if (!Ctor) return null;
-    context = new Ctor();
-    master = context.createGain();
-    master.gain.value = masterGain();
-    master.connect(context.destination);
+    try {
+      context = new Ctor({ latencyHint: 'interactive' });
+    } catch {
+      context = new Ctor();
+    }
+    buildGraph(context);
   }
   if (context.state === 'suspended') void context.resume();
   return context;
@@ -121,545 +125,606 @@ export function toggleMuted() {
   return setMuted(!muted);
 }
 
-/**
- * One tone with an exponential decay.
+/* ─────────── the voice: the redesign preview's sound (2026-11-21) ───────────
  *
- * Exponential rather than linear because a linear fade on a short note reads as a click at the
- * end — the amplitude hits zero while the waveform is still mid-cycle.
- */
-function tone(ctx, { freq, type = 'sine', start = 0, duration = 0.18, gain = 0.5, sweepTo = null }) {
-  const osc = ctx.createOscillator();
-  const amp = ctx.createGain();
-  const at = ctx.currentTime + start;
+ * Every cue runs into one bus, through a gentle compressor, with a short room reverb on a send, so
+ * a coin, a bell and a blast sit in the same space instead of each beeping on its own. Bells are
+ * two-operator FM (bright when struck, mellowing as they ring), coins are inharmonic partials, and
+ * noise is shaped by a sweeping filter. Five Minecraft clips (the orb, the level-up, the click, the
+ * fizz and the chest) are fetched once as MP3 and used where they fit; until one has decoded, or if
+ * it never does, the cue plays its synth part alone.
+ *
+ * `pitch` is the caller's `rate` while a cue is being built: every tone, bell, filter and clip in
+ * that cue is scaled by it, so a gem can ring a step higher for every one found. */
 
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, at);
-  if (sweepTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), at + duration);
+const SAMPLE_BASE = '/assets/sound/';
+const SAMPLES = ['orb', 'levelup', 'click', 'fizz', 'chestopen'];
+const buffers = {};
+let verb = null;
+let noiseBuffer = null;
+let pitch = 1;
+let lastPeg = -1;
 
-  amp.gain.setValueAtTime(0.0001, at);
-  amp.gain.exponentialRampToValueAtTime(gain, at + 0.008);
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+const semi = (n) => 2 ** (n / 12);
+const rnd = (low, high) => low + Math.random() * (high - low);
+const PENT = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];
 
-  osc.connect(amp);
-  amp.connect(master);
-  osc.start(at);
-  osc.stop(at + duration + 0.02);
-  // Release the nodes once the voice is done, or the graph grows for the life of the tab.
-  osc.onended = () => {
-    osc.disconnect();
-    amp.disconnect();
-  };
-}
-
-/** Filtered white noise — the transient that makes a clang sound like metal rather than a beep. */
-function noise(ctx, { start = 0, duration = 0.12, gain = 0.25, frequency = 2200, q = 0.8 }) {
-  const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-  const channel = buffer.getChannelData(0);
-  for (let index = 0; index < frames; index += 1) {
-    // Decaying noise: full energy at the transient, gone by the end of the window.
-    channel[index] = (Math.random() * 2 - 1) * (1 - index / frames);
+/** A small room: decaying stereo noise as the reverb's impulse. */
+function room(ctx, seconds, decay) {
+  const rate = ctx.sampleRate;
+  const frames = Math.floor(rate * seconds);
+  const buffer = ctx.createBuffer(2, frames, rate);
+  for (let channel = 0; channel < 2; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < frames; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / frames) ** decay * Math.min(1, i / (rate * 0.01));
   }
+  return buffer;
+}
 
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
+function loadSamples(ctx) {
+  if (typeof fetch !== 'function') return;
+  for (const name of SAMPLES) {
+    fetch(`${SAMPLE_BASE}${name}.mp3`)
+      .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)))))
+      // The callback form, which older Safari needs; the promise wraps it for everyone else.
+      .then((bytes) => new Promise((resolve, reject) => { ctx.decodeAudioData(bytes, resolve, reject); }))
+      .then((buffer) => { buffers[name] = buffer; })
+      .catch(() => { /* the synth part of each cue covers for it */ });
+  }
+}
 
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = frequency;
-  filter.Q.value = q;
+/** The bus and the room, built with the context. */
+function buildGraph(ctx) {
+  const squash = ctx.createDynamicsCompressor();
+  squash.threshold.value = -15;
+  squash.knee.value = 10;
+  squash.ratio.value = 5;
+  squash.attack.value = 0.002;
+  squash.release.value = 0.2;
+  master = ctx.createGain();
+  master.gain.value = masterGain();
+  master.connect(squash);
+  squash.connect(ctx.destination);
+  verb = ctx.createConvolver();
+  verb.buffer = room(ctx, 1.6, 3.2);
+  const wet = ctx.createGain();
+  wet.gain.value = 0.32;
+  verb.connect(wet);
+  wet.connect(master);
+  loadSamples(ctx);
+}
 
-  const amp = ctx.createGain();
-  const at = ctx.currentTime + start;
-  amp.gain.setValueAtTime(gain, at);
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+/** Routes a voice to the bus (panned, and with some of it sent to the room). Returns the nodes it
+ *  added, so the voice can let go of them all when it ends. */
+function out(ctx, node, send = 0.15, pan = 0) {
+  const added = [];
+  let tail = node;
+  if (pan && ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    tail.connect(panner);
+    tail = panner;
+    added.push(panner);
+  }
+  tail.connect(master);
+  if (send) {
+    const sendGain = ctx.createGain();
+    sendGain.gain.value = send;
+    tail.connect(sendGain);
+    sendGain.connect(verb);
+    added.push(sendGain);
+  }
+  return added;
+}
 
-  source.connect(filter);
-  filter.connect(amp);
-  amp.connect(master);
-  source.start(at);
+/** Releases a finished voice's nodes, or the graph grows for the life of the tab. */
+function release(source, nodes) {
   source.onended = () => {
-    source.disconnect();
-    filter.disconnect();
-    amp.disconnect();
+    for (const node of nodes) node.disconnect();
   };
 }
 
-/* The cue library. Each one is a tiny arrangement rather than a single beep, because a lone sine
- * reads as a system error and a two-voice cluster reads as an object. */
-const CUES = {
-  /** Soft tick for any ordinary press. Quiet on purpose: it fires constantly. */
-  click(ctx) {
-    tone(ctx, { freq: 660, type: 'triangle', duration: 0.05, gain: 0.16 });
-  },
-  /** Hovering a live control. Almost subliminal. */
-  hover(ctx) {
-    tone(ctx, { freq: 880, type: 'sine', duration: 0.035, gain: 0.05 });
-  },
-  /** Anvil: a broadband strike over two detuned partials. */
-  anvil(ctx) {
-    noise(ctx, { duration: 0.16, gain: 0.34, frequency: 3200, q: 0.6 });
-    tone(ctx, { freq: 320, type: 'square', duration: 0.2, gain: 0.22, sweepTo: 190 });
-    tone(ctx, { freq: 484, type: 'triangle', duration: 0.26, gain: 0.14, sweepTo: 300 });
-  },
-  /** Coins: four quick descending pings with a little randomness in the spacing. */
-  coin(ctx) {
-    [0, 0.045, 0.085, 0.13].forEach((offset, index) => {
-      tone(ctx, {
-        freq: 1180 - index * 90,
-        type: 'triangle',
-        start: offset,
-        duration: 0.13,
-        gain: 0.2 - index * 0.03,
-      });
-    });
-  },
-  /** Portal: a low sweep under a slow beat between two close partials. */
-  portal(ctx) {
-    tone(ctx, { freq: 90, type: 'sine', duration: 1.1, gain: 0.24, sweepTo: 210 });
-    tone(ctx, { freq: 136, type: 'sine', duration: 1.1, gain: 0.12, sweepTo: 272 });
-    tone(ctx, { freq: 139, type: 'sine', duration: 1.1, gain: 0.1, sweepTo: 276 });
-  },
-  /** Win: a major triad, arpeggiated upward. */
-  win(ctx) {
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.06, duration: 0.32, gain: 0.26 });
-    });
-    noise(ctx, { start: 0.02, duration: 0.3, gain: 0.1, frequency: 5200, q: 0.5 });
-  },
-  /** Loss: one falling minor third. Short, not punishing. */
-  lose(ctx) {
-    tone(ctx, { freq: 300, type: 'sawtooth', duration: 0.3, gain: 0.16, sweepTo: 150 });
-    tone(ctx, { freq: 252, type: 'sine', start: 0.05, duration: 0.3, gain: 0.1, sweepTo: 126 });
-  },
-  /** Reward claimed: coins with a bright cap on top. */
-  reward(ctx) {
-    CUES.coin(ctx);
-    tone(ctx, { freq: 1318.5, type: 'sine', start: 0.14, duration: 0.36, gain: 0.2 });
-  },
-  /** The upgrader wheel ticking past a graduation. Pitched by caller. */
-  tick(ctx) {
-    tone(ctx, { freq: 1400, type: 'square', duration: 0.02, gain: 0.07 });
-  },
-  /* ── the high-dopamine set ──
-   * Four cues the platform's loudest moments were missing. Each one is an arrangement rather than a
-   * beep, because a lone sine reads as a system error and a two-voice cluster reads as an object.
-   */
-  /** A heavy anvil hit with a sub-bass drop under it. The big-multiplier upgrader win. */
-  slam(ctx) {
-    noise(ctx, { duration: 0.09, gain: 0.34, frequency: 2600, q: 0.7 });
-    tone(ctx, { freq: 196, type: 'square', duration: 0.13, gain: 0.26, sweepTo: 88 });
-    // The drop: an octave below anything else on the site, and the reason this cue is felt.
-    tone(ctx, { freq: 58, type: 'sine', start: 0.04, duration: 0.9, gain: 0.42, sweepTo: 28 });
-    tone(ctx, { freq: 87, type: 'sine', start: 0.04, duration: 0.7, gain: 0.18, sweepTo: 42 });
-  },
-  /** One click of a crate reel. Pitched by the caller as the reel slows. */
-  reeltick(ctx) {
-    tone(ctx, { freq: 2100, type: 'square', duration: 0.014, gain: 0.05 });
-    noise(ctx, { duration: 0.02, gain: 0.05, frequency: 5200, q: 2.4 });
-  },
-  /** Coins breaking apart. A kill, or a big orb going in. */
-  shatter(ctx) {
-    noise(ctx, { duration: 0.22, gain: 0.16, frequency: 3400, q: 0.5 });
-    [1568, 2093, 2637].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.018, duration: 0.16, gain: 0.12 });
-    });
-    tone(ctx, { freq: 140, type: 'sine', duration: 0.24, gain: 0.16, sweepTo: 70 });
-  },
-  /** A bright portal chime. Level-up, and the lava rain claim. */
-  chime(ctx) {
-    [1318.5, 1760, 2637].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'sine', start: index * 0.05, duration: 0.55, gain: 0.2 });
-    });
-    tone(ctx, { freq: 659.25, type: 'triangle', duration: 0.6, gain: 0.12, sweepTo: 1318.5 });
-  },
+/* The gain starts silent, not at its default of 1: a voice that starts a hair before its envelope
+ * would otherwise let one full-level sample through, and through a high-pass that is a click. */
+function envelope(gain, at, attack, peak, decay) {
+  gain.gain.value = 0.0001;
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), at + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
+}
 
-  /* ── the arena ──
-   * Three cues for a mode where the player is looking at the floor, not at the interface, and has
-   * to be told what happened without reading anything.
-   */
-  /** Boost: a short rising whoosh under a filtered hiss. Fires on press, never on hold. */
+/** A filter frequency the context can take, after the caller's pitch. */
+function hz(ctx, value) {
+  return Math.min(ctx.sampleRate / 2 - 100, Math.max(20, value * pitch));
+}
+
+/** One oscillator with an exponential envelope, optionally swept and low-passed. */
+function tone(ctx, freq, { t = 0, type = 'sine', a = 0.004, d = 0.18, vol = 0.1, to = 0, lp = 0, send = 0.15, pan = 0 } = {}) {
+  const at = ctx.currentTime + t;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq * pitch, at);
+  if (to) osc.frequency.exponentialRampToValueAtTime(to * pitch, at + a + d);
+  const nodes = [osc, gain];
+  let head = osc;
+  if (lp) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = hz(ctx, lp);
+    osc.connect(filter);
+    head = filter;
+    nodes.push(filter);
+  }
+  envelope(gain, at, a, vol, d);
+  head.connect(gain);
+  nodes.push(...out(ctx, gain, send, pan));
+  release(osc, nodes);
+  osc.start(at);
+  osc.stop(at + a + d + 0.05);
+}
+
+/** Filtered noise with an envelope: air, sand, water, a blast. */
+function hiss(ctx, { t = 0, a = 0.002, d = 0.1, vol = 0.1, type = 'bandpass', f = 2000, to = 0, q = 1, send = 0.1, pan = 0 } = {}) {
+  if (!noiseBuffer || noiseBuffer.sampleRate !== ctx.sampleRate) {
+    noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+  }
+  const at = ctx.currentTime + t;
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  source.buffer = noiseBuffer;
+  source.loop = true;
+  filter.type = type;
+  filter.Q.value = q;
+  filter.frequency.setValueAtTime(hz(ctx, f), at);
+  if (to) filter.frequency.exponentialRampToValueAtTime(hz(ctx, to), at + a + d);
+  envelope(gain, at, a, vol, d);
+  source.connect(filter);
+  filter.connect(gain);
+  release(source, [source, filter, gain, ...out(ctx, gain, send, pan)]);
+  source.start(at, Math.random() * 0.8);
+  source.stop(at + a + d + 0.05);
+}
+
+/** Two-operator FM: a struck bell that loses its brightness as it rings. */
+function bell(ctx, freq, { t = 0, vol = 0.08, d = 0.8, ratio = 3.5, index = 1.6, send = 0.35, pan = 0 } = {}) {
+  const at = ctx.currentTime + t;
+  const f = freq * pitch;
+  const carrier = ctx.createOscillator();
+  const modulator = ctx.createOscillator();
+  const depth = ctx.createGain();
+  const gain = ctx.createGain();
+  carrier.frequency.setValueAtTime(f, at);
+  modulator.frequency.setValueAtTime(f * ratio, at);
+  depth.gain.setValueAtTime(f * index, at);
+  depth.gain.exponentialRampToValueAtTime(Math.max(1, f * 0.02), at + d * 0.6);
+  modulator.connect(depth);
+  depth.connect(carrier.frequency);
+  carrier.connect(gain);
+  envelope(gain, at, 0.002, vol, d);
+  release(carrier, [carrier, modulator, depth, gain, ...out(ctx, gain, send, pan)]);
+  carrier.start(at);
+  modulator.start(at);
+  carrier.stop(at + d + 0.1);
+  modulator.stop(at + d + 0.1);
+}
+
+/** Inharmonic partials: a coin, or the edge of a chip. */
+function clink(ctx, freq, { t = 0, vol = 0.05, d = 0.35, send = 0.3, pan = 0 } = {}) {
+  [1, 2.76, 5.4].forEach((ratio, i) => tone(ctx, freq * ratio, { t, a: 0.001, d: d / (1 + i), vol: vol / (1 + i * 1.3), send, pan }));
+}
+
+/** One of the Minecraft clips; false when it has not decoded, so the cue can fall back. */
+function sample(ctx, name, { rate = 1, vol = 0.4, t = 0, send = 0.12, pan = 0 } = {}) {
+  const buffer = buffers[name];
+  if (!buffer) return false;
+  const source = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  source.buffer = buffer;
+  source.playbackRate.value = rate * pitch;
+  gain.gain.value = vol;
+  source.connect(gain);
+  release(source, [source, gain, ...out(ctx, gain, send, pan)]);
+  source.start(ctx.currentTime + t);
+  return true;
+}
+
+/* The preview's building blocks, shared by the cues below. */
+function coins(ctx, n = 6, spread = 0.4) {
+  for (let i = 0; i < n; i += 1) clink(ctx, rnd(1900, 3200), { t: Math.random() * spread, vol: 0.034, d: 0.32, pan: rnd(-0.6, 0.6) });
+}
+function winBells(ctx, m = 2) {
+  const notes = m >= 5 ? [0, 4, 7, 12] : m >= 2 ? [0, 7, 12] : [0, 7];
+  notes.forEach((n, i) => bell(ctx, 1046.5 * semi(n), { t: i * 0.065, vol: 0.075, d: 0.95, index: 1.2, pan: (i - 1) * 0.18 }));
+  sample(ctx, 'orb', { rate: 1.25, vol: 0.16, t: 0.02 });
+}
+function cash(ctx, m = 2) {
+  coins(ctx, 5 + Math.min(8, Math.floor(m)), 0.35);
+  winBells(ctx, m);
+}
+function big(ctx) {
+  if (!sample(ctx, 'levelup', { vol: 0.42, send: 0.25 })) [0, 4, 7, 12, 16].forEach((n, i) => bell(ctx, 784 * semi(n), { t: i * 0.08, vol: 0.08 }));
+  [0, 4, 7, 12, 16].forEach((n, i) => bell(ctx, 1046.5 * semi(n), { t: 0.05 + i * 0.075, vol: 0.05, d: 1.3, pan: (i - 2) * 0.15 }));
+  coins(ctx, 14, 1.1);
+}
+function boom(ctx, size = 1) {
+  hiss(ctx, { type: 'lowpass', f: 2400, to: 80, q: 0.7, a: 0.003, d: 1.15, vol: 0.85 * size, send: 0.4 });
+  tone(ctx, 115, { to: 32, a: 0.002, d: 0.65, vol: 0.55 * size, send: 0.1 });
+  tone(ctx, 58, { type: 'triangle', to: 28, a: 0.004, d: 0.95, vol: 0.32 * size, send: 0 });
+  for (let i = 0; i < 10; i += 1) hiss(ctx, { t: 0.03 + Math.random() * 0.55, type: 'highpass', f: rnd(2400, 6000), d: rnd(0.015, 0.05), vol: rnd(0.06, 0.15) * size, pan: rnd(-0.7, 0.7), send: 0.25 });
+}
+function gem(ctx, quiet = false) {
+  if (!sample(ctx, 'orb', { rate: 0.72, vol: quiet ? 0.16 : 0.3, send: 0.2 })) bell(ctx, 1046.5, { vol: 0.07, d: 0.6 });
+  bell(ctx, 2093, { t: 0.015, vol: quiet ? 0.012 : 0.022, d: 0.5, ratio: 2, index: 0.7 });
+}
+function whoosh(ctx, { d = 0.35, up = true, vol = 0.1 } = {}) {
+  hiss(ctx, { type: 'bandpass', f: up ? 320 : 2600, to: up ? 2600 : 320, q: 1.3, a: d * 0.6, d: d * 0.4, vol, send: 0.15 });
+}
+function tickVoice(ctx, p = 0, vol = 1) {
+  hiss(ctx, { type: 'highpass', f: 6000, d: 0.012, vol: 0.05 * vol, send: 0 });
+  tone(ctx, 1500 * semi(p), { type: 'triangle', d: 0.03, vol: 0.024 * vol, send: 0.05 });
+}
+function chipClack(ctx) {
+  const f = rnd(2900, 3700);
+  hiss(ctx, { f, q: 8, d: 0.02, vol: 0.3, send: 0.05 });
+  hiss(ctx, { t: 0.025, f: f * 0.86, q: 8, d: 0.025, vol: 0.18, send: 0.05 });
+}
+function betClack(ctx) {
+  hiss(ctx, { f: 3400, q: 7, d: 0.022, vol: 0.34, send: 0.05 });
+  hiss(ctx, { t: 0.032, f: 2900, q: 7, d: 0.03, vol: 0.24, send: 0.05 });
+  tone(ctx, 2650, { t: 0.032, type: 'triangle', d: 0.05, vol: 0.018, send: 0.1 });
+}
+function dieLand(ctx) {
+  hiss(ctx, { type: 'lowpass', f: 1100, d: 0.05, vol: 0.2, send: 0.05 });
+  tone(ctx, 230, { d: 0.05, vol: 0.05, send: 0 });
+}
+function launch(ctx, vol = 1) {
+  hiss(ctx, { type: 'lowpass', f: 180, to: 1500, q: 0.8, a: 0.35, d: 0.6, vol: 0.32 * vol, send: 0.2 });
+  tone(ctx, 70, { to: 150, a: 0.2, d: 0.6, vol: 0.12 * vol });
+}
+function ball(ctx, v = 1, t = 0) {
+  hiss(ctx, { t, type: 'bandpass', f: 4300, q: 5, d: 0.008, vol: 0.22 * v, send: 0.06 });
+  tone(ctx, 3100, { t, d: 0.012, vol: 0.012 * v, send: 0 });
+}
+
+/* The cue library. The names are the site's; each one is voiced the way the preview voices the same
+ * moment (its Mines gem for a diamond, its cart for the minecart, its cash for a cash-out). */
+const CUES = {
+  /** Any ordinary press: the Minecraft click, high and quiet. It fires constantly. */
+  click(ctx) {
+    if (!sample(ctx, 'click', { rate: 1.45, vol: 0.16, send: 0 })) tone(ctx, 2400, { d: 0.02, vol: 0.03, send: 0 });
+  },
+  /** Hovering a live control: a breath of air, almost nothing. */
+  hover(ctx) {
+    hiss(ctx, { type: 'highpass', f: 7000, d: 0.006, vol: 0.015, send: 0 });
+  },
+  /** Anvil: a metal clink over a low knock. A duel's hit. */
+  anvil(ctx) {
+    clink(ctx, rnd(1650, 1950), { vol: 0.08, d: 0.5 });
+    hiss(ctx, { type: 'lowpass', f: 650, d: 0.05, vol: 0.18, send: 0 });
+    tone(ctx, 120, { to: 60, d: 0.22, vol: 0.18, send: 0.1 });
+  },
+  /** Coins: a handful of clinks, spread a little. */
+  coin(ctx) {
+    coins(ctx, 5, 0.3);
+  },
+  /** Portal: a rising whoosh into a soft bell. */
+  portal(ctx) {
+    whoosh(ctx, { d: 0.45, up: true, vol: 0.1 });
+    bell(ctx, 784, { t: 0.22, vol: 0.05, d: 0.9, ratio: 2, index: 0.8 });
+  },
+  /** Win: root, fifth and octave on bells, with the orb. */
+  win(ctx) {
+    winBells(ctx, 2);
+  },
+  /** Loss: a falling tone and a soft low knock, never a buzzer. */
+  lose(ctx) {
+    tone(ctx, 370, { type: 'triangle', to: 185, a: 0.005, d: 0.34, vol: 0.06, lp: 1300, send: 0.22 });
+    hiss(ctx, { type: 'lowpass', f: 320, d: 0.09, vol: 0.12, send: 0 });
+  },
+  /** Reward claimed: coins under four bells. */
+  reward(ctx) {
+    cash(ctx, 5);
+  },
+  /** A tick: a dry click with a little pitch to it. Pitched by the caller. */
+  tick(ctx) {
+    tickVoice(ctx, 0);
+  },
+  /** A heavy hit: the blast, held back. */
+  slam(ctx) {
+    boom(ctx, 0.7);
+  },
+  /** One click of a reel going round. It fires every 70 to 95 ms, so it stays small. */
+  reeltick(ctx) {
+    tickVoice(ctx, 0, 0.75);
+  },
+  /** Glass breaking: a bright scatter over a low thud. Also every firework, pitched up. */
+  shatter(ctx) {
+    hiss(ctx, { type: 'highpass', f: 3200, a: 0.001, d: 0.3, vol: 0.3, send: 0.35 });
+    for (let i = 0; i < 12; i += 1) tone(ctx, rnd(2600, 6800), { t: Math.random() * 0.22, d: rnd(0.06, 0.22), vol: rnd(0.015, 0.035), pan: rnd(-0.7, 0.7), send: 0.45 });
+    tone(ctx, 95, { to: 45, d: 0.35, vol: 0.28 });
+    hiss(ctx, { t: 0.06, type: 'lowpass', f: 1100, to: 220, d: 0.65, vol: 0.28, send: 0.45 });
+  },
+  /** A bright bell. Level-up, the rain claim, a book landing on a reel, the derby's finish. */
+  chime(ctx) {
+    bell(ctx, 1568, { vol: 0.09, d: 0.9, ratio: 2, index: 0.8 });
+    sample(ctx, 'orb', { rate: 1.5, vol: 0.1, t: 0.02 });
+  },
+  /** Boost: a short rising whoosh. */
   boost(ctx) {
-    tone(ctx, { freq: 150, type: 'sawtooth', duration: 0.18, gain: 0.12, sweepTo: 520 });
-    noise(ctx, { duration: 0.16, gain: 0.07, frequency: 1800, q: 0.6 });
+    whoosh(ctx, { d: 0.3, up: true, vol: 0.12 });
   },
-  /** Orb absorbed. Deliberately tiny: it fires several times a second at speed. */
+  /** An orb collected: the Minecraft orb, small. It can fire several times a second. */
   absorb(ctx) {
-    tone(ctx, { freq: 880, type: 'sine', duration: 0.05, gain: 0.08, sweepTo: 1320 });
+    if (!sample(ctx, 'orb', { rate: rnd(1.5, 1.8), vol: 0.07, send: 0.05 })) bell(ctx, 2093, { vol: 0.015, d: 0.2, ratio: 2, index: 0.7 });
   },
-  /** Something died nearby and the floor lit up. A low thud with a bright tail of coins. */
+  /** Coins spilling out over a soft thud. */
   spill(ctx) {
-    tone(ctx, { freq: 80, type: 'sine', duration: 0.5, gain: 0.26, sweepTo: 40 });
-    noise(ctx, { start: 0.01, duration: 0.35, gain: 0.14, frequency: 900, q: 0.4 });
-    [1046.5, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: 0.09 + index * 0.06, duration: 0.24, gain: 0.14 });
-    });
+    hiss(ctx, { type: 'lowpass', f: 420, d: 0.06, vol: 0.12, send: 0 });
+    coins(ctx, 8, 0.5);
   },
   /* ── the lake ── */
   /** A line whipped out over the water: a quick rising swish. */
   cast(ctx) {
-    noise(ctx, { duration: 0.18, gain: 0.1, frequency: 3200, q: 1.2 });
-    tone(ctx, { freq: 400, type: 'sine', duration: 0.15, gain: 0.05, sweepTo: 900 });
+    whoosh(ctx, { d: 0.28, up: true, vol: 0.11 });
   },
-  /** Water: the bobber landing, a fish taking it. Low filtered noise with a bright spray on top. */
+  /** Water: a rising wash with spray on top. */
   splash(ctx) {
-    noise(ctx, { duration: 0.28, gain: 0.22, frequency: 900, q: 0.5 });
-    noise(ctx, { start: 0.03, duration: 0.2, gain: 0.12, frequency: 2400, q: 0.7 });
-    tone(ctx, { freq: 180, type: 'sine', duration: 0.18, gain: 0.12, sweepTo: 90 });
+    hiss(ctx, { type: 'bandpass', f: 700, to: 2600, q: 0.8, a: 0.012, d: 0.26, vol: 0.2, send: 0.3 });
+    hiss(ctx, { t: 0.07, type: 'highpass', f: 3500, d: 0.2, vol: 0.05, send: 0.2 });
   },
-  /** Thunder far off: a long low rumble under the storm. */
+  /** Thunder far off: a long low rumble. */
   thunder(ctx) {
-    noise(ctx, { duration: 1.6, gain: 0.3, frequency: 120, q: 0.4 });
-    noise(ctx, { start: 0.1, duration: 1.2, gain: 0.18, frequency: 260, q: 0.5 });
-    tone(ctx, { freq: 48, type: 'sine', duration: 1.4, gain: 0.25, sweepTo: 30 });
+    hiss(ctx, { type: 'lowpass', f: 500, to: 60, q: 0.7, a: 0.05, d: 1.6, vol: 0.45, send: 0.4 });
+    tone(ctx, 55, { type: 'triangle', to: 30, a: 0.02, d: 1.2, vol: 0.2, send: 0.1 });
   },
   /* ── the mine ── */
-  /** A pickaxe on stone: a dry knock, a gritty top and a dull body. Pitched by caller per crack. */
+  /** A pickaxe on stone: a dry crack over a dull knock. Pitched by the caller per crack. */
   dig(ctx) {
-    noise(ctx, { duration: 0.07, gain: 0.16, frequency: 1500, q: 1.1 });
-    noise(ctx, { duration: 0.04, gain: 0.06, frequency: 4200, q: 1.4 });
-    tone(ctx, { freq: 210, type: 'triangle', duration: 0.07, gain: 0.08, sweepTo: 140 });
+    hiss(ctx, { type: 'highpass', f: 2600, d: 0.05, vol: 0.2, send: 0.2 });
+    tone(ctx, 3800, { d: 0.05, vol: 0.02 });
+    hiss(ctx, { type: 'lowpass', f: 900, d: 0.04, vol: 0.12, send: 0 });
   },
-  /** TNT lit: a thin, bright hiss that runs on under the fuse. */
+  /** TNT lit: the Minecraft fizz. */
   fuse(ctx) {
-    noise(ctx, { duration: 0.9, gain: 0.09, frequency: 5200, q: 0.9 });
-    noise(ctx, { start: 0.02, duration: 0.7, gain: 0.05, frequency: 2600, q: 1.2 });
+    if (!sample(ctx, 'fizz', { rate: 1.35, vol: 0.2, send: 0.05 })) hiss(ctx, { type: 'highpass', f: 4000, a: 0.02, d: 0.35, vol: 0.08 });
   },
-  /** TNT going off: a hard crack over a long low roar, and the sub-bass under it. */
+  /** TNT going off: a roar falling away, a sub drop and debris. */
   explode(ctx) {
-    noise(ctx, { duration: 0.12, gain: 0.32, frequency: 1800, q: 0.5 });
-    noise(ctx, { duration: 1.1, gain: 0.34, frequency: 160, q: 0.35 });
-    noise(ctx, { start: 0.04, duration: 0.6, gain: 0.16, frequency: 600, q: 0.6 });
-    tone(ctx, { freq: 70, type: 'sine', duration: 0.9, gain: 0.3, sweepTo: 28 });
+    boom(ctx, 1);
   },
-  /** Something enormous landed. Used sparingly or it stops meaning anything. */
+  /** Something enormous: the level-up, a run of bells and a rain of coins. */
   jackpot(ctx) {
-    CUES.anvil(ctx);
-    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: 0.1 + index * 0.075, duration: 0.6, gain: 0.24 });
-    });
-    tone(ctx, { freq: 65, type: 'sine', start: 0.1, duration: 1.2, gain: 0.3 });
+    big(ctx);
   },
-
-  /* ── Plinko's flat board ──
-   * A peg tap that fires a dozen times a ball, so it is the quietest thing here, and a landing in
-   * four sizes, so the ear knows how a ball did before the eye finds its slot.
-   */
-  /** A ball leaving the hand: a short rising pop. */
+  /* ── Plinko ── */
+  /** A ball leaving the hand: the click. */
   plinkoDrop(ctx) {
-    tone(ctx, { freq: 420, type: 'triangle', duration: 0.07, gain: 0.13, sweepTo: 760 });
-    noise(ctx, { duration: 0.03, gain: 0.03, frequency: 3000, q: 1.2 });
+    CUES.click(ctx);
   },
-  /** A ball on a peg: a small glassy tap. Pitched by the caller, higher as the ball falls. */
+  /** A ball on a peg: a small tap, never more than one every 28 ms. Pitched by the caller. */
   pegtap(ctx) {
-    tone(ctx, { freq: 1180, type: 'sine', duration: 0.05, gain: 0.07 });
-    tone(ctx, { freq: 2360, type: 'triangle', duration: 0.022, gain: 0.022 });
+    const now = ctx.currentTime;
+    if (now - lastPeg < 0.028) return;
+    lastPeg = now;
+    tone(ctx, 1100 + rnd(-30, 30), { type: 'triangle', d: 0.05, vol: 0.022, send: 0.1 });
+    hiss(ctx, { type: 'highpass', f: 7000, d: 0.006, vol: 0.03, send: 0 });
   },
-  /** Into a slot that pays back less than the ball cost: a soft, low knock. */
+  /** Into a slot that pays back less than the ball cost: a low knock. */
   plinkoLow(ctx) {
-    tone(ctx, { freq: 300, type: 'triangle', duration: 0.12, gain: 0.12, sweepTo: 220 });
-    noise(ctx, { duration: 0.05, gain: 0.035, frequency: 1300, q: 1 });
+    tone(ctx, 196, { type: 'triangle', d: 0.12, vol: 0.05, lp: 900, send: 0.05 });
+    hiss(ctx, { type: 'lowpass', f: 420, d: 0.05, vol: 0.08, send: 0 });
   },
-  /** About even (1x to 2x): two quick notes going up. */
+  /** About even (1x to 2x): one bell. */
   plinkoEven(ctx) {
-    tone(ctx, { freq: 659.25, type: 'triangle', duration: 0.12, gain: 0.13 });
-    tone(ctx, { freq: 987.77, type: 'triangle', start: 0.05, duration: 0.16, gain: 0.11 });
+    bell(ctx, 1318.5, { vol: 0.05, d: 0.45 });
   },
-  /** A real win (2x and up): three bright notes with a glint on top. */
+  /** A real win (2x and up). */
   plinkoWin(ctx) {
-    [783.99, 987.77, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.05, duration: 0.24, gain: 0.16 });
-    });
-    noise(ctx, { start: 0.09, duration: 0.18, gain: 0.05, frequency: 6200, q: 0.8 });
+    winBells(ctx, 2);
   },
-  /** 10x and up: a longer run of notes over a low swell. 100x and up is the jackpot. */
+  /** 10x and up: four bells and coins. 100x and up is the jackpot. */
   plinkoBig(ctx) {
-    [523.25, 783.99, 1046.5, 1318.5, 1567.98].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.06, duration: 0.42, gain: 0.17 });
-    });
-    tone(ctx, { freq: 130.81, type: 'sine', duration: 0.6, gain: 0.2, sweepTo: 196 });
-    noise(ctx, { start: 0.1, duration: 0.4, gain: 0.06, frequency: 5600, q: 0.6 });
+    cash(ctx, 5);
   },
-
-  /* ── Dice ──
-   * The line ticks as it is dragged, the roll rattles out, and the landing says win or miss.
-   */
-  /** The line moving one point: a dry, tiny click. Pitched by the caller with where the line is. */
+  /* ── Dice ── */
+  /** The line moving one point: a tiny tick. Pitched by the caller with where the line is. */
   diceTick(ctx) {
-    tone(ctx, { freq: 1700, type: 'triangle', duration: 0.014, gain: 0.035 });
-    noise(ctx, { duration: 0.012, gain: 0.018, frequency: 4200, q: 2 });
+    tone(ctx, 1020, { type: 'triangle', d: 0.02, vol: 0.022, send: 0 });
+    hiss(ctx, { type: 'highpass', f: 7000, d: 0.005, vol: 0.02, send: 0 });
   },
-  /** The roll going out: three quick knocks, a die shaken in a cup. */
+  /** The roll going out: a die rattling in a cup. */
   diceRoll(ctx) {
-    [0, 0.05, 0.11].forEach((start, index) => {
-      noise(ctx, { start, duration: 0.032, gain: 0.08 - index * 0.018, frequency: 2600 - index * 320, q: 1.6 });
-      tone(ctx, { freq: 540 + index * 110, type: 'triangle', start, duration: 0.035, gain: 0.06 });
-    });
+    let t = 0;
+    for (let i = 0; i < 7; i += 1) {
+      hiss(ctx, { t, f: rnd(2300, 4200), q: 4, d: 0.014, vol: 0.18, send: 0.05, pan: rnd(-0.3, 0.3) });
+      t += 0.035 + i * 0.016;
+    }
   },
-  /** A win: two bright notes going up, with a glint. */
+  /** A win: the die lands, then the bells. */
   diceWin(ctx) {
-    tone(ctx, { freq: 880, type: 'triangle', duration: 0.12, gain: 0.14 });
-    tone(ctx, { freq: 1318.5, type: 'triangle', start: 0.065, duration: 0.24, gain: 0.13 });
-    noise(ctx, { start: 0.065, duration: 0.12, gain: 0.03, frequency: 6400, q: 0.8 });
+    dieLand(ctx);
+    winBells(ctx, 2);
   },
-  /** 10x and up: a run of four notes over a low swell. */
+  /** 10x and up: the die lands, then the level-up. */
   diceBig(ctx) {
-    [659.25, 880, 1108.73, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.36, gain: 0.15 });
-    });
-    tone(ctx, { freq: 164.81, type: 'sine', duration: 0.5, gain: 0.16, sweepTo: 246.94 });
-    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 5800, q: 0.6 });
+    dieLand(ctx);
+    big(ctx);
   },
-  /** A miss: a soft, low knock, never a buzzer. */
+  /** A miss: the die lands, then the soft fall. */
   diceLose(ctx) {
-    tone(ctx, { freq: 250, type: 'triangle', duration: 0.13, gain: 0.11, sweepTo: 175 });
-    noise(ctx, { duration: 0.05, gain: 0.03, frequency: 900, q: 1 });
+    dieLand(ctx);
+    CUES.lose(ctx);
   },
-
-  /* ── Tower ──
-   * A tap as a tile is chosen, a gem that rings higher the higher the floor, a lift as the next
-   * floor wakes, a short blast for TNT, the rest of the tower ticking over, and the cash-out.
-   */
-  /** A tile chosen: a soft, wooden press. */
+  /* ── Tower ── */
+  /** A tile chosen: the click over a soft knock. */
   towerTap(ctx) {
-    tone(ctx, { freq: 620, type: 'triangle', duration: 0.045, gain: 0.07, sweepTo: 480 });
-    noise(ctx, { duration: 0.02, gain: 0.025, frequency: 2600, q: 1.4 });
+    if (!sample(ctx, 'click', { rate: 1.1, vol: 0.2, send: 0 })) tone(ctx, 1800, { d: 0.02, vol: 0.03, send: 0 });
+    hiss(ctx, { type: 'lowpass', f: 900, d: 0.03, vol: 0.1, send: 0 });
   },
-  /** A climb starting: two notes going up. */
+  /** A climb starting: the bet going down. */
   towerStart(ctx) {
-    tone(ctx, { freq: 523.25, type: 'triangle', duration: 0.1, gain: 0.11 });
-    tone(ctx, { freq: 783.99, type: 'triangle', start: 0.07, duration: 0.16, gain: 0.1 });
+    betClack(ctx);
   },
-  /** A gem: a glassy ring with a glint. Pitched by the caller, a step up for every floor. */
+  /** A gem: the orb with a bell over it. Pitched by the caller, a step up for every floor. */
   towerGem(ctx) {
-    tone(ctx, { freq: 1046.5, type: 'sine', duration: 0.22, gain: 0.12 });
-    tone(ctx, { freq: 1568, type: 'triangle', start: 0.035, duration: 0.18, gain: 0.07 });
-    noise(ctx, { start: 0.02, duration: 0.08, gain: 0.025, frequency: 7000, q: 0.9 });
+    gem(ctx);
   },
-  /** The next floor waking: a short rise. */
+  /** The next floor waking: a spring up and a soft landing. */
   towerClimb(ctx) {
-    tone(ctx, { freq: 330, type: 'sine', duration: 0.14, gain: 0.05, sweepTo: 660 });
+    tone(ctx, 380, { to: 820, a: 0.005, d: 0.11, vol: 0.045, type: 'triangle', send: 0.1 });
+    hiss(ctx, { t: 0.26, type: 'lowpass', f: 520, d: 0.06, vol: 0.15, send: 0 });
   },
-  /** TNT: a hard crack and a short low boom, not the long roar of the mine. */
+  /** TNT: the fizz, then the blast. */
   towerBoom(ctx) {
-    noise(ctx, { duration: 0.08, gain: 0.28, frequency: 1700, q: 0.6 });
-    noise(ctx, { duration: 0.45, gain: 0.24, frequency: 190, q: 0.4 });
-    tone(ctx, { freq: 90, type: 'sine', duration: 0.4, gain: 0.24, sweepTo: 38 });
+    sample(ctx, 'fizz', { rate: 1.6, vol: 0.12, send: 0.05 });
+    boom(ctx, 0.85);
   },
-  /** The rest of the tower turning over: a tiny tick per floor, pitched up by the caller. */
+  /** The rest of the tower turning over: a small tick per floor, pitched up by the caller. */
   towerReveal(ctx) {
-    tone(ctx, { freq: 760, type: 'sine', duration: 0.035, gain: 0.03 });
+    tickVoice(ctx, 0, 0.7);
   },
-  /** Cashed out: a quick run of four notes and a shimmer. */
+  /** Cashed out: coins and bells. */
   towerCash(ctx) {
-    [783.99, 987.77, 1174.66, 1567.98].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
-    });
-    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
-    tone(ctx, { freq: 196, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 262 });
+    cash(ctx, 3);
   },
-
-  /* ── Mines ──
-   * The same language as the Tower's, so a pick, a find and a blast sound alike across the two: a
-   * tap as a tile is chosen, a diamond that rings a step higher for every one found, a short blast,
-   * the field ticking over in rings, and the cash-out.
-   */
-  /** A tile chosen: a soft press, a touch brighter than the Tower's. */
+  /* ── Mines ── */
+  /** A tile chosen: a dry crack. */
   minesTap(ctx) {
-    tone(ctx, { freq: 700, type: 'triangle', duration: 0.04, gain: 0.07, sweepTo: 540 });
-    noise(ctx, { duration: 0.02, gain: 0.025, frequency: 2900, q: 1.4 });
+    hiss(ctx, { type: 'highpass', f: 2600, d: 0.05, vol: 0.2, send: 0.2 });
+    tone(ctx, 3800, { d: 0.05, vol: 0.02 });
   },
-  /** A game starting: two notes going up. */
   minesStart(ctx) { CUES.towerStart(ctx); },
-  /** A diamond: a bright crystal ping with a glint. Pitched by the caller, a step up per diamond. */
+  /** A diamond: the orb with a bell over it. Pitched by the caller, a step up per diamond. */
   minesGem(ctx) {
-    tone(ctx, { freq: 1174.66, type: 'sine', duration: 0.2, gain: 0.12 });
-    tone(ctx, { freq: 1760, type: 'triangle', start: 0.03, duration: 0.16, gain: 0.07 });
-    noise(ctx, { start: 0.015, duration: 0.07, gain: 0.025, frequency: 7400, q: 0.9 });
+    gem(ctx);
   },
-  /** TNT: a hard crack and a short low boom. */
   minesBoom(ctx) { CUES.towerBoom(ctx); },
-  /** The rest of the field turning over: a tiny tick per ring, pitched up by the caller. */
   minesReveal(ctx) { CUES.towerReveal(ctx); },
-  /** Cashed out: a quick run of notes and a shimmer. */
   minesCash(ctx) { CUES.towerCash(ctx); },
-
-  /* ── Upgrader ──
-   * A rise as the stake goes in, a ratchet click for every graduation that passes the pointer
-   * (pitched up by the dial as it slows), a low swell when it is about to land on an edge, and the
-   * landing: a bright chord for a hit, a soft knock for a miss.
-   */
-  /** The stake going in: a short rising sweep with a click on top. */
+  /* ── Upgrader ── */
+  /** The stake going in: a low rising launch. */
   upgStart(ctx) {
-    tone(ctx, { freq: 260, type: 'triangle', duration: 0.18, gain: 0.08, sweepTo: 620 });
-    noise(ctx, { duration: 0.03, gain: 0.04, frequency: 3200, q: 1.3 });
+    launch(ctx);
   },
-  /** One graduation past the pointer: a dry, short tick. */
+  /** One graduation past the pointer: a dry tick, pitched up by the dial as it slows. */
   upgTick(ctx) {
-    tone(ctx, { freq: 1500, type: 'triangle', duration: 0.016, gain: 0.04 });
-    noise(ctx, { duration: 0.012, gain: 0.02, frequency: 4600, q: 2 });
+    tickVoice(ctx, 0, 0.85);
   },
-  /** About to land near an edge: a low swell under the ticks. */
+  /** About to land near an edge: a low swell. */
   upgTense(ctx) {
-    tone(ctx, { freq: 110, type: 'sine', duration: 0.9, gain: 0.12, sweepTo: 165 });
+    hiss(ctx, { type: 'lowpass', f: 180, to: 600, q: 0.8, a: 0.3, d: 0.3, vol: 0.15, send: 0.2 });
+    tone(ctx, 70, { to: 110, a: 0.25, d: 0.35, vol: 0.08 });
   },
-  /** A hit: a bright chord going up, with a shimmer. */
+  /** A hit: coins and bells. */
   upgWin(ctx) {
-    [659.25, 830.61, 987.77, 1318.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.05, duration: 0.32, gain: 0.14 });
-    });
-    noise(ctx, { start: 0.1, duration: 0.26, gain: 0.045, frequency: 6400, q: 0.7 });
+    cash(ctx, 3);
   },
-  /** A miss: a soft, low knock, never a buzzer. */
+  /** A miss: the soft fall. */
   upgLose(ctx) {
-    tone(ctx, { freq: 230, type: 'triangle', duration: 0.16, gain: 0.12, sweepTo: 150 });
-    noise(ctx, { duration: 0.05, gain: 0.03, frequency: 850, q: 1 });
+    CUES.lose(ctx);
   },
-
-  /* ── Roulette ──
-   * A chip clacking onto the felt, the ball rattling round a slowing wheel, the drop into the
-   * pocket, and a win.
-   */
-  /** A clay chip set down on the felt: two quick, dry clacks. */
+  /* ── Roulette ── */
+  /** A chip set down on the felt: two quick clacks. */
   rouChip(ctx) {
-    noise(ctx, { duration: 0.025, gain: 0.09, frequency: 3400, q: 1.8 });
-    tone(ctx, { freq: 1250, type: 'triangle', duration: 0.03, gain: 0.05 });
-    noise(ctx, { start: 0.035, duration: 0.02, gain: 0.05, frequency: 3900, q: 2 });
+    chipClack(ctx);
   },
-  /** The ball round the wheel: a soft whoosh, and a rattle of ticks that spaces out as it slows. */
+  /** The ball round the wheel: a whoosh, and the ball's ticks spacing out as it slows. */
   rouSpin(ctx) {
-    noise(ctx, { duration: 0.6, gain: 0.05, frequency: 900, q: 0.6 });
+    whoosh(ctx, { d: 0.5, up: true, vol: 0.12 });
     let at = 0.12;
     let gap = 0.045;
     for (let i = 0; i < 34 && at < 2.6; i += 1) {
-      tone(ctx, { freq: 2100 - i * 18, type: 'triangle', start: at, duration: 0.012, gain: 0.018 + i * 0.0007 });
+      ball(ctx, Math.max(0.25, 1 - at / 2.6), at);
       at += gap;
       gap *= 1.07;
     }
   },
-  /** The ball dropping into its pocket: a couple of bounces and a clack. */
+  /** The ball dropping into its pocket: two bounces and the pocket. */
   rouLand(ctx) {
-    tone(ctx, { freq: 1500, type: 'triangle', duration: 0.02, gain: 0.05 });
-    tone(ctx, { freq: 1300, type: 'triangle', start: 0.07, duration: 0.02, gain: 0.04 });
-    noise(ctx, { start: 0.12, duration: 0.05, gain: 0.08, frequency: 2600, q: 1.4 });
-    tone(ctx, { freq: 420, type: 'sine', start: 0.12, duration: 0.09, gain: 0.07, sweepTo: 300 });
+    ball(ctx, 0.7);
+    ball(ctx, 0.5, 0.09);
+    hiss(ctx, { t: 0.16, type: 'lowpass', f: 1300, d: 0.07, vol: 0.26, send: 0.1 });
+    clink(ctx, 1500, { t: 0.16, vol: 0.04, d: 0.25 });
   },
-  /** A win on the table: a bright run of notes. */
+  /** A win on the table. */
   rouWin(ctx) { CUES.upgWin(ctx); },
-
-  /* ── Limbo ──
-   * A rise as the number climbs (the caller fits its pitch to how far it goes), and the landing in
-   * Dice's language: two notes for a win, a run of notes from 10x up, a soft knock for a miss.
-   */
-  /** The number climbing: a sweep up with a glint at the top. */
+  /* ── Limbo ── */
+  /** The number climbing: a tick, then a rising whoosh. The caller fits its pitch to the climb. */
   limboRise(ctx) {
-    tone(ctx, { freq: 220, type: 'sine', duration: 0.5, gain: 0.07, sweepTo: 880 });
-    tone(ctx, { freq: 440, type: 'triangle', start: 0.05, duration: 0.42, gain: 0.03, sweepTo: 1320 });
-    noise(ctx, { duration: 0.18, gain: 0.025, frequency: 3600, q: 0.8 });
+    tickVoice(ctx, 7);
+    whoosh(ctx, { d: 0.6, up: true, vol: 0.09 });
   },
-  limboWin(ctx) { CUES.diceWin(ctx); },
-  limboBig(ctx) { CUES.diceBig(ctx); },
-  limboLose(ctx) { CUES.diceLose(ctx); },
-
-  /* ── Chicken ──
-   * A cluck and two notes as a run starts, a soft spring for every hop and a landing that rings a
-   * step higher for every lane, the minecart rattling down its rails and the crash as it lands, the
-   * minecart rolling in after a cash-out, and the cash-out.
-   */
-  /** A run starting: a quick cluck, then two notes going up. */
+  limboWin(ctx) { winBells(ctx, 2); },
+  limboBig(ctx) { big(ctx); },
+  limboLose(ctx) { CUES.lose(ctx); },
+  /* ── Chicken ── */
+  /** A run starting: the bet going down. */
   chickenStart(ctx) {
-    tone(ctx, { freq: 640, type: 'triangle', duration: 0.05, gain: 0.07, sweepTo: 420 });
-    noise(ctx, { duration: 0.03, gain: 0.02, frequency: 2400, q: 1.2 });
-    tone(ctx, { freq: 587.33, type: 'triangle', start: 0.08, duration: 0.1, gain: 0.1 });
-    tone(ctx, { freq: 880, type: 'triangle', start: 0.15, duration: 0.16, gain: 0.09 });
+    betClack(ctx);
   },
   /** A hop: a soft spring up. */
   chickenHop(ctx) {
-    tone(ctx, { freq: 300, type: 'sine', duration: 0.13, gain: 0.07, sweepTo: 720 });
-    noise(ctx, { duration: 0.05, gain: 0.018, frequency: 1900, q: 0.9 });
+    tone(ctx, 380, { to: 820, a: 0.005, d: 0.11, vol: 0.045, type: 'triangle', send: 0.1 });
   },
-  /** Landing on a block: a soft thud and a bright ping. Pitched by the caller, a step up per lane. */
+  /** Landing on a block: a soft thud and the orb. Pitched by the caller, a step up per lane. */
   chickenLand(ctx) {
-    tone(ctx, { freq: 150, type: 'sine', duration: 0.07, gain: 0.09, sweepTo: 95 });
-    tone(ctx, { freq: 987.77, type: 'triangle', start: 0.01, duration: 0.18, gain: 0.1 });
-    tone(ctx, { freq: 1479.98, type: 'sine', start: 0.035, duration: 0.15, gain: 0.05 });
+    hiss(ctx, { type: 'lowpass', f: 520, d: 0.06, vol: 0.15, send: 0 });
+    gem(ctx, true);
   },
-  /** The minecart coming down its rails: a rising rattle and a thin squeal. */
+  /** The minecart coming down its rails: a rising rumble and the wheels on the joints. */
   chickenCart(ctx) {
-    noise(ctx, { duration: 0.34, gain: 0.1, frequency: 420, q: 0.6 });
-    noise(ctx, { start: 0.04, duration: 0.28, gain: 0.03, frequency: 3400, q: 2.4 });
-    tone(ctx, { freq: 1800, type: 'triangle', start: 0.1, duration: 0.22, gain: 0.018, sweepTo: 2500 });
+    hiss(ctx, { type: 'lowpass', f: 200, to: 700, q: 1, a: 0.22, d: 0.18, vol: 0.45, send: 0.1 });
+    for (const t of [0.04, 0.12, 0.2, 0.28]) hiss(ctx, { t, type: 'bandpass', f: 1600, q: 5, d: 0.012, vol: 0.12, send: 0 });
   },
-  /** The minecart landing: an iron clank and a low thump. */
+  /** The minecart landing: the blast, smaller. */
   chickenCrash(ctx) {
-    noise(ctx, { duration: 0.07, gain: 0.26, frequency: 2600, q: 0.7 });
-    tone(ctx, { freq: 230, type: 'square', duration: 0.12, gain: 0.05, sweepTo: 120 });
-    noise(ctx, { duration: 0.42, gain: 0.2, frequency: 170, q: 0.4 });
-    tone(ctx, { freq: 88, type: 'sine', duration: 0.38, gain: 0.24, sweepTo: 40 });
+    boom(ctx, 0.6);
   },
   /** After a cash-out, the minecart rolling into view: a soft rumble. */
   chickenReveal(ctx) {
-    noise(ctx, { duration: 0.5, gain: 0.05, frequency: 380, q: 0.7 });
-    tone(ctx, { freq: 120, type: 'sine', duration: 0.4, gain: 0.04, sweepTo: 80 });
+    hiss(ctx, { type: 'lowpass', f: 200, to: 500, q: 1, a: 0.2, d: 0.3, vol: 0.18, send: 0.1 });
   },
-  /** Cashed out: a quick run of four notes and a shimmer. */
+  /** Cashed out: coins and bells. */
   chickenCash(ctx) {
-    [659.25, 880, 1108.73, 1318.51].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
-    });
-    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6200, q: 0.7 });
-    tone(ctx, { freq: 220, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 294 });
+    cash(ctx, 3);
   },
-
-  /* ── Crash ──
-   * A chip clack as the bet goes in, a soft tick for each of the last three seconds, a whoosh at the
-   * launch, a ping at every whole multiplier (pitched up by the caller as it climbs), the rocket
-   * going up when the round busts, and the cash-out.
-   */
-  /** The bet going in: a chip clacking down. */
+  /* ── Crash ── */
+  /** The bet going in: the clack. */
   crashBet(ctx) {
-    tone(ctx, { freq: 1300, type: 'triangle', duration: 0.03, gain: 0.07, sweepTo: 900 });
-    noise(ctx, { duration: 0.035, gain: 0.05, frequency: 3000, q: 1.3 });
-    tone(ctx, { freq: 330, type: 'sine', start: 0.01, duration: 0.07, gain: 0.05, sweepTo: 240 });
+    betClack(ctx);
   },
-  /** One of the last three seconds: a soft tick, pitched up by the caller. */
+  /** One of the last three seconds: a tick, pitched up by the caller. */
   crashTick(ctx) {
-    tone(ctx, { freq: 880, type: 'sine', duration: 0.05, gain: 0.06 });
-    noise(ctx, { duration: 0.02, gain: 0.015, frequency: 4200, q: 1.6 });
+    tickVoice(ctx, 5);
   },
-  /** The launch: a rising whoosh with a spark of ignition. */
+  /** The launch: a low rising roar. */
   crashLaunch(ctx) {
-    noise(ctx, { duration: 0.06, gain: 0.06, frequency: 2800, q: 0.9 });
-    tone(ctx, { freq: 160, type: 'triangle', duration: 0.55, gain: 0.08, sweepTo: 640 });
-    noise(ctx, { start: 0.04, duration: 0.5, gain: 0.05, frequency: 900, q: 0.5 });
+    launch(ctx);
   },
-  /** A whole multiplier passed: a small bright ping. */
+  /** A whole multiplier passed: a small bell, pitched up by the caller as it climbs. */
   crashUp(ctx) {
-    tone(ctx, { freq: 1046.5, type: 'triangle', duration: 0.12, gain: 0.06 });
-    tone(ctx, { freq: 1568, type: 'sine', start: 0.02, duration: 0.1, gain: 0.03 });
+    bell(ctx, 1046.5 * semi(PENT[2]), { vol: 0.05, d: 0.6, ratio: 2, index: 0.9 });
   },
-  /** The bust: a crack, a boom and a low fall. */
+  /** The bust: the blast. */
   crashBust(ctx) {
-    noise(ctx, { duration: 0.09, gain: 0.3, frequency: 1700, q: 0.6 });
-    tone(ctx, { freq: 320, type: 'square', duration: 0.18, gain: 0.04, sweepTo: 90 });
-    noise(ctx, { duration: 0.7, gain: 0.24, frequency: 150, q: 0.4 });
-    tone(ctx, { freq: 72, type: 'sine', duration: 0.6, gain: 0.26, sweepTo: 32 });
+    boom(ctx, 0.8);
   },
-  /** Cashed out: a quick run of four notes and a shimmer. */
+  /** Cashed out: coins and bells. */
   crashCash(ctx) {
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, index) => {
-      tone(ctx, { freq, type: 'triangle', start: index * 0.055, duration: 0.3, gain: 0.14 });
-    });
-    noise(ctx, { start: 0.12, duration: 0.3, gain: 0.05, frequency: 6400, q: 0.7 });
-    tone(ctx, { freq: 196, type: 'sine', duration: 0.4, gain: 0.12, sweepTo: 262 });
+    cash(ctx, 3);
   },
 };
 
 /**
  * Plays a cue.
  *
- * `rate` repitches the whole cue — the upgrader uses it to climb the wheel ticks as a spin slows,
- * so the same twenty-millisecond click carries tension without a second sound.
+ * `rate` repitches the whole cue: every tone, bell, filter and clip in it (see `pitch` above). The
+ * upgrader climbs its ticks this way as the dial slows, and a Mines diamond rings a step higher for
+ * every one found.
  *
  * Never throws. An interface that breaks because a sound failed is worse than a silent interface.
  */
@@ -668,29 +733,13 @@ export function playSound(name, { rate = 1 } = {}) {
   if (!cue) return;
   const ctx = ensureContext();
   if (!ctx) return;
+  pitch = Number.isFinite(rate) && rate > 0 ? rate : 1;
   try {
-    if (rate === 1) {
-      cue(ctx);
-      return;
-    }
-    // Repitching is applied by temporarily wrapping tone() frequencies through the master detune;
-    // simplest correct approach is to call the cue with a scaled frequency table.
-    const original = context.createOscillator;
-    context.createOscillator = function createScaledOscillator() {
-      const osc = original.call(this);
-      const setValueAtTime = osc.frequency.setValueAtTime.bind(osc.frequency);
-      osc.frequency.setValueAtTime = (value, when) => setValueAtTime(value * rate, when);
-      const rampTo = osc.frequency.exponentialRampToValueAtTime.bind(osc.frequency);
-      osc.frequency.exponentialRampToValueAtTime = (value, when) => rampTo(value * rate, when);
-      return osc;
-    };
-    try {
-      cue(ctx);
-    } finally {
-      context.createOscillator = original;
-    }
+    cue(ctx);
   } catch {
     /* A failed cue must never take an interaction down with it. */
+  } finally {
+    pitch = 1;
   }
 }
 
