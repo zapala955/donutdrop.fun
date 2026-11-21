@@ -944,6 +944,56 @@ body.lx .battles .btlrec:nth-child(odd) { background: var(--lx-1); }
   body.lx .battles .btl__dot { animation: none; }
 }
 
+/* ═════════ the account menu, as the preview's (2026-11-21) ═════════
+   The owner: "the menu from the preview the one u click ur mc head on". A 16rem card off the head
+   button: your name, VIP level and its progress bar on top, then ten 40px rows with the preview's
+   icons in the row's own colour. */
+body.lx .lxtop .acct .menu {
+  top: calc(100% + 4px); width: 16rem; max-height: calc(100dvh - var(--lx-top) - 16px);
+  padding: 4px; border: 1px solid #27231f; border-radius: 10px;
+  background: var(--lx-3); box-shadow: 0 12px 24px -12px rgba(8, 6, 5, .55);
+  transform-origin: top right; animation: pv-menu-in 220ms cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes pv-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+body.lx .lxtop .acct .menu .menu__head {
+  display: grid; gap: 8px; margin: 0 0 4px; padding: 12px; border-bottom: 1px solid #27231f;
+}
+body.lx .lxtop .acct .menu .menu__who {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; white-space: nowrap;
+}
+body.lx .lxtop .acct .menu .menu__who b { overflow: hidden; color: var(--lx-ink); font: 700 .875rem/1.2 var(--lx-ui); text-overflow: ellipsis; }
+body.lx .lxtop .acct .menu .menu__tier {
+  --tc: var(--lx-gold);
+  display: inline-flex; align-items: center; height: 1.25rem; padding: 0 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--tc) 16%, transparent); color: var(--tc);
+  font: 800 .6875rem/1 var(--lx-ui); letter-spacing: .08em; text-transform: uppercase;
+}
+body.lx .lxtop .acct .menu .menu__tier[hidden], body.lx .lxtop .acct .menu .menu__bar[hidden] { display: none; }
+body.lx .lxtop .acct .menu .menu__tier[data-tier="bronze"] { --tc: var(--lx-tier-bronze); }
+body.lx .lxtop .acct .menu .menu__tier[data-tier="silver"] { --tc: var(--lx-tier-silver); }
+body.lx .lxtop .acct .menu .menu__tier[data-tier="platinum"] { --tc: var(--lx-tier-platinum); }
+body.lx .lxtop .acct .menu .menu__tier[data-tier="diamond"] { --tc: var(--lx-tier-diamond); }
+body.lx .lxtop .acct .menu .menu__tier[data-tier="high_roller"] { --tc: #ef7a5c; }
+body.lx .lxtop .acct .menu .menu__bar { height: .5rem; overflow: hidden; border-radius: 999px; background: var(--lx-4); }
+body.lx .lxtop .acct .menu .menu__bar > i {
+  display: block; height: 100%; background: var(--lx-gold);
+  transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform 600ms cubic-bezier(.16, 1, .3, 1);
+}
+body.lx .lxtop .acct .menu .menu__row {
+  gap: 12px; width: 100%; min-height: 0; height: 2.5rem; padding: 0 12px; border-radius: 8px;
+  color: var(--lx-text); font: 600 .875rem/1 var(--lx-ui); text-align: left; white-space: nowrap;
+}
+body.lx .lxtop .acct .menu .menu__row:hover,
+body.lx .lxtop .acct .menu .menu__row:focus-visible { background: var(--lx-4); color: var(--lx-ink); }
+body.lx .lxtop .acct .menu .menu__row .menu__ico,
+body.lx .lxtop .acct .menu .menu__row:hover .menu__ico {
+  width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.lx .lxtop .acct .menu { animation: none; }
+  body.lx .lxtop .acct .menu .menu__bar > i { transition: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

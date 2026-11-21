@@ -39,7 +39,7 @@ describe('the casino-lobby shell', () => {
     const ids = [
       'skipToMain', 'burger', 'chat', 'chatScrim', 'chatLog', 'chatForm', 'chatInput', 'wCash',
       'lvlPill', 'lvlNum', 'lvlFill', 'lvlTip', 'muteBtn', 'loginBtn', 'loginHead', 'loginLabel',
-      'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuInvites', 'signOutBtn', 'dailyCodeBtn',
+      'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuName', 'menuWallet', 'signOutBtn', 'dailyCodeBtn',
       'vaultJackpot', 'tickerRoot', 'devRoot', 'toasts', 'modal', 'modalTitle', 'modalClose',
       'modalBody', 'main', 'lobby', 'lobbySearch', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
       'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',

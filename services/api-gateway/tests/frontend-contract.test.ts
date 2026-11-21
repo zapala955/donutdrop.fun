@@ -330,7 +330,8 @@ describe('frontend/backend contract', () => {
     const rewards = await source('assets/js/rakeback.js');
     /* No figure in the markup. The reward is an admin setting now, so a number typed here would be
      * wrong the first time somebody changed it; the server's terms fill it in, as for the nav pill. */
-    assert.match(html, /id="menuInvites"><\/b> Invites/);
+    // The account menu is the preview's since 2026-11-21 and has no Invites row (Referrals is in the
+    // sidebar); the figure still comes from the server's terms wherever it is shown.
     assert.match(app, /state\.referrals\?\.terms\?\.bonusMinor/);
     assert.match(html, /href="\/rewards" data-route="rewards"/);
     assert.match(html, /data-view="rewards"/);
@@ -583,7 +584,7 @@ describe('frontend/backend contract', () => {
     const row = discordRows[0]?.[0] ?? '';
     assert.match(row, /href="\/discord" data-route="discord"/);
     assert.doesNotMatch(row, /target="_blank"/);
-    assert.match(row, /<svg class="menu__ico menu__ico--brand"/);
+    assert.match(row, /<svg class="menu__ico"/);
     assert.match(html, /<a class="lxnav" href="\/discord" data-route="discord"/);
 
     // The page itself still carries the invite, and the link code.

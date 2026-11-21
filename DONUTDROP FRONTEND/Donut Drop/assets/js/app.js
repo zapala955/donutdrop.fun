@@ -1549,6 +1549,7 @@ mountViewToggle($('#view3dBtn'));
 
 $('#loginBtn').addEventListener('click', openLoginModal);
 $('#depositBtn').addEventListener('click', openDepositModal);
+$('#menuWallet')?.addEventListener('click', openDepositModal);
 $('#withdrawBtn').addEventListener('click', openWithdrawModal);
 $('#signOutBtn')?.addEventListener('click', async (event) => {
   event.preventDefault();
@@ -1802,6 +1803,37 @@ document.addEventListener('keydown', (event) => {
     };
     paintInvites();
     bus.addEventListener('change', paintInvites);
+
+    /* The preview's head on the menu: who you are, your VIP level and how far into it you are. The
+     * standing rides in on every balance refresh, so this is right after each bet without a fetch
+     * of its own; until it has arrived the name stands alone rather than showing an empty bar. */
+    const paintHead = () => {
+      const name = $('#menuName');
+      if (name) name.textContent = state.user?.minecraftUsername ?? '';
+      const vip = state.authenticated ? state.vip : null;
+      const known = Boolean(vip?.current);
+      const tier = $('#menuTier');
+      const bar = $('#menuBar');
+      if (tier) {
+        tier.hidden = !known;
+        if (known) {
+          tier.textContent = vip.current.label;
+          tier.dataset.tier = vip.current.tier;
+        }
+      }
+      if (bar) {
+        bar.hidden = !known;
+        if (known) {
+          const ratio = Math.min(1, Math.max(0, Number(vip.progress?.ratio ?? 1)));
+          $('#menuFill', bar)?.style.setProperty('--p', ratio.toFixed(4));
+          bar.title = vip.next
+            ? `${money(Number(vip.progress?.remainingMinor ?? 0))} more to ${vip.next.label}`
+            : 'Top level';
+        }
+      }
+    };
+    paintHead();
+    bus.addEventListener('change', paintHead);
   }
 }
 
