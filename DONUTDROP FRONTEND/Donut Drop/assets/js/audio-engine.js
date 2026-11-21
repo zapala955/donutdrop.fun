@@ -746,8 +746,10 @@ export function playSound(name, { rate = 1 } = {}) {
 /**
  * Wires the global gesture sounds once.
  *
- * Delegated from the document so controls rendered later still make noise, and scoped to elements
- * that opted in with data-sfx plus the ordinary buttons, so scrolling a list of links is silent.
+ * Delegated from the document so controls rendered later still make noise, and only for elements
+ * that opted in with data-sfx (a Plinko drop, a Battles chip). Ordinary buttons are silent: the
+ * Minecraft click on every press (opening the chat, the menu, a tab) went on 2026-11-21, the owner:
+ * "no need for the minecraft sounds every click". The games still sound their own moments.
  */
 export function initAudioEngine() {
   if (document.body.dataset.sfx === '1') return;
@@ -763,9 +765,9 @@ export function initAudioEngine() {
   document.addEventListener(
     'pointerdown',
     (event) => {
-      const target = event.target.closest('button, .btn, [data-sfx]');
+      const target = event.target.closest('[data-sfx]');
       if (!target || target.disabled) return;
-      playSound(target.dataset.sfx || 'click');
+      playSound(target.dataset.sfx);
     },
     { passive: true },
   );

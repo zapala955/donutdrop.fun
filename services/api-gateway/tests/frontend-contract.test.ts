@@ -172,18 +172,23 @@ describe('frontend/backend contract', () => {
     });
   });
 
-  it('wears the pixel lockup in the header: the donut and the name in pixel letters, never blurred', async () => {
-    /* 2026-10-17: the text wordmark ("Donut" + gold "Luxe" in Archivo) gave way to the site's own
-     * art -- the favicon's pixel donut beside the name drawn on whole pixels, Minecraft's bold. */
+  it('wears the logo in the header: the pixel donut on whole screen pixels, the name in type', async () => {
+    /* 2026-10-17: the text wordmark gave way to the name in pixel letters. 2026-11-21, the owner:
+     * "make the donutluxe logo bigger and higher res": the letters were six pixels tall, so no size
+     * made them sharp, and the name is type again (Archivo 900, ivory and gold), the donut bigger. */
     const html = await source('index.html');
     const css = await source('assets/css/luxe.css');
-    assert.match(html, /<img class="lxbrand__mark" src="assets\/img\/brand\/donut\.svg\?v=\d+" alt="" width="32" height="32" \/>/);
-    assert.match(html, /<img class="lxbrand__word" src="assets\/img\/brand\/wordmark\.svg\?v=\d+" alt="DonutLuxe"/);
+    const preview = await source('assets/css/preview.css');
+    assert.match(html, /<img class="lxbrand__mark" src="assets\/img\/brand\/donut\.svg\?v=\d+" alt="" width="48" height="48" \/>/);
+    assert.match(html, /<span class="lxbrand__word lxlogo" aria-hidden="true">Donut<b>Luxe<\/b><\/span>/);
+    assert.match(html, /<span class="lxside__word lxlogo" aria-hidden="true">Donut<b>Luxe<\/b><\/span>/);
     assert.match(html, /<a class="lxbrand" href="\/" aria-label="DonutLuxe home">/);
+    assert.match(html, /<link rel="preload" href="assets\/fonts\/archivo-700-900-latin\.woff2" as="font"/);
     assert.match(css, /\.lxbrand img \{[^}]*image-rendering: pixelated;/);
-    for (const file of ['donut.svg', 'wordmark.svg']) {
-      assert.match(await source(`assets/img/brand/${file}`), /shape-rendering="crispEdges"/, file);
-    }
+    assert.match(preview, /\.lxlogo \{\n\s*flex: none; color: var\(--lx-ink\); font: 900 24px\/1 var\(--lx-display\);/);
+    assert.match(preview, /\.lxside__mark \{ width: calc\(16 \* var\(--lx-markpx, 3px\)\);/);
+    assert.match(await source('assets/js/luxe.js'), /const fit = Math\.floor\(3 \* dpr \+ 1e-6\) \/ dpr;/);
+    assert.match(await source('assets/img/brand/donut.svg'), /shape-rendering="crispEdges"/);
   });
 
   it('draws every lobby icon as 16px pixel art, at whole-number sizes, with no glow behind it', async () => {

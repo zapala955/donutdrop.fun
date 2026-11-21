@@ -28,31 +28,7 @@
 }
 .lxband__link:hover { color: var(--lx-ink); }
 
-/* ═════════ the top bar's search field (wide screens) ═════════ */
-.lxfind {
-  display: none; flex: 0 1 280px; min-width: 160px; align-items: center; gap: var(--lx-s2);
-  height: 40px; padding: 0 6px 0 var(--lx-s3);
-  border-radius: 999px; background: var(--lx-2);
-  box-shadow: inset 0 0 0 1px var(--lx-3);
-  cursor: text;
-  transition: box-shadow var(--lx-quick) var(--lx-ease);
-}
-.lxfind:hover { box-shadow: inset 0 0 0 1px var(--lx-5); }
-.lxfind:focus-within { box-shadow: inset 0 0 0 2px var(--lx-gold); }
-.lxfind > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--lx-mute); stroke-width: 2; stroke-linecap: round; }
-.lxfind input {
-  flex: 1; min-width: 0; height: 100%;
-  border: 0; outline: 0; background: none;
-  color: var(--lx-ink); font: 500 .875rem/1 var(--lx-ui);
-}
-.lxfind input::placeholder { color: var(--lx-mute); }
-.lxfind input::-webkit-search-cancel-button { filter: grayscale(1) brightness(1.6); }
-.lxfind .lxkbd { flex: none; }
-.lxfind:focus-within .lxkbd { display: none; }
 @media (min-width: 1024px) {
-  .lxfind { display: flex; }
-  /* The field is the search here; the lobby's own box and the bar's magnifier step aside. */
-  body.lx .lxlobby .lxsearch, body.lx #lxSearchBtn { display: none; }
   body.lx .lxtabs { margin-top: 0; }
 }
 
@@ -362,11 +338,23 @@ body.lx .lxside__burger { width: 40px; height: 40px; border-radius: var(--lx-r);
 body.lx[data-side="open"] .lxside__burger { width: 40px; height: 40px; }
 body.lx .lxside__burger:hover { background: var(--lx-3); color: var(--lx-ink); }
 body.lx .lxside__burger .lxi { width: 20px; height: 20px; fill: none; }
-.lxside__brand { display: none; align-items: center; gap: var(--lx-s2); min-width: 0; }
+.lxside__brand { display: none; align-items: center; gap: var(--lx-s2); min-width: 0; margin-left: calc(4px - var(--lx-s2)); }
 body[data-side="open"] .lxside__brand { display: flex; }
 .lxside__brand img { display: block; flex: none; image-rendering: pixelated; }
-.lxside__mark { width: calc(16 * var(--lx-artpx, 2px)); height: calc(16 * var(--lx-artpx, 2px)); }
-.lxside__word { width: calc(62 * var(--lx-artpx, 2px)); height: calc(8 * var(--lx-artpx, 2px)); }
+.lxside__mark { width: calc(16 * var(--lx-markpx, 3px)); height: calc(16 * var(--lx-markpx, 3px)); }
+/* The name (2026-11-21, the owner: "make the donutluxe logo bigger and higher res"): the pixel
+ * wordmark drew each letter in six pixels, so no size made it sharp. Now it is type, the site's heavy
+ * Archivo, a little condensed to fit the menu's 240px: "Donut" in ivory, "Luxe" in gold lit from the top,
+ * a hard shadow under both. */
+.lxlogo {
+  flex: none; color: var(--lx-ink); font: 900 24px/1 var(--lx-display); font-stretch: 84%; letter-spacing: -.02em; white-space: nowrap;
+  filter: drop-shadow(0 2px 0 rgb(0 0 0 / .55));
+}
+.lxlogo b {
+  font-weight: inherit; color: var(--lx-gold);
+  background: linear-gradient(180deg, #ffe58a 0%, var(--lx-gold) 62%); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
 body.lx .lxside__nav { display: grid; align-content: start; gap: var(--lx-s3); padding: var(--lx-s3) var(--lx-s2); }
 body.lx[data-side="open"] .lxside__nav { padding: var(--lx-s3); }
@@ -391,22 +379,11 @@ body.lx .lxside__label { margin: 0; padding: var(--lx-s2) var(--lx-s3) var(--lx-
 body.lx .lxtop { background: var(--lx-0); box-shadow: 0 1px 0 var(--pv-rule); }
 body.lx .lxtop__in { max-width: none; gap: var(--lx-s2); padding: 0 var(--lx-s4); }
 body.lx .lxbrand { gap: var(--lx-s2); }
-body.lx .lxbrand__mark { width: calc(16 * var(--lx-artpx, 2px)); height: calc(16 * var(--lx-artpx, 2px)); }
-body.lx .lxbrand__word { width: calc(62 * var(--lx-artpx, 2px)); height: calc(8 * var(--lx-artpx, 2px)); }
+body.lx .lxbrand__mark { width: calc(16 * var(--lx-markpx, 3px)); height: calc(16 * var(--lx-markpx, 3px)); }
+body.lx .lxbrand__word { width: auto; height: auto; }
 @media (min-width: 1024px) {
   /* The menu carries the name while it is open; the bar carries it while the menu is a rail. */
   body.lx[data-side="open"] .lxtop .lxbrand { display: none; }
-}
-body.lx .lxfind {
-  flex: 0 1 272px; height: 40px; gap: var(--lx-s2); padding: 0 var(--lx-s2) 0 var(--lx-s3);
-  background: var(--lx-2); box-shadow: inset 0 0 0 1px var(--pv-rule);
-}
-body.lx .lxfind:hover { box-shadow: inset 0 0 0 1px var(--lx-5); }
-body.lx .lxfind > svg { width: 20px; height: 20px; stroke-width: 1.8; }
-body.lx .lxfind input { font: 500 .9375rem/1 var(--lx-ui); }
-body.lx .lxfind .lxkbd {
-  padding: 2px 4px; border: 0; border-radius: 6px; background: var(--lx-4); box-shadow: none;
-  color: var(--lx-mute); font: 700 .6875rem/1.2 var(--lx-ui);
 }
 body.lx .lxpurse { height: 40px; border-radius: var(--lx-r); background: var(--lx-2); overflow: hidden; }
 body.lx .lxpurse .lxbal { min-width: 0; height: 100%; padding: 0 var(--lx-s3) 0 10px; border-radius: 0; }
@@ -440,10 +417,11 @@ body.lx .lxtop #acctBtn .acct__head:not([src]) { display: none; }
 .lxwtabs button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
 
 /* ═════════ the lobby, 1:1 with the preview ═════════
-   The Originals in a row that scrolls, five cards to the width (seven on a wide column), with two
-   arrows and "See all"; then the slot machines, PvP and cases side by side at the same card size. */
+   The Originals, three cards to a phone's width, five or seven on a wider column, every one in sight
+   (2026-11-21: they were a row that scrolled behind two arrows, and players never saw past the
+   first seven); then the slot machines, PvP and cases side by side at the same card size. */
 body.lx #lobby { container: lxlobby / inline-size; display: grid; gap: var(--lx-s6); }
-body.lx #lobby > * { --tile-w: calc((100cqi - 2 * 12px) / 3.3); }
+body.lx #lobby > * { --tile-w: calc((100cqi - 2 * 12px) / 3); }
 @container lxlobby (min-width: 40rem) { body.lx #lobby > * { --tile-w: calc((100cqi - 4 * 12px) / 5); } }
 @container lxlobby (min-width: 60rem) { body.lx #lobby > * { --tile-w: calc((100cqi - 6 * 12px) / 7); } }
 body.lx .lxtabs[hidden] { display: none; }
@@ -465,9 +443,10 @@ body.lx #lobby :is(#lobbyTrack, .lxgrp .lxrow) {
   grid-auto-flow: column; grid-auto-columns: var(--tile-w); grid-template-columns: none;
   gap: var(--lx-s3); padding: 4px 0 0;
 }
-body.lx #lobbyTrack { overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
-body.lx #lobbyTrack::-webkit-scrollbar { display: none; }
-body.lx #lobbyTrack > li { scroll-snap-align: start; }
+body.lx #lobby #lobbyTrack {
+  grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, var(--tile-w));
+  row-gap: var(--lx-s4);
+}
 .lxgroups { display: flex; flex-wrap: wrap; gap: var(--lx-s6) var(--lx-s3); }
 .lxgrp { display: grid; gap: var(--lx-s3); flex: none; max-width: 100%; }
 
@@ -560,10 +539,7 @@ body.lx .lxbets__title {
 @media (max-width: 1023px) {
   body.lx .lxtop .lxbrand { display: inline-flex; }
   body.lx .lxtop .lxbrand__word { display: none; }
-  body.lx .lxtop #lxSearchBtn { display: grid; place-items: center; color: var(--lx-text); }
-  body.lx .lxtop #lxSearchBtn .lxi { width: 22px; height: 22px; }
   body.lx .lxwallet { margin: 0 auto; }
-  body.lx:not([data-find="open"]) .lxlobby .lxsearch { display: none; }
   body.lx .lxdock { background: var(--lx-0); box-shadow: 0 -1px 0 var(--pv-rule); }
   body.lx .lxdock__btn { gap: 4px; color: var(--lx-mute); font: 700 .6875rem/1 var(--lx-ui); }
   body.lx .lxdock__btn .lxi { width: 22px; height: 22px; fill: none; stroke: currentColor; }
@@ -1351,5 +1327,4 @@ body.lx .modal[data-wallet] .auth__crow--total b { color: var(--lx-ink); font-si
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
-  .lxfind { transition: none; }
 }

@@ -84,10 +84,9 @@ function mountHome(view) {
   view.dataset.built = '1';
 
   /* The lobby. Every card is in the markup, in its row: the Originals, then the slot machines, PvP
-   * and cases side by side (the redesign preview's, 2026-11-20). This filters every row and names the
-   * first after the kind of game. A card shows when it is of the chosen kind and its name or its
-   * keywords contain every word typed; a row with nothing left in it goes. */
-  const search = $('#lobbySearch', view);
+   * and cases side by side (the redesign preview's, 2026-11-20). This filters every row by kind of
+   * game and names the first after it; a row with nothing left in it goes. (The search went on
+   * 2026-11-21: with every game in sight on the lobby it was one more box in the way.) */
   const none = $('#lobbyNone', view);
   const tabs = $$('.lobby__tab', view);
   const cards = $$('.gcard', view);
@@ -96,12 +95,9 @@ function mountHome(view) {
   let category = 'all';
 
   const filterLobby = () => {
-    const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let shown = 0;
     for (const card of cards) {
-      const inCategory = category === 'all' || card.dataset.cat.split(' ').includes(category);
-      const text = `${$('.gcard__name', card).textContent} ${card.dataset.q}`.toLowerCase();
-      const match = inCategory && words.every((word) => text.includes(word));
+      const match = category === 'all' || card.dataset.cat.split(' ').includes(category);
       card.parentElement.hidden = !match;
       if (match) shown += 1;
     }
@@ -119,12 +115,7 @@ function mountHome(view) {
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => pickCategory(tab.dataset.cat));
-  search.addEventListener('input', filterLobby);
-  $('#lobbyReset', view).addEventListener('click', () => {
-    search.value = '';
-    pickCategory('all');
-    search.focus();
-  });
+  $('#lobbyReset', view).addEventListener('click', () => pickCategory('all'));
 
   /* The three offers at the top. Every figure is the server's: before /v1/promotions answers, and
    * with an offer switched off, each one says what it can say without a number. */

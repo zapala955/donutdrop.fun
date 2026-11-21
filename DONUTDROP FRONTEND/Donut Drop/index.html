@@ -56,6 +56,7 @@
      stylesheet from another origin on every cold visit. The interface face is asked for up front: it
      is on every page, and without this the browser only learns it is needed once the CSS is parsed. -->
 <link rel="preload" href="assets/fonts/figtree-400-800-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="assets/fonts/archivo-700-900-latin.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="assets/css/fonts.css" />
 <link rel="stylesheet" href="assets/css/app.css" />
 <!-- Owns every large surface. Must load after app.css: it replaces four
@@ -274,8 +275,8 @@
       <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <a class="lxside__brand" href="/" aria-label="DonutLuxe lobby">
-      <img class="lxside__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="32" height="32" />
-      <img class="lxside__word" src="assets/img/brand/wordmark.svg?v=1" alt="DonutLuxe" width="124" height="16" />
+      <img class="lxside__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="48" height="48" />
+      <span class="lxside__word lxlogo" aria-hidden="true">Donut<b>Luxe</b></span>
     </a>
   </div>
 
@@ -323,23 +324,9 @@
   <header class="lxtop">
     <div class="lxtop__in">
       <a class="lxbrand" href="/" aria-label="DonutLuxe home">
-        <img class="lxbrand__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="32" height="32" />
-        <img class="lxbrand__word" src="assets/img/brand/wordmark.svg?v=1" alt="DonutLuxe" width="186" height="24" />
+        <img class="lxbrand__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="48" height="48" />
+        <span class="lxbrand__word lxlogo" aria-hidden="true">Donut<b>Luxe</b></span>
       </a>
-      <!-- Under 1024px the search is this magnifier beside the donut (the preview's phone bar). -->
-      <button class="lxicon" id="lxSearchBtn" type="button" aria-label="Search games" aria-keyshortcuts="Control+K">
-        <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      </button>
-
-      <!-- Search, in the bar on a wide screen (2026-11-20, the preview's): typing filters the lobby,
-           from any page (luxe.js). A phone keeps the lobby's own search box. -->
-      <label class="lxfind">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
-        <input type="search" id="lxFind" placeholder="Search games" aria-label="Search games"
-               aria-keyshortcuts="Control+K" autocomplete="off" spellcheck="false" enterkeyhint="search" />
-        <kbd class="lxkbd" aria-hidden="true">Ctrl K</kbd>
-      </label>
-
       <!-- Signed in: the balance and the two money actions, centred like the wallet it is. -->
       <div class="lxwallet">
         <!-- Media test mode (assets/js/testmode.js), shown only to approved creators and staff. On,
@@ -507,13 +494,6 @@
       </section>
 
       <section class="lxlobby" id="lobby" aria-labelledby="lobbyH" tabindex="-1">
-        <label class="lxsearch">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
-          <input type="search" id="lobbySearch" placeholder="Search DonutLuxe" aria-label="Search games"
-                 aria-keyshortcuts="Control+K" autocomplete="off" spellcheck="false" enterkeyhint="search" />
-          <kbd class="lxkbd" aria-hidden="true">Ctrl + K</kbd>
-        </label>
-
         <div class="lxtabs" hidden>
           <div class="lxtabs__track" role="group" aria-label="Show games by type">
             <button class="lobby__tab lxtab" type="button" data-cat="all" data-title="Originals" aria-pressed="true">
@@ -548,9 +528,10 @@
           <nav class="lxchips" id="lxChips" aria-label="Kinds of game"></nav>
         </div>
         <!-- The lobby as the redesign preview has it (2026-11-20, the owner: "I WANT THE SITE TO LOOK LIKE THE
-             PREVIEW 1:1"): the Originals in a row that scrolls, with arrows and "See all", then the slot
-             machines, PvP and cases side by side. The search and a kind of game filter every row; a row
-             with nothing left in it goes (app.js). "N playing" under a card is the server's count of
+             PREVIEW 1:1"): the Originals, then the slot machines, PvP and cases side by side. Every
+             Original is in sight, in rows that wrap (2026-11-21: in a row that scrolled, players never
+             found the ones past the arrows). A kind of game filters every row; a row with nothing left
+             in it goes (app.js). "N playing" under a card is the server's count of
              distinct players with a round in that game in the last fifteen minutes
              (GET /v1/activity/playing); a game nobody is in says nothing rather than zero. Mines Duel is
              hidden (2026-11-10): its page still opens at /mines-duel for a game in play. -->
@@ -558,12 +539,10 @@
           <div class="lxrow__head lxband__head">
             <h2 class="lxrow__h" id="lobbyH"><span id="lobbyTitle">Originals</span></h2><span class="lxband__count" data-count="casino"></span>
             <div class="lxband__tools">
-              <button class="lxband__btn" type="button" data-rail-prev="lobbyTrack" aria-label="Scroll back"><svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
-              <button class="lxband__btn" type="button" data-rail-next="lobbyTrack" aria-label="Scroll on"><svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
               <a class="lxband__see" href="/?c=casino">See all<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
             </div>
           </div>
-          <ul class="lxrow lxrail" id="lobbyTrack">
+          <ul class="lxrow" id="lobbyTrack">
           <li><a class="gcard lxcard" href="/crash" data-cat="casino" data-game="crash" data-q="crash cash out before it crashes multiplier">
             <img class="lxcard__art retroart" src="assets/img/items/game-crash.svg" alt="" width="96" height="96" />
             <span class="lxcard__txt"><span class="gcard__name lxcard__name">Crash</span><span class="lxcard__brand" aria-hidden="true">DonutLuxe Originals</span></span>

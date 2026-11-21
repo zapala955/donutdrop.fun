@@ -41,7 +41,7 @@ describe('the casino-lobby shell', () => {
       'lvlPill', 'lvlNum', 'lvlFill', 'lvlTip', 'muteBtn', 'loginBtn', 'loginHead', 'loginLabel',
       'depositBtn', 'withdrawBtn', 'acctBtn', 'acctMenu', 'menuName', 'menuWallet', 'signOutBtn', 'dailyCodeBtn',
       'vaultJackpot', 'tickerRoot', 'devRoot', 'toasts', 'modal', 'modalTitle', 'modalClose',
-      'modalBody', 'main', 'lobby', 'lobbySearch', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
+      'modalBody', 'main', 'lobby', 'lobbyNone', 'lobbyTrack', 'lobbyTitle',
       'lobbyReset', 'pbanLead', 'pbanLeadGo', 'pbanLeadCover',
       'pbanExplore', 'pbanLeadEyebrow', 'pbanLeadH', 'pbanLeadP', 'pbanLeadArt', 'pbanInvite',
       'pbanInviteH', 'pbanInviteGo', 'bigDrops', 'lxSide', 'lxSideBtn', 'lxChatBtn', 'lxRegister',

@@ -86,7 +86,7 @@ describe('the lobby', () => {
     const track = (id: string) => html.slice(html.indexOf(`id="${id}"`), html.indexOf('</ul>', html.indexOf(`id="${id}"`)));
     const main = track('lobbyTrack');
     const slots = track('slotsTrack');
-    assert.match(html, /<ul class="lxrow lxrail" id="lobbyTrack">/);
+    assert.match(html, /<ul class="lxrow" id="lobbyTrack">/);
     assert.equal(main.match(/<a class="gcard lxcard"/g)?.length, 13);
     assert.equal(slots.match(/<a class="gcard lxcard"/g)?.length, 2);
     assert.equal(track('pvpTrack').match(/<a class="gcard lxcard"/g)?.length, 1);
@@ -107,18 +107,34 @@ describe('the lobby', () => {
     }
   });
 
-  it('scrolls the Originals with the preview\'s arrows, and hides a row the search empties', async () => {
-    /* The arrows came back with the redesign preview (2026-11-20): one pair on the Originals rail,
-     * driven by luxe.js, and "See all" is a link to the category, not a toggle. */
+  it('shows every Original on the lobby, in rows that wrap, and hides a row a kind empties', async () => {
+    /* 2026-11-21, the owner: "ppl dont rlly see games other than show on the main page and they need
+     * to click see all and maybe they wont notice it". The Originals were a row that scrolled behind
+     * two arrows; now every card is in sight, at the card size the other rows use. */
     const app = await read('assets/js/app.js');
     const home = app.slice(app.indexOf('function mountHome(view)'), app.indexOf('/* The three offers at the top.'));
-    assert.doesNotMatch(home, /wireRow|paintArrows|lobbyPrev|lobbyNext|slotsPrev|\.lxmore|scrollLeft/);
+    assert.doesNotMatch(home, /wireRow|paintArrows|lobbyPrev|lobbyNext|slotsPrev|\.lxmore|scrollLeft|lobbySearch/);
     assert.match(home, /for \(const row of rows\) row\.hidden = !\$\$\('\.gcard', row\)\.some\(\(card\) => !card\.parentElement\.hidden\);/);
     const luxe = await read('assets/js/luxe.js');
-    assert.doesNotMatch(luxe, /lxMore|See all games|Show fewer/);
-    assert.match(luxe, /function wireRails\(\)/);
+    assert.doesNotMatch(luxe, /lxMore|See all games|Show fewer|wireRails|data-rail/);
     const html = await read('index.html');
-    assert.match(html, /data-rail-prev="lobbyTrack"/);
+    assert.doesNotMatch(html, /data-rail-(prev|next)|lxrail/);
     assert.match(html, /<a class="lxband__see" href="\/\?c=casino">See all/);
+    const css = await read('assets/css/preview.css');
+    assert.match(css, /body\.lx #lobby #lobbyTrack \{\n\s*grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat\(auto-fill, var\(--tile-w\)\);/);
+    assert.doesNotMatch(css, /#lobbyTrack \{ overflow-x: auto;/);
+  });
+
+  it('has no search box in the bar or the lobby, and no click on every press', async () => {
+    /* 2026-11-21, the owner: "u can remove the search" and "no need for the minecraft sounds every
+     * click lol like when opening chat etc". The games keep their own sounds. */
+    const html = await read('index.html');
+    assert.doesNotMatch(html, /type="search"|id="lxFind"|id="lxSearchBtn"|id="lobbySearch"/);
+    const luxe = await read('assets/js/luxe.js');
+    assert.doesNotMatch(luxe, /lxFind|focusSearch|lobbySearch|key\.toLowerCase\(\) === 'k'/);
+    const engine = await read('assets/js/audio-engine.js');
+    assert.match(engine, /const target = event\.target\.closest\('\[data-sfx\]'\);/);
+    assert.doesNotMatch(engine, /closest\('button, \.btn/);
+    assert.doesNotMatch(await read('assets/js/chat.js'), /playSound\('click'\)/);
   });
 });

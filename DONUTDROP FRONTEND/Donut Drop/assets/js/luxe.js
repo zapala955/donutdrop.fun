@@ -199,78 +199,9 @@ new MutationObserver(() => {
 /* ═════════ the two doors ═════════ */
 $('#lxRegister')?.addEventListener('click', () => $('#loginBtn').click());
 
-/* ═════════ search: Ctrl+K from anywhere ═════════ */
-const find = $('#lxFind');
-/* The bar's search field (2026-11-20). It types into the lobby's own box, which does the
- * filtering, so there is one search with one set of rules; from another page it opens the lobby
- * first. The lobby's box is hidden wherever this field shows. */
-function findInLobby() {
-  const run = () => {
-    const input = $('#lobbySearch');
-    if (!input) return;
-    input.value = find.value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    // Results in sight: under the offers the grid can sit below the fold.
-    const lobbyBox = $('#lobby');
-    if (lobbyBox && lobbyBox.getBoundingClientRect().top > innerHeight * 0.6) {
-      lobbyBox.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' });
-    }
-  };
-  if (currentRouteName() !== 'home') {
-    navigate('/');
-    requestAnimationFrame(run);
-  } else {
-    run();
-  }
-}
-if (find) {
-  find.addEventListener('input', findInLobby);
-  find.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && find.value) {
-      event.preventDefault();
-      find.value = '';
-      findInLobby();
-    }
-  });
-  // "Show every game" under an empty result clears the lobby's box; this one follows.
-  $('#lobbyReset')?.addEventListener('click', () => { find.value = ''; });
-}
-
-function focusSearch() {
-  /* Under 1024px the lobby's box is folded away until the magnifier asks for it (the preview's
-   * phone bar); it folds again when it is left empty. */
-  document.body.dataset.find = 'open';
-  if (find && find.offsetParent !== null) {
-    find.focus();
-    find.select();
-    return;
-  }
-  const go = () => {
-    const input = $('#lobbySearch');
-    if (!input) return;
-    input.focus({ preventScroll: true });
-    input.closest('.lxsearch')?.scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
-  };
-  if (currentRouteName() !== 'home') {
-    navigate('/');
-    requestAnimationFrame(go);
-  } else {
-    go();
-  }
-}
-$('#lxSearchBtn')?.addEventListener('click', focusSearch);
-$('#lobbySearch')?.addEventListener('blur', (event) => {
-  if (!event.target.value.trim()) delete document.body.dataset.find;
-});
 /* The bottom bar's Wallet: the Wallet window signed in, the sign-in signed out. */
 $('#lxDockWallet')?.addEventListener('click', () => {
   $(document.body.dataset.auth === 'in' ? '#depositBtn' : '#loginBtn')?.click();
-});
-document.addEventListener('keydown', (event) => {
-  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
-    event.preventDefault();
-    focusSearch();
-  }
 });
 
 /* ═════════ the lobby ═════════ */
@@ -344,7 +275,6 @@ function paintCounts() {
     const n = cards.filter((card) => card.dataset.cat.split(' ').includes(line.dataset.count)).length;
     line.textContent = line.closest('#origRow') ? `${n} games` : String(n);
   }
-  find?.setAttribute('placeholder', `Search ${cards.length} games`);
 }
 
 function paintKind() {
@@ -365,32 +295,7 @@ function paintKind() {
   if (tab && tab.getAttribute('aria-pressed') !== 'true') tab.click();
 }
 
-function wireRails() {
-  for (const button of $$('[data-rail-prev], [data-rail-next]', lobby)) {
-    const track = $(`#${button.dataset.railPrev || button.dataset.railNext}`);
-    if (!track) continue;
-    const step = button.dataset.railPrev ? -1 : 1;
-    button.addEventListener('click', () => {
-      track.scrollBy({ left: step * track.clientWidth * 0.9, behavior: reduceMotion() ? 'auto' : 'smooth' });
-    });
-  }
-  for (const track of $$('.lxrail', lobby)) {
-    const sync = () => {
-      const max = track.scrollWidth - track.clientWidth - 2;
-      const prev = $(`[data-rail-prev="${track.id}"]`);
-      const next = $(`[data-rail-next="${track.id}"]`);
-      if (prev) prev.disabled = track.scrollLeft <= 2;
-      if (next) next.disabled = track.scrollLeft >= max;
-    };
-    track.addEventListener('scroll', sync, { passive: true });
-    new ResizeObserver(sync).observe(track);
-    sync();
-  }
-}
-if (lobby) {
-  paintCounts();
-  wireRails();
-}
+if (lobby) paintCounts();
 
 /* The account button wears the player's head, as the preview's does: the same picture the sign-in
  * button carries (app.js), and the outline figure until it loads or if it cannot. */
@@ -470,17 +375,16 @@ function onRoute() {
 onNavigate(onRoute);
 onRoute();
 
-/* The logo is pixel art: the donut on a 16-pixel grid, the name on a 62 by 8 one. It is only sharp
- * when every one of its pixels covers a whole number of screen pixels. Two CSS pixels each is that
- * at 100% and 200%, but at 125% (a common Windows setting) or 175% it is 2.5 or 3.5, and the pixels
- * come out uneven, so the name looks low-res. So each art pixel is the most whole screen pixels that
- * still fit the menu's head (2.05 CSS px: burger, donut and name in 240px), unless that would make it
- * much smaller than usual, when it stays at 2. --lx-artpx in preview.css; asked again when the
- * screen's scale changes (browser zoom, or the window moving to another monitor). */
+/* The logo's donut is pixel art on a 16-pixel grid. It is only sharp when every one of its pixels
+ * covers a whole number of screen pixels: three CSS pixels each is that at 100% and 200%, but at
+ * 125% (a common Windows setting) it would be 3.75, and the pixels come out uneven. So each art
+ * pixel is the most whole screen pixels that fit in three CSS pixels (48px at 100%, 38.4px at 125%,
+ * 42.7px at 150%). The name beside it is type, sharp at any scale. --lx-markpx in preview.css; asked
+ * again when the screen's scale changes (browser zoom, or the window moving to another monitor). */
 function snapLogoPixels() {
   const dpr = window.devicePixelRatio || 1;
-  const fit = Math.floor(2.05 * dpr + 1e-6) / dpr;
-  document.documentElement.style.setProperty('--lx-artpx', `${fit >= 1.5 ? fit : 2}px`);
+  const fit = Math.floor(3 * dpr + 1e-6) / dpr;
+  document.documentElement.style.setProperty('--lx-markpx', `${fit >= 2 ? fit : 2}px`);
   matchMedia(`(resolution: ${dpr}dppx)`).addEventListener('change', snapLogoPixels, { once: true });
 }
 snapLogoPixels();

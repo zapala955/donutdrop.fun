@@ -370,7 +370,7 @@ body.lx .lxbal .cashpill__n {
 /* A container query adds no weight, and the chip's own display rule comes later in this file, so
    these are written one step heavier (.lxtop__end) to win regardless of order. */
 @container lxtop (max-width: 1040px) { body.lx .lxtop .lxtop__end .lvl { display: none; } }
-@container lxtop (max-width: 860px) { body.lx .lxtop .lxtop__end :is(#lxSearchBtn, #muteBtn) { display: none; } }
+@container lxtop (max-width: 860px) { body.lx .lxtop .lxtop__end #muteBtn { display: none; } }
 /* The chat docked beside the page from 1280px (open by default since 2026-11-14) leaves the bar about
    880px: the donut alone stands for the name, so the wallet and the bar's buttons all fit. */
 @container lxtop (max-width: 940px) { body.lx .lxtop .lxbrand__word { display: none; } }
@@ -915,7 +915,7 @@ body.lx .chat__dock { display: none; }
   body.lx .lxbal { min-width: 0; height: 40px; padding: 0 var(--lx-s3) 0 10px; }
   /* Withdraw stays on a phone: the way out is never harder to find than the way in. */
   body.lx :is(#depositBtn, #withdrawBtn) { height: 40px; padding: 0 var(--lx-s3); }
-  body.lx #lxSearchBtn, body.lx #muteBtn, body.lx .lxtop .lvl, body.lx #lxChatBtn { display: none; }
+  body.lx #muteBtn, body.lx .lxtop .lvl, body.lx #lxChatBtn { display: none; }
   body.lx .lxtop .lxbtn { height: 40px; padding: 0 var(--lx-s4); }
 
   /* the chat is a full drawer from the right, opened from the bottom bar */
