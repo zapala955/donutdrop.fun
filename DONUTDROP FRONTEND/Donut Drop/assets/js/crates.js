@@ -4,7 +4,7 @@
  *
  *   PANEL  left: which case, how many, quick unbox, and the one gold button that spends money.
  *   STAGE  right, on the dark: the case itself -- its art, name, price, what it returns on
- *          average, its edge, its best prize -- and every item in it with its odds. The odds are on
+ *          average, its best prize -- and every item in it with its odds. The odds are on
  *          screen beside the button that charges you, never behind a click.
  *   BAR    under both: the page's name and "How it works" (index.html, as every game has).
  *   BROWSE under the bar: every case, with search, sort and the risk and price filters. Picking
@@ -120,7 +120,6 @@ function build() {
           <span class="cases__price mono" id="casesPrice"></span>
           <dl class="cases__facts">
             <div><dt>Avg return</dt><dd class="mono" id="casesAvg">—</dd></div>
-            <div><dt>House edge</dt><dd class="mono" id="casesEdge">—</dd></div>
             <div><dt>Top prize</dt><dd class="mono" id="casesTop">—</dd></div>
             <div><dt>Mystery</dt><dd class="mono" id="casesMyst">—</dd></div>
           </dl>
@@ -144,15 +143,16 @@ function build() {
           <button type="button" class="cases__change" id="casesChange">Change</button>
         </div>
 
-        <span class="cases__label" id="casesQtyLabel">Quantity</span>
+        <span class="cases__label" id="casesQtyLabel">Cases at once</span>
         <div class="cases__qty" role="group" aria-labelledby="casesQtyLabel">
           ${QUANTITIES.map((n) => `<button type="button" class="cases__n" data-n="${n}" aria-pressed="${n === view.quantity}">${n}</button>`).join('')}
         </div>
 
-        <button class="cases__quick" id="casesQuick" type="button" role="switch" aria-checked="${view.quickOpen}">
-          <span>Quick unbox</span>
-          <i aria-hidden="true"></i>
-        </button>
+        <span class="cases__label" id="casesSpeedLabel">Speed</span>
+        <div class="cases__speed" role="group" aria-labelledby="casesSpeedLabel">
+          <button type="button" class="cases__sp" data-quick="0" aria-pressed="${!view.quickOpen}">Normal</button>
+          <button type="button" class="cases__sp" data-quick="1" aria-pressed="${view.quickOpen}">Quick</button>
+        </div>
 
         <button class="btn btn--go cases__go" id="casesGo" type="button">Open case</button>
         <p class="cases__hint mono" id="casesHint" aria-live="polite"></p>
@@ -232,10 +232,12 @@ function build() {
       paintPanel();
     });
   }
-  $('#casesQuick', root).addEventListener('click', () => {
-    view.quickOpen = !view.quickOpen;
-    paintPanel();
-  });
+  for (const button of root.querySelectorAll('.cases__sp')) {
+    button.addEventListener('click', () => {
+      view.quickOpen = button.dataset.quick === '1';
+      paintPanel();
+    });
+  }
   $('#casesChange', root).addEventListener('click', () => {
     browse.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
     $('#crateSearch', browse).focus({ preventScroll: true });
@@ -484,12 +486,10 @@ function paintStage() {
   const sorted = ordinaryDrops(selected).sort((a, b) => b.value - a.value);
   const expected = selected.drops
     .reduce((sum, drop) => sum + (drop.weight / totalWeight) * drop.value, 0);
-  const edge = (1 - expected / selected.price) * 100;
   const odds = mysteryOdds(selected);
   const top = topMultiple(selected);
 
   $('#casesAvg', root).textContent = money(Math.round(expected));
-  $('#casesEdge', root).textContent = `${edge.toFixed(2)}%`;
   $('#casesTop', root).textContent = sorted.length
     ? `${money(sorted[0].value)} · ${top >= 10 ? top.toFixed(0) : top.toFixed(1)}×`
     : '—';
@@ -588,15 +588,16 @@ function paintPanel() {
     button.setAttribute('aria-pressed', String(Number(button.dataset.n) === view.quantity));
     button.disabled = opening;
   }
-  const quick = $('#casesQuick', root);
-  quick.setAttribute('aria-checked', String(view.quickOpen));
-  quick.disabled = opening;
+  for (const button of root.querySelectorAll('.cases__sp')) {
+    button.setAttribute('aria-pressed', String((button.dataset.quick === '1') === view.quickOpen));
+    button.disabled = opening;
+  }
 
   const total = selected ? selected.price * view.quantity : 0;
   const affordable = state.authenticated && state.balance >= total;
   const go = $('#casesGo', root);
   const hint = $('#casesHint', root);
-  const what = view.quantity > 1 ? `Open ${view.quantity} cases` : 'Open case';
+  const what = view.quantity > 1 ? `Open ${view.quantity} for` : 'Open for';
 
   if (!selected) {
     go.textContent = 'Pick a case';
@@ -607,7 +608,7 @@ function paintPanel() {
     go.disabled = false;
     hint.textContent = '';
   } else {
-    go.textContent = opening ? 'Opening…' : `${what} · ${money(total)}`;
+    go.textContent = opening ? 'Opening…' : `${what} ${money(total)}`;
     go.disabled = opening || !affordable;
     /* The wallet figure, or why the button is off. */
     hint.textContent = affordable || opening

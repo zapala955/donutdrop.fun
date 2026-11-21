@@ -1196,6 +1196,44 @@ body.lx .upg .ug__grid button[data-on="1"] .ug__tile i { color: var(--lx-gold); 
   body.lx .upg .ug__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+/* ═════════ Cases, as the preview's ═════════
+   The panel's choices as pills (how many at once, the speed), the button "Open for $X"; on the
+   stage the case and its numbers, then its drop table as rows two across: the sprite, the name
+   over the value, the odds on the right, the item's colour down the left edge. */
+body.lx .crates .cases__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .crates :is(.cases__qty, .cases__speed) { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: 999px; background: var(--lx-0); }
+body.lx .view .crates :is(.cases__n, .cases__sp),
+body.lx .view .crates :is(.cases__n, .cases__sp):hover:not(:disabled) {
+  height: 36px; min-width: 0; padding: 0 8px; border: 0; border-radius: 999px; box-shadow: none; transform: none;
+  background: transparent; color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui); cursor: pointer;
+}
+body.lx .view .crates :is(.cases__n, .cases__sp):hover:not(:disabled) { color: var(--lx-ink); }
+body.lx .view .crates :is(.cases__n, .cases__sp)[aria-pressed="true"],
+body.lx .view .crates :is(.cases__n, .cases__sp)[aria-pressed="true"]:hover:not(:disabled) { background: var(--lx-4); color: var(--lx-ink); box-shadow: none; }
+body.lx .view .crates :is(.cases__n, .cases__sp):disabled { cursor: progress; opacity: .6; }
+body.lx .crates .cases__facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+body.lx .crates .cases__facts div { background: var(--lx-0); box-shadow: none; border-radius: 8px; }
+body.lx .crates .cases__itemshead h3 { font: 800 .9375rem/1.2 var(--lx-ui); }
+body.lx .crates .cases__count { color: var(--lx-mute); font: 500 .75rem/1.2 var(--lx-ui); }
+@media (min-width: 1024px) {
+  body.lx .crates .cases__items { padding: 16px; border-radius: 10px; background: var(--lx-1); }
+  body.lx .crates .cases__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  body.lx .crates .cases__item {
+    grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: auto auto; justify-items: start; align-items: center;
+    column-gap: 10px; row-gap: 2px; min-height: 48px; padding: 6px 12px 6px 14px; border-radius: 6px;
+    background: var(--lx-2); box-shadow: inset 3px 0 0 var(--rar, var(--lx-4)); text-align: left;
+  }
+  body.lx .crates .cases__item img,
+  body.lx .crates .cases__q { grid-column: 1; grid-row: 1 / 3; width: 32px; height: 32px; filter: none; }
+  body.lx .crates .cases__q { font-size: 1.375rem; }
+  body.lx .crates .cases__iname { grid-column: 2; grid-row: 1; display: block; min-height: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lx-ink); font: 700 .8125rem/1.2 var(--lx-ui); }
+  body.lx .crates .cases__ival { grid-column: 2; grid-row: 2; color: var(--lx-text); font: 600 .75rem/1.2 var(--lx-ui); }
+  body.lx .crates .cases__ival .coin, body.lx .crates .cases__ival img { display: none; }
+  body.lx .crates .cases__iodds { grid-column: 3; grid-row: 1 / 3; color: var(--lx-ink); font: 800 .8125rem/1 var(--lx-ui); }
+  body.lx .crates .cases__item--myst { background: var(--lx-2); }
+  body.lx .crates .cases__item--myst .cases__iodds { color: var(--lx-gold); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

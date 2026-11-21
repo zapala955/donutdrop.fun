@@ -39,7 +39,10 @@ describe('the Cases page', () => {
     assert.match(crates, /<div class="cases__grid" id="casesItems" role="list"/);
     assert.match(crates, /<button class="btn btn--go cases__go" id="casesGo" type="button">/);
     // The figures on the button are the total for the quantity picked.
-    assert.match(crates, /go\.textContent = opening \? 'Opening…' : `\$\{what\} · \$\{money\(total\)\}`;/);
+    assert.match(crates, /go\.textContent = opening \? 'Opening…' : `\$\{what\} \$\{money\(total\)\}`;/);
+    // The preview's words: "Open for $2M", "Open 3 for $6M"; and no edge figure on the stage.
+    assert.match(crates, /const what = view\.quantity > 1 \? `Open \$\{view\.quantity\} for` : 'Open for';/);
+    assert.doesNotMatch(crates, /House edge|casesEdge/);
     // The stage is never empty while there are cases.
     assert.match(crates, /if \(!selected && state\.cases\.length\) \{\n\s*selected = \[\.\.\.state\.cases\]\.sort\(\(a, b\) => a\.price - b\.price\)\[0\];/);
   });
