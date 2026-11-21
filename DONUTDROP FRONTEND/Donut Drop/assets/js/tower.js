@@ -22,7 +22,7 @@
  * every one of them is an instant change of state, and nothing shakes. No line of text says how a
  * climb went; a screen reader hears it from the status line (say).
  */
-import { api, clientSeed } from './api.js';
+import { API_BASE_URL, api, clientSeed } from './api.js';
 import { betOnCommitment, bus, refreshBalance, state } from './store.js';
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
@@ -68,6 +68,14 @@ function multiplierBps(name, cleared) {
 }
 
 const times = (bps) => `${(Math.floor(bps / 100) / 100).toFixed(2)}×`;
+
+/** What clearing every floor pays on `stake`, worked out as lib/tower.ts does, up to the cap. */
+function topPayout(name, stake) {
+  const { tiles, traps } = MODES[name];
+  const paid = (stake * (10_000n - EDGE_BPS) * BigInt(tiles) ** BigInt(FLOORS)) / (10_000n * BigInt(tiles - traps) ** BigInt(FLOORS));
+  const cap = config?.maxPayoutMinor ? BigInt(config.maxPayoutMinor) : null;
+  return cap !== null && paid > cap ? cap : paid;
+}
 
 /* ─────────── state ─────────── */
 
@@ -534,6 +542,13 @@ function paintBoard() {
   board.dataset.state = inPlay() ? 'play' : over() ? 'over' : 'idle';
   board.dataset.mode = name;
   let rebuilt = false;
+  /* Where the player's head stands, as in the preview: on the floor being climbed, at the foot
+   * before a climb, where they stopped after cashing out, and nowhere once the TNT has gone off. */
+  let standing = state.authenticated ? 0 : -1;
+  if (inPlay()) standing = game.floor;
+  else if (over()) standing = game.outcome === 'cashout' ? Math.min(game.picks.length, FLOORS - 1) : -1;
+  const me = state.user?.id ? `url("${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40")` : '';
+  if (board.style.getPropertyValue('--tower-me') !== me) board.style.setProperty('--tower-me', me);
 
   for (let floor = 0; floor < FLOORS; floor += 1) {
     const floorEl = floorNode(floor);
@@ -544,6 +559,8 @@ function paintBoard() {
     const traps = over() ? new Set(game.trapTiles?.[floor] ?? []) : null;
     floorEl.dataset.state = floor === current ? 'now' : cleared ? 'done' : lostHere ? 'lost' : 'ahead';
     const pays = times(multiplierBps(name, floor + 1));
+    if (floorEl.dataset.x !== pays) floorEl.dataset.x = pays;
+    floorEl.toggleAttribute('data-me', floor === standing);
 
     for (let tile = 0; tile < tiles; tile += 1) {
       const node = floorEl.children[tile];
@@ -609,13 +626,13 @@ function paintControls() {
     text = 'Log in to play';
   } else if (inPlay()) {
     if (pressed === 'cashout') { text = 'Cashing out…'; tone = 'cash'; disabled = true; }
-    else if (game.floor === 0) { text = 'Pick a tile'; tone = 'idle'; disabled = true; }
+    else if (game.floor === 0) { text = 'Cash out'; tone = 'cash'; disabled = true; }
     else { text = `Cash out ${money(Number(game.cashoutMinor))}`; tone = 'cash'; disabled = busy; }
   } else if (pressed === 'start') {
     text = 'Starting…';
     disabled = true;
   } else {
-    text = `${over() ? 'Play again' : 'Start'} · ${money(Number(stakeMinor() ?? 0n))}`;
+    text = 'Bet';
     disabled = Boolean(startProblem()) || busy;
   }
   if (label.textContent !== text) label.textContent = text;
@@ -629,17 +646,30 @@ function paintControls() {
   random.disabled = busy;
 
   const locked = inPlay() || busy;
-  for (const node of root.querySelectorAll('.tower__form input, .tower__form .tower__adj, .tower__mode')) {
+  for (const node of root.querySelectorAll('.tower__form input, .tower__form .tower__adj, #towerMode')) {
     node.disabled = locked;
   }
-  const name = boardMode();
-  // The gold pill under the chosen difficulty slides to it (tower.css).
-  $('.tower__modes', root).style.setProperty('--mode-i', String(MODE_NAMES.indexOf(name)));
-  root.querySelectorAll('.tower__mode').forEach((button) => {
-    const chosen = button.dataset.mode === name;
-    button.setAttribute('aria-checked', String(chosen));
-    button.tabIndex = chosen ? 0 : -1;
-  });
+  const select = $('#towerMode', root);
+  if (select.value !== boardMode()) select.value = boardMode();
+  paintProfit();
+}
+
+/** The panel's profit: before a climb, what the top floor pays on the stake in the field; during
+ * one, what cashing out now would add. The multiplier beside the label, in brackets. */
+function paintProfit() {
+  const out = $('#towerProfit', root);
+  if (inPlay()) {
+    const cleared = game.floor;
+    const profit = cleared ? BigInt(game.cashoutMinor) - BigInt(game.stakeMinor) : 0n;
+    $('#towerProfitL', root).textContent = 'Total profit';
+    $('#towerProfitX', root).textContent = `(${times(cleared ? game.multiplierBps : 10_000)})`;
+    out.value = profit > 0n ? `+${money(Number(profit)).slice(1)}` : '0';
+    return;
+  }
+  const stake = stakeMinor();
+  $('#towerProfitL', root).textContent = 'Top floor pays';
+  $('#towerProfitX', root).textContent = `(${times(multiplierBps(mode, FLOORS))})`;
+  out.value = stake && stake > 0n ? money(Number(topPayout(mode, stake))).slice(1) : '0';
 }
 
 /* ─────────── building ─────────── */
@@ -677,14 +707,18 @@ function build() {
           <button type="button" class="tower__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="tower__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <span class="tower__label" id="towerModeLabel">Difficulty</span>
-        <div class="tower__modes" role="radiogroup" aria-labelledby="towerModeLabel">
-          ${MODE_NAMES.map((name) => `<button type="button" class="tower__mode" role="radio" data-mode="${name}" aria-checked="false">${MODES[name].label}</button>`).join('')}
+        <label class="tower__label" for="towerMode">Difficulty</label>
+        <div class="tower__field tower__field--sel">
+          <select id="towerMode">${MODE_NAMES.map((name) => `<option value="${name}">${MODES[name].label} · ${MODES[name].tiles - MODES[name].traps} of ${MODES[name].tiles} tiles safe</option>`).join('')}</select>
         </div>
         <button class="btn tower__go" id="towerGo" type="submit" data-tone="go">
           <span id="towerGoLabel">Loading…</span>
         </button>
-        <button class="tower__random" id="towerRandom" type="button" hidden>Random pick</button>
+        <button class="tower__random" id="towerRandom" type="button" hidden>Pick a random tile</button>
+        <div class="tower__profit" id="towerProfitRow">
+          <label class="tower__label tower__label--row" for="towerProfit"><span id="towerProfitL">Top floor pays</span><span class="tower__profitx" id="towerProfitX"></span></label>
+          <div class="tower__field tower__field--read"><span aria-hidden="true">$</span><output id="towerProfit" for="towerStake towerMode">0</output></div>
+        </div>
         <p class="tower__hint" id="towerHint" aria-live="polite"></p>
         ${viewSwitch('towerView')}
         <label class="tower__gfx" for="towerGfx">
@@ -707,20 +741,7 @@ function build() {
     paint();
   }));
 
-  const modes = $('.tower__modes', root);
-  modes.addEventListener('click', (event) => {
-    const button = event.target.closest('.tower__mode');
-    if (button) chooseMode(button.dataset.mode);
-  });
-  /* A radio group: one tab stop, the arrows move the choice. */
-  modes.addEventListener('keydown', (event) => {
-    const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
-    if (!step || inPlay() || busy) return;
-    event.preventDefault();
-    const index = (MODE_NAMES.indexOf(mode) + step + MODE_NAMES.length) % MODE_NAMES.length;
-    chooseMode(MODE_NAMES[index]);
-    modes.querySelector(`[data-mode="${mode}"]`)?.focus();
-  });
+  $('#towerMode', root).addEventListener('change', (event) => chooseMode(event.target.value));
 
   $('#towerForm', root).addEventListener('submit', (event) => {
     event.preventDefault();

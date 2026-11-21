@@ -29,7 +29,6 @@ import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
 const TILES = 25;
-const QUICK_MINES = [1, 3, 5, 10, 24];
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
@@ -56,6 +55,18 @@ function stakeMinor() {
   const value = parseAmount(stakeText);
   return value === null ? null : BigInt(value);
 }
+
+/** The TNT on the board: the game's own while one runs, otherwise the count picked for the next. */
+const tntNow = () => (inPlay() ? game.mines : mineCount);
+
+/** What the first diamond pays on `stake`, worked out as lib/mines.ts does, up to the table's cap. */
+function firstPayout(stake) {
+  const keep = BigInt(10_000 - Number(config?.houseEdgeBps ?? 0));
+  const paid = (stake * keep * BigInt(TILES)) / (10_000n * BigInt(TILES - mineCount));
+  const cap = config?.maxPayoutMinor ? BigInt(config.maxPayoutMinor) : null;
+  return cap !== null && paid > cap ? cap : paid;
+}
+const firstBps = () => Number((BigInt(10_000 - Number(config?.houseEdgeBps ?? 0)) * BigInt(TILES)) / BigInt(TILES - mineCount));
 
 function startProblem() {
   if (!config) return 'Mines is not answering';
@@ -526,16 +537,23 @@ function paintBoard() {
   }
 }
 
-/** The panel's profit so far, while a game runs: what cashing out now would add, at what multiplier. */
+/** The panel's profit: before a game, what the first diamond would add to the stake in the field;
+ * while one runs, what cashing out now would add. The multiplier beside the label, in brackets. */
 function paintProfit() {
-  const row = $('#minesProfitRow', root);
-  const show = inPlay();
-  row.hidden = !show;
-  if (!show) return;
-  const found = game.revealed.length;
-  const profit = found ? BigInt(game.cashoutMinor) - BigInt(game.stakeMinor) : 0n;
-  $('#minesProfitX', root).textContent = times(found ? game.multiplierBps : 10_000);
-  $('#minesProfit', root).value = `${money(Number(profit))}`;
+  let profit = 0n;
+  let bps = 10_000;
+  if (inPlay()) {
+    const found = game.revealed.length;
+    profit = found ? BigInt(game.cashoutMinor) - BigInt(game.stakeMinor) : 0n;
+    bps = found ? game.multiplierBps : 10_000;
+  } else if (config) {
+    const stake = stakeMinor();
+    bps = firstBps();
+    profit = stake && stake > 0n ? firstPayout(stake) - stake : 0n;
+  }
+  $('#minesProfitL', root).textContent = inPlay() ? 'Total profit' : 'Profit on first diamond';
+  $('#minesProfitX', root).textContent = `(${times(bps)})`;
+  $('#minesProfit', root).value = profit > 0n ? `+${money(Number(profit)).slice(1)}` : '0';
 }
 
 function paintControls() {
@@ -550,14 +568,14 @@ function paintControls() {
   } else if (inPlay()) {
     const found = game.revealed.length;
     if (pressed === 'cashout') { text = 'Cashing out…'; tone = 'cash'; disabled = true; }
-    else if (found === 0) { text = 'Pick a tile'; tone = 'idle'; disabled = true; }
+    else if (found === 0) { text = 'Cash out'; tone = 'cash'; disabled = true; }
     else { text = `Cash out ${money(Number(game.cashoutMinor))}`; tone = 'cash'; disabled = busy; }
   } else if (pressed === 'start') {
     text = 'Starting…';
     disabled = true;
   } else {
     const problem = startProblem();
-    text = `${game?.status === 'settled' ? 'Play again' : 'Start'} · ${money(Number(stakeMinor() ?? 0n))}`;
+    text = 'Bet';
     disabled = Boolean(problem) || busy;
   }
   if (label.textContent !== text) label.textContent = text;
@@ -570,13 +588,12 @@ function paintControls() {
   $('#minesRandom', root).disabled = busy;
   paintProfit();
   const locked = inPlay() || busy;
-  for (const node of root.querySelectorAll('.mines__form input, .mines__form .mines__adj, .mines__form .mines__pick, .mines__step')) {
+  for (const node of root.querySelectorAll('.mines__form input, .mines__form .mines__adj, #minesCount')) {
     node.disabled = locked;
   }
-  $('#minesCount', root).textContent = String(mineCount);
-  root.querySelectorAll('.mines__pick[data-mines]').forEach((pick) => {
-    pick.setAttribute('aria-pressed', String(Number(pick.dataset.mines) === mineCount));
-  });
+  const count = $('#minesCount', root);
+  if (count.value !== String(tntNow())) count.value = String(tntNow());
+  $('#minesLeft', root).value = String(TILES - tntNow() - (inPlay() ? game.revealed.length : 0));
 }
 
 /* ─────────── building ─────────── */
@@ -605,23 +622,26 @@ function build() {
           <button type="button" class="mines__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="mines__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <span class="mines__label" id="minesCountLabel">TNT in the field</span>
-        <div class="mines__stepper" role="group" aria-labelledby="minesCountLabel">
-          <button type="button" class="mines__step" data-step="-1" aria-label="One less TNT">−</button>
-          <output id="minesCount" aria-live="off">3</output>
-          <button type="button" class="mines__step" data-step="1" aria-label="One more TNT">+</button>
-        </div>
-        <div class="mines__picks" role="group" aria-label="Quick TNT counts">
-          ${QUICK_MINES.map((count) => `<button type="button" class="mines__pick" data-mines="${count}" aria-pressed="false">${count}</button>`).join('')}
-        </div>
-        <div class="mines__profit" id="minesProfitRow" hidden>
-          <label class="mines__label mines__label--row" for="minesProfit"><span>Total profit</span><span class="mines__profitx" id="minesProfitX"></span></label>
-          <div class="mines__field mines__field--read"><output id="minesProfit" for="minesStake">$0</output></div>
+        <div class="mines__row2">
+          <div class="mines__cell">
+            <label class="mines__label" for="minesCount">TNT</label>
+            <div class="mines__field mines__field--sel">
+              <select id="minesCount">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
+            </div>
+          </div>
+          <div class="mines__cell">
+            <label class="mines__label" for="minesLeft">Diamonds left</label>
+            <div class="mines__field mines__field--count"><output id="minesLeft" for="minesCount">22</output></div>
+          </div>
         </div>
         <button class="btn mines__go" id="minesGo" type="submit" data-tone="go">
           <span id="minesGoLabel">Loading…</span>
         </button>
-        <button class="mines__random" id="minesRandom" type="button" hidden>Random tile</button>
+        <button class="mines__random" id="minesRandom" type="button" hidden>Pick a random tile</button>
+        <div class="mines__profit" id="minesProfitRow">
+          <label class="mines__label mines__label--row" for="minesProfit"><span id="minesProfitL">Profit on first diamond</span><span class="mines__profitx" id="minesProfitX"></span></label>
+          <div class="mines__field mines__field--read"><span aria-hidden="true">$</span><output id="minesProfit" for="minesStake">0</output></div>
+        </div>
         <p class="mines__hint" id="minesHint" aria-live="polite"></p>
         ${viewSwitch('minesView')}
         <label class="mines__gfx" for="minesGfx">
@@ -643,14 +663,10 @@ function build() {
     stake.value = stakeText;
     paint();
   }));
-  root.querySelectorAll('.mines__step').forEach((button) => button.addEventListener('click', () => {
-    mineCount = Math.min(24, Math.max(1, mineCount + Number(button.dataset.step)));
+  $('#minesCount', root).addEventListener('change', (event) => {
+    mineCount = Number(event.target.value);
     paint();
-  }));
-  root.querySelectorAll('.mines__pick').forEach((button) => button.addEventListener('click', () => {
-    mineCount = Number(button.dataset.mines);
-    paint();
-  }));
+  });
   $('#minesForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
     if (inPlay()) void cashOut();

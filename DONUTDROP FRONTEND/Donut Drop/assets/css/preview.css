@@ -712,6 +712,160 @@ body.lx .view .crash__go kbd { display: none; }
 .pvsound svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pvsound + .pvfair { margin-left: 8px; }
 
+/* ═════════ Mines, as the preview's ═════════
+   The panel: TNT as a list beside the diamonds left, Bet, a random pick while a game runs, then the
+   profit in the body ink (mines.js). The field: no frame round it, on the bare stage; each tile a
+   block with its lip and sheen inside it, sunk flat once turned. 2D only; the cave keeps its own. */
+body.lx .mines .mines__row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+body.lx .mines .mines__cell { display: grid; gap: 8px; min-width: 0; }
+body.lx .view :is(.mines__field--sel, .tower__field--sel, .chicken__field--sel, .mines__field--count) { padding-left: 0; }
+body.lx .view :is(.mines__field--sel, .tower__field--sel, .chicken__field--sel) select {
+  flex: 1; min-width: 0; width: 100%; height: 100%; padding: 0 12px; border: 0; outline: 0;
+  appearance: none; cursor: pointer; color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--lx-mute) 50%) calc(100% - 18px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--lx-mute) 50%, transparent 50%) calc(100% - 13px) 50% / 5px 5px no-repeat;
+}
+body.lx .view :is(.mines__field--sel, .tower__field--sel, .chicken__field--sel) select:disabled { cursor: not-allowed; opacity: 1; color: var(--lx-mute); }
+body.lx .view :is(.mines__field--sel, .tower__field--sel, .chicken__field--sel) select option { background: var(--lx-3); color: var(--lx-ink); }
+body.lx .mines .mines__field--count output { flex: 1; padding: 0 12px; color: var(--lx-text); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .view :is(.mines__field--read, .tower__field--read, .chicken__field--read) { background: var(--lx-0); border-color: var(--lx-4); }
+body.lx .view :is(.mines__field--read, .tower__field--read, .chicken__field--read) output {
+  flex: 1; min-width: 0; padding-right: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--lx-text); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx .view :is(.mines__profit, .tower__profit, .chicken__profit) { display: grid; gap: 8px; }
+body.lx .view :is(.mines__label--row, .tower__label--row, .chicken__label--row) { display: flex; justify-content: space-between; gap: 8px; }
+body.lx .view :is(.mines__profitx, .tower__profitx, .chicken__profitx) { color: var(--lx-text); font-variant-numeric: tabular-nums; }
+body.lx .view :is(.mines__random, .tower__random) { height: 44px; border-radius: 8px; box-shadow: none; }
+body.lx .view :is(.mines__random, .tower__random):active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+body.lx .view :is(.mines__hint, .tower__hint, .chicken__hint):empty { display: none; }
+
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__pit { width: min(100%, 496px); }
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__board {
+  width: 100%; gap: 12px; padding: 16px; border-radius: 0; background: none; box-shadow: none;
+}
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile { border-radius: 8px; }
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile[data-kind="hidden"] {
+  opacity: 1; background: var(--lx-4);
+  box-shadow: inset 0 -5px 0 rgba(8, 6, 5, .32), inset 0 2px 0 rgba(255, 250, 240, .16);
+}
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__board[data-state="idle"] .mtile { opacity: 1; }
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__board[data-state="play"] .mtile[data-kind="hidden"] { background: var(--lx-5); }
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__board[data-state="play"] .mtile[data-kind="hidden"][aria-disabled="false"]:hover {
+  transform: translateY(-3px); background: #45403a;
+  box-shadow: inset 0 -5px 0 rgba(8, 6, 5, .32), inset 0 2px 0 rgba(255, 250, 240, .16), 0 3px 0 var(--pv-shade);
+}
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mines__board[data-state="play"] .mtile[data-kind="hidden"][aria-disabled="false"]:active,
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile[aria-busy="true"] {
+  transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(8, 6, 5, .32);
+}
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile:is([data-kind="gem"], [data-kind="tnt"], [data-kind="dim-gem"]) {
+  background: var(--lx-1); box-shadow: inset 0 3px 0 rgba(8, 6, 5, .32);
+}
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile img { width: 70%; height: 70%; object-fit: contain; image-rendering: pixelated; }
+body.lx .mines:not([data-render="3d"], [data-render="loading"]) .mtile[data-kind="dim-gem"] img { opacity: .34; transform: scale(.8); }
+
+/* ═════════ Tower, as the preview's ═════════
+   No frame round the tower: nine thin floors on the bare stage, each with its price on the left
+   (muted ahead, white on the floor being climbed, green once cleared) and the player's head beside
+   the floor they stand on (tower.js sets data-x and data-me). Tiles as Mines' blocks, no figures. */
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__pit { width: min(100%, 496px); padding: 24px 16px; border-radius: 0; background: none; box-shadow: none; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__board { gap: 8px; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor {
+  grid-template-columns: 28px 52px repeat(var(--tiles, 4), minmax(0, 1fr)); gap: 8px; align-items: center;
+  opacity: .4; transition: opacity var(--lx-quick) var(--lx-ease);
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__board[data-state="idle"] .tfloor { opacity: .62; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) :is(.tfloor[data-state="now"], .tfloor[data-state="done"], .tfloor[data-state="lost"]),
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tower__board[data-state="over"] .tfloor { opacity: 1; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor::before {
+  content: ""; grid-column: 1; grid-row: 1; justify-self: center; width: 24px; height: 24px; border-radius: 4px;
+  image-rendering: pixelated; background: center / cover no-repeat;
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-me]::before { background-image: var(--tower-me); box-shadow: 0 2px 0 var(--pv-shade); }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor::after {
+  content: attr(data-x); grid-column: 2; grid-row: 1; padding-right: 4px; text-align: right; white-space: nowrap;
+  color: var(--lx-mute); font: 800 .75rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"]::after { color: var(--lx-ink); }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="done"]::after { color: var(--pv-win); }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile__x { display: none; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile { height: 34px; border-radius: 8px; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile[data-kind="hidden"] {
+  background: var(--lx-4); box-shadow: inset 0 -5px 0 rgba(8, 6, 5, .32), inset 0 2px 0 rgba(255, 250, 240, .16);
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"] { background: var(--lx-5); }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"]:nth-child(2) { animation-delay: 110ms; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"]:nth-child(3) { animation-delay: 220ms; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"]:nth-child(4) { animation-delay: 330ms; }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"][aria-disabled="false"]:hover {
+  transform: translateY(-3px); background: #45403a; animation: none;
+  box-shadow: inset 0 -5px 0 rgba(8, 6, 5, .32), inset 0 2px 0 rgba(255, 250, 240, .16), 0 3px 0 var(--pv-shade);
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"][aria-disabled="false"]:active,
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile[aria-busy="true"] { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(8, 6, 5, .32); }
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile[data-kind="passed"] {
+  opacity: 1; background: var(--lx-4); box-shadow: inset 0 -5px 0 rgba(8, 6, 5, .32), inset 0 2px 0 rgba(255, 250, 240, .16);
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile:is([data-kind="gem"], [data-kind="tnt"], [data-kind="dim-gem"]) {
+  background: var(--lx-1); box-shadow: inset 0 3px 0 rgba(8, 6, 5, .32);
+}
+body.lx .tower:not([data-render="3d"], [data-render="loading"]) .ttile[data-kind="boom"] { background: rgba(229, 83, 75, .16); box-shadow: inset 0 0 0 2px var(--lx-loss); }
+@keyframes pv-breathe { 50% { background-color: #45403a; } }
+@media (prefers-reduced-motion: no-preference) {
+  body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-me]::before { animation: pv-hop 380ms cubic-bezier(.3, .8, .4, 1); }
+  body.lx .tower:not([data-render="3d"], [data-render="loading"]) .tfloor[data-state="now"] .ttile[data-kind="hidden"] { animation: pv-breathe 1.5s var(--lx-ease-io) infinite; }
+}
+@keyframes pv-hop {
+  from { transform: translateY(14px); opacity: 0; }
+  55% { transform: translateY(-8px) scale(1.12, .9); opacity: 1; }
+  85% { transform: scale(.92, 1.08); }
+  to { transform: none; }
+}
+
+/* ═════════ Chicken, as the preview's ═════════
+   The road is the whole stage, no frame: a dirt path to start from, then twenty lanes of rails
+   running top to bottom, split by a dark seam, each lane's price on a chip at the top (lit on the
+   next lane, green once crossed, red where the minecart came). The chicken stands mid-road. */
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) { --chicken-hen: 56px; --chicken-cart: 56px; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__stage { padding: 0; align-content: stretch; overflow: hidden; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__road { height: 100%; border-radius: 0; background: none; scrollbar-width: none; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__road::-webkit-scrollbar { display: none; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__track { height: 100%; min-height: 480px; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane {
+  flex-basis: 72px; overflow-y: clip; box-shadow: none; border-right: 2px solid var(--lx-0);
+  background: linear-gradient(rgba(8, 6, 5, .48), rgba(8, 6, 5, .48)), url("../img/block/rail.png") top / 100% auto;
+  image-rendering: pixelated;
+}
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane[data-state="done"] { background-image: linear-gradient(rgba(8, 6, 5, .9), rgba(8, 6, 5, .9)), url("../img/block/rail.png"); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane[data-state="hit"] { background-image: linear-gradient(rgba(229, 83, 75, .16), rgba(229, 83, 75, .16)), linear-gradient(rgba(8, 6, 5, .48), rgba(8, 6, 5, .48)), url("../img/block/rail.png"); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) :is(.clane--start, .clane--end) {
+  flex-basis: 80px; border-right: 0; overflow: visible;
+  background: linear-gradient(rgba(8, 6, 5, .28), rgba(8, 6, 5, .28)), url("../img/block/dirt_path_top.png") top / 100% auto;
+}
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane--start { border-right: 2px solid var(--lx-0); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) :is(.clane__x--start, .chicken__flag) { display: none; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane__x {
+  top: 24px; left: 0; right: 0; width: max-content; height: 28px; margin: 0 auto; padding: 0 8px;
+  border-radius: 999px; background: var(--lx-2); box-shadow: none; image-rendering: auto;
+  color: var(--lx-text); font: 800 .75rem/1 var(--lx-ui); z-index: 3;
+}
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane[data-state="next"] .clane__x { animation: none; background: var(--lx-5); color: var(--lx-ink); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane[data-state="done"] .clane__x { background: var(--pv-win); color: #0b2419; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .clane:is([data-state="hit"], [data-state="cart"]) .clane__x { background: var(--lx-loss); color: var(--lx-ink); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__track[data-state="over"] .clane[data-state="ahead"] .clane__x { background: var(--lx-2); color: var(--lx-faint); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__track[data-state="play"] .clane[data-state="next"] { cursor: pointer; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__hen { top: calc(50% - var(--chicken-hen) / 2); z-index: 4; }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__hen img,
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) :is(.chicken__cart, .chicken__pass) { image-rendering: pixelated; filter: drop-shadow(0 5px 0 var(--pv-shade)); }
+body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__cart { top: calc(50% - var(--chicken-cart) / 2); height: var(--chicken-cart); z-index: 5; }
+.chicken__pass {
+  position: absolute; top: 0; left: calc(50% - 28px); z-index: 2; width: 56px; height: 56px;
+  object-fit: contain; pointer-events: none; user-select: none;
+}
+.chicken:is([data-render="3d"], [data-render="loading"]) .chicken__pass { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

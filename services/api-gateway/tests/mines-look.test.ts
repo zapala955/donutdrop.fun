@@ -22,10 +22,15 @@ describe('the mines field', () => {
     assert.doesNotMatch(page, /minesNow|minesNext|paintReadout/);
   });
 
-  it('shows the profit so far in the panel while a game runs', async () => {
+  it('shows the profit in the panel: the first diamond before a game, the profit so far in one', async () => {
     const page = await read('assets/js/mines.js');
-    assert.match(page, /<div class="mines__profit" id="minesProfitRow" hidden>/);
-    assert.match(page, /const profit = found \? BigInt\(game\.cashoutMinor\) - BigInt\(game\.stakeMinor\) : 0n;/);
+    assert.match(page, /<div class="mines__profit" id="minesProfitRow">/);
+    assert.match(page, /profit = found \? BigInt\(game\.cashoutMinor\) - BigInt\(game\.stakeMinor\) : 0n;/);
+    assert.match(page, /inPlay\(\) \? 'Total profit' : 'Profit on first diamond'/);
+    // The preview's panel: the TNT as a list beside the diamonds left, and a button that says Bet.
+    assert.match(page, /<select id="minesCount">/);
+    assert.match(page, /<output id="minesLeft" for="minesCount">/);
+    assert.match(page, /text = 'Bet';/);
   });
 
   it('has its own sounds, a diamond ringing higher for every one found', async () => {

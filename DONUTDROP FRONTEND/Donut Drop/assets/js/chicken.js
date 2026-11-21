@@ -75,6 +75,8 @@ let mode = 'easy';
 let road3d = null; // the meadow, once it is up
 let roadTried = null;
 let fx = null; // the preview's effects over the flat road (pvfx.js)
+let traffic = 0; // the minecarts rolling down the lanes ahead, as in the preview
+let trafficTick = 0;
 
 /* ─────────── the maths, mirrored from lib/chicken.ts ─────────── */
 
@@ -90,6 +92,14 @@ function multiplierBps(name, crossed) {
 function times(bps) {
   const value = Math.floor(bps / 100) / 100;
   return value >= 1000 ? `${Math.floor(value).toLocaleString('en-US')}×` : `${value.toFixed(2)}×`;
+}
+
+/** What crossing the first lane pays on `stake`, worked out as lib/chicken.ts does, up to the cap. */
+function firstPayout(name, stake) {
+  const { hit, of } = MODES[name];
+  const paid = (stake * (10_000n - EDGE_BPS) * BigInt(of)) / (10_000n * BigInt(of - hit));
+  const cap = config?.maxPayoutMinor ? BigInt(config.maxPayoutMinor) : null;
+  return cap !== null && paid > cap ? cap : paid;
 }
 
 /* ─────────── state ─────────── */
@@ -304,6 +314,7 @@ function follow(animate) {
 /** A safe step: the chicken hops onto the lane's block, which presses in as it lands; the landing
  * rings a step higher for every lane. */
 function hop(lane) {
+  laneNode(lane)?.querySelectorAll('.chicken__pass').forEach((cart) => cart.remove());
   playSound('chickenHop');
   setTimeout(() => playSound('chickenLand', { rate: 1 + lane * 0.045 }), LAND_MS);
   if (reduceMotion()) return;
@@ -644,13 +655,13 @@ function paintControls() {
   if (!state.authenticated) {
     text = 'Log in to play';
   } else if (inPlay()) {
-    text = `Go · ${times(game.nextMultiplierBps ?? 0)}`;
+    text = 'Cross the next lane';
     disabled = busy;
   } else if (pressed === 'start') {
     text = 'Starting…';
     disabled = true;
   } else {
-    text = `${over() ? 'Play again' : 'Start'} · ${money(Number(stakeMinor() ?? 0n))}`;
+    text = 'Bet';
     disabled = Boolean(startProblem()) || busy;
   }
   if (label.textContent !== text) label.textContent = text;
@@ -662,26 +673,69 @@ function paintControls() {
     const crossed = game.crossed;
     cash.textContent = pressed === 'cashout'
       ? 'Cashing out…'
-      : crossed ? `Cash out ${money(Number(game.cashoutMinor))}` : 'Cross a lane to cash out';
+      : crossed ? `Cash out ${money(Number(game.cashoutMinor))}` : 'Cash out';
     cash.disabled = busy || crossed === 0;
     cash.setAttribute('aria-busy', String(pressed === 'cashout'));
   }
   hint.textContent = state.authenticated && !inPlay() ? startProblem() : '';
 
   const locked = inPlay() || busy;
-  for (const node of root.querySelectorAll('.chicken__form input, .chicken__form .chicken__adj, .chicken__mode')) {
+  for (const node of root.querySelectorAll('.chicken__form input, .chicken__form .chicken__adj, #chickenMode')) {
     node.disabled = locked;
   }
-  const name = roadMode();
-  const index = MODE_NAMES.indexOf(name);
-  const modes = $('.chicken__modes', root);
-  modes.style.setProperty('--mode-x', String(index % 2));
-  modes.style.setProperty('--mode-y', String(Math.floor(index / 2)));
-  root.querySelectorAll('.chicken__mode').forEach((button) => {
-    const chosen = button.dataset.mode === name;
-    button.setAttribute('aria-checked', String(chosen));
-    button.tabIndex = chosen ? 0 : -1;
-  });
+  const select = $('#chickenMode', root);
+  if (select.value !== roadMode()) select.value = roadMode();
+  paintProfit();
+}
+
+/** The panel's profit: before a run, what the first lane adds to the stake in the field; during
+ * one, what cashing out now would add. The multiplier beside the label, in brackets. */
+function paintProfit() {
+  const out = $('#chickenProfit', root);
+  let profit = 0n;
+  let bps = 10_000;
+  if (inPlay()) {
+    profit = game.crossed ? BigInt(game.cashoutMinor) - BigInt(game.stakeMinor) : 0n;
+    bps = game.crossed ? game.multiplierBps : 10_000;
+  } else {
+    const stake = stakeMinor();
+    bps = multiplierBps(mode, 1);
+    profit = stake && stake > 0n ? firstPayout(mode, stake) - stake : 0n;
+  }
+  $('#chickenProfitL', root).textContent = inPlay() ? 'Total profit' : 'First lane pays';
+  $('#chickenProfitX', root).textContent = `(${times(bps)})`;
+  out.value = profit > 0n ? `+${money(Number(profit)).slice(1)}` : '0';
+}
+
+/* ─────────── the traffic ───────────
+ * The preview's road: minecarts keep rolling down the lanes still ahead of the chicken, never the
+ * one it is stepping into. Scenery only: a run's minecart is the server's, and comes in rollCartIn.
+ * The lanes and the speeds go round a fixed cycle. */
+function rollTraffic() {
+  const road = $('#chickenRoad', root);
+  if (!road || document.hidden || !root.offsetParent || root.closest('.chicken')?.dataset.render === '3d') return;
+  const from = inPlay() ? game.crossed + 1 : 0;
+  if (from >= LANES || over()) return;
+  trafficTick += 1;
+  const lane = laneNode(from + ((trafficTick * 7) % (LANES - from)));
+  if (!lane || lane.querySelector('.chicken__pass')) return;
+  const cart = document.createElement('img');
+  cart.className = 'chicken__pass';
+  cart.src = 'assets/img/items/minecart.png';
+  cart.alt = '';
+  cart.draggable = false;
+  lane.append(cart);
+  const run = cart.animate(
+    [{ transform: 'translateY(-90px)' }, { transform: `translateY(${road.clientHeight + 40}px)` }],
+    { duration: 850 + ((trafficTick * 211) % 550), easing: 'linear' },
+  );
+  run.onfinish = () => cart.remove();
+  run.oncancel = () => cart.remove();
+}
+
+function startTraffic() {
+  if (traffic || reduceMotion()) return;
+  traffic = setInterval(rollTraffic, 520);
 }
 
 /* ─────────── building ─────────── */
@@ -724,14 +778,18 @@ function build() {
           <button type="button" class="chicken__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="chicken__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <span class="chicken__label" id="chickenModeLabel">Difficulty</span>
-        <div class="chicken__modes" role="radiogroup" aria-labelledby="chickenModeLabel">
-          ${MODE_NAMES.map((name) => `<button type="button" class="chicken__mode" role="radio" data-mode="${name}" aria-checked="false">${MODES[name].label}</button>`).join('')}
+        <label class="chicken__label" for="chickenMode">Difficulty</label>
+        <div class="chicken__field chicken__field--sel">
+          <select id="chickenMode">${MODE_NAMES.map((name) => `<option value="${name}">${MODES[name].label} · a cart in ${MODES[name].hit} of ${MODES[name].of} lanes</option>`).join('')}</select>
         </div>
         <button class="btn chicken__go" id="chickenGo" type="submit" data-tone="go" data-sfx="none">
           <span id="chickenGoLabel">Loading…</span>
         </button>
         <button class="chicken__cash" id="chickenCash" type="button" data-sfx="none" hidden>Cash out</button>
+        <div class="chicken__profit" id="chickenProfitRow">
+          <label class="chicken__label chicken__label--row" for="chickenProfit"><span id="chickenProfitL">First lane pays</span><span class="chicken__profitx" id="chickenProfitX"></span></label>
+          <div class="chicken__field chicken__field--read"><span aria-hidden="true">$</span><output id="chickenProfit" for="chickenStake chickenMode">0</output></div>
+        </div>
         <p class="chicken__hint" id="chickenHint" aria-live="polite"></p>
         ${viewSwitch('chickenView')}
         <label class="chicken__gfx" for="chickenGfx">
@@ -754,20 +812,8 @@ function build() {
     paint();
   }));
 
-  const modes = $('.chicken__modes', root);
-  modes.addEventListener('click', (event) => {
-    const button = event.target.closest('.chicken__mode');
-    if (button) chooseMode(button.dataset.mode);
-  });
-  /* A radio group: one tab stop, the arrows move the choice. */
-  modes.addEventListener('keydown', (event) => {
-    const move = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
-    if (!move || inPlay() || busy) return;
-    event.preventDefault();
-    const index = (MODE_NAMES.indexOf(mode) + move + MODE_NAMES.length) % MODE_NAMES.length;
-    chooseMode(MODE_NAMES[index]);
-    modes.querySelector(`[data-mode="${mode}"]`)?.focus();
-  });
+  $('#chickenMode', root).addEventListener('change', (event) => chooseMode(event.target.value));
+  startTraffic();
 
   // Enter or the gold button: start a run, or take the next step of one.
   $('#chickenForm', root).addEventListener('submit', (event) => {
