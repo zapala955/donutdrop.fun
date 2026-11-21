@@ -5,28 +5,29 @@
  * still says which pocket and how long; the 3D wheel only runs the ball there. Without WebGL the flat
  * wheel turns as it always has.
  *
- * The flat table (2026-11-09): a real layout -- 0 down the left, the numbers in three rows of
- * twelve, the dozens and the even-money bets under them; on a phone the vertical table, 0 across
- * the top and the numbers three to a row. Your chips sit on the spots as chips. A countdown bar
- * says how long betting has left. The wheel's hub takes the colour of the pocket it landed on, a
- * win pops a card over the wheel that counts up, and nothing toasts: the chip on the board is the
- * confirmation, the hub and the card are the result. Its own sounds: a chip clacking down, the
- * ball rattling round and dropping, and a win.
+ * The flat table, as the preview's (2026-11-21, the owner: "roulette"). The bet panel on the left:
+ * the bet amount, typed or set with ½, 2× and Max, what you have on the table and in how many chips,
+ * what the board pays, the table's limits and the live bets. On the stage: the last numbers top
+ * right, the wheel, "Bets lock in" over a draining bar, and the board under it -- 0 down the left,
+ * the numbers in three rows of twelve, the dozens and the even-money bets under them. Your chips sit
+ * on the spots as chips. When the ball lands, the spots that number won are outlined, the status
+ * line says what it paid you, and a win pops the preview's card over the wheel. The preview's Undo
+ * and Clear are left out: a chip placed on the server cannot be taken back.
  *
- * The flat wheel is a roulette wheel, not a prize wheel: no pointer, a ball. The wheel turns
- * clockwise; the ball is launched round the track outside the pockets the other way, slows, falls
- * in, skips over a few frets, and is caught by the winning pocket and rides it to the top as the
- * wheel stops (rollBall). It reads where the pocket really is from the wheel's own transform every
- * frame, so it lands where the server said whatever the frame rate. */
+ * The flat wheel is the preview's, drawn on a canvas: it is always turning slowly, with the ball
+ * resting in the last pocket. On a spin the wheel is kicked faster and slows again, and the ball
+ * runs round the track against it, drops off, skips over the frets and settles in the pocket the
+ * server named, as the next betting window opens (rollBall). The ball is placed in the wheel's own
+ * frame and its run ends on that pocket, so it lands where the server said whatever the frame rate. */
 import { api, idempotencyKey } from './api.js';
 import { state, refreshBalance, holdLiveFigures, showBalance } from './store.js';
 import { onNavigate } from './routing.js';
 import { tableAvatar } from './table-avatar.js';
 import { linkPlayer } from './player-link.js';
-import { $, money, reduceMotion } from './util.js';
+import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
-import { fxColors, makeFx } from './pvfx.js';
+import { clearWin, makeFx, winCard } from './pvfx.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -48,26 +49,24 @@ const LIVE_STALE_MS = 6_000;
  * into every ten-second round on any browser whose event stream was not delivering. The real
  * window is read from the round the server published. */
 const POLL_STALE_FLOOR_MS = 4_500;
-const CHIPS = Object.freeze([
-  [100_000n, '$100K'],
-  [500_000n, '$500K'],
-  [1_000_000n, '$1M'],
-  [5_000_000n, '$5M'],
-  [10_000_000n, '$10M'],
-  [50_000_000n, '$50M'],
-  [100_000_000n, '$100M'],
-  [500_000_000n, '$500M'],
-  [1_000_000_000n, '$1B'],
-]);
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
-/* The pop of the hub, a chip and the win card: quick out, a little past, settled. */
-const POP_EASE = 'cubic-bezier(.16, 1, .3, 1)';
-/* The ball, in fractions of the wheel's width from its centre: running on the track outside the
- * pockets, and resting in a pocket. Both match the rings drawn in roulette.css. */
-const BALL_TRACK = 0.462;
-const BALL_POCKET = 0.272;
-/* How many times it goes round the track against the wheel before it is caught. */
-const BALL_TURNS = 3;
+/* A chip dropping onto its spot, as the preview drops it: quick, a little past, settled. */
+const POP_EASE = 'cubic-bezier(.2, 1.5, .4, 1)';
+/* The preview's wheel, on a canvas 560 across: the rim, the track the ball runs on, the outer and
+ * inner edge of the number ring, the bottom of the pockets, the cone, and where a ball rests in its
+ * pocket. Radii in canvas pixels from the centre. */
+const WHEEL_PX = 560;
+const RIM = 276;
+const TRACK = 252;
+const NUM_O = 236;
+const NUM_I = 200;
+const POCK_I = 170;
+const CONE = 168;
+const REST = 186;
+const TAU = Math.PI * 2;
+const SEG = TAU / ORDER.length;
+/* The wheel's own slow turn, in radians a second; a spin adds a kick that dies away. */
+const WHEEL_IDLE = 0.45;
 const OUTSIDE = Object.freeze([
   ['low', '1–18'],
   ['even', 'Even'],
@@ -75,21 +74,21 @@ const OUTSIDE = Object.freeze([
   ['black', 'Black'],
   ['odd', 'Odd'],
   ['high', '19–36'],
-  ['dozen:1', '1st 12'],
-  ['dozen:2', '2nd 12'],
-  ['dozen:3', '3rd 12'],
+  ['dozen:1', '1 to 12'],
+  ['dozen:2', '13 to 24'],
+  ['dozen:3', '25 to 36'],
 ]);
 
 let root;
 let snapshot;
 let selected = 'red';
 let amountMinor = 1_000_000n;
+let stakeText = '1m'; // the bet amount as typed
 let serverOffsetMs = 0;
 let polling = false;
 let placing = false;
 let seenResultId = null;
 let pendingResultId = null;
-let wheelRotation = 0;
 let lastSuccessfulSyncMs = 0;
 let lastLivePulseMs = 0;
 let deadlineTimer = null;
@@ -100,6 +99,22 @@ let chipsRoundId = null;
 let wheel3d = null; // the fortress's wheel, once it is up
 let wheelTried = null;
 let fx = null; // the preview's effects over the flat stage (pvfx.js)
+/* The flat wheel (turnWheel): its turn, and the ball in the wheel's own frame, pocket i being at
+ * pocketAngle(i). The ball rests in `ballPocket` (-1 until the first result is known) and has a
+ * `ballRun` while it runs. */
+let wheelImg = null;
+let wheelPaint = null;
+let wheelAngle = 0;
+let ballAngle = -Math.PI / 2;
+let ballRadius = REST;
+let ballPocket = -1;
+let ballRun = null;
+let wheelRaf = 0;
+let wheelLast = 0;
+/* What the status line says for a moment after the ball lands. */
+let resultNote = '';
+let resultNoteUntil = 0;
+let paintedNewest = null;
 
 export function mountRoulette(view) {
   root = $('#rouletteRoot', view);
@@ -132,6 +147,7 @@ export function mountRoulette(view) {
   }
   void refresh();
   void startWheel();
+  startWheelLoop();
 }
 
 /* ─────────── the wheel in 3D ─────────── */
@@ -160,6 +176,7 @@ function startWheel() {
         if (wheel3d === built) wheel3d = null;
         built.dispose();
         root.dataset.render = '2d';
+        startWheelLoop();
       };
       built.onCue = (cue, at) => {
         if (cue === 'bounce') playSound('click', { rate: 1.3 - at * 0.08 });
@@ -215,6 +232,7 @@ function setView(on) {
     wheel3d = null;
     wheelTried = null;
     root.dataset.render = '2d';
+    startWheelLoop();
   }
   if (on) void startWheel();
   paintGraphics();
@@ -240,19 +258,9 @@ function build() {
         <div class="roulette__history" id="rouletteHistory" aria-label="Recent results"></div>
       </div>
       <div class="roulette__wheelwrap">
-        <div class="roulette__wheel" id="rouletteWheel" aria-hidden="true"></div>
-        <div class="roulette__orbit" id="rouletteOrbit" aria-hidden="true"><span class="roulette__ball" id="rouletteBall"></span></div>
+        <canvas class="roulette__wheel" id="rouletteWheel" width="${WHEEL_PX}" height="${WHEEL_PX}" aria-hidden="true"></canvas>
         <div class="roulette__hub" id="rouletteHub" data-color=""><b id="rouletteResult">—</b></div>
-        <div class="roulette__win" id="rouletteWin" hidden><span>You won</span><b>$0</b></div>
       </div>
-      ${viewSwitch('rouletteView')}
-      <label class="roulette__gfx" for="rouletteGfx">
-        <span>Graphics</span>
-        <select id="rouletteGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
-      </label>
-    </section>
-
-    <section class="roulette__board">
       <div class="roulette__status">
         <strong id="roulettePhase" role="status" aria-live="polite">Connecting to the table…</strong>
         <span class="roulette__clock mono" id="rouletteClock">—</span>
@@ -262,18 +270,29 @@ function build() {
         <div class="roulette__numbers" id="rouletteNumbers"></div>
         <div class="roulette__outside" id="rouletteOutside"></div>
       </div>
-      <div class="roulette__slip">
-        <div class="roulette__choice">
-          <span>Chip</span><strong id="rouletteChipValue">$1M</strong>
-          <i class="mono" id="rouletteChoice">Red · 1.85× return</i>
-        </div>
-        <div class="roulette__chips" id="rouletteChips" aria-label="Choose a chip"></div>
+      ${viewSwitch('rouletteView')}
+      <label class="roulette__gfx" for="rouletteGfx">
+        <span>Graphics</span>
+        <select id="rouletteGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+      </label>
+    </section>
+
+    <section class="roulette__board" aria-label="Your bets">
+      <label class="roulette__label" for="rouletteStake">Bet amount</label>
+      <!-- The preview's stake box: any amount inside the table's limits, with ½, 2× and Max. -->
+      <div class="roulette__field">
+        <span aria-hidden="true">$</span>
+        <input id="rouletteStake" inputmode="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" />
+        <button type="button" class="roulette__adj" data-adj="half" aria-label="Halve the bet">½</button>
+        <button type="button" class="roulette__adj" data-adj="double" aria-label="Double the bet">2×</button>
+        <button type="button" class="roulette__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
       </div>
+      <div class="roulette__sum">
+        <div class="roulette__sumrow"><span>On the table</span><span id="rouletteMineTotal">$0</span></div>
+        <div class="roulette__sumrow"><b>Chips</b><b id="rouletteMineCount">0</b></div>
+      </div>
+      <p class="roulette__hint" id="rouletteChoice" aria-live="polite">Click the board to place a chip of your bet amount.</p>
       <p class="roulette__limits mono" id="rouletteLimits">Loading table limits…</p>
-      <div class="roulette__yours">
-        <div class="roulette__subhead"><strong>Your chips this round</strong><span id="rouletteMineTotal">$0</span></div>
-        <div class="roulette__bets" id="rouletteBets"><span class="roulette__empty">No chips placed yet.</span></div>
-      </div>
       <section class="roulette__livebets" aria-labelledby="rouletteLiveBetsTitle">
         <div class="roulette__subhead">
           <strong id="rouletteLiveBetsTitle">Live bets</strong>
@@ -290,6 +309,11 @@ function build() {
   fx = makeFx($('.roulette__stage', root));
 
   buildWheel();
+  drawWheel();
+  document.fonts?.ready?.then(() => {
+    buildWheel();
+    drawWheel();
+  });
   const numbers = $('#rouletteNumbers', root);
   for (let value = 0; value <= 36; value += 1) {
     const button = document.createElement('button');
@@ -345,15 +369,14 @@ function build() {
     if (selection === 'red' || selection === 'black') button.dataset.color = selection;
     outside.append(button);
   });
-  const chips = $('#rouletteChips', root);
-  for (const [value, label] of CHIPS) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.chip = value.toString();
-    button.textContent = label;
-    button.setAttribute('aria-label', `${label} chip`);
-    chips.append(button);
-  }
+  const stake = $('#rouletteStake', root);
+  stake.value = stakeText;
+  stake.addEventListener('input', () => {
+    stakeText = stake.value;
+    const value = parseAmount(stakeText);
+    amountMinor = value === null ? 0n : BigInt(value);
+    syncSelection();
+  });
   root.addEventListener('click', onClick);
   $('#rouletteGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#rouletteView', root), setView);
@@ -363,24 +386,198 @@ function build() {
   syncSelection();
 }
 
+/** The wheel's colours, off the page, so the canvas matches the board (preview.css). */
+function wheelColors() {
+  const css = getComputedStyle(root);
+  const v = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+  return {
+    red: v('--rou-red', '#be2323'),
+    black: v('--rou-black', '#1b1813'),
+    green: v('--rou-green', '#007e46'),
+    ink: v('--lx-ink', '#f5f3ef'),
+    mute: v('--lx-mute', '#9c9792'),
+    gold: v('--lx-gold', '#ffaa00'),
+    goldHi: v('--lx-gold-hi', '#fec348'),
+    well: v('--lx-0', '#080605'),
+    p2: v('--lx-2', '#171411'),
+    p3: v('--lx-3', '#211d1a'),
+    p4: v('--lx-4', '#2c2824'),
+    p5: v('--lx-5', '#39342f'),
+    font: v('--lx-display', 'system-ui, sans-serif'),
+  };
+}
+
+/** The part of the wheel that turns, drawn once: the pockets with their numbers, gold frets, the
+ * dark cone with its four gold spokes and the hub. */
 function buildWheel() {
-  const wheel = $('#rouletteWheel', root);
-  const step = 360 / ORDER.length;
-  /* Each pocket in its colour, with a thin fret before the next: a pocket wheel's dividers. */
-  const fret = 0.45;
-  const stops = ORDER.map((number, index) => {
-    const start = index * step;
-    const end = (index + 1) * step;
-    const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#171411';
-    return `${shade} ${start.toFixed(4)}deg ${(end - fret).toFixed(4)}deg, #8d8f97 ${(end - fret).toFixed(4)}deg ${end.toFixed(4)}deg`;
-  });
-  wheel.style.background = `conic-gradient(from -${step / 2}deg, ${stops.join(',')})`;
+  const C = wheelColors();
+  const img = document.createElement('canvas');
+  img.width = WHEEL_PX;
+  img.height = WHEEL_PX;
+  const x = img.getContext('2d');
+  if (!x) return;
+  const c0 = WHEEL_PX / 2;
   ORDER.forEach((number, index) => {
-    const label = document.createElement('span');
-    label.textContent = String(number);
-    label.style.setProperty('--pocket-angle', `${index * step}deg`);
-    wheel.append(label);
+    const a0 = -Math.PI / 2 + index * SEG - SEG / 2;
+    x.beginPath();
+    x.arc(c0, c0, NUM_O, a0, a0 + SEG);
+    x.arc(c0, c0, POCK_I, a0 + SEG, a0, true);
+    x.closePath();
+    x.fillStyle = number === 0 ? C.green : RED.has(number) ? C.red : C.black;
+    x.fill();
+    // the pocket ring, a shade deeper than the numbers' ring
+    x.beginPath();
+    x.arc(c0, c0, NUM_I, a0, a0 + SEG);
+    x.arc(c0, c0, POCK_I, a0 + SEG, a0, true);
+    x.closePath();
+    x.fillStyle = 'rgba(0, 0, 0, .38)';
+    x.fill();
+    x.save();
+    x.translate(c0, c0);
+    x.rotate(a0 + SEG / 2 + Math.PI / 2);
+    x.fillStyle = C.ink;
+    x.font = `800 19px ${C.font}`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(String(number), 0, -(NUM_O + NUM_I) / 2);
+    x.restore();
   });
+  x.strokeStyle = C.gold;
+  x.lineWidth = 2;
+  ORDER.forEach((_, index) => {
+    const a = -Math.PI / 2 + index * SEG - SEG / 2;
+    x.beginPath();
+    x.moveTo(c0 + Math.cos(a) * POCK_I, c0 + Math.sin(a) * POCK_I);
+    x.lineTo(c0 + Math.cos(a) * NUM_O, c0 + Math.sin(a) * NUM_O);
+    x.stroke();
+  });
+  x.beginPath();
+  x.arc(c0, c0, NUM_I, 0, TAU);
+  x.strokeStyle = 'rgba(0, 0, 0, .4)';
+  x.stroke();
+  x.beginPath();
+  x.arc(c0, c0, CONE, 0, TAU);
+  x.fillStyle = C.p3;
+  x.fill();
+  x.beginPath();
+  x.arc(c0, c0, CONE - 26, 0, TAU);
+  x.fillStyle = C.p2;
+  x.fill();
+  for (let spoke = 0; spoke < 4; spoke += 1) {
+    x.save();
+    x.translate(c0, c0);
+    x.rotate((spoke * Math.PI) / 2);
+    x.fillStyle = C.gold;
+    x.fillRect(-7, -CONE + 34, 14, CONE - 70);
+    x.fillStyle = C.goldHi;
+    x.fillRect(-12, -CONE + 26, 24, 16);
+    x.restore();
+  }
+  x.beginPath();
+  x.arc(c0, c0, 34, 0, TAU);
+  x.fillStyle = C.gold;
+  x.fill();
+  x.beginPath();
+  x.arc(c0, c0, 20, 0, TAU);
+  x.fillStyle = C.goldHi;
+  x.fill();
+  wheelImg = img;
+  wheelPaint = C;
+}
+
+/** One frame of the flat wheel: the bowl, the wheel at its turn, and the ball where it is on it. */
+function drawWheel() {
+  const canvas = root && $('#rouletteWheel', root);
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || !wheelImg) return;
+  const C = wheelPaint;
+  const c0 = WHEEL_PX / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, WHEEL_PX, WHEEL_PX);
+  ctx.beginPath();
+  ctx.arc(c0, c0, RIM, 0, TAU);
+  ctx.fillStyle = C.p4;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(c0, c0, RIM - 6, 0, TAU);
+  ctx.fillStyle = C.p2;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(c0, c0, NUM_O + 2, 0, TAU);
+  ctx.fillStyle = C.well;
+  ctx.fill();
+  // the eight diamonds on the track, which do not turn
+  ctx.fillStyle = C.p5;
+  for (let at = 0; at < 8; at += 1) {
+    const a = (at * Math.PI) / 4 + Math.PI / 8;
+    ctx.fillRect(c0 + Math.cos(a) * (TRACK - 4) - 4, c0 + Math.sin(a) * (TRACK - 4) - 4, 8, 8);
+  }
+  ctx.save();
+  ctx.translate(c0, c0);
+  ctx.rotate(wheelAngle);
+  ctx.drawImage(wheelImg, -c0, -c0);
+  ctx.restore();
+  if (ballPocket < 0 && !ballRun) return;
+  const a = wheelAngle + ballAngle;
+  const bx = c0 + Math.cos(a) * ballRadius;
+  const by = c0 + Math.sin(a) * ballRadius;
+  ctx.fillStyle = 'rgba(0, 0, 0, .35)';
+  ctx.beginPath();
+  ctx.arc(bx + 3, by + 4, 10, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = C.ink;
+  ctx.beginPath();
+  ctx.arc(bx, by, 10, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = C.mute;
+  ctx.beginPath();
+  ctx.arc(bx + 2, by + 3, 6, 0.2, 2.6);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(bx - 5, by - 6, 4, 4);
+}
+
+function startWheelLoop() {
+  if (wheelRaf || !root?.isConnected) return;
+  wheelLast = 0;
+  wheelRaf = requestAnimationFrame(turnWheel);
+}
+
+/* The flat wheel frame by frame, as the preview runs it: always turning slowly, kicked faster by a
+ * spin and slowing back down, the ball drawn where it is. It stops while the page is hidden, under
+ * the 3D wheel, and (with nothing running) for reduced motion; mountRoulette starts it again. */
+function turnWheel(now) {
+  wheelRaf = 0;
+  if (!root?.isConnected || root.closest('.view')?.hidden || wheel3d) return;
+  const dt = Math.min(0.05, wheelLast ? (now - wheelLast) / 1000 : 0.016);
+  wheelLast = now;
+  let speed = reduceMotion() ? 0 : WHEEL_IDLE;
+  if (ballRun) {
+    const elapsed = now - ballRun.started;
+    const k = Math.min(1, elapsed / ballRun.ms);
+    speed += 2.2 * Math.exp(-elapsed / 1500);
+    ballAngle = ballRun.from + ballRun.delta * (1 - (1 - k) ** 3);
+    ballRadius = ballRadiusAt(k);
+  }
+  wheelAngle = (wheelAngle + speed * dt) % TAU;
+  drawWheel();
+  if (speed > 0 || ballRun) wheelRaf = requestAnimationFrame(turnWheel);
+}
+
+/** How far out the ball is, k of the way through its run: on the track to 58%, then falling into
+ * the pockets with a few bounces over the frets, then a last small rattle as it settles. */
+function ballRadiusAt(k) {
+  if (k < 0.58) return TRACK;
+  if (k < 0.84) {
+    const s = (k - 0.58) / 0.26;
+    return REST + (TRACK - REST) * (1 - s) ** 1.6 + 18 * Math.abs(Math.sin(s * Math.PI * 2.5)) * (1 - s);
+  }
+  return REST + 3 * Math.sin((k - 0.84) * 70) * (1 - (k - 0.84) / 0.16);
+}
+
+/** Where pocket `index` is in the wheel's own frame (the canvas's angle, the top being -π/2). */
+function pocketAngle(index) {
+  return -Math.PI / 2 + index * SEG;
 }
 
 function onClick(event) {
@@ -388,21 +585,47 @@ function onClick(event) {
   if (choice && root.contains(choice)) {
     selected = choice.dataset.selection;
     syncSelection();
+    // A bet amount the table will not take says why under the box instead of going to the server.
+    if (stakeProblem()) {
+      $('#rouletteStake', root)?.focus();
+      return;
+    }
     void place(selected);
     return;
   }
-  const chip = event.target.closest('[data-chip]');
-  if (chip && root.contains(chip)) {
-    amountMinor = BigInt(chip.dataset.chip);
+  const adj = event.target.closest('[data-adj]');
+  if (adj && root.contains(adj) && !adj.disabled) {
+    amountMinor = adjustStake(adj.dataset.adj, amountMinor, state.balanceMinor, largestChip());
+    stakeText = formatAmountInput(Number(amountMinor));
+    $('#rouletteStake', root).value = stakeText;
     syncSelection();
   }
 }
 
-function payoutBps() {
-  if (!snapshot?.config?.payoutBps) return 0;
-  if (selected.startsWith('straight:')) return snapshot.config.payoutBps.straight;
-  if (selected.startsWith('dozen:')) return snapshot.config.payoutBps.dozen;
-  return snapshot.config.payoutBps.evenMoney;
+/** The most one chip can be right now: the table's largest, or what is left of the limit. */
+function largestChip() {
+  const max = BigInt(snapshot?.config?.maxStakeMinor || '0');
+  const allowance = roundAllowanceMinor();
+  return allowance !== null && allowance < max ? allowance : max;
+}
+
+/** What is wrong with the bet amount, if anything; the server checks it again either way. */
+function stakeProblem() {
+  const config = snapshot?.config;
+  if (!config) return '';
+  const value = amountMinor;
+  const min = BigInt(config.minStakeMinor);
+  const max = BigInt(config.maxStakeMinor);
+  const allowance = roundAllowanceMinor();
+  if (value <= 0n) return 'Enter a bet amount, for example 1m';
+  if (value < min) return `The smallest chip is ${money(Number(min))}`;
+  if (value > max) return `The largest chip is ${money(Number(max))}`;
+  // A chip is offered only while it still fits the table limit for this spin.
+  if (!(allowance === null || value <= allowance)) {
+    return `That is over the table limit for this spin: ${money(Number(allowance))} left`;
+  }
+  if (state.authenticated && value > BigInt(state.balanceMinor || '0')) return 'That is more than your balance';
+  return '';
 }
 
 function labelFor(selection) {
@@ -415,11 +638,17 @@ function syncSelection() {
     button.classList.toggle('is-selected', button.dataset.selection === selected);
     button.setAttribute('aria-pressed', button.dataset.selection === selected ? 'true' : 'false');
   });
+  /* Under the box: what the board pays, from the table's own config -- or, as on Dice, what is wrong
+     with the bet amount. */
   const choice = $('#rouletteChoice', root);
-  const chipValue = $('#rouletteChipValue', root);
-  const multiplier = (payoutBps() / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
-  if (choice) choice.textContent = `${labelFor(selected)} · ${multiplier}× return`;
-  if (chipValue) chipValue.textContent = money(Number(amountMinor));
+  const pays = snapshot?.config?.payoutBps;
+  const times = (bps) => `${(bps / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}×`;
+  const problem = stakeProblem();
+  const hint = problem || (pays
+    ? `Click the board to place a chip of your bet amount. Straight pays ${times(pays.straight)}, dozens ${times(pays.dozen)}, red, black, odd, even, 1–18 and 19–36 pay ${times(pays.evenMoney)}.`
+    : 'Click the board to place a chip of your bet amount.');
+  if (choice && choice.textContent !== hint) choice.textContent = hint;
+  choice?.classList.toggle('is-error', Boolean(problem));
   paintControls();
 }
 
@@ -438,7 +667,6 @@ function roundAllowanceMinor() {
 
 function paintControls() {
   const min = BigInt(snapshot?.config?.minStakeMinor || '0');
-  const max = BigInt(snapshot?.config?.maxStakeMinor || '0');
   const allowance = roundAllowanceMinor();
   /* At the table limit the whole board goes dead, not just the chips. A layout that leaves the
      numbers pressable and answers every one of them with the same refusal is a board that looks
@@ -448,14 +676,8 @@ function paintControls() {
   root.querySelectorAll('[data-selection]').forEach((button) => {
     button.disabled = tableLocked;
   });
-  root.querySelectorAll('[data-chip]').forEach((button) => {
-    const value = BigInt(button.dataset.chip);
-    /* A chip is offered only if it would still fit. The server decides, under a lock; this is
-       here so the limit is visible before it is hit rather than arriving as a rejection. */
-    const inLimits = value >= min && value <= max && (allowance === null || value <= allowance);
-    button.disabled = placing || !snapshot || !inLimits;
-    button.classList.toggle('is-selected', value === amountMinor);
-    button.setAttribute('aria-pressed', value === amountMinor ? 'true' : 'false');
+  root.querySelectorAll('[data-adj]').forEach((button) => {
+    button.disabled = placing || !snapshot || (button.dataset.adj === 'max' && atLimit);
   });
 }
 
@@ -561,13 +783,16 @@ function paintPhase() {
     phase.textContent = 'Round closing · waiting for the result';
     return;
   }
-  if (!state.authenticated) {
+  if (!state.authenticated && performance.now() >= resultNoteUntil) {
     phase.textContent = 'Log in to place a chip';
     return;
   }
+  /* What the last spin paid, for a moment after the ball lands; otherwise the clock says it all. */
   phase.textContent = placing
     ? `Placing ${money(Number(amountMinor))}…`
-    : 'Place your bets';
+    : performance.now() < resultNoteUntil
+      ? resultNote
+      : '';
 }
 
 function paintClock() {
@@ -585,7 +810,7 @@ function paintClock() {
         : spinning
           ? 'No more bets'
           : remaining > 0
-            ? `${(remaining / 1000).toFixed(1)}s`
+            ? `Bets lock in ${(remaining / 1000).toFixed(1)}s`
             : 'Settling';
     if (clock.textContent !== text) clock.textContent = text;
   }
@@ -612,7 +837,7 @@ function paintClock() {
   root.classList.toggle('is-locked', !open);
   /* Ten times a second, but the board is only repainted when something it shows has changed:
    * re-setting fifty buttons' state every tick was a style pass every tick on a slow machine. */
-  const key = `${phase}|${open}|${placing}|${state.authenticated}|${amountMinor}|${snapshot?.round?.id}|${roundAllowanceMinor()}|${Boolean(snapshot)}`;
+  const key = `${phase}|${open}|${placing}|${state.authenticated}|${amountMinor}|${snapshot?.round?.id}|${roundAllowanceMinor()}|${Boolean(snapshot)}|${performance.now() < resultNoteUntil}`;
   if (key === paintedClockKey) return;
   paintedClockKey = key;
   paintPhase();
@@ -645,7 +870,7 @@ async function refresh() {
         new Date(Date.parse(next.serverTime) + Number(next.config?.spinSeconds || 0) * 1000).toISOString();
       spinTo(newest.result, next.yourPreviousBets || [], spinEndsAt);
     }
-    else if (newest?.result != null && wheelRotation === 0) setWheel(newest.result);
+    else if (newest?.result != null && ballPocket < 0) setWheel(newest.result);
     syncBetHold();
     scheduleDeadlineRefresh();
   } catch (error) {
@@ -690,23 +915,33 @@ function visibleHistory() {
 
 function paintHistory() {
   const history = $('#rouletteHistory', root);
+  const rounds = visibleHistory().slice(0, 6);
+  // Only a number that has just landed slides in; a repaint of the same list does not.
+  const fresh = paintedNewest !== null && rounds[0] && rounds[0].id !== paintedNewest;
+  paintedNewest = rounds[0]?.id ?? paintedNewest;
   history.replaceChildren(
-    ...visibleHistory()
-      .slice(0, 10)
-      .map((round) => {
-        const node = document.createElement('span');
-        node.className = `roulette__past roulette__past--${round.color}`;
-        node.textContent = String(round.result);
-        node.title = `Round ${round.id}`;
-        return node;
-      }),
+    ...rounds.reverse().map((round, at, list) => {
+      const node = document.createElement('span');
+      node.className = `roulette__past roulette__past--${round.color}`;
+      if (fresh && at === list.length - 1) node.classList.add('is-new');
+      node.textContent = String(round.result);
+      node.title = `Round ${round.id}`;
+      return node;
+    }),
   );
+}
+
+/* The chips riding on the spin on screen. The server opens the next round as it settles the last,
+ * so while the ball runs `yourBets` is already the new round's, empty; the chips the ball is
+ * deciding stay on the board until it lands, as in the preview (finish() repaints them away). */
+function ridingBets() {
+  return (pendingResultId !== null ? snapshot?.yourPreviousBets : snapshot?.yourBets) || [];
 }
 
 /** What this player has on each spot, keyed by selection. */
 function mineBySelection() {
   const mine = new Map();
-  for (const bet of snapshot?.yourBets || []) {
+  for (const bet of ridingBets()) {
     mine.set(bet.selection, (mine.get(bet.selection) ?? 0n) + BigInt(bet.stakeMinor));
   }
   return mine;
@@ -739,7 +974,8 @@ function paintPools() {
     if (own > 0n) {
       const chip = document.createElement('b');
       chip.className = 'roulette__mine';
-      chip.textContent = money(Number(own));
+      // The preview's chip on the felt: the figure without its $, as a chip carries it.
+      chip.textContent = money(Number(own)).replace(/^\$/, '');
       button.append(chip);
       button.setAttribute('aria-label', `${name} — you have ${money(Number(own))} on this`);
     } else {
@@ -756,33 +992,15 @@ function paintPools() {
 }
 
 function paintBets() {
-  const host = $('#rouletteBets', root);
-  const bets = snapshot.yourBets || [];
-  host.replaceChildren();
-  if (!bets.length) {
-    const empty = document.createElement('span');
-    empty.className = 'roulette__empty';
-    empty.textContent = state.authenticated ? 'No chips placed yet.' : 'Log in to place a chip.';
-    host.append(empty);
-  } else {
-    for (const bet of bets) {
-      const row = document.createElement('span');
-      row.className = 'roulette__bet';
-      const name = document.createElement('b');
-      name.textContent = labelFor(bet.selection);
-      const value = document.createElement('i');
-      value.textContent = money(Number(bet.stakeMinor));
-      row.append(name, value);
-      host.append(row);
-    }
-  }
+  const bets = ridingBets();
+  $('#rouletteMineCount', root).textContent = String(bets.length);
   /* The total, and what is left of the table limit beside it. A running total on its own answers
      "how much am I in for"; the pair answers "can I place another chip", which is the question
-     somebody looking at this line is actually asking. */
-  const total = roundStakedMinor();
+     somebody looking at this line is actually asking. While the ball runs it is what rides on it. */
+  const total = bets.reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
   const allowance = roundAllowanceMinor();
   $('#rouletteMineTotal', root).textContent =
-    allowance === null
+    allowance === null || pendingResultId !== null
       ? money(Number(total))
       : `${money(Number(total))} · ${money(Number(allowance))} left`;
 }
@@ -865,8 +1083,8 @@ async function place(selection) {
     const spot = root.querySelector(`[data-selection="${placedSelection}"] .roulette__mine`);
     if (spot && !reduceMotion()) {
       spot.animate(
-        [{ transform: 'translateY(-10px) scale(1.25)', opacity: 0 }, { transform: 'none', opacity: 1 }],
-        { duration: 260, easing: POP_EASE },
+        [{ transform: 'translateY(-60%) scale(1.5)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+        { duration: 300, easing: POP_EASE },
       );
     }
   } catch (error) {
@@ -886,65 +1104,36 @@ async function place(selection) {
 function setWheel(result) {
   const index = ORDER.indexOf(Number(result));
   if (index < 0) return;
-  wheelRotation = -((index * 360) / ORDER.length);
-  const wheel = $('#rouletteWheel', root);
-  wheel.style.transition = 'none';
-  wheel.style.transform = `rotate(${wheelRotation}deg)`;
   wheel3d?.rest(index);
-  // The last result's pocket is at the top, and the ball sits in it.
-  placeBall(0, BALL_POCKET);
-}
-
-/* ─────────── the ball ─────────── */
-let ballFrame = 0;
-
-/** Puts the ball at `angle` degrees clockwise from the top, `radius` of the wheel's width out. */
-function placeBall(angle, radius) {
-  const orbit = $('#rouletteOrbit', root);
-  const ball = $('#rouletteBall', root);
-  if (!orbit || !ball) return;
-  orbit.style.setProperty('--a', `${angle.toFixed(2)}deg`);
-  ball.style.setProperty('--r', radius.toFixed(4));
-}
-
-/** The wheel's rotation as it is drawn right now, mid-transition included, in degrees. */
-function wheelAngleNow(wheel) {
-  const match = /matrix\(([^,]+),\s*([^,]+)/.exec(getComputedStyle(wheel).transform);
-  return match ? (Math.atan2(Number(match[2]), Number(match[1])) * 180) / Math.PI : 0;
+  // The last result's pocket has the ball in it, turning with the wheel.
+  settleBall(index);
 }
 
 /**
- * The ball's run, for the length of the wheel's spin.
+ * The preview's ball run, for the length of the wheel's spin.
  *
- * Out of its pocket onto the track, round it anticlockwise (against the wheel) slowing on an
- * ease-out, down off the track with a few bounces across the frets, and caught by the winning
- * pocket: from 72% of the run it is drawn toward where that pocket really is, and from 88% it rides
- * in it. At the end the wheel has the pocket at the top, so the ball is there too.
+ * Out of the pocket it was resting in and round the track against the wheel, a turn for each second
+ * of the spin, slowing on an ease-out; off the track at 58%, skipping over the frets, and settled at
+ * the end. It is placed in the wheel's own frame and the run is measured to end exactly on pocket
+ * `index`, so the ball finishes in the pocket the server named however the frames fall.
  */
 function rollBall(index, ms) {
-  cancelAnimationFrame(ballFrame);
-  const wheel = $('#rouletteWheel', root);
-  const step = 360 / ORDER.length;
-  const started = performance.now();
-  const frame = (now) => {
-    if (!root?.isConnected) return;
-    const t = Math.min(1, (now - started) / ms);
-    const free = -BALL_TURNS * 360 * (1 - (1 - t) ** 3);
-    const pocket = wheelAngleNow(wheel) + index * step;
-    const pull = t < 0.72 ? 0 : t > 0.88 ? 1 : (t - 0.72) / 0.16;
-    const delta = ((((pocket - free) % 360) + 540) % 360) - 180;
-    const angle = free + delta * pull * pull * (3 - 2 * pull);
-    let radius = BALL_POCKET;
-    if (t < 0.06) radius = BALL_POCKET + (BALL_TRACK - BALL_POCKET) * (t / 0.06);
-    else if (t < 0.55) radius = BALL_TRACK;
-    else if (t < 0.85) {
-      const u = (t - 0.55) / 0.3;
-      radius = BALL_POCKET + (BALL_TRACK - BALL_POCKET) * (1 - u) ** 2 * Math.abs(Math.cos(u * Math.PI * 2.5));
-    }
-    placeBall(angle, radius);
-    if (t < 1) ballFrame = requestAnimationFrame(frame);
-  };
-  ballFrame = requestAnimationFrame(frame);
+  const target = pocketAngle(index);
+  const from = ballPocket >= 0 ? ballAngle : -Math.PI / 2 - wheelAngle;
+  const ahead = (((target - from) % TAU) + TAU) % TAU;
+  const turns = Math.max(2, Math.round(ms / 1000));
+  ballRun = { from, delta: ahead - TAU * turns, started: performance.now(), ms };
+  ballRadius = TRACK;
+  startWheelLoop();
+}
+
+/** The ball at rest in pocket `index`. */
+function settleBall(index) {
+  ballRun = null;
+  ballPocket = index;
+  ballAngle = pocketAngle(index);
+  ballRadius = REST;
+  if (!wheel3d) drawWheel();
 }
 
 /**
@@ -1003,14 +1192,9 @@ function spinTo(result, bets, opensAt) {
     return;
   }
   const wheel = $('#rouletteWheel', root);
-  const target = -((index * 360) / ORDER.length);
-  const normalized = ((wheelRotation % 360) + 360) % 360;
-  const targetNormalized = ((target % 360) + 360) % 360;
-  const delta = (targetNormalized - normalized + 360) % 360;
   const parsedOpen = Date.parse(opensAt);
   const spinWindowMs = Number.isFinite(parsedOpen) ? Math.max(0, parsedOpen - serverNowMs()) : 0;
   const animationMs = reduceMotion() || spinWindowMs <= 150 ? 0 : spinWindowMs - 100;
-  wheelRotation += (animationMs === 0 ? 0 : 5 * 360) + delta;
 
   const finish = () => {
     /* The release is in a `finally` because this runs from a timer that fires whether or not the
@@ -1019,22 +1203,17 @@ function spinTo(result, bets, opensAt) {
      * SITE until a reload — a far worse bug than the spoiler it was taken to prevent. */
     try {
       wheel.classList.remove('is-spinning');
-      cancelAnimationFrame(ballFrame);
-      placeBall(0, BALL_POCKET);
+      settleBall(index);
       pendingResultId = null;
+      paintPools();
+      paintBets();
       const face = $('#rouletteResult', root);
       if (face) face.textContent = String(result);
+      // The number comes up in the middle of the wheel in its pocket's colour (preview.css).
       const hub = $('#rouletteHub', root);
-      if (hub) {
-        hub.dataset.color = color(Number(result));
-        if (animationMs > 0 && !reduceMotion()) {
-          hub.animate(
-            [{ transform: 'scale(.85)' }, { transform: 'scale(1.08)', offset: 0.6 }, { transform: 'scale(1)' }],
-            { duration: 320, easing: POP_EASE },
-          );
-        }
-      }
+      if (hub) hub.dataset.color = color(Number(result));
       if (animationMs > 0 && !root.closest('.view')?.hidden) playSound('rouLand');
+      markHits(Number(result));
       paintHistory();
       announceResult(result, bets);
     } finally {
@@ -1044,69 +1223,81 @@ function spinTo(result, bets, opensAt) {
   };
 
   if (animationMs === 0) {
-    wheel.style.transition = 'none';
-    wheel.style.transform = `rotate(${wheelRotation}deg)`;
     wheel3d?.rest(index);
     finish();
     return;
   }
+  // Held before anything moves: the settlement's balance events are already on their way.
+  takeSpinHold();
   // The fortress's wheel runs the ball into the same pocket in the same time.
   wheel3d?.spin(index, animationMs);
-
-  takeSpinHold();
-  wheel.style.transition = `transform ${animationMs}ms cubic-bezier(.12,.68,.16,1)`;
   wheel.classList.add('is-spinning');
-  // Empty while the ball runs: a dot here read as a second ball.
+  // The middle empties while the ball runs; the last spin's card and marks go.
   $('#rouletteResult', root).textContent = '';
   $('#rouletteHub', root).dataset.color = '';
-  $('#rouletteWin', root).hidden = true;
+  clearWin($('.roulette__wheelwrap', root));
+  markHits(null);
+  resultNoteUntil = 0;
   if (!root.closest('.view')?.hidden) playSound('rouSpin');
-  requestAnimationFrame(() => {
-    wheel.style.transform = `rotate(${wheelRotation}deg)`;
-  });
   if (!wheel3d) rollBall(index, animationMs);
   window.setTimeout(finish, animationMs + 40);
 }
 
-/* A win pops a card over the wheel, its amount counting up; a loss says itself in the hub. */
+/** Whether a chip on `selection` wins on `number`, for marking the board only: the server settles. */
+function covers(selection, number) {
+  if (selection === `straight:${number}`) return true;
+  if (number === 0) return false;
+  if (selection === 'red') return RED.has(number);
+  if (selection === 'black') return !RED.has(number);
+  if (selection === 'odd') return number % 2 === 1;
+  if (selection === 'even') return number % 2 === 0;
+  if (selection === 'low') return number <= 18;
+  if (selection === 'high') return number >= 19;
+  if (selection.startsWith('dozen:')) return Math.ceil(number / 12) === Number(selection.slice(6));
+  return false;
+}
+
+/** The spots the number won outlined, pulsing as the preview's do, until the next spin. */
+function markHits(number) {
+  root.querySelectorAll('[data-selection]').forEach((button) => {
+    if (number !== null && covers(button.dataset.selection, number)) button.dataset.hit = '';
+    else delete button.dataset.hit;
+  });
+}
+
+/** The status line's word on the spin, for three seconds of the next betting window. */
+function noteResult(text) {
+  resultNote = text;
+  resultNoteUntil = performance.now() + 3_000;
+  paintedClockKey = '';
+  paintClock();
+}
+
+/* The result as the preview gives it. A win pops the preview's card over the wheel, the multiple
+ * and the amount counting up (gold rain at 10x or more); a miss says so in the status line with the
+ * soft fall; with nothing on the spin the line just names the number. */
 function announceResult(result, bets) {
-  if (!bets.length) return;
+  const number = Number(result);
+  const shown = !root.closest('.view')?.hidden;
+  if (!bets.length) {
+    noteResult(`${number} ${color(number)}`);
+    return;
+  }
   const staked = bets.reduce((sum, bet) => sum + BigInt(bet.stakeMinor), 0n);
   const paid = bets.reduce((sum, bet) => sum + BigInt(bet.payoutMinor || '0'), 0n);
-  if (paid <= 0n) return;
-  wheel3d?.cheer(paid >= staked * 5n);
-  if (!root.closest('.view')?.hidden) playSound(paid >= staked * 10n ? 'jackpot' : 'rouWin');
-  const card = $('#rouletteWin', root);
-  if (!card) return;
-  card.hidden = false;
-  const figure = $('b', card);
-  const value = Number(paid);
-  if (reduceMotion()) {
-    figure.textContent = money(value);
-  } else {
-    card.animate(
-      [{ opacity: 0, transform: 'translate(-50%, -50%) scale(.82)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1.04)', offset: 0.6 }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }],
-      { duration: 380, easing: POP_EASE },
-    );
-    // The preview's win, on the flat wheel: the card bursts, and 10x the stake or more rains gold.
-    if (fx && !wheel3d) {
-      const c = fxColors();
-      const big = paid >= staked * 10n;
-      const [x, y] = fx.at(card);
-      fx.burst(x, y, { n: big ? 48 : 26, colors: [c.win, c.ink, c.gold], speed: big ? 480 : 330, size: 6, g: 800, life: 0.95 });
-      if (big) fx.coins(36);
-    }
-    const started = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - started) / 650);
-      figure.textContent = money(Math.round(value * (1 - (1 - t) ** 3)));
-      if (t < 1 && figure.isConnected) requestAnimationFrame(step);
-    };
-    figure.textContent = money(0);
-    requestAnimationFrame(step);
+  if (paid <= 0n) {
+    noteResult(`${number}. No win this spin.`);
+    if (shown) playSound('lose');
+    return;
   }
+  noteResult(`${number} pays you ${money(Number(paid))}`);
+  wheel3d?.cheer(paid >= staked * 5n);
+  if (shown) playSound(paid >= staked * 10n ? 'jackpot' : 'rouWin');
+  const wrap = $('.roulette__wheelwrap', root);
+  if (!wrap || staked <= 0n) return;
+  winCard(wrap, wheel3d ? null : fx, Number(paid) / Number(staked), Number(paid));
   window.clearTimeout(winTimer);
-  winTimer = window.setTimeout(() => { card.hidden = true; }, 5_000);
+  winTimer = window.setTimeout(() => clearWin(wrap), 3_000);
 }
 let winTimer = 0;
 

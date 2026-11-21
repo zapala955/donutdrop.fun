@@ -118,9 +118,13 @@ describe('roulette persistence and client contract', () => {
     assert.match(finishBody, /pendingResultId = null;/);
     assert.match(finishBody, /#rouletteResult/);
     assert.match(client, /\$\('#rouletteResult'[\s\S]*paintHistory\(\);\s*announceResult/);
-    assert.doesNotMatch(client, /rouletteAmount|parseAmount|formatAmountInput/);
-    assert.match(client, /\[100_000n, '\$100K'\]/);
-    assert.match(client, /\[1_000_000_000n, '\$1B'\]/);
+    /* The preview's bet amount (2026-11-21): typed, or set with ½, 2× and Max, as on Dice. The server
+       takes any stake inside its limits and checks each one again; the page only says why a figure
+       will not do before sending it. */
+    assert.match(client, /<input id="rouletteStake"/);
+    assert.match(client, /data-adj="half"[\s\S]*data-adj="double"[\s\S]*data-adj="max"/);
+    assert.match(client, /adjustStake\(adj\.dataset\.adj, amountMinor, state\.balanceMinor, largestChip\(\)\)/);
+    assert.match(client, /if \(stakeProblem\(\)\) \{/);
     assert.match(client, /void place\(selected\)/);
     assert.match(client, /if \(placing \|\| !isBettingOpen\(\)\) return/);
     assert.match(client, /spinTo\(newest\.result,[\s\S]*spinEndsAt\)/);
@@ -331,10 +335,12 @@ describe('the roulette does not spoil its own spin', () => {
     assert.match(source, /spinHold = holdLiveFigures\(\);/);
     // Taken before the animation starts, released when it ends.
     const spin = source.slice(source.indexOf('function spinTo('));
+    assert.ok(spin.indexOf('rollBall(index, animationMs)') > 0);
     assert.ok(
-      spin.indexOf('takeSpinHold()') < spin.indexOf('cubic-bezier'),
-      'the hold must be taken before the transition is armed',
+      spin.indexOf('takeSpinHold()') < spin.indexOf('rollBall(index, animationMs)'),
+      'the hold must be taken before the ball is set running',
     );
+    assert.ok(spin.indexOf('takeSpinHold()') < spin.indexOf('wheel3d?.spin(index, animationMs)'));
   });
 
   it('releases the hold even when the page is gone by the time the timer fires', async () => {
@@ -362,12 +368,18 @@ describe('the roulette does not spoil its own spin', () => {
     assert.match(css, /\.roulette__mine \{/);
     assert.match(css, /\[data-mine='1'\]/);
 
-    /* The chip and the label share the spot's flow. The first version positioned the chip
-     * absolutely over a centred label and the two landed on each other on a narrow spot, which is
-     * the bug this shape exists to make unrepresentable — nothing out of flow cannot overlap. */
-    const chipRule = css.slice(css.indexOf('.roulette__mine {'));
+    /* On the preview's board (2026-11-21) your chip is the preview's: a round chip over the middle
+     * of the spot, as a chip sits on felt, covering its label on purpose. It lets clicks through to
+     * the spot, and what the spot is and how much you have on it stay in its accessible name. */
+    const preview = await readFile(
+      path.join(repo, 'DONUTDROP FRONTEND/Donut Drop/assets/css/preview.css'),
+      'utf8',
+    );
+    const chipRule = preview.slice(preview.indexOf('body.lx .roulette .roulette__felt .roulette__mine {'));
     const chipBody = chipRule.slice(0, chipRule.indexOf('}'));
-    assert.doesNotMatch(chipBody, /position:\s*absolute/);
+    assert.match(chipBody, /position: absolute; inset: 0;/);
+    assert.match(chipBody, /margin: auto;/);
+    assert.match(chipBody, /pointer-events: none;/);
     /* And the label has to be shrinkable, or a flex child refuses to go below its content width
      * and widens the spot instead of ellipsing inside it. */
     const faceRule = css.slice(css.indexOf('.roulette__face {'));

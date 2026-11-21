@@ -3,37 +3,51 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-/* The flat wheel is a roulette wheel (2026-11-10): no pointer, a ball that runs round the track
- * against the wheel, falls in and rides the winning pocket to the top as the wheel stops. */
+/* The flat wheel is the preview's (2026-11-21, the owner: "roulette"): drawn on a canvas, always
+ * turning slowly, the ball resting in the last pocket. A spin kicks the wheel faster and runs the
+ * ball round the track against it, off the track, over the frets, into the pocket the server named.
+ * Still no pointer: it is a roulette wheel, not a prize wheel. */
 
 const frontend = path.resolve(import.meta.dirname, '../../../DONUTDROP FRONTEND/Donut Drop');
 const read = async (file: string) => (await readFile(path.join(frontend, file), 'utf8')).replace(/\r\n/g, '\n');
 
 describe('the roulette ball', () => {
-  it('has a ball and no pointer', async () => {
+  it('is the preview\'s wheel, on a canvas, with a ball and no pointer', async () => {
     const page = await read('assets/js/roulette.js');
-    assert.match(page, /<div class="roulette__orbit" id="rouletteOrbit" aria-hidden="true"><span class="roulette__ball" id="rouletteBall"><\/span><\/div>/);
-    assert.doesNotMatch(page, /<span class="roulette__pointer"/);
+    assert.match(page, /<canvas class="roulette__wheel" id="rouletteWheel" width="\$\{WHEEL_PX\}" height="\$\{WHEEL_PX\}" aria-hidden="true"><\/canvas>/);
+    assert.doesNotMatch(page, /roulette__pointer/);
+    // The turning part is drawn once; every frame only turns it and puts the ball on it.
+    assert.match(page, /ctx\.rotate\(wheelAngle\);\n\s*ctx\.drawImage\(wheelImg, -c0, -c0\);/);
+    assert.match(page, /const a = wheelAngle \+ ballAngle;/);
   });
 
-  it('lands in the pocket the server named, read off the wheel as it is drawn', async () => {
+  it('lands in the pocket the server named, whatever the frame rate', async () => {
     const page = await read('assets/js/roulette.js');
-    // Where the pocket really is, every frame: the wheel's own transform plus the pocket's place on it.
-    assert.match(page, /const pocket = wheelAngleNow\(wheel\) \+ index \* step;/);
-    assert.match(page, /const pull = t < 0\.72 \? 0 : t > 0\.88 \? 1 : \(t - 0\.72\) \/ 0\.16;/);
-    // Run for the wheel's own spin, and put exactly at the top of its pocket when it stops.
+    /* The ball is placed in the wheel's own frame and its run is measured to end on the pocket: the
+       run's last angle is the pocket's angle plus whole turns, and at the end it is put exactly there. */
+    assert.match(page, /const ahead = \(\(\(target - from\) % TAU\) \+ TAU\) % TAU;/);
+    assert.match(page, /ballRun = \{ from, delta: ahead - TAU \* turns, started: performance\.now\(\), ms \};/);
+    assert.match(page, /ballAngle = ballRun\.from \+ ballRun\.delta \* \(1 - \(1 - k\) \*\* 3\);/);
+    assert.match(page, /function settleBall\(index\) \{\n\s*ballRun = null;\n\s*ballPocket = index;\n\s*ballAngle = pocketAngle\(index\);/);
+    // Run for the wheel's own spin, and settled in the pocket when it stops.
     assert.match(page, /if \(!wheel3d\) rollBall\(index, animationMs\);/);
-    assert.match(page, /cancelAnimationFrame\(ballFrame\);\n\s*placeBall\(0, BALL_POCKET\);/);
+    assert.match(page, /wheel\.classList\.remove\('is-spinning'\);\n\s*settleBall\(index\);/);
     // Still no source of chance in the page.
     assert.doesNotMatch(page, /Math\.random|crypto\.getRandomValues/);
   });
 
-  it('runs on the track the bowl draws and rests in the pocket ring', async () => {
-    const [page, css] = await Promise.all([read('assets/js/roulette.js'), read('assets/css/roulette.css')]);
-    assert.match(page, /const BALL_TRACK = 0\.462;/);
-    assert.match(page, /const BALL_POCKET = 0\.272;/);
-    // The wheel is inset 7.5%, so its edge is at 0.425 of the width and the track band runs out to the rim.
-    assert.match(css, /\.roulette__wheel \{\n  position: absolute;\n  inset: 7\.5%;/);
-    assert.match(css, /top: calc\(\(0\.5 - var\(--r, 0\.272\)\) \* 100%\);/);
+  it('runs on the track and rests in the pocket ring the canvas draws', async () => {
+    const page = await read('assets/js/roulette.js');
+    const radius = (name: string) => Number(new RegExp(`const ${name} = (\\d+);`).exec(page)?.[1]);
+    const [track, numOuter, numInner, pocketInner, rest] = ['TRACK', 'NUM_O', 'NUM_I', 'POCK_I', 'REST'].map(radius);
+    assert.ok(track > numOuter, 'the track is outside the numbers');
+    assert.ok(rest > pocketInner && rest < numInner, 'a ball at rest sits in the pocket ring');
+    assert.match(page, /if \(k < 0\.58\) return TRACK;/);
+  });
+
+  it('stops drawing when nobody can see it', async () => {
+    const page = await read('assets/js/roulette.js');
+    assert.match(page, /if \(!root\?\.isConnected \|\| root\.closest\('\.view'\)\?\.hidden \|\| wheel3d\) return;/);
+    assert.match(page, /if \(speed > 0 \|\| ballRun\) wheelRaf = requestAnimationFrame\(turnWheel\);/);
   });
 });

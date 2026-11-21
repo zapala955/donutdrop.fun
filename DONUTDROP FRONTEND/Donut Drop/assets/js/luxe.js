@@ -620,9 +620,9 @@ function howCard(view, how) {
 }
 
 /* The preview's sound key on the bar, beside the chip: the same switch as the top bar's. Only on
- * the games the owner has had moved to the preview's own panel (2026-11-21: Dice); the others keep
- * their bars as they were. */
-const SOUND_KEY_GAMES = new Set(['dice']);
+ * the games the owner has had moved to the preview's own panel (2026-11-21: Dice, Roulette); the
+ * others keep their bars as they were. */
+const SOUND_KEY_GAMES = new Set(['dice', 'roulette']);
 const SOUND_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="M16 9a4.25 4.25 0 0 1 0 6"/><path d="M18.5 6.5a7.75 7.75 0 0 1 0 11"/></svg>';
 const SOUND_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="m16.5 9.5 5 5m0-5-5 5"/></svg>';
 const soundKeys = [];
