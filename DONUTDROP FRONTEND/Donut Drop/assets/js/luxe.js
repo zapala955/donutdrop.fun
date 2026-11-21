@@ -4,8 +4,7 @@
  * menu, the chat itself and the home lobby's filters; this file adds the furniture the new shell
  * has and the old one did not, and never reaches into a game.
  *
- * Two things are remembered per browser, both conveniences: whether the sidebar is open, and
- * whether the chat panel is showing. Storage can be missing or throw (private windows, blocked
+ * One thing is remembered per browser, a convenience: whether the chat panel is showing. Storage can be missing or throw (private windows, blocked
  * site data), and the shell works the same without it.
  */
 import { api } from './api.js';
@@ -15,7 +14,6 @@ import { bus, state } from './store.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
 import { isMuted, setMuted } from './audio-engine.js';
 
-const SIDE_KEY = 'lx:side';
 /* v2 (2026-11-14): the chat now opens by default on a wide screen, so everybody starts from open
  * once; closing it is remembered from then on. */
 const CHAT_KEY = 'lx:chat:v2';
@@ -35,7 +33,6 @@ const side = $('#lxSide');
 const sideBtn = $('#lxSideBtn');
 const dockMenu = $('#lxDockMenu');
 const scrim = $('#lxScrim');
-const tip = $('#lxTip');
 
 /* ═════════ the sidebar ═════════ */
 function paintSide() {
@@ -50,8 +47,6 @@ function paintSide() {
 
 function setSide(open) {
   body.dataset.side = open ? 'open' : 'closed';
-  remember(SIDE_KEY, body.dataset.side);
-  hideTip();
   paintSide();
 }
 
@@ -61,10 +56,11 @@ function setDrawer(open) {
   if (open) $('.lxnav', side)?.focus();
 }
 
-/* Open on a wide screen until the player closes it (2026-11-20, the redesign preview's layout); a
- * remembered choice either way wins. */
-const sideSaved = recall(SIDE_KEY);
-body.dataset.side = (sideSaved ?? (matchMedia('(min-width: 1280px)').matches ? 'open' : 'closed')) === 'open' ? 'open' : 'closed';
+/* On a wide screen the menu is a rail of icons down the right edge, with the chat on the left
+ * (2026-11-21, the owner: "move the chat to left and the left sidebar to the right and make it like
+ * expand when hovering over it"). It opens over the page, never pushing it, so nothing is
+ * remembered: every page starts with the rail. */
+body.dataset.side = 'closed';
 body.dataset.drawer = 'closed';
 paintSide();
 
@@ -85,37 +81,30 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-/* The collapsed rail's labels. One chip, placed beside whatever the pointer or the keyboard is on,
- * shown at once on focus and after a beat on hover so a pass across the rail does not flicker. */
-let tipTimer = 0;
-function showTip(target, delay) {
-  clearTimeout(tipTimer);
-  if (phone.matches || body.dataset.side === 'open') return;
-  tipTimer = window.setTimeout(() => {
-    const rect = target.getBoundingClientRect();
-    tip.textContent = target.dataset.tip;
-    tip.style.left = `${Math.round(rect.right + 10)}px`;
-    tip.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
-    tip.hidden = false;
-  }, delay);
-}
-function hideTip() {
-  clearTimeout(tipTimer);
-  tip.hidden = true;
-}
-side.addEventListener('pointerover', (event) => {
-  const target = event.target.closest('[data-tip]');
-  if (target) showTip(target, 120);
+/* The pointer on the rail opens it, the pointer off it closes it: each after a beat, so a pass across
+ * it on the way to the scrollbar does not open it, and a wobble off its edge does not close it. The
+ * keyboard opens it too, and leaving it with Tab closes it. A tap (no hover) opens it from the
+ * burger, and a tap anywhere off it closes it. */
+let hoverTimer = 0;
+const hoverTo = (open, delay) => {
+  clearTimeout(hoverTimer);
+  hoverTimer = window.setTimeout(() => setSide(open), delay);
+};
+side.addEventListener('pointerenter', (event) => {
+  if (!phone.matches && event.pointerType === 'mouse') hoverTo(true, 120);
 });
-side.addEventListener('pointerout', (event) => {
-  if (!event.relatedTarget || !event.target.closest('[data-tip]')?.contains(event.relatedTarget)) hideTip();
+side.addEventListener('pointerleave', (event) => {
+  if (!phone.matches && event.pointerType === 'mouse') hoverTo(false, 200);
 });
 side.addEventListener('focusin', (event) => {
-  const target = event.target.closest('[data-tip]');
-  if (target) showTip(target, 0);
+  if (!phone.matches && event.target.matches(':focus-visible')) hoverTo(true, 0);
 });
-side.addEventListener('focusout', hideTip);
-$('.lxside__nav', side).addEventListener('scroll', hideTip, { passive: true });
+side.addEventListener('focusout', (event) => {
+  if (!phone.matches && !side.contains(event.relatedTarget) && !side.matches(':hover')) hoverTo(false, 0);
+});
+document.addEventListener('pointerdown', (event) => {
+  if (!phone.matches && body.dataset.side === 'open' && !side.contains(event.target)) hoverTo(false, 0);
+});
 
 /* ═════════ where you are ═════════
  * The menu names kinds of game, not games (the redesign preview's, 2026-11-20): on a game's page its
@@ -367,7 +356,7 @@ armGates($('#main'));
 function onRoute() {
   markRoute();
   paintKind();
-  hideTip();
+  if (!phone.matches && !side.matches(':hover')) hoverTo(false, 0);
   if (body.dataset.drawer === 'open') setDrawer(false);
   if (currentRouteName() === 'home') syncNewTab();
   schedulePlaying();

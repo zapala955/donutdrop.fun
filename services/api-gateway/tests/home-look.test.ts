@@ -137,4 +137,19 @@ describe('the lobby', () => {
     assert.doesNotMatch(engine, /closest\('button, \.btn/);
     assert.doesNotMatch(await read('assets/js/chat.js'), /playSound\('click'\)/);
   });
+
+  it('puts the chat on the left and the menu on the right, opening on hover', async () => {
+    /* 2026-11-21, the owner: "move the chat to left and the left sidebar to the right and make it
+     * like expand when hovering over it". */
+    const css = await read('assets/css/preview.css');
+    const wide = css.slice(css.indexOf('/* ═════════ the chat on the left, the menu on the right'));
+    assert.match(wide, /body\.lx \.lxside \{ inset: 0 0 0 auto;/);
+    assert.match(wide, /body\.lx \.chat \{ left: 0; right: auto;/);
+    assert.match(wide, /body\.lx\[data-chat="open"\] \.lxapp \{ margin-left: var\(--lx-chat\); \}/);
+    assert.match(wide, /margin-right: var\(--lx-rail\);/);
+    const luxe = await read('assets/js/luxe.js');
+    assert.match(luxe, /side\.addEventListener\('pointerenter', \(event\) => \{\n\s*if \(!phone\.matches && event\.pointerType === 'mouse'\) hoverTo\(true, 120\);/);
+    assert.match(luxe, /body\.dataset\.side = 'closed';/);
+    assert.doesNotMatch(luxe, /SIDE_KEY|lx:side/);
+  });
 });

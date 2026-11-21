@@ -381,10 +381,6 @@ body.lx .lxtop__in { max-width: none; gap: var(--lx-s2); padding: 0 var(--lx-s4)
 body.lx .lxbrand { gap: var(--lx-s2); }
 body.lx .lxbrand__mark { width: calc(16 * var(--lx-markpx, 3px)); height: calc(16 * var(--lx-markpx, 3px)); }
 body.lx .lxbrand__word { width: auto; height: auto; }
-@media (min-width: 1024px) {
-  /* The menu carries the name while it is open; the bar carries it while the menu is a rail. */
-  body.lx[data-side="open"] .lxtop .lxbrand { display: none; }
-}
 body.lx .lxpurse { height: 40px; border-radius: var(--lx-r); background: var(--lx-2); overflow: hidden; }
 body.lx .lxpurse .lxbal { min-width: 0; height: 100%; padding: 0 var(--lx-s3) 0 10px; border-radius: 0; }
 body.lx .lxpurse .lxbal .cashpill__n { margin-left: 0; font: 800 .875rem/1 var(--lx-ui); }
@@ -1327,4 +1323,26 @@ body.lx .modal[data-wallet] .auth__crow--total b { color: var(--lx-ink); font-si
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
+}
+
+/* ═════════ the chat on the left, the menu on the right (2026-11-21) ═════════
+   The owner: "move the chat to left and the left sidebar to the right and make it like expand when
+   hovering over it". From 1024px the menu is a rail of icons down the right edge; the pointer on it
+   opens it over the page (luxe.js), with a shadow to its left, and the page never moves. The bar
+   always carries the logo, top left. From 1280px the chat is a column down the left under the bar,
+   which runs the full width above it; narrower, it comes in over the page from the left. A phone
+   keeps its two drawers, the menu from the left and the chat from the right, beside their buttons. */
+@media (min-width: 1024px) {
+  body.lx .lxside { inset: 0 0 0 auto; box-shadow: -1px 0 0 var(--pv-rule); }
+  body.lx[data-side="open"] .lxside { box-shadow: -1px 0 0 var(--pv-rule), -24px 0 48px -16px rgb(0 0 0 / .75); }
+  body.lx .lxapp, body.lx[data-side="open"] .lxapp, body.lx[data-chat="open"] .lxapp { margin-left: 0; margin-right: var(--lx-rail); }
+  body.lx[data-side] .lxside__brand { display: none; }
+  body.lx[data-side] .lxtop .lxbrand { display: inline-flex; }
+  body.lx .chat { left: 0; right: auto; box-shadow: 1px 0 0 rgb(255 255 255 / .04), 8px 0 24px -12px rgb(0 0 0 / .6); }
+  body.lx .toasts, body.lx[data-chat="open"] .toasts { right: calc(var(--lx-rail) + 16px); }
+}
+@media (min-width: 1280px) {
+  body.lx[data-chat="open"] .lxapp { margin-left: var(--lx-chat); }
+  body.lx[data-chat="open"] .lxtop { margin-left: calc(-1 * var(--lx-chat)); }
+  body.lx .chat { top: var(--lx-top); }
 }

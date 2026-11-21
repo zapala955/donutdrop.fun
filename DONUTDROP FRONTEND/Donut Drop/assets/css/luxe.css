@@ -165,7 +165,8 @@ body.lx .skip:focus-visible { transform: none; }
 
 /* ═════════ the sidebar ═════════
    Collapsed it is a rail of icons, expanded a labelled menu. The state lives on <body> as
-   data-side="open" (luxe.js, remembered). Below 1024px it is a drawer over the page instead. */
+   data-side="open" (luxe.js). From 1024px it sits on the right and opens on hover (preview.css, the
+   end); below 1024px it is a drawer over the page instead. */
 .lxside {
   position: fixed; inset: 0 auto 0 0; z-index: 90;
   display: flex; flex-direction: column;
@@ -256,22 +257,6 @@ body[data-side="open"] .lxside__label {
   display: block; margin: 0 0 var(--lx-s2) var(--lx-s2);
   color: var(--lx-faint); font-size: .75rem; font-weight: 700; letter-spacing: .02em;
 }
-
-/* the collapsed rail's label: one floating chip, placed by luxe.js */
-.lxtip {
-  position: fixed; z-index: 95; pointer-events: none;
-  padding: 7px 12px; border-radius: var(--lx-r-s);
-  background: var(--lx-4); color: var(--lx-ink);
-  font-weight: 700; font-size: .8125rem; white-space: nowrap;
-  box-shadow: var(--lx-shade);
-  transform: translateY(-50%);
-}
-.lxtip::before {
-  content: ""; position: absolute; left: -5px; top: 50%;
-  border: 5px solid transparent; border-left: 0; border-right-color: var(--lx-4);
-  transform: translateY(-50%);
-}
-.lxtip[hidden] { display: none; }
 
 .lxscrim { position: fixed; inset: 0; z-index: 85; background: var(--lx-scrim); }
 .lxscrim[hidden] { display: none; }
@@ -745,7 +730,7 @@ body.lx :is(.popup__x, .nudge__x):hover { color: var(--lx-ink); background: var(
 body.lx .popup__go:disabled { background: var(--lx-4); color: var(--lx-mute); opacity: 1; }
 
 /* ═════════ the chat panel ═════════
-   Down the right edge, under the top bar. Wide screens keep it beside the page (data-chat="open",
+   Down the left edge from 1024px (preview.css, the end). Wide screens keep it beside the page (data-chat="open",
    remembered); a phone slides it over the page instead (app.js's chat-open). */
 body.lx .chat {
   position: fixed; top: 0; right: 0; bottom: 0; left: auto; z-index: 95;
@@ -905,7 +890,6 @@ body.lx .chat__dock { display: none; }
   .lxside__label { display: block; margin: 0 0 var(--lx-s2) var(--lx-s2); color: var(--lx-faint); font-size: .75rem; font-weight: 700; }
   .lxside__rule { width: 100%; background: transparent; }
   .lxnavs { padding: var(--lx-s1); border-radius: var(--lx-r); background: var(--lx-1); }
-  .lxtip { display: none; }
 
   .lxtop__in { gap: var(--lx-s2); }
   .lxbrand { gap: 12px; }

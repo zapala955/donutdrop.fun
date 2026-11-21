@@ -263,12 +263,13 @@
 <button class="skip" id="skipToMain" type="button">Skip to content</button>
 
 <!-- ══════════ sidebar ══════════
-     A rail of icons that opens into a labelled menu (the burger), remembered per browser. Below
-     1024px it is a drawer opened from the bottom bar. Every link is an ordinary path; the router
+     A rail of icons down the right edge that opens into a labelled menu over the page while the
+     pointer is on it (2026-11-21), or from the burger on a touch screen. Below 1024px it is a drawer
+     opened from the bottom bar. Every link is an ordinary path; the router
      takes it from there. -->
 <!-- The menu, as the redesign preview has it (2026-11-20, the owner: "I WANT THE SITE TO LOOK LIKE THE
      PREVIEW 1:1"): the lobby and the four kinds of game, then the rewards, then help. A kind of game
-     opens the lobby on that kind (/?c=…, luxe.js); every game is in the lobby and the search. -->
+     opens the lobby on that kind (/?c=…, luxe.js); every game is in the lobby. -->
 <aside class="lxside" id="lxSide" aria-label="Menu">
   <div class="lxside__head">
     <button class="lxside__burger" id="lxSideBtn" type="button" aria-controls="lxSide" aria-expanded="false" aria-label="Open menu">
@@ -314,9 +315,6 @@
 <!-- Behind the menu when it is a drawer; a tap anywhere off it closes it. -->
 <div class="lxscrim" id="lxScrim" hidden></div>
 
-<!-- A single floating label for the collapsed rail: the nav scrolls, so a label drawn inside it
-     would be clipped by its own scroller. -->
-<div class="lxtip" id="lxTip" role="tooltip" hidden></div>
 
 <div class="lxapp" id="lxApp">
 
