@@ -1320,6 +1320,28 @@ body.lx .view .derby .derby__pick:hover:not(:disabled) { border-color: var(--lx-
 body.lx .view .derby .derby__pick[aria-checked="true"] { border-color: var(--lx-gold); background: color-mix(in srgb, var(--lx-gold) 8%, var(--lx-1)); }
 body.lx .view .derby .derby__odds { color: var(--lx-mute); font-weight: 700; }
 
+/* ═════════ Fishing panel, as the preview's ═════════
+   (The stage stays 3D.) The sinker as one pill (its speed is on the tooltip), "Reel in at" with
+   "blank = by hand", a plain "Cast", the line about sinkers under it; Auto cast and the graphics
+   stay, the tallies, the log and the second how-it-works key go. */
+body.lx .fishing :is(.fishing__stats, .fishing__log, .fishing__logempty, .fishing__label--log, .fishing__paytable, .fishing__sinkernote, .fishing__sinkertop) { display: none; }
+body.lx .fishing .fishing__toggles { grid-template-columns: minmax(0, 1fr); }
+body.lx .fishing .fishing__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .fishing .fishing__label--row { display: flex; justify-content: space-between; gap: 8px; }
+body.lx .fishing .fishing__labelx { color: var(--lx-faint); font-weight: 600; }
+body.lx .fishing .fishing__sinkers { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: none; gap: 4px; padding: 4px; border-radius: 999px; background: var(--lx-0); }
+body.lx .view .fishing .fishing__sinker,
+body.lx .view .fishing .fishing__sinker:hover:not(:disabled) {
+  display: grid; grid-template: none / none; place-items: center; align-content: center; height: 36px; min-height: 0; padding: 0 6px; border: 0; border-radius: 999px;
+  box-shadow: none; background: transparent; color: var(--lx-mute); cursor: pointer;
+}
+body.lx .fishing .fishing__hint:empty { display: none; }
+body.lx .view .fishing .fishing__sinker b { margin: 0; font: 700 .875rem/1 var(--lx-ui); color: inherit; }
+body.lx .view .fishing .fishing__sinker:hover:not(:disabled) { color: var(--lx-ink); }
+body.lx .view .fishing .fishing__sinker[aria-checked="true"],
+body.lx .view .fishing .fishing__sinker[aria-checked="true"]:hover:not(:disabled) { background: var(--lx-4); color: var(--lx-ink); box-shadow: none; }
+body.lx .fishing .fishing__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
