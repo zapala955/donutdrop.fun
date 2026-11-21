@@ -32,6 +32,7 @@ import {
   showBalance,
 } from './store.js';
 import { $, el, money, safeImage, grouped, reduceMotion } from './util.js';
+import { RARITY } from './data.js';
 import { bezier, span } from './fx.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -138,14 +139,14 @@ export function mountBattles(node) {
       if (['login', 'logout', 'ready', 'cases'].includes(event.detail)) {
         /* The lobby keeps its host panel across repaints, so a change that affects the panel —
          * signing in, the crate list arriving — repaints it explicitly. */
-        if (view.screen === 'lobby') paintCreator();
+        paintCreator();
         paint();
       }
     });
     if (!state.cases.length) refreshCases().catch(() => undefined);
     api.get('/v1/battles/modes').then((modes) => {
       view.modes = modes;
-      if (view.screen === 'lobby') paintCreator();
+      paintCreator();
       paint();
     }).catch(() => undefined);
   }
@@ -453,6 +454,7 @@ function isSpinning(battle = view.battle) {
 
 function paint() {
   if (!root?.isConnected) return;
+  buildFrame();
   if (view.screen === 'arena' && view.battle) {
     /* A full repaint during a spin tears the strip out from under the animation. Every socket
      * message that touches this battle — a watcher count, a lobby echo, the settled payload that
@@ -461,9 +463,10 @@ function paint() {
      * turning the arena is patched in place instead. */
     if (isSpinning() && showsLiveBoard()) patchArena();
     else paintArena();
-    return;
+  } else {
+    paintIdle();
   }
-  paintLobby();
+  paintLists();
 }
 
 /* Whether the arena on screen is already the board this battle is spinning on. It is not enough to
@@ -471,7 +474,7 @@ function paint() {
  * placeholders for real seats and drops the waiting bar, so that one has to repaint. Everything
  * after it — watcher counts, lobby echoes, the settled payload — must not. */
 function showsLiveBoard() {
-  const arena = root.querySelector('.arena');
+  const arena = $('#arena', root);
   return arena?.dataset.phase === 'run'
     && Number(arena.dataset.seats) === view.battle.seats.length;
 }
@@ -484,44 +487,45 @@ function patchArena() {
   fast.disabled = !view.battle.isHost;
 }
 
-function paintLobby() {
-  /* The skeleton is built once and the lists are repainted into it. Rebuilding the whole lobby on
-   * every socket echo also rebuilt the host panel, which threw away a half-typed crate search and
-   * the pool's scroll position each time somebody else joined a battle. */
-  if (!root.querySelector('.btl')) {
-    root.innerHTML = `
-      <div class="btl">
-        <aside class="btl__make" id="btlMake"></aside>
-        <div class="btl__list">
-          <p class="btl__paused" id="btlPaused" role="status" hidden>
-            Case Battles are paused for now. Open lobbies are being refunded, and nobody can host or
-            join until they are back.
-          </p>
-          <section class="btl__sec" id="btlLiveSec" hidden>
-            <div class="btl__listhead">
-              <h2><i class="btl__dot" aria-hidden="true"></i>Live now</h2>
-              <span class="btl__count mono" id="btlLiveCount"></span>
-            </div>
-            <div class="btl__rows" id="btlLive"></div>
-          </section>
-          <section class="btl__sec">
-            <div class="btl__listhead">
-              <h2>Open battles</h2>
-              <span class="btl__count mono" id="btlCount"></span>
-            </div>
-            <div class="btl__rows" id="btlRows"></div>
-          </section>
-          <section class="btl__sec" id="btlRecentSec" hidden>
-            <div class="btl__listhead">
-              <h2>Recent battles</h2>
-            </div>
-            <div class="btl__recent" id="btlRecent"></div>
-          </section>
+/* The redesign preview's frame (2026-11-21, the owner: "now case battles from the preview"): the
+ * host panel down the left, the stage on the right — the battle the panel describes until one is
+ * open, then that battle — and the battle lists under the game bar. Built once and repainted into:
+ * rebuilding it on every socket echo also rebuilt the host panel, which threw away a half-typed
+ * case search and the list's scroll position each time somebody else joined a battle. */
+function buildFrame() {
+  if (root.querySelector('.bframe')) return;
+  root.innerHTML = `
+    <div class="bframe">
+      <aside class="btl__make bpanel" id="btlMake" aria-label="Host a battle"></aside>
+      <div class="bstage" id="btlStage"></div>
+    </div>
+    <div class="btl__list">
+      <p class="btl__paused" id="btlPaused" role="status" hidden>
+        Case Battles are paused for now. Open lobbies are being refunded, and nobody can host or
+        join until they are back.
+      </p>
+      <section class="btl__sec" id="btlLiveSec" hidden>
+        <div class="btl__listhead">
+          <h2><i class="btl__dot" aria-hidden="true"></i>Live now</h2>
+          <span class="btl__count mono" id="btlLiveCount"></span>
         </div>
-      </div>`;
-    paintCreator();
-  }
-  paintLists();
+        <div class="btl__rows" id="btlLive"></div>
+      </section>
+      <section class="btl__sec">
+        <div class="btl__listhead">
+          <h2>Open battles</h2>
+          <span class="btl__count mono" id="btlCount"></span>
+        </div>
+        <div class="btl__rows" id="btlRows"></div>
+      </section>
+      <section class="btl__sec" id="btlRecentSec" hidden>
+        <div class="btl__listhead">
+          <h2>Recent battles</h2>
+        </div>
+        <div class="btl__recent" id="btlRecent"></div>
+      </section>
+    </div>`;
+  paintCreator();
 }
 
 /** The server says whether battles are open; until it has answered they are assumed to be. */
@@ -732,86 +736,66 @@ function paintCreator() {
   const formats = view.modes?.modes ?? [];
 
   panel.innerHTML = `
-    <h2>Host a battle</h2>
-    <div class="btl__field">
-      <span class="btl__label">Format</span>
-      <div class="btl__chips" id="btlFormats"></div>
+    <div class="bp__field">
+      <span class="bp__label" id="btlFormatsLabel">Mode</span>
+      <div class="bp__seg" id="btlFormats" role="group" aria-labelledby="btlFormatsLabel"></div>
     </div>
-    <div class="btl__field">
-      <span class="btl__label">Rules</span>
-      <div class="btl__chips" id="btlModes"></div>
+    <div class="bp__field">
+      <span class="bp__label" id="btlModesLabel">Rules</span>
+      <div class="bp__seg" id="btlModes" role="group" aria-labelledby="btlModesLabel"></div>
     </div>
-    <div class="btl__field">
-      <span class="btl__label">Lobby</span>
-      <div class="btl__chips" id="btlVis"></div>
+    <div class="bp__field">
+      <span class="bp__label" id="btlVisLabel">Lobby</span>
+      <div class="bp__seg" id="btlVis" role="group" aria-labelledby="btlVisLabel"></div>
     </div>
-    <label class="btl__toggle" id="btlBots">
+    <button class="bp__toggle" id="btlBots" type="button" role="switch">
       <span>Fill empty seats with bots</span>
-      <i class="btl__sw" aria-hidden="true"></i>
-    </label>
-    <div class="btl__field">
-      <span class="btl__label btl__label--row">Crates <b id="btlPickCount"></b>
-        <button class="btl__clear" id="btlClear" type="button">Clear</button>
+      <i class="bp__sw" aria-hidden="true"></i>
+    </button>
+    <div class="bp__field">
+      <span class="bp__label bp__label--row">
+        <span>Cases</span>
+        <b id="btlPickCount"></b>
+        <button class="bp__clear" id="btlClear" type="button">Clear</button>
       </span>
-      <div class="btl__picked" id="btlPicked"></div>
-      <div class="btl__find">
-        <input id="btlSearch" type="search" placeholder="Search crates" autocomplete="off" maxlength="40" aria-label="Search crates" />
-        <select id="btlSort" aria-label="Sort crates">
+      <div class="bp__find">
+        <input id="btlSearch" type="search" placeholder="Search cases" autocomplete="off" maxlength="40" aria-label="Search cases" />
+        <select id="btlSort" aria-label="Sort cases">
           <option value="price">Price ↑</option>
           <option value="price-desc">Price ↓</option>
           <option value="name">Name</option>
         </select>
       </div>
-      <div class="btl__pool" id="btlPool"></div>
+      <ul class="bcases" id="btlPool"></ul>
     </div>
-    <div class="btl__sum">
-      <span><i>Entry per seat</i><b class="mono" id="btlTotal"></b></span>
-      <span><i id="btlValueLabel">Battle value</i><b class="mono" id="btlValue"></b></span>
-    </div>
-    <button class="btn btn--go btl__go" id="btlCreate" type="button">Create battle</button>`;
+    <button class="btn btn--go btl__go" id="btlCreate" type="button">Create battle</button>
+    <p class="bp__note" id="btlNote"></p>`;
 
-  const formatChips = $('#btlFormats', panel);
-  for (const format of formats) {
-    const chip = el('button', 'btl__chip');
-    chip.type = 'button';
-    chip.textContent = format.label;
-    chip.title = format.blurb;
-    chip.setAttribute('aria-pressed', String(view.draft.format === format.code));
-    chip.addEventListener('click', () => {
-      view.draft.format = format.code;
-      paintCreator();
-    });
-    formatChips.appendChild(chip);
-  }
-
-  const modeChips = $('#btlModes', panel);
-  for (const [code, label] of [['standard', 'Highest wins'], ['crazy', 'Crazy · lowest wins']]) {
-    const chip = el('button', 'btl__chip');
-    chip.type = 'button';
-    chip.textContent = label;
-    chip.setAttribute('aria-pressed', String(view.draft.mode === code));
-    chip.addEventListener('click', () => {
-      view.draft.mode = code;
-      paintCreator();
-    });
-    modeChips.appendChild(chip);
-  }
-
-  const visChips = $('#btlVis', panel);
-  for (const [code, label] of [['public', 'Public'], ['private', 'Private link']]) {
-    const chip = el('button', 'btl__chip');
-    chip.type = 'button';
-    chip.textContent = label;
-    chip.setAttribute('aria-pressed', String(view.draft.visibility === code));
-    chip.addEventListener('click', () => {
-      view.draft.visibility = code;
-      paintCreator();
-    });
-    visChips.appendChild(chip);
-  }
+  const segment = (box, options, current, pick) => {
+    for (const [code, label, title] of options) {
+      const button = el('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (title) button.title = title;
+      button.setAttribute('aria-pressed', String(current === code));
+      button.addEventListener('click', () => {
+        pick(code);
+        paintCreator();
+      });
+      box.appendChild(button);
+    }
+  };
+  segment($('#btlFormats', panel), formats.map((format) => [format.code, format.label, format.blurb]), view.draft.format, (code) => { view.draft.format = code; });
+  segment($('#btlModes', panel), [
+    ['standard', 'Highest wins', 'The side whose drops are worth the most takes the pot'],
+    ['crazy', 'Lowest wins', 'Crazy mode: the side whose drops are worth the least takes the pot'],
+  ], view.draft.mode, (code) => { view.draft.mode = code; });
+  segment($('#btlVis', panel), [
+    ['public', 'Public', 'Listed under Open battles for anyone to join'],
+    ['private', 'Private link', 'Only players with the invite link can join'],
+  ], view.draft.visibility, (code) => { view.draft.visibility = code; });
 
   const bots = $('#btlBots', panel);
-  bots.setAttribute('role', 'switch');
   bots.setAttribute('aria-checked', String(view.draft.allowBots));
   bots.addEventListener('click', () => {
     view.draft.allowBots = !view.draft.allowBots;
@@ -823,7 +807,7 @@ function paintCreator() {
     paintPicks(panel);
   });
 
-  /* Typing filters the pool in place. Repainting the panel per keystroke would take the focus out
+  /* Typing filters the list in place. Repainting the panel per keystroke would take the focus out
    * of the very box being typed in. */
   const search = $('#btlSearch', panel);
   search.value = view.pool.query;
@@ -857,49 +841,24 @@ function paintPicks(panel) {
     return sum + (crate?.price ?? 0);
   }, 0);
 
-  $('#btlPickCount', panel).textContent = `${picked.length}/${max}`;
+  const count = $('#btlPickCount', panel);
+  count.textContent = `${picked.length} round${picked.length === 1 ? '' : 's'}`;
+  count.title = `Up to ${max} rounds. Every seat opens the same cases, in the order they were added.`;
   $('#btlClear', panel).hidden = picked.length === 0;
-  $('#btlTotal', panel).textContent = money(entry);
-  $('#btlValueLabel', panel).textContent = `Value · ${seats} seats`;
-  $('#btlValue', panel).textContent = money(entry * seats);
-
-  const pickedRow = $('#btlPicked', panel);
-  pickedRow.replaceChildren();
-  for (const group of crateGroups(picked.map((id) => ({ caseId: id })))) {
-    const crate = state.cases.find((candidate) => candidate.id === group.caseId);
-    if (!crate) continue;
-    const chip = el('button', 'btl__crate btl__pick');
-    chip.type = 'button';
-    chip.title = `${crate.name} — click to remove one`;
-    const art = document.createElement('img');
-    art.src = safeImage(crate.art);
-    art.alt = '';
-    chip.appendChild(art);
-    if (group.count > 1) {
-      const count = el('b', 'btlcrate__n mono');
-      count.textContent = `×${group.count}`;
-      chip.appendChild(count);
-    }
-    chip.addEventListener('click', () => {
-      const at = view.draft.caseIds.lastIndexOf(crate.id);
-      if (at >= 0) view.draft.caseIds.splice(at, 1);
-      paintPicks(panel);
-    });
-    pickedRow.appendChild(chip);
-  }
-  if (!picked.length) {
-    const hint = el('p', 'btl__hint');
-    hint.textContent = 'Pick up to ten crates below. Every seat opens the same ones, in order.';
-    pickedRow.appendChild(hint);
-  }
 
   const create = $('#btlCreate', panel);
   create.disabled = state.authenticated && picked.length < 1;
   create.textContent = !state.authenticated
     ? 'Log in to host'
-    : picked.length < 1 ? 'Pick at least one crate' : `Create · ${money(entry)}`;
+    : picked.length < 1 ? 'Add a case' : `Create battle · ${money(entry)}`;
+
+  const side = view.draft.mode === 'crazy' ? 'least' : 'most';
+  $('#btlNote', panel).textContent = picked.length
+    ? `Every seat pays ${money(entry)}, ${money(entry * seats)} across ${seats} seats. The side whose drops are worth the ${side} takes the whole pot.`
+    : `Every seat pays the same. The side whose drops are worth the ${side} takes the whole pot.`;
 
   paintPool(panel);
+  paintIdle();
 }
 
 function paintPool(panel) {
@@ -915,78 +874,244 @@ function paintPool(panel) {
         : a.price - b.price
   ));
 
-  /* Rebuilt in place with its scroll kept, so picking a crate far down the list does not throw
-   * the player back to the top of it. */
+  /* Rebuilt in place with its scroll kept, so stepping a case far down the list does not throw the
+   * player back to the top of it, and with the focus put back on the button that was pressed. */
   const top = pool.scrollTop;
+  const focused = document.activeElement?.closest?.('#btlPool [data-step]');
+  const refocus = focused ? `[data-step="${focused.dataset.step}"][data-case="${focused.dataset.case}"]` : null;
   pool.replaceChildren();
   for (const crate of crates) {
-    const chip = el('button', 'btl__crate btl__crate--pool');
-    chip.type = 'button';
-    chip.title = `${crate.name} · ${money(crate.price)}`;
-    chip.disabled = picked.length >= max;
     const count = picked.filter((id) => id === crate.id).length;
-    if (count) chip.dataset.picked = '1';
-    const art = document.createElement('img');
-    art.src = safeImage(crate.art);
-    art.alt = '';
-    art.loading = 'lazy';
-    const price = el('span', 'btl__cratecost mono');
+    const row = el('li');
+    row.dataset.picked = count ? '1' : '0';
+    const art = el('span', 'bcases__art');
+    const img = document.createElement('img');
+    img.src = safeImage(crate.art);
+    img.alt = '';
+    img.loading = 'lazy';
+    art.appendChild(img);
+    const text = el('span', 'bcases__txt');
+    const name = el('b');
+    name.textContent = crate.name;
+    const price = el('em', 'mono');
     price.textContent = money(crate.price);
-    chip.append(art, price);
-    /* Picked once is the gold border; a count is only worth a badge from two up. */
-    if (count > 1) {
-      const badge = el('b', 'btlcrate__n mono');
-      badge.textContent = `×${count}`;
-      chip.appendChild(badge);
-    }
-    chip.addEventListener('click', () => {
-      if (view.draft.caseIds.length >= max) return;
-      view.draft.caseIds.push(crate.id);
-      playSound('click');
-      paintPicks(panel);
+    text.append(name, price);
+    const stepper = el('span', 'bstep');
+    const step = (kind, label, aria, disabled, act) => {
+      const button = el('button', 'bstep__btn');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.step = kind;
+      button.dataset.case = crate.id;
+      button.dataset.sfx = 'rouChip';
+      button.setAttribute('aria-label', aria);
+      button.disabled = disabled;
+      button.addEventListener('click', () => {
+        act();
+        paintPicks(panel);
+      });
+      return button;
+    };
+    const less = step('less', '−', `One fewer ${crate.name}`, count === 0, () => {
+      const at = view.draft.caseIds.lastIndexOf(crate.id);
+      if (at >= 0) view.draft.caseIds.splice(at, 1);
     });
-    pool.appendChild(chip);
+    const tally = el('output', 'bstep__n mono');
+    tally.textContent = String(count);
+    const more = step('more', '+', `One more ${crate.name}`, picked.length >= max, () => {
+      if (view.draft.caseIds.length < max) view.draft.caseIds.push(crate.id);
+    });
+    stepper.append(less, tally, more);
+    row.append(art, text, stepper);
+    pool.appendChild(row);
   }
   if (!crates.length) {
-    const none = el('p', 'btl__hint');
-    none.textContent = state.cases.length ? 'No crate matches that search.' : 'Loading crates…';
+    const none = el('li', 'bcases__none');
+    none.textContent = state.cases.length ? 'No case matches that search.' : 'Loading cases…';
     pool.appendChild(none);
   }
   pool.scrollTop = top;
+  if (refocus) pool.querySelector(refocus)?.focus();
+}
+
+/* ─────────────────────────── the stage ─────────────────────────── */
+
+/* The seats of a battle laid out the preview's way: team by team, split by "VS". A team format
+ * boxes each side with its combined total; a free-for-all is every player in their own row. Seats
+ * are team-major, so a seat's index alone says which team it sits in. */
+function layoutSeats(board, teamCount, teamSize, seatAt, { won = null, total = null } = {}) {
+  for (let team = 0; team < teamCount; team += 1) {
+    if (team > 0) board.appendChild(versus());
+    const block = el('section', 'bsquad');
+    block.dataset.team = String(team);
+    block.dataset.squad = teamSize > 1 ? '1' : '0';
+    if (won !== null) block.dataset.won = won === team ? '1' : '0';
+    if (teamSize > 1) {
+      const head = el('header', 'bsquad__head');
+      const name = el('span', 'bsquad__name');
+      name.textContent = `Team ${team + 1}`;
+      const sum = el('span', 'bsquad__total mono');
+      sum.dataset.team = String(team);
+      sum.textContent = money(total ? total(team) : 0);
+      head.append(name, sum);
+      block.appendChild(head);
+    }
+    for (let offset = 0; offset < teamSize; offset += 1) block.appendChild(seatAt(team * teamSize + offset, team));
+    board.appendChild(block);
+  }
+}
+
+/** A seat's picture: the player's own head on their seat, a letter for anyone else (their name
+ *  reaches this page masked, and there is nothing to look a head up by), and a mark for a bot. */
+function seatAvatar(seat) {
+  const box = el('span', 'bavatar');
+  if (!seat) {
+    box.dataset.open = '1';
+    return box;
+  }
+  if (seat.isBot) {
+    box.dataset.bot = '1';
+    box.textContent = 'BOT';
+    return box;
+  }
+  if (seat.isYou && state.user?.id) {
+    const head = document.createElement('img');
+    head.alt = '';
+    head.width = 32;
+    head.height = 32;
+    head.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40`;
+    head.addEventListener('error', () => {
+      head.remove();
+      box.textContent = initials(seat.name);
+    });
+    box.appendChild(head);
+    return box;
+  }
+  box.textContent = initials(seat.name);
+  return box;
+}
+
+/** The round's cases in the stage's bar, small, in the order they are opened. */
+function caseChips(rounds) {
+  const row = el('span', 'battle__cases');
+  rounds.forEach((round, index) => {
+    const chip = el('span', 'bcase');
+    chip.dataset.index = String(index);
+    chip.title = `${round.name} · ${money(Number(round.priceMinor ?? round.price ?? 0))}`;
+    const art = document.createElement('img');
+    art.src = safeImage(round.art ?? crateArt(round));
+    art.alt = '';
+    chip.appendChild(art);
+    row.appendChild(chip);
+  });
+  return row;
+}
+
+/* Before a battle is open the stage shows the one the panel describes: its format, its rounds and
+ * their cases, the player's seat and the open ones, every reel resting on the first case's drops.
+ * Nothing on it is a result, and nothing is staked until Create is pressed. Keyed, so a socket
+ * echo that changes nothing here does not rebuild it. */
+function paintIdle() {
+  const stage = $('#btlStage', root);
+  if (!stage || (view.screen === 'arena' && view.battle)) return;
+  const format = (view.modes?.modes ?? []).find((entry) => entry.code === view.draft.format)
+    ?? { code: '1v1', label: '1v1', teamCount: 2, teamSize: 1 };
+  const crates = view.draft.caseIds.map((id) => state.cases.find((crate) => crate.id === id)).filter(Boolean);
+  const key = JSON.stringify([format.code, view.draft.caseIds, state.cases.length, state.user?.id ?? '']);
+  if (stage.dataset.idle !== key) {
+    stage.dataset.idle = key;
+    const seats = format.teamCount * format.teamSize;
+    const entry = crates.reduce((sum, crate) => sum + crate.price, 0);
+    const battle = el('div', 'battle battle--idle');
+    battle.dataset.count = String(seats);
+    battle.dataset.size = String(format.teamSize);
+
+    const bar = el('div', 'battle__bar');
+    const mode = el('span', 'battle__mode');
+    mode.textContent = format.label;
+    const rounds = el('span', 'battle__round');
+    rounds.textContent = crates.length ? `${crates.length} round${crates.length === 1 ? '' : 's'}` : 'Add a case';
+    const pot = el('b', 'battle__pot');
+    const potLabel = el('i');
+    potLabel.textContent = 'Value';
+    const potValue = el('span', 'mono');
+    potValue.textContent = money(entry * seats);
+    pot.append(potLabel, potValue);
+    bar.append(mode, rounds, caseChips(crates), pot);
+
+    const board = el('div', 'battle__seats');
+    const you = state.authenticated && state.user
+      ? { seat: 0, team: 0, name: state.user.minecraftUsername ?? 'You', isYou: true, isBot: false }
+      : null;
+    /* With no case added yet the reels show the cheapest case's drops, so the stage is a battle
+     * rather than empty frames. Nothing here is a result. */
+    const shown = crates[0] ?? [...state.cases].sort((x, y) => x.price - y.price)[0];
+    const pool = shown?.drops ?? [];
+    layoutSeats(board, format.teamCount, format.teamSize, (index, team) => {
+      const seat = index === 0 ? you : null;
+      const cell = el('div', seat ? 'bseat' : 'bseat bseat--open');
+      cell.dataset.team = String(team);
+      const head = el('div', 'bseat__head');
+      const who = el('span', 'bseat__who');
+      const name = el('b');
+      name.textContent = seat ? seat.name : 'Open seat';
+      who.appendChild(name);
+      const total = el('em', 'bseat__tot mono');
+      total.textContent = money(0);
+      head.append(seatAvatar(seat), who, total);
+      const reel = el('div', 'bseat__reel');
+      const track = el('div', 'bseat__strip');
+      const random = seeded(`draft:${index}:${shown?.id ?? ''}`);
+      for (let tile = 0; tile < 13; tile += 1) {
+        track.appendChild(buildTile(pool.length ? weightedPick(pool, random) : null, false, null));
+      }
+      reel.append(track, el('i', 'bseat__mark'));
+      cell.append(head, reel);
+      return cell;
+    });
+    battle.append(bar, board);
+    stage.replaceChildren(battle);
+  }
+  /* Rested every time, not only when built: a stage painted while the page was hidden had no
+   * width to measure. */
+  for (const track of stage.querySelectorAll('.battle--idle .bseat__strip')) restAt(track, 6);
 }
 
 function paintArena() {
   const battle = view.battle;
+  const stage = $('#btlStage', root);
+  if (!stage) return;
   /* Not `battle.status === 'settled'`. See the clock section above: the server settles before the
    * spin, so the status is true several seconds before the player is meant to know anything. */
   const revealed = isRevealed(battle);
 
-  root.innerHTML = `
-    <div class="arena barena">
-      <header class="arena__head">
-        <button class="btn arena__back" id="arenaBack" type="button">← Lobby</button>
-        <div class="arena__title">
-          <h2><span class="btlcard__fmt" id="arenaFmt"></span><span class="arena__mode" id="arenaMode"></span></h2>
-          <span class="arena__code mono" id="arenaCode"></span>
-        </div>
-        <div class="arena__stats">
-          <span class="arena__stat"><i id="arenaValueLabel"></i><b class="mono" id="arenaValue"></b></span>
-          <span class="arena__stat"><i>Round</i><b class="mono" id="arenaRound">–</b></span>
-        </div>
-        <div class="arena__tools">
-          <button class="btn arena__copy" id="arenaCopy" type="button">Copy invite</button>
-          <button class="btn arena__fast" id="arenaFast" type="button" role="switch">Fast roll</button>
-        </div>
-      </header>
-      <div class="arena__strip" id="arenaStrip"></div>
-      <div class="arena__result" id="arenaResult" hidden></div>
-      <div class="arena__board" id="arenaBoard"></div>
+  stage.dataset.idle = '';
+  stage.innerHTML = `
+    <div class="battle" id="arena">
+      <div class="battle__bar">
+        <span class="battle__mode" id="arenaFmt"></span>
+        <span class="battle__rule" id="arenaMode"></span>
+        <span class="battle__round" id="arenaRound">–</span>
+        <span class="battle__slot" id="arenaStrip"></span>
+        <b class="battle__pot"><i id="arenaValueLabel"></i><span class="mono" id="arenaValue"></span></b>
+      </div>
+      <div class="battle__tools">
+        <button class="battle__tool" id="arenaBack" type="button">← Lobby</button>
+        <span class="battle__code mono" id="arenaCode"></span>
+        <button class="battle__tool" id="arenaCopy" type="button">Copy invite</button>
+        <button class="battle__tool" id="arenaFast" type="button" role="switch">Fast roll</button>
+      </div>
+      <div class="bresult" id="arenaResult" hidden></div>
+      <div class="battle__seats" id="arenaBoard"></div>
+      <div class="bcount" id="arenaCount" aria-hidden="true" hidden></div>
       <details class="bfair" id="arenaFair" hidden></details>
     </div>`;
 
-  const arena = root.querySelector('.arena');
+  const arena = $('#arena', root);
   arena.dataset.phase = battle.status === 'lobby' ? 'lobby' : 'run';
   arena.dataset.seats = String(battle.seats.length);
+  arena.dataset.count = String(battle.seatCount);
+  arena.dataset.size = String(battle.teamSize);
   arena.dataset.mode = battle.mode;
 
   $('#arenaFmt', root).textContent = formatLabel(battle);
@@ -994,9 +1119,12 @@ function paintArena() {
   $('#arenaCode', root).textContent = battle.code;
   /* The pot is the sum of every drop, so it is the answer: it stays hidden behind the battle's
    * value until the last reel stops, like everything else the result touches. */
-  $('#arenaValueLabel', root).textContent = revealed ? 'Pot' : 'Battle value';
+  $('#arenaValueLabel', root).textContent = revealed ? 'Pot' : 'Value';
   $('#arenaValue', root).textContent = money(revealed ? Number(battle.potMinor ?? 0) : battleValue(battle));
-  if (battle.status === 'lobby') $('#arenaRound', root).textContent = `0/${battle.rounds.length}`;
+  if (battle.status === 'lobby') {
+    const count = battle.rounds.length;
+    $('#arenaRound', root).textContent = `${count} round${count === 1 ? '' : 's'}`;
+  }
   $('#arenaBack', root).addEventListener('click', goLobby);
 
   const copy = $('#arenaCopy', root);
@@ -1013,6 +1141,7 @@ function paintArena() {
   const fast = $('#arenaFast', root);
   fast.setAttribute('aria-checked', String(view.fast));
   fast.disabled = !battle.isHost || revealed;
+  fast.hidden = !battle.isHost;
   fast.addEventListener('click', async () => {
     try {
       await api.post(`/v1/battles/${battle.code}/speed`, { fast: !view.fast });
@@ -1021,50 +1150,16 @@ function paintArena() {
     }
   });
 
-  // The crate strip, with the active round marked.
-  const strip = $('#arenaStrip', root);
-  battle.rounds.forEach((round) => {
-    const cell = el('div', 'arena__round');
-    cell.dataset.index = String(round.index);
-    cell.title = round.name;
-    const art = document.createElement('img');
-    art.src = safeImage(crateArt(round));
-    art.alt = '';
-    const price = el('span', 'arena__roundprice mono');
-    price.textContent = money(Number(round.priceMinor));
-    cell.append(art, price);
-    strip.appendChild(cell);
-  });
+  // The rounds' cases, with the one being opened marked.
+  $('#arenaStrip', root).replaceWith(caseChips(battle.rounds));
 
-  /* Team by team, split by "vs". A 2v2 is two boxed pairs with a combined total each; a free-for-all
-   * is every player in their own lane. Seats are laid out team-major by the server, so a seat's
-   * index alone says which team it sits in. */
   const board = $('#arenaBoard', root);
   board.dataset.seats = String(battle.seatCount);
   board.dataset.teams = String(battle.teamCount);
-  for (let team = 0; team < battle.teamCount; team += 1) {
-    if (team > 0) board.appendChild(versus());
-    const block = el('section', 'bteam');
-    block.dataset.team = String(team);
-    block.dataset.squad = battle.teamSize > 1 ? '1' : '0';
-    if (revealed) block.dataset.won = battle.winningTeam === team ? '1' : '0';
-    if (battle.teamSize > 1) {
-      const head = el('header', 'bteam__head');
-      const name = el('span', 'bteam__name');
-      name.textContent = `Team ${team + 1}`;
-      const total = el('span', 'bteam__total mono');
-      total.dataset.team = String(team);
-      total.textContent = money(revealed ? teamTotal(battle, team) : 0);
-      head.append(name, total);
-      block.appendChild(head);
-    }
-    for (let offset = 0; offset < battle.teamSize; offset += 1) {
-      const index = team * battle.teamSize + offset;
-      const seat = battle.seats.find((entry) => entry.seat === index);
-      block.appendChild(seat ? buildSeat(battle, seat, revealed) : emptySeat(battle));
-    }
-    board.appendChild(block);
-  }
+  layoutSeats(board, battle.teamCount, battle.teamSize, (index) => {
+    const seat = battle.seats.find((entry) => entry.seat === index);
+    return seat ? buildSeat(battle, seat, revealed) : emptySeat(battle, index);
+  }, { won: revealed ? battle.winningTeam : null, total: revealed ? (team) => teamTotal(battle, team) : null });
 
   if (battle.status === 'lobby') paintWaiting(battle);
   if (revealed) {
@@ -1075,14 +1170,16 @@ function paintArena() {
 }
 
 function versus() {
-  const vs = el('div', 'bvs');
-  vs.textContent = 'VS';
+  const vs = el('div', 'bversus');
   vs.setAttribute('aria-hidden', 'true');
+  const label = el('span');
+  label.textContent = 'VS';
+  vs.appendChild(label);
   return vs;
 }
 
 function buildSeat(battle, seat, revealed) {
-  const cell = el('div', 'seat');
+  const cell = el('div', 'bseat');
   cell.dataset.seat = String(seat.seat);
   cell.dataset.team = String(seat.team);
   cell.dataset.you = seat.isYou ? '1' : '0';
@@ -1090,69 +1187,71 @@ function buildSeat(battle, seat, revealed) {
    * even though nobody is paid for it. The payout line below is what only humans get. */
   if (revealed) cell.dataset.won = battle.winningTeam === seat.team ? '1' : '0';
 
-  const info = el('div', 'seat__info');
-  const avatar = el('span', 'seat__av');
-  avatar.dataset.bot = seat.isBot ? '1' : '0';
-  avatar.textContent = seat.isBot ? 'BOT' : initials(seat.name);
-
-  const who = el('div', 'seat__who');
-  const name = el('span', 'seat__name');
+  const head = el('div', 'bseat__head');
+  const who = el('span', 'bseat__who');
+  const name = el('b');
   name.textContent = seat.name;
-  const tags = el('span', 'seat__tags');
-  if (seat.isYou) tags.appendChild(el('i', 'seat__you', 'YOU'));
-  if (seat.isBot) tags.appendChild(el('i', 'seat__bot', 'BOT'));
-  const place = el('i', 'seat__team mono');
-  place.textContent = battle.teamSize > 1 ? `TEAM ${seat.team + 1}` : `P${seat.seat + 1}`;
-  tags.appendChild(place);
-  who.append(name, tags);
-
-  const crown = el('span', 'seat__crown', CROWN_SVG);
-  crown.setAttribute('aria-hidden', 'true');
+  who.appendChild(name);
+  if (seat.isYou) who.appendChild(el('i', 'bseat__tag', 'You'));
+  if (seat.isBot) who.appendChild(el('i', 'bseat__tag', 'Bot'));
+  /* Every drop this seat has landed so far, filled in round by round by the animation. */
+  const drops = el('span', 'bseat__items');
+  drops.dataset.seat = String(seat.seat);
+  who.appendChild(drops);
 
   /* The running total starts at zero and is counted up by the animation as each round lands. It
    * used to open on `totalDropMinor` — the settled, final figure — which handed the player the
    * answer while the reels were still spinning. */
-  const total = el('div', 'seat__total mono');
+  const sum = el('span', 'bseat__sum');
+  const total = el('em', 'bseat__tot mono');
   total.dataset.seat = String(seat.seat);
-  total.append(coin(), document.createTextNode(
-    money(revealed ? Number(seat.totalDropMinor ?? 0) : 0),
-  ));
-
-  const won = el('div', 'seat__won mono');
+  total.textContent = money(revealed ? Number(seat.totalDropMinor ?? 0) : 0);
+  sum.appendChild(total);
   if (revealed && Number(seat.payoutMinor) > 0) {
+    const won = el('span', 'bseat__won mono');
     won.textContent = `+${money(Number(seat.payoutMinor))}`;
+    sum.appendChild(won);
   }
-  info.append(avatar, who, crown, total, won);
+  head.append(seatAvatar(seat), who, sum);
 
-  const play = el('div', 'seat__play');
-  const reel = el('div', 'seat__reel');
-  const track = el('div', 'seat__track');
+  const reel = el('div', 'bseat__reel');
+  const track = el('div', 'bseat__strip');
   track.dataset.seat = String(seat.seat);
-  reel.append(track, el('i', 'seat__marker'));
-  /* Every drop this seat has landed so far, filled in round by round by the animation. */
-  const drops = el('div', 'seat__drops');
-  drops.dataset.seat = String(seat.seat);
-  play.append(reel, drops);
+  reel.append(track, el('i', 'bseat__mark'));
 
-  cell.append(info, play);
+  cell.append(head, reel);
   return cell;
 }
 
-function emptySeat(battle) {
-  const empty = el('div', 'seat seat--empty');
-  const label = el('p', 'seat__waiting');
-  label.textContent = 'Waiting for a player…';
-  empty.appendChild(label);
+function emptySeat(battle, index) {
+  const cell = el('div', 'bseat bseat--open');
+  cell.dataset.team = String(Math.floor(index / battle.teamSize));
+  const head = el('div', 'bseat__head');
+  const who = el('span', 'bseat__who');
+  const name = el('b');
+  name.textContent = 'Open seat';
+  who.appendChild(name);
+  head.append(seatAvatar(null), who);
   /* Only offered to someone not already at the table — a seated player taking a second seat is a
    * request the server refuses anyway. */
   if (!battle.seats.some((seat) => seat.isYou)) {
-    const join = el('button', 'btn btn--go');
+    const join = el('button', 'btn btn--go bseat__join');
     join.type = 'button';
-    join.textContent = `Take this seat · ${money(Number(battle.entryCostMinor))}`;
+    join.textContent = `Take seat · ${money(Number(battle.entryCostMinor))}`;
     join.addEventListener('click', () => joinBattle(battle.code, battle.entryCostMinor));
-    empty.appendChild(join);
+    head.appendChild(join);
+  } else {
+    const wait = el('span', 'bseat__wait');
+    wait.textContent = 'Waiting for a player…';
+    head.appendChild(wait);
   }
-  return empty;
+  /* The reel is dressed like the others', so an open seat shows the case it will open. */
+  const reel = el('div', 'bseat__reel');
+  const track = el('div', 'bseat__strip');
+  track.dataset.seat = String(index);
+  reel.append(track, el('i', 'bseat__mark'));
+  cell.append(head, reel);
+  return cell;
 }
 
 /* The banner over the board once the last reel stops: who took it, and for the player who did,
@@ -1168,9 +1267,9 @@ function paintResult(battle) {
   box.hidden = false;
   box.dataset.state = youWon ? 'won' : mine ? 'lost' : 'neutral';
 
-  const text = el('div', 'arena__resulttext');
-  const title = el('strong', 'arena__resulttitle');
-  const sub = el('span', 'arena__resultsub');
+  const text = el('div', 'bresult__text');
+  const title = el('strong', 'bresult__title');
+  const sub = el('span', 'bresult__sub');
   const side = battle.teamSize > 1
     ? `Team ${battle.winningTeam + 1}`
     : (winners[0]?.isYou ? 'You' : winners[0]?.name ?? 'A player');
@@ -1182,12 +1281,10 @@ function paintResult(battle) {
     + `${money(teamTotal(battle, battle.winningTeam))}`;
   text.append(title, sub);
 
-  const trophy = el('span', 'arena__trophy', TROPHY_SVG);
-  trophy.setAttribute('aria-hidden', 'true');
-  box.replaceChildren(trophy, text);
+  box.replaceChildren(text);
 
   if (state.authenticated) {
-    const again = el('button', 'btn btn--go arena__again');
+    const again = el('button', 'btn btn--go bresult__again');
     again.type = 'button';
     again.textContent = 'Battle again';
     again.title = 'Host a new battle with the same crates and format';
@@ -1237,13 +1334,14 @@ function rematch(battle) {
     allowBots: Boolean(battle.allowBots),
     caseIds: battle.rounds.map((round) => round.caseId).slice(0, view.modes?.maxRounds ?? 10),
   };
+  paintCreator();
   goLobby();
 }
 
 function paintWaiting(battle) {
   const board = $('#arenaBoard', root);
   if (!board) return;
-  const bar = el('div', 'arena__waiting');
+  const bar = el('div', 'bwait');
   const text = el('span');
   text.textContent = `${battle.seats.length} of ${battle.seatCount} seats taken`;
   bar.appendChild(text);
@@ -1261,7 +1359,7 @@ function paintWaiting(battle) {
     });
     bar.appendChild(fill);
   }
-  const leave = el('button', 'btn');
+  const leave = el('button', 'btn bwait__leave');
   leave.type = 'button';
   leave.textContent = battle.isHost ? 'Cancel lobby' : 'Leave';
   leave.addEventListener('click', async () => {
@@ -1289,14 +1387,14 @@ function startAnimation() {
   const battle = view.battle;
   if (!battle) return;
 
-  const tracks = [...root.querySelectorAll('.seat__track')];
+  const tracks = [...root.querySelectorAll('#arena .bseat__strip')];
   if (!tracks.length) return;
 
   /* A lobby still filling has no results at all, so its reels can safely show the first crate's
    * contents at rest — a seated player sees what they are about to open instead of an empty bar. */
   if (battle.status === 'lobby') {
     dress(tracks, new Map(), battle, 0);
-    for (const track of tracks) settle(track, 0);
+    for (const track of tracks) restAt(track, 6);
     return;
   }
 
@@ -1335,10 +1433,27 @@ function startAnimation() {
    * that ended last week finishes on frame one — that is a replay, and a replay must not fire the
    * jackpot sound and the "you took the pot" toast at someone who is just reading the history. */
   let watched = false;
+  const countdown = $('#arenaCount', root);
 
   const tick = () => {
     const { startsAt, roundMs } = schedule;
     const elapsed = Date.now() - startsAt;
+
+    /* The preview's 3, 2, 1 over the lead-in, from the same clock as the reels, so a player who
+     * arrives a second late sees "2" like everyone else. */
+    if (countdown) {
+      const left = elapsed < 0 ? Math.min(3, Math.ceil(-elapsed / (START_LEAD_MS / 3))) : 0;
+      if (String(left) !== countdown.dataset.n) {
+        countdown.dataset.n = String(left);
+        countdown.hidden = left === 0;
+        if (left) {
+          const number = el('span');
+          number.textContent = String(left);
+          countdown.replaceChildren(number);
+          playSound('tick');
+        }
+      }
+    }
     const finished = elapsed >= roundMs * totalRounds;
     const index = elapsed < 0 ? 0 : Math.min(totalRounds - 1, Math.floor(elapsed / roundMs));
 
@@ -1393,14 +1508,19 @@ function travel(progress) {
 }
 
 function markRound(index) {
-  for (const cell of root.querySelectorAll('.arena__round')) {
+  for (const cell of root.querySelectorAll('#arena .bcase')) {
     const at = Number(cell.dataset.index);
-    cell.dataset.active = at === index ? '1' : '0';
-    cell.dataset.done = at < index ? '1' : '0';
+    cell.dataset.state = at === index ? 'now' : at < index ? 'done' : '';
+  }
+  /* Many rounds overflow the bar, so the row scrolls the case being opened into its middle. */
+  const now = root.querySelector('#arena .bcase[data-state="now"]');
+  const row = now?.parentElement;
+  if (row && row.scrollWidth > row.clientWidth) {
+    row.scrollLeft = Math.max(0, now.offsetLeft - row.offsetLeft - row.clientWidth / 2 + now.offsetWidth / 2);
   }
   const total = view.battle?.rounds?.length ?? 0;
   const label = $('#arenaRound', root);
-  if (label && total) label.textContent = `${Math.min(index + 1, total)}/${total}`;
+  if (label && total) label.textContent = `Round ${Math.min(index + 1, total)} / ${total}`;
 }
 
 function dress(tracks, byRound, battle, roundIndex) {
@@ -1441,6 +1561,21 @@ function measure(track) {
   return { total: pad + WIN_AT * (tileWidth + gap) + tileWidth / 2 - reelWidth / 2 };
 }
 
+/* A reel at rest, before its battle starts: tile `at` under the marker, so the reel reads as full
+ * rather than starting at its left edge. */
+function restAt(track, at) {
+  const reel = track.parentElement;
+  const tile = track.firstElementChild;
+  if (!reel || !tile) return;
+  const tileWidth = tile.getBoundingClientRect().width;
+  const reelWidth = reel.getBoundingClientRect().width;
+  if (!tileWidth || !reelWidth) return;
+  const style = getComputedStyle(track);
+  const gap = parseFloat(style.columnGap) || 0;
+  const pad = parseFloat(style.paddingLeft) || 0;
+  track.style.transform = `translate3d(${-(pad + at * (tileWidth + gap) + tileWidth / 2 - reelWidth / 2)}px, 0, 0)`;
+}
+
 /* A reel is only as wide as its grid column, so a resize invalidates the measurement. */
 window.addEventListener('resize', () => { metrics = null; }, { passive: true });
 
@@ -1476,32 +1611,37 @@ function buildStrip(track, result, battle, roundIndex, seat) {
 }
 
 function buildTile(item, winning, result) {
-  const tile = el('div', 'seat__tile');
-  /* `winner`, not the old `win`: that attribute lit the tile gold the moment the strip was built,
-   * so the drop could be read off the reel while it was still racing. battles.css lights this one
-   * only once its reel reports landed, and hides the value until then. */
+  const tile = el('div', 'btile');
+  /* `winner`, not the old `win`: that attribute lit the tile the moment the strip was built, so the
+   * drop could be read off the reel while it was still racing. The stage lights this one only once
+   * its reel reports landed. */
   if (winning) tile.dataset.winner = '1';
-  if (item?.rarity) tile.dataset.rarity = item.rarity;
+  if (item?.rarity) {
+    tile.dataset.rarity = item.rarity;
+    const colour = RARITY[item.rarity]?.color;
+    if (colour) tile.style.setProperty('--rar', colour);
+  }
 
   const art = document.createElement('img');
   /* `img` first: the normaliser already prefers the server URL there and falls back to the local
-   * sprite, whereas `imageUrl` is the raw, usually-null field. The old order had it backwards. */
+   * sprite, whereas `imageUrl` is the raw, usually-null field. */
   art.src = safeImage(item?.img ?? item?.imageUrl ?? '');
   art.alt = '';
   art.loading = 'lazy';
   tile.appendChild(art);
 
-  /* Naming the drop is what makes a reel readable at all — a 40px sprite flying past is a shape,
-   * not an item. Written with textContent, like every other server string in this file. */
-  const name = el('span', 'seat__tilename');
+  /* Naming the drop is what makes a reel readable at all — a sprite flying past is a shape, not an
+   * item. Written with textContent, like every other server string in this file. */
+  const name = el('b', 'btile__name');
   name.textContent = item?.displayName ?? item?.name ?? '';
   tile.appendChild(name);
 
-  if (winning && result) {
-    const value = el('span', 'seat__tileval mono');
-    value.textContent = money(Number(result.payoutMinor));
-    tile.appendChild(value);
-  }
+  /* Every tile carries its value, the preview's way, so the winner's tile looks like any other
+   * until its reel lands. */
+  const value = el('em', 'btile__val mono');
+  if (winning && result) value.textContent = money(Number(result.payoutMinor));
+  else if (item) value.textContent = money(Number(item.value ?? 0) * Number(item.quantity ?? 1));
+  tile.appendChild(value);
   return tile;
 }
 
@@ -1545,7 +1685,7 @@ function paintProgress(battle, landedRounds, byRound) {
   const seatTotals = new Map();
   for (const seat of battle.seats) {
     let total = 0n;
-    const drops = root.querySelector(`.seat__drops[data-seat="${seat.seat}"]`);
+    const drops = root.querySelector(`#arena .bseat__items[data-seat="${seat.seat}"]`);
     for (let index = 0; index < landedRounds; index += 1) {
       const result = byRound.get(index)?.get(seat.seat);
       if (!result) continue;
@@ -1559,15 +1699,15 @@ function paintProgress(battle, landedRounds, byRound) {
       if (Number(chip.dataset.round) >= landedRounds) chip.remove();
     }
     seatTotals.set(seat.seat, total);
-    const node = root.querySelector(`.seat__total[data-seat="${seat.seat}"]`);
-    if (node) node.replaceChildren(coin(), document.createTextNode(money(Number(total))));
+    const node = root.querySelector(`#arena .bseat__tot[data-seat="${seat.seat}"]`);
+    if (node) node.textContent = money(Number(total));
   }
 
   const teamTotals = new Map();
   for (const seat of battle.seats) {
     teamTotals.set(seat.team, (teamTotals.get(seat.team) ?? 0n) + (seatTotals.get(seat.seat) ?? 0n));
   }
-  for (const node of root.querySelectorAll('.bteam__total')) {
+  for (const node of root.querySelectorAll('#arena .bsquad__total')) {
     node.textContent = money(Number(teamTotals.get(Number(node.dataset.team)) ?? 0n));
   }
 
@@ -1582,23 +1722,25 @@ function paintProgress(battle, landedRounds, byRound) {
     leaders = new Set([...teamTotals].filter(([, value]) => value === best).map(([team]) => team));
     if (leaders.size === teamTotals.size) leaders = new Set();
   }
-  for (const cell of root.querySelectorAll('.seat[data-seat]')) {
+  for (const cell of root.querySelectorAll('#arena .bseat[data-seat]')) {
     cell.dataset.lead = leaders.has(Number(cell.dataset.team)) ? '1' : '0';
   }
 }
 
 function dropChip(result, round) {
   const item = result.item ? normalizeItem(result.item) : null;
-  const chip = el('span', 'seat__drop');
+  const chip = el('span', 'bitem');
   chip.dataset.round = String(round);
-  if (item?.rarity) chip.dataset.rarity = item.rarity;
+  if (item?.rarity) {
+    chip.dataset.rarity = item.rarity;
+    const colour = RARITY[item.rarity]?.color;
+    if (colour) chip.style.setProperty('--rar', colour);
+  }
   chip.title = `${item?.displayName ?? ''} · ${money(Number(result.payoutMinor))}`;
   const art = document.createElement('img');
   art.src = safeImage(item?.img ?? item?.imageUrl ?? '');
   art.alt = '';
-  const value = el('b', 'mono');
-  value.textContent = money(Number(result.payoutMinor));
-  chip.append(art, value);
+  chip.appendChild(art);
   return chip;
 }
 
@@ -1657,6 +1799,7 @@ async function createBattle() {
       clientSeed: randomSeed(),
     });
     view.draft.caseIds = [];
+    paintCreator();
     playSound('coin');
     await refreshBalance().catch(() => undefined);
     navigate(`/battles?code=${encodeURIComponent(result.battle.code)}`);
@@ -1772,13 +1915,6 @@ function confetti() {
   window.setTimeout(() => layer.remove(), 2_600);
 }
 
-const CROWN_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 8.5l4.5 3.5L12 5l4.5 7L21 8.5 19 18H5L3 8.5z"/><rect x="5" y="19.2" width="14" height="1.8" rx=".9"/></svg>';
 const TROPHY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M16 5h3a3 3 0 0 1-3 4M8 5H5a3 3 0 0 0 3 4"/><path d="M12 13v4M8.5 20h7M10 17h4v3h-4z"/></svg>';
-
-function coin() {
-  const mark = el('i', 'coin');
-  mark.setAttribute('aria-hidden', 'true');
-  return mark;
-}
 
 void grouped;
