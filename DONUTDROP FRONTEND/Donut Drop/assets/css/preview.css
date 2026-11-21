@@ -1275,6 +1275,51 @@ body.lx .view .btl .btl__make .btl__sum b { color: var(--lx-ink); font: 800 .75r
 body.lx .view .btl .btl__make .btl__go { height: 52px; font-size: 1rem; }
 body.lx .view .btl .btl__make .btl__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
 
+/* ═════════ Slots and Mob Derby panels, as the preview's ═════════
+   (Their stages stay 3D.) Slots: Speed as a pill over "Spin", the paytable in the panel as the
+   preview's table (pays × the whole bet) and the specials under it; Auto spin stays, the session
+   tallies go. Derby: "Back a mob" on flat tiles (the odds in plain ink), "Back the Pig", the profit
+   on a win in a read-only field; Auto race and the graphics stay, the tallies and the log go. */
+body.lx .slots :is(.slots__stats, .slots__toggles:empty) { display: none; }
+body.lx .slots .slots__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .slots .slots__speed { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; border-radius: 999px; background: var(--lx-0); }
+body.lx .view .slots .slots__sp,
+body.lx .view .slots .slots__sp:hover:not(:disabled) {
+  height: 36px; border: 0; border-radius: 999px; box-shadow: none; background: transparent;
+  color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui); cursor: pointer;
+}
+body.lx .view .slots .slots__sp:hover:not(:disabled) { color: var(--lx-ink); }
+body.lx .view .slots .slots__sp[aria-pressed="true"],
+body.lx .view .slots .slots__sp[aria-pressed="true"]:hover:not(:disabled) { background: var(--lx-4); color: var(--lx-ink); }
+body.lx .slots .slots__toggles { grid-template-columns: minmax(0, 1fr); }
+body.lx .slots .slots__pays { display: grid; gap: 8px; padding: 10px 8px 10px 10px; border-radius: 8px; background: var(--lx-0); }
+body.lx .slots .slots__paytab { width: 100%; border-collapse: collapse; font: 600 .75rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .slots .slots__paytab th, body.lx .slots .slots__paytab td { padding: 4px 2px; text-align: right; white-space: nowrap; }
+body.lx .slots .slots__paytab thead th { color: var(--lx-mute); font-weight: 700; }
+body.lx .slots .slots__paytab th:first-child { text-align: left; }
+body.lx .slots .slots__paytab tbody th { display: flex; align-items: center; gap: 8px; color: var(--lx-text); font-weight: 600; }
+body.lx .slots .slots__paytab tbody th img { width: 18px; height: 18px; object-fit: contain; image-rendering: pixelated; }
+body.lx .slots .slots__paytab td { color: var(--lx-ink); font-weight: 800; }
+body.lx .slots .slots__rules { margin: 0; color: var(--lx-mute); font: 500 .6875rem/1.55 var(--lx-ui); }
+body.lx .slots .slots__rules b { color: var(--lx-text); }
+body.lx .slots .slots__pays:empty { display: none; }
+body.lx .slots .slots__paytable { height: auto; padding: 0; border: 0; background: none; box-shadow: none; color: var(--lx-mute); font: 600 .75rem/1.4 var(--lx-ui); text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+body.lx .slots .slots__paytable:hover { color: var(--lx-ink); background: none; }
+body.lx .derby :is(.derby__stats, .derby__log, .derby__logempty, .derby__label--log, .derby__paytable) { display: none; }
+body.lx .derby .derby__toggles { grid-template-columns: minmax(0, 1fr); }
+body.lx .derby .derby__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .derby .derby__label--row { display: flex; justify-content: space-between; gap: 8px; }
+body.lx .derby #derbyProfitX { color: var(--lx-text); font-weight: 800; }
+body.lx .derby .derby__field--read { display: flex; align-items: center; height: 44px; padding: 0 12px; border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-0); }
+body.lx .derby .derby__field--read > span { padding-right: 8px; color: var(--lx-gold); font: 900 .9375rem/1 var(--lx-ui); }
+body.lx .derby .derby__field--read output { color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .view .derby .derby__pick {
+  border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-1); box-shadow: none;
+}
+body.lx .view .derby .derby__pick:hover:not(:disabled) { border-color: var(--lx-5); background: var(--lx-2); }
+body.lx .view .derby .derby__pick[aria-checked="true"] { border-color: var(--lx-gold); background: color-mix(in srgb, var(--lx-gold) 8%, var(--lx-1)); }
+body.lx .view .derby .derby__odds { color: var(--lx-mute); font-weight: 700; }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

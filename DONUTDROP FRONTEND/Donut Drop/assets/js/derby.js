@@ -371,7 +371,7 @@ function paintControls() {
   const go = $('#derbyGo', root);
   const label = $('#derbyGoLabel', root);
   const problem = phase === 'idle' ? raceProblem() : '';
-  let text = `Race · ${money(Number(stakeMinor() ?? 0n))} on the ${racerOf(pick)?.name ?? '…'}`;
+  let text = `Back the ${racerOf(pick)?.name ?? '…'}`;
   if (!state.authenticated) text = 'Log in to play';
   else if (phase === 'racing') text = 'They’re off…';
   if (label.textContent !== text) label.textContent = text;
@@ -382,6 +382,13 @@ function paintControls() {
   autoButton.textContent = auto ? 'Stop auto' : 'Auto race';
   autoButton.disabled = !state.authenticated;
   $('#derbyHint', root).textContent = state.authenticated && phase === 'idle' ? problem : '';
+  // The preview's "Profit on win": what the stake makes over itself at the backed mob's odds.
+  const odds = racerOf(pick)?.oddsX100;
+  const stake = stakeMinor();
+  $('#derbyProfit', root).textContent = odds && stake && stake > 0n
+    ? money(Math.floor((Number(stake) * (odds - 100)) / 100)).slice(1)
+    : '0';
+  $('#derbyProfitX', root).textContent = odds ? `(${times(odds)})` : '';
   for (const node of root.querySelectorAll('.derby__field input, .derby__adj')) node.disabled = phase !== 'idle';
 }
 
@@ -433,7 +440,7 @@ function paintHud(status, text) {
   hud.dataset.state = status;
   const racer = racerOf(pick);
   let big = racer ? `${racer.name} · ${times(racer.oddsX100)}` : '';
-  let line = 'Back a racer, then race';
+  let line = 'Back a mob, then race';
   if (status === 'waiting') line = 'Into the gate…';
   else if (status === 'countdown') { big = text; line = 'Get ready…'; }
   else if (status === 'running') line = `You backed the ${racer?.name ?? ''}`;
@@ -508,7 +515,7 @@ function build() {
         <ol class="derby__lanes" id="derbyLanes" aria-hidden="true"></ol>
         <div class="derby__hud" id="derbyHud" data-state="idle">
           <p class="derby__big" id="derbyBig"></p>
-          <p class="derby__status" id="derbyStatus">Back a racer, then race</p>
+          <p class="derby__status" id="derbyStatus">Back a mob, then race</p>
         </div>
         <ol class="derby__order" id="derbyOrder" aria-label="The order" hidden></ol>
         <p class="derby__splash" id="derbySplash" aria-hidden="true" hidden></p>
@@ -529,9 +536,11 @@ function build() {
           <button type="button" class="derby__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="derby__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <span class="derby__label" id="derbyPickLabel">Back a racer</span>
+        <span class="derby__label" id="derbyPickLabel">Back a mob</span>
         <div class="derby__picks" role="radiogroup" aria-labelledby="derbyPickLabel"></div>
         <button class="btn derby__go" id="derbyGo" type="submit"><span id="derbyGoLabel">Loading…</span></button>
+        <label class="derby__label derby__label--row" for="derbyProfit"><span>Profit on win</span><span id="derbyProfitX"></span></label>
+        <div class="derby__field derby__field--read"><span aria-hidden="true">$</span><output id="derbyProfit" for="derbyStake">0</output></div>
         <div class="derby__toggles">
           <button class="derby__toggle" id="derbyAuto" type="button" aria-pressed="false">Auto race</button>
           <button class="derby__paytable" id="derbyPaytable" type="button">How it works</button>
@@ -542,7 +551,7 @@ function build() {
           <div><dt>Won</dt><dd id="derbyWon"></dd></div>
           <div><dt>Best</dt><dd id="derbyBest"></dd></div>
         </dl>
-        <span class="derby__label">Last races</span>
+        <span class="derby__label derby__label--log">Last races</span>
         <ol class="derby__log" id="derbyLog"></ol>
         <p class="derby__logempty" id="derbyLogEmpty">No races yet.</p>
         <label class="derby__gfx" for="derbyGfx">
