@@ -108,11 +108,11 @@ const TOP = Math.PI / 2;         // six o'clock, in canvas angles (y grows down)
  * sticker, and a graded one reads as lit. */
 /* Flat, as the rest of the casino floor (2026-11-09): one gold for the zone, green once it has paid,
  * a white pointer that reads on the track and on the zone alike, and no light anywhere. */
-const ZONE_HOT = '#ffa903';
-const ZONE_MID = '#ffa903';
-const ZONE_LOW = '#ffa903';
-const ZONE_WON = '#40c786';
-const TRACK = '#211d1a';
+const ZONE_HOT = '#ffc233';
+const ZONE_MID = '#ffaa00';
+const ZONE_LOW = '#ff9500';
+const ZONE_WON = '#3ecf7d';
+const TRACK = '#1d1d23';
 const RIM = 'rgba(255,255,255,.06)';
 const TICK = 'rgba(255,255,255,.16)';
 const POINTER = '#ffffff';
@@ -155,8 +155,8 @@ export function createWheel(canvas) {
     ctx.scale(z, z);
     ctx.translate(-cx, -cy);
 
-    const R = Math.min(w, h) * 0.36;      // centre of the track
-    const TW = R * 0.2;                   // track width
+    const R = Math.min(w, h) * 0.335;     // centre of the track
+    const TW = R * 0.30;                  // track width
     const sweep = Math.max(0, Math.min(1, S.chance)) * TAU;
     // where the ring's local zero has been carried to
     const spin = TOP + S.angle + S.kick * 0.4;

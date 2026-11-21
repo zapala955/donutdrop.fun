@@ -39,15 +39,10 @@ describe('the tower table', () => {
     assert.match(page, /button\.dataset\.sfx = 'none';/);
   });
 
-  it('picks the difficulty from a list, prices the top floor, and is still for reduced motion', async () => {
+  it('slides a gold pill under the difficulty and is still for reduced motion', async () => {
     const [page, css] = await Promise.all([read('assets/js/tower.js'), read('assets/css/tower.css')]);
-    // The preview's panel: a list of difficulties, a button that says Bet, the top floor's figure.
-    assert.match(page, /<select id="towerMode">/);
-    assert.match(page, /\$\('#towerMode', root\)\.addEventListener\('change', \(event\) => chooseMode\(event\.target\.value\)\);/);
-    assert.match(page, /text = 'Bet';/);
-    assert.match(page, /\$\('#towerProfitL', root\)\.textContent = 'Top floor pays';/);
-    // Each floor carries its price and, on the floor they stand on, the player's head.
-    assert.match(page, /floorEl\.toggleAttribute\('data-me', floor === standing\);/);
+    assert.match(page, /\$\('\.tower__modes', root\)\.style\.setProperty\('--mode-i', String\(MODE_NAMES\.indexOf\(name\)\)\);/);
+    assert.match(css, /transform: translateX\(calc\(var\(--mode-i, 0\) \* 100%\)\);/);
     assert.doesNotMatch(css, /blur\(|drop-shadow|text-shadow/);
     assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.tower__modes::before,[\s\S]*\.ttile\[data-kind="boom"\]::after,/);
     for (const motion of ['function wake()', 'function gem(', 'async function boom(']) {

@@ -583,7 +583,7 @@ function paintControls() {
   const go = $('#fishingGo', root);
   const label = $('#fishingGoLabel', root);
   const problem = phase === 'idle' ? castProblem() : '';
-  let text = 'Cast';
+  let text = `Cast · ${money(Number(stakeMinor() ?? 0n))}`;
   let tone = 'go';
   if (!state.authenticated) text = 'Log in to play';
   else if (phase === 'casting') text = 'Casting…';
@@ -621,7 +621,6 @@ function paintSinkers() {
     button.disabled = phase !== 'idle';
     const growth = config?.growth?.[button.dataset.sinker];
     $('.fishing__sinkertop', button).textContent = growth ? `2× in ${(Math.log(2) / growth).toFixed(1)}s` : '';
-    button.title = growth ? `${$('.fishing__sinkernote', button).textContent} · 2× in ${(Math.log(2) / growth).toFixed(1)}s` : '';
   }
 }
 
@@ -848,7 +847,7 @@ function build() {
 
     <aside class="fishing__panel" aria-label="Your cast">
       <form class="fishing__form" id="fishingForm" novalidate>
-        <label class="fishing__label" for="fishingStake">Bet amount</label>
+        <label class="fishing__label" for="fishingStake">Stake</label>
         <div class="fishing__field">
           <span aria-hidden="true">$</span>
           <input id="fishingStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -863,9 +862,9 @@ function build() {
             <b>${s.label}</b><span class="fishing__sinkernote">${s.note}</span><span class="fishing__sinkertop"></span>
           </button>`).join('')}
         </div>
-        <label class="fishing__label fishing__label--row" for="fishingAutoX"><span>Reel in at</span><span class="fishing__labelx">blank = by hand</span></label>
+        <label class="fishing__label" for="fishingAutoX">Auto reel at</label>
         <div class="fishing__field fishing__field--x">
-          <input id="fishingAutoX" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="2.00" />
+          <input id="fishingAutoX" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="Off" />
           <span aria-hidden="true">×</span>
         </div>
         <button class="btn fishing__go" id="fishingGo" type="submit" data-tone="go">
@@ -876,13 +875,12 @@ function build() {
           <button class="fishing__paytable" id="fishingPaytable" type="button">How it works</button>
         </div>
         <p class="fishing__hint" id="fishingHint" aria-live="polite"></p>
-        <p class="fishing__note">A heavier sinker dives faster: the multiplier climbs quicker, and so does the risk.</p>
         <dl class="fishing__stats">
           <div><dt>Casts</dt><dd id="fishingCasts"></dd></div>
           <div><dt>Won</dt><dd id="fishingWon"></dd></div>
           <div><dt>Best</dt><dd id="fishingBest"></dd></div>
         </dl>
-        <span class="fishing__label fishing__label--log">Last casts</span>
+        <span class="fishing__label">Last casts</span>
         <ol class="fishing__log" id="fishingLog"></ol>
         <p class="fishing__logempty" id="fishingLogEmpty">Nothing caught yet.</p>
         <label class="fishing__gfx" for="fishingGfx">

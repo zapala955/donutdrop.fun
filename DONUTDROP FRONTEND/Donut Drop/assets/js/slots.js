@@ -691,7 +691,6 @@ function createSlotsGame(game) {
     if (!root) return;
     paintView();
     paintControls();
-    paintPays();
     paintStats();
     paintFree();
   }
@@ -714,7 +713,7 @@ function createSlotsGame(game) {
     const go = $(`#${P}Go`, root);
     const label = $(`#${P}GoLabel`, root);
     const problem = spinProblem();
-    let text = 'Spin';
+    let text = `Spin · ${money(Number(stakeMinor() ?? 0n))}`;
     if (!state.authenticated) text = 'Log in to play';
     else if (round?.free) {
       const { played, left } = round.free;
@@ -731,7 +730,6 @@ function createSlotsGame(game) {
     autoButton.textContent = auto ? 'Stop auto' : 'Auto spin';
     autoButton.disabled = !state.authenticated || (Boolean(problem) && !auto);
     $(`#${P}Turbo`, root).setAttribute('aria-pressed', String(turbo));
-    $(`#${P}Normal`, root).setAttribute('aria-pressed', String(!turbo));
     machine?.setFlags({ auto, turbo });
     $(`#${P}Hint`, root).textContent = state.authenticated && !spinning ? problem : '';
     for (const node of root.querySelectorAll('.slots__field input, .slots__adj')) node.disabled = spinning;
@@ -799,28 +797,6 @@ function createSlotsGame(game) {
       <p class="slotspay__sub">A round pays at most ${config.maxWinX.toLocaleString('en-US')}× the stake and plays at most ${config.maxFreeSpins} free spins. Every spin comes from your fairness seed and can be checked on the Fairness page.</p>`;
   }
 
-  /* The preview's paytable in the panel: each symbol's pay for 3, 4 and 5 in a row as a multiple of
-   * the whole bet (the server's figures are per line, a tenth of the bet), then the specials. */
-  let paysFor = null;
-  function paintPays() {
-    const box = $(`#${P}Pays`, root);
-    if (!box || !config || paysFor === config) return;
-    paysFor = config;
-    const whole = (x) => `${Number((x / 10).toFixed(2))}×`;
-    const rows = config.symbols.filter((s) => s.pays.length).slice().reverse().map((s) => `
-      <tr><th><img src="${icon(s.id)}" alt="" />${s.name}</th><td>${whole(s.pays[0])}</td><td>${whole(s.pays[1])}</td><td>${whole(s.pays[2])}</td></tr>`).join('');
-    const wild = symbolOf(config.wild);
-    const book = symbolOf(config.scatter);
-    const x = config.scatterPayX;
-    const n = config.scatterSpins;
-    box.innerHTML = `
-      <table class="slots__paytab">
-        <thead><tr><th>Pays × total bet</th><th>3</th><th>4</th><th>5</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p class="slots__rules"><b>${wild.name}</b> is wild. ${game.wildNote} 3+ <b>${book.name}</b> pay ${x[3]}×/${x[4]}×/${x[5]}× and start ${n[3]}/${n[4]}/${n[5]} free spins at ${config.freeMultiplier}×. Max win ${config.maxWinX.toLocaleString('en-US')}×.</p>`;
-  }
-
   function openPaytable() {
     openModal(`${game.title} paytable`, (body) => {
       const wrap = document.createElement('div');
@@ -878,7 +854,7 @@ function createSlotsGame(game) {
 
       <aside class="slots__panel" aria-label="Your spin">
         <form class="slots__form" id="${P}Form" novalidate>
-          <label class="slots__label" for="${P}Stake">Bet amount</label>
+          <label class="slots__label" for="${P}Stake">Stake</label>
           <div class="slots__field">
             <span aria-hidden="true">$</span>
             <input id="${P}Stake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -886,16 +862,12 @@ function createSlotsGame(game) {
             <button type="button" class="slots__adj" data-adj="double" aria-label="Double the stake">2×</button>
             <button type="button" class="slots__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
           </div>
-          <span class="slots__label" id="${P}SpeedLabel">Speed</span>
-          <div class="slots__speed" role="group" aria-labelledby="${P}SpeedLabel">
-            <button class="slots__sp" id="${P}Normal" type="button" aria-pressed="true">Normal</button>
-            <button class="slots__sp" id="${P}Turbo" type="button" aria-pressed="false">Turbo</button>
-          </div>
           <button class="btn slots__go" id="${P}Go" type="submit" data-tone="go">
             <span id="${P}GoLabel">Loading…</span>
           </button>
           <div class="slots__toggles">
             <button class="slots__toggle" id="${P}Auto" type="button" aria-pressed="false">Auto spin</button>
+            <button class="slots__toggle" id="${P}Turbo" type="button" aria-pressed="false">Turbo</button>
           </div>
           <p class="slots__hint" id="${P}Hint" aria-live="polite"></p>
           <dl class="slots__stats">
@@ -903,8 +875,7 @@ function createSlotsGame(game) {
             <div><dt>Won</dt><dd id="${P}Won"></dd></div>
             <div><dt>Best</dt><dd id="${P}Best"></dd></div>
           </dl>
-          <div class="slots__pays" id="${P}Pays"></div>
-          <button class="slots__paytable" id="${P}Paytable" type="button">The ten lines and every rule</button>
+          <button class="slots__paytable" id="${P}Paytable" type="button">Paytable</button>
           ${viewSwitch(`${P}View`)}
         </form>
       </aside>
@@ -931,7 +902,6 @@ function createSlotsGame(game) {
       else if (!auto) clearTimeout(nextTimer);
     });
     $(`#${P}Turbo`, root).addEventListener('click', () => { turbo = !turbo; paintControls(); });
-    $(`#${P}Normal`, root).addEventListener('click', () => { turbo = false; paintControls(); });
     $(`#${P}Paytable`, root).addEventListener('click', openPaytable);
     onViewSwitch($(`#${P}View`, root), setView);
     // The same choice made anywhere else: 2D at once, 3D only for the machine on screen.

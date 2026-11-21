@@ -17,10 +17,9 @@ const phone = (css: string) => {
 };
 
 describe('the blackjack controls', () => {
-  it('shows the stake and the deal, or the moves, never both (on a desktop the stake stays, locked, as in the preview)', async () => {
+  it('shows the stake and the deal, or the moves, never both', async () => {
     const page = await read('assets/js/blackjack.js');
     assert.match(page, /\$\('#bjBetting', root\)\.hidden = inPlay;\n\s*\$\('#bjActions', root\)\.hidden = !inPlay;/);
-    assert.match(page, /if \(inPlay\) betting\.hidden = !window\.matchMedia\('\(min-width: 1024px\)'\)\.matches;\n\s*\$\('#bjDeal', root\)\.hidden = inPlay;/);
     const frame = await read('assets/css/luxe-games.css');
     assert.match(frame, /body\.lx \.bj__betting\[hidden\], body\.lx \.bj__actions\[hidden\] \{ display: none; \}/);
     // The rule that hides must come after the one that lays the form out, or the grid wins again.
@@ -42,9 +41,7 @@ describe('the blackjack controls', () => {
 
   /* 2026-11-10: "the blackjack doesnt fit the sites premium theme at all". The emerald felt became the
    * site's warm obsidian under one lamp, the print a gold-lined band, the backs a gold lattice with the
-   * pixel donut, the bet a chip; and the frame's shadow no longer boxes the print in.
-   * 2026-11-21: the 1:1 preview look draws over this in preview.css (green wool under the stage's dark
-   * wash, striped gold backs, the print as one line); blackjack.css keeps the table it replaces. */
+   * pixel donut, the bet a chip; and the frame's shadow no longer boxes the print in. */
   it('is a card room in the site\'s obsidian and gold, not a green felt', async () => {
     const css = await read('assets/css/blackjack.css');
     const tokens = css.slice(css.indexOf('.bj {'), css.indexOf('\n}\n', css.indexOf('.bj {')));

@@ -228,7 +228,7 @@ describe('the chicken page', () => {
     assert.match(page, /const EDGE_BPS = 1000n;/);
     assert.match(page, /api\.post\(`\/v1\/chicken\/games\/\$\{game\.id\}\/step`, \{ lane \}\)/);
     assert.match(page, /api\.post\(`\/v1\/chicken\/games\/\$\{game\.id\}\/cashout`, \{ crossed: game\.crossed \}\)/);
-    assert.match(page, /<label class="chicken__label" for="chickenMode">Difficulty<\/label>/);
+    assert.match(page, /role="radiogroup" aria-labelledby="chickenModeLabel"/);
   });
 
   it('scrolls the road inside its own box, in the site’s tokens, with reduced motion honoured', async () => {

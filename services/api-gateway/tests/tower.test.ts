@@ -241,7 +241,7 @@ describe('the tower page', () => {
     // Only the floor being climbed takes a press.
     assert.match(page, /node\.disabled = !live;/);
     // The difficulty is a radio group.
-    assert.match(page, /<label class="tower__label" for="towerMode">Difficulty<\/label>/);
+    assert.match(page, /role="radiogroup" aria-labelledby="towerModeLabel"/);
   });
 
   it('sits in the shared game frame, in the site’s tokens', async () => {

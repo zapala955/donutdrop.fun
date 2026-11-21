@@ -42,17 +42,6 @@ describe('the chicken road', () => {
     assert.match(page, /id="chickenCash" type="button" data-sfx="none" hidden/);
   });
 
-  it('has the preview’s panel and road: a list of difficulties, Bet, the first lane’s figure, carts rolling by', async () => {
-    const page = await read('assets/js/chicken.js');
-    assert.match(page, /<select id="chickenMode">/);
-    assert.match(page, /text = 'Bet';/);
-    assert.match(page, /text = 'Cross the next lane';/);
-    assert.match(page, /inPlay\(\) \? 'Total profit' : 'First lane pays'/);
-    // Scenery only, never on the lane being stepped into, and still for reduced motion.
-    assert.match(page, /const from = inPlay\(\) \? game\.crossed \+ 1 : 0;/);
-    assert.match(page, /if \(traffic \|\| reduceMotion\(\)\) return;/);
-  });
-
   it('is flat: no blur, no drop shadow, a sliding pill, buttons on a lip, and still under reduced motion', async () => {
     const css = await read('assets/css/chicken.css');
     assert.doesNotMatch(css, /blur\(|drop-shadow|text-shadow/);

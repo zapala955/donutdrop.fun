@@ -17,7 +17,6 @@
  */
 import { api, clientSeed } from './api.js';
 import { betOnCommitment, bus, holdLiveFigures, refreshBalance, showBalance, state } from './store.js';
-import { autoFields, autoSwitch, wireAuto } from './autobet.js';
 import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } from './util.js';
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
@@ -37,7 +36,6 @@ let stakeText = '1m';
 let target = 200; // 2.00x
 let recent = []; // newest first
 let fx = null; // the preview's effects over the stage (pvfx.js)
-let auto = null; // Manual or Auto (autobet.js)
 
 /* ─────────── the maths, mirrored from lib/limbo.ts ─────────── */
 
@@ -138,7 +136,6 @@ async function bet() {
     say(placed.win
       ? `Drew ${times(placed.result)}, target ${times(placed.target)}. A win: ${money(Number(placed.payoutMinor))}, ${money(Number(profit))} profit.`
       : `Drew ${times(placed.result)}, target ${times(placed.target)} needed. Lost ${money(Number(placed.stakeMinor))}.`);
-    return placed;
   } catch (error) {
     release();
     if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
@@ -262,21 +259,18 @@ function paintControls() {
   let text;
   if (!state.authenticated) text = 'Log in to play';
   else if (busy) text = 'Betting…';
-  else text = 'Bet';
-  if (auto && state.authenticated) text = auto.label(text);
+  else text = `Bet · ${money(Number(stake ?? 0n))}`;
   if (label.textContent !== text) label.textContent = text;
   const problem = state.authenticated ? betProblem() : '';
-  // A run in Auto can always be stopped, mid-bet included.
-  go.disabled = auto?.running ? false : busy || Boolean(problem);
+  go.disabled = busy || Boolean(problem);
   go.setAttribute('aria-busy', String(busy));
   hint.textContent = problem;
 
   $('#limboProfit', root).value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
   $('#limboProfitX', root).textContent = times(target);
 
-  const locked = busy || Boolean(auto?.running);
-  for (const node of root.querySelectorAll('.limbo__field input, .limbo__adj, .limbo__stage input')) {
-    node.disabled = locked;
+  for (const node of root.querySelectorAll('.limbo__panel input, .limbo__adj, .limbo__stage input')) {
+    node.disabled = busy;
   }
 }
 
@@ -325,8 +319,7 @@ function build() {
 
     <aside class="limbo__panel" aria-label="Your bet">
       <form class="limbo__form" id="limboForm" novalidate>
-        ${autoSwitch('limbo')}
-        <label class="limbo__label" for="limboStake">Bet amount</label>
+        <label class="limbo__label" for="limboStake">Stake</label>
         <div class="limbo__field">
           <span aria-hidden="true">$</span>
           <input id="limboStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -334,14 +327,13 @@ function build() {
           <button type="button" class="limbo__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="limbo__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        ${autoFields('limbo')}
-        <button class="btn limbo__go" id="limboGo" type="submit" data-sfx="none">
-          <span id="limboGoLabel">Loading…</span>
-        </button>
         <label class="limbo__label limbo__label--row" for="limboProfit"><span>Profit on win</span><span class="limbo__profitx" id="limboProfitX"></span></label>
         <div class="limbo__field limbo__field--read">
           <output id="limboProfit" for="limboStake limboTarget">—</output>
         </div>
+        <button class="btn limbo__go" id="limboGo" type="submit" data-sfx="none">
+          <span id="limboGoLabel">Loading…</span>
+        </button>
         <p class="limbo__hint" id="limboHint" aria-live="polite"></p>
       </form>
     </aside>
@@ -383,20 +375,9 @@ function build() {
     });
   }
 
-  auto = wireAuto(root, 'limbo', {
-    betOnce: bet,
-    getStake: stakeMinor,
-    setStake: (minor) => {
-      stakeText = formatAmountInput(Number(minor));
-      stake.value = stakeText;
-      paintControls();
-    },
-    paint: paintControls,
-  });
   $('#limboForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
-    if (auto.mode === 'auto') auto.toggle();
-    else void bet();
+    void bet();
   });
 }
 

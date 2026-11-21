@@ -22,8 +22,8 @@ import { playSound } from './audio-engine.js';
 import { clearWin, fxColors, makeFx, winCard } from './pvfx.js';
 
 const SIDE = {
-  heads: { label: 'Heads', art: 'assets/img/brand/donut.svg' },
-  tails: { label: 'Tails', art: 'assets/img/items/diamond.png' },
+  heads: { label: 'Heads', art: 'assets/img/items/gold_ingot.png' },
+  tails: { label: 'Tails', art: 'assets/img/items/iron_ingot.png' },
 };
 const RECENT = 12;
 /** The whole flip: up, over five times and down, in milliseconds. */
@@ -302,15 +302,15 @@ function paintControls() {
   let text;
   if (!state.authenticated) text = 'Log in to play';
   else if (busy) text = 'Flipping…';
-  else text = `Flip ${SIDE[call].label.toLowerCase()}`;
+  else text = `Flip ${SIDE[call].label.toLowerCase()} · ${money(Number(stake ?? 0n))}`;
   if (label.textContent !== text) label.textContent = text;
   const problem = state.authenticated ? betProblem() : '';
   go.disabled = busy || Boolean(problem);
   go.setAttribute('aria-busy', String(busy));
   hint.textContent = problem;
 
-  const note = `Call it right and you get ${times().replace(/0+×$/, '×').replace(/\.×$/, '×')} your stake.`;
-  if ($('#cflipNote', root).textContent !== note) $('#cflipNote', root).textContent = note;
+  $('#cflipProfit', root).value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
+  $('#cflipProfitX', root).textContent = times();
 
   for (const node of root.querySelectorAll('.cflip__panel input, .cflip__adj, .cflip__side')) {
     node.disabled = busy;
@@ -343,8 +343,8 @@ function paintLeftovers() {
 /* ─────────── building ─────────── */
 
 function build() {
-  const face = (side) => `<div class="cflip__face cflip__face--${side}"><img src="${SIDE[side].art}" alt="" draggable="false" /><span>${SIDE[side].label[0]}</span></div>`;
-  const pick = (side) => `<button type="button" class="cflip__side" role="radio" data-side="${side}" aria-checked="false"><i class="cflip__mini" data-side="${side}" aria-hidden="true">${SIDE[side].label[0]}</i><b>${SIDE[side].label}</b></button>`;
+  const face = (side) => `<div class="cflip__face cflip__face--${side}"><img src="${SIDE[side].art}" alt="" draggable="false" /></div>`;
+  const pick = (side) => `<button type="button" class="cflip__side" role="radio" data-side="${side}" aria-checked="false"><img src="${SIDE[side].art}" alt="" /><b>${SIDE[side].label}</b></button>`;
   root.innerHTML = `
     <section class="cflip__stage" aria-label="The coin">
       <div class="cflip__top">
@@ -363,7 +363,7 @@ function build() {
 
     <aside class="cflip__panel" aria-label="Your flip">
       <form class="cflip__form" id="cflipForm" novalidate>
-        <label class="cflip__label" for="cflipStake">Bet amount</label>
+        <label class="cflip__label" for="cflipStake">Stake</label>
         <div class="cflip__field">
           <span aria-hidden="true">$</span>
           <input id="cflipStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -371,13 +371,16 @@ function build() {
           <button type="button" class="cflip__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="cflip__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        <span class="cflip__label" id="cflipCallLabel">Your side</span>
+        <span class="cflip__label" id="cflipCallLabel">Your call</span>
         <div class="cflip__sides" role="radiogroup" aria-labelledby="cflipCallLabel">${pick('heads')}${pick('tails')}</div>
+        <label class="cflip__label cflip__label--row" for="cflipProfit"><span>Profit on win</span><span class="cflip__profitx" id="cflipProfitX"></span></label>
+        <div class="cflip__field cflip__field--read">
+          <output id="cflipProfit" for="cflipStake">—</output>
+        </div>
         <button class="btn cflip__go" id="cflipGo" type="submit" data-sfx="none">
           <span id="cflipGoLabel">Loading…</span>
         </button>
         <p class="cflip__hint" id="cflipHint" aria-live="polite"></p>
-        <p class="cflip__note" id="cflipNote"></p>
       </form>
       <div class="cflip__old" id="cflipOld" hidden></div>
     </aside>

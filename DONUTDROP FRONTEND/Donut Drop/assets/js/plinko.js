@@ -31,7 +31,6 @@ import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } f
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { fxColors, makeFx } from './pvfx.js';
-import { autoFields, autoSwitch, wireAuto } from './autobet.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { fallAt, simulateFall } from './plinko-fall.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
@@ -85,7 +84,6 @@ let introAt = 0; // when the flat board last changed shape
 let tipSlot = null; // the slot whose card is open
 let lastLand = 0;
 let fx = null; // the preview's effects over the flat board (pvfx.js)
-let auto = null; // Manual or Auto (autobet.js)
 
 /* ─────────── numbers ─────────── */
 
@@ -179,22 +177,16 @@ async function refreshSeed() {
   }
 }
 
-/* `done`, when given, hears the server's answer for this ball: the settled bet, or null if it did
- * not drop. Auto (autobet.js) waits on it; the ball still falls in its own time. */
-function drop(done = null) {
+function drop() {
   if (!state.authenticated) {
     $('#loginBtn')?.click();
-    done?.(null);
     return;
   }
-  if (dropProblem() || queue.length >= MAX_QUEUED || queue.length + balls.length >= MAX_FALLING) {
-    done?.(null);
-    return;
-  }
+  if (dropProblem() || queue.length >= MAX_QUEUED || queue.length + balls.length >= MAX_FALLING) return;
   if (serverBalance === null) serverBalance = BigInt(state.balanceMinor || '0');
   /* Held from the click, not from the answer: a poll landing between the two would print this
    * ball's stake and payout before the ball exists. */
-  queue.push({ key: idempotencyKey(), stakeMinor: stakeMinor(), rows, risk, release: holdLiveFigures(), done });
+  queue.push({ key: idempotencyKey(), stakeMinor: stakeMinor(), rows, risk, release: holdLiveFigures() });
   paint();
   void pump();
 }
@@ -214,13 +206,9 @@ async function pump() {
         commitmentMoved(response.nextServerSeedHash);
         serverBalance = BigInt(response.balanceMinor);
         launch(response.bet, next.release);
-        next.done?.(response.bet);
       } catch (error) {
         // This ball and every one behind it stay in the hand; nothing was taken for them.
-        for (const waiting of queue) {
-          waiting.release();
-          waiting.done?.(null);
-        }
+        for (const waiting of queue) waiting.release();
         queue = [];
         if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
         toast({ kind: 'lose', title: 'Plinko', body: error?.message || 'That ball did not drop' });
@@ -232,15 +220,6 @@ async function pump() {
     settleIfDone();
     paint();
   }
-}
-
-/** One ball for Auto: waits for room on the board, then drops it and hears the server's answer. */
-async function dropForAuto() {
-  for (let waited = 0; queue.length >= MAX_QUEUED || queue.length + balls.length >= MAX_FALLING; waited += 100) {
-    if (waited >= 15_000) return null;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return new Promise((resolve) => drop(resolve));
 }
 
 async function send(next) {
@@ -793,13 +772,11 @@ function paintControls() {
   const hint = $('#plinkoHint', root);
   const problem = state.authenticated ? dropProblem() : '';
   const full = queue.length >= MAX_QUEUED || queue.length + balls.length >= MAX_FALLING;
-  let text = !state.authenticated
+  const text = !state.authenticated
     ? 'Log in to play'
-    : 'Drop a ball';
-  if (auto && state.authenticated) text = auto.label(text);
+    : `Drop · ${money(Number(stakeMinor() ?? 0n))}`;
   if (label.textContent !== text) label.textContent = text;
-  // A run in Auto can always be stopped; while it runs a full board only makes it wait.
-  go.disabled = auto?.running ? false : state.authenticated && (Boolean(problem) || full || !config);
+  go.disabled = state.authenticated && (Boolean(problem) || full || !config);
   go.setAttribute('aria-busy', String(sending));
   hint.textContent = problem;
 
@@ -849,8 +826,7 @@ function build() {
 
     <aside class="plinko__panel" aria-label="Your ball">
       <form class="plinko__form" id="plinkoForm" novalidate>
-        ${autoSwitch('plinko')}
-        <label class="plinko__label" for="plinkoStake">Bet amount</label>
+        <label class="plinko__label" for="plinkoStake">Stake per ball</label>
         <div class="plinko__field">
           <span aria-hidden="true">$</span>
           <input id="plinkoStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -858,7 +834,6 @@ function build() {
           <button type="button" class="plinko__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="plinko__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
-        ${autoFields('plinko')}
         <span class="plinko__label" id="plinkoRiskLabel">Risk</span>
         <div class="plinko__risks" role="group" aria-labelledby="plinkoRiskLabel">
           ${RISKS.map(([value, name]) => `<button type="button" class="plinko__risk" data-risk="${value}" aria-pressed="false">${name}</button>`).join('')}
@@ -937,20 +912,9 @@ function build() {
   // The same choice made anywhere else (the top bar, the settings page) applies here too: 2D at
   // once, 3D only for the page on screen (the others build theirs when they are next opened).
   onViewChange((on) => { if (!on || root?.offsetParent) setView(on); });
-  auto = wireAuto(root, 'plinko', {
-    betOnce: dropForAuto,
-    getStake: stakeMinor,
-    setStake: (minor) => {
-      stakeText = formatAmountInput(Number(minor));
-      stake.value = stakeText;
-      paintControls();
-    },
-    paint: paintControls,
-  });
   $('#plinkoForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
-    if (auto.mode === 'auto') auto.toggle();
-    else drop();
+    drop();
   });
 
   new ResizeObserver(() => resize()).observe(canvas);

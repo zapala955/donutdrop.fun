@@ -186,16 +186,13 @@ function seat(name) {
 
 function paintTotal(which, faces, { final = false } = {}) {
   const node = seat(which).total;
-  node.hidden = false;
   if (!faces.length) {
-    node.textContent = '–';
-    node.dataset.state = '';
+    node.hidden = true;
     return;
   }
   const { total, soft } = totalOf(faces);
-  // The preview's pills: a soft hand as both its counts, the dealer's face-down card as " + ?".
-  const hole = which === 'Dealer' && !final && hand?.status === 'active';
-  node.textContent = `${soft && total < 21 && !final ? `${total - 10}/${total}` : String(total)}${hole ? ' + ?' : ''}`;
+  node.hidden = false;
+  node.textContent = soft && total < 21 && !final ? `Soft ${total}` : String(total);
   node.dataset.state = total > 21 ? 'bust' : total === 21 ? 'twentyone' : '';
 }
 
@@ -353,17 +350,6 @@ function paintControls() {
   const inPlay = hand?.status === 'active';
   $('#bjBetting', root).hidden = inPlay;
   $('#bjActions', root).hidden = !inPlay;
-  /* The preview keeps the stake in view, locked, over the moves (a phone still shows one set at a
-   * time: preview.css). The flag lets the frame show it; Deal itself goes. */
-  const betting = $('#bjBetting', root);
-  betting.dataset.play = inPlay ? '1' : '';
-  if (inPlay) betting.hidden = !window.matchMedia('(min-width: 1024px)').matches;
-  $('#bjDeal', root).hidden = inPlay;
-  for (const node of betting.querySelectorAll('input, .bj__adj')) node.disabled = inPlay;
-  $('#bjYou', root).textContent = state.user?.minecraftUsername || 'You';
-  const status = $('#bjStatus', root);
-  const say = !hand ? 'Place a bet and deal.' : inPlay && !busy ? 'Hit or stand?' : '';
-  if (status.textContent !== say) status.textContent = say;
 
   const deal = $('#bjDeal', root);
   const problem = stakeProblem();
@@ -373,7 +359,7 @@ function paintControls() {
     deal.disabled = false;
     hint.textContent = '';
   } else {
-    deal.textContent = busy && pressed === 'deal' ? 'Dealing…' : 'Deal';
+    deal.textContent = busy && pressed === 'deal' ? 'Dealing…' : hand ? 'Deal again' : 'Deal';
     deal.disabled = busy || Boolean(problem);
     hint.textContent = problem;
   }
@@ -384,7 +370,7 @@ function paintControls() {
     const stake = BigInt(hand.stakeMinor);
     const canAffordDouble = BigInt(state.balanceMinor || '0') >= stake;
     const double = $('#bjDouble', root);
-    $('#bjDoubleLabel', root).textContent = 'Double';
+    $('#bjDoubleLabel', root).textContent = `Double ${money(Number(stake))}`;
     double.disabled = busy || !hand.canDouble || !canAffordDouble;
     double.title = !hand.canDouble ? 'Only on your first two cards' : canAffordDouble ? '' : 'Not enough balance to double';
     $('#bjHit', root).disabled = busy;
@@ -606,17 +592,16 @@ function build() {
         <text><textPath href="#bjArc" startOffset="50%" text-anchor="middle">WINS PAY 1.8× · BLACKJACK PAYS 2.5×</textPath></text>
       </svg>
       <p class="bj__rules"><span class="bj__rules-tie">Wins pay 1.8× · Blackjack pays 2.5× · </span>Ties push · Dealer hits soft 17 · Double on any first two cards</p>
-      <div class="bj__mid"><p class="bj__print">Blackjack pays 2.5× · Dealer hits soft 17</p><p class="bj__status" id="bjStatus" aria-live="polite"></p></div>
       <section class="bj__seat bj__seat--player" aria-label="Your hand">
         <div class="bj__cards" id="bjPlayerCards"></div>
-        <div class="bj__label"><span id="bjYou">You</span><output class="bj__total" id="bjPlayerTotal" hidden></output><span class="bj__bet" id="bjBet" hidden></span></div>
+        <div class="bj__label"><span>You</span><output class="bj__total" id="bjPlayerTotal" hidden></output><span class="bj__bet" id="bjBet" hidden></span></div>
       </section>
       <div class="bj__result" id="bjResult" role="status" aria-live="polite" hidden><b></b><span></span></div>
     </div>
 
     <div class="bj__controls">
       <form class="bj__betting" id="bjBetting" novalidate>
-        <label class="bj__stakelabel" for="bjStake">Bet amount</label>
+        <label class="bj__stakelabel" for="bjStake">Stake</label>
         <div class="bj__stake">
           <span aria-hidden="true">$</span>
           <input id="bjStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -632,13 +617,9 @@ function build() {
         <button class="btn" id="bjStand" type="button" aria-keyshortcuts="S">Stand <kbd>S</kbd></button>
         <button class="btn" id="bjDouble" type="button" aria-keyshortcuts="D"><span id="bjDoubleLabel">Double</span> <kbd>D</kbd></button>
       </div>
-      <p class="bj__note">Wins pay 1.8×, blackjack pays 2.5×, ties push. The dealer hits soft 17.</p>
     </div>`;
 
   fx = makeFx($('.bj__table', root));
-  // The totals read "–" before the first deal, as the preview's pills do.
-  paintTotal('Player', []);
-  paintTotal('Dealer', []);
 
   const input = $('#bjStake', root);
   input.value = stakeText;

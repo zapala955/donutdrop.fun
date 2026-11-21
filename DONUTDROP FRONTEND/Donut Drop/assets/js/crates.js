@@ -143,16 +143,15 @@ function build() {
           <button type="button" class="cases__change" id="casesChange">Change</button>
         </div>
 
-        <span class="cases__label" id="casesQtyLabel">Cases at once</span>
+        <span class="cases__label" id="casesQtyLabel">Quantity</span>
         <div class="cases__qty" role="group" aria-labelledby="casesQtyLabel">
           ${QUANTITIES.map((n) => `<button type="button" class="cases__n" data-n="${n}" aria-pressed="${n === view.quantity}">${n}</button>`).join('')}
         </div>
 
-        <span class="cases__label" id="casesSpeedLabel">Speed</span>
-        <div class="cases__speed" role="group" aria-labelledby="casesSpeedLabel">
-          <button type="button" class="cases__sp" data-quick="0" aria-pressed="${!view.quickOpen}">Normal</button>
-          <button type="button" class="cases__sp" data-quick="1" aria-pressed="${view.quickOpen}">Quick</button>
-        </div>
+        <button class="cases__quick" id="casesQuick" type="button" role="switch" aria-checked="${view.quickOpen}">
+          <span>Quick unbox</span>
+          <i aria-hidden="true"></i>
+        </button>
 
         <button class="btn btn--go cases__go" id="casesGo" type="button">Open case</button>
         <p class="cases__hint mono" id="casesHint" aria-live="polite"></p>
@@ -232,12 +231,10 @@ function build() {
       paintPanel();
     });
   }
-  for (const button of root.querySelectorAll('.cases__sp')) {
-    button.addEventListener('click', () => {
-      view.quickOpen = button.dataset.quick === '1';
-      paintPanel();
-    });
-  }
+  $('#casesQuick', root).addEventListener('click', () => {
+    view.quickOpen = !view.quickOpen;
+    paintPanel();
+  });
   $('#casesChange', root).addEventListener('click', () => {
     browse.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
     $('#crateSearch', browse).focus({ preventScroll: true });
@@ -588,16 +585,15 @@ function paintPanel() {
     button.setAttribute('aria-pressed', String(Number(button.dataset.n) === view.quantity));
     button.disabled = opening;
   }
-  for (const button of root.querySelectorAll('.cases__sp')) {
-    button.setAttribute('aria-pressed', String((button.dataset.quick === '1') === view.quickOpen));
-    button.disabled = opening;
-  }
+  const quick = $('#casesQuick', root);
+  quick.setAttribute('aria-checked', String(view.quickOpen));
+  quick.disabled = opening;
 
   const total = selected ? selected.price * view.quantity : 0;
   const affordable = state.authenticated && state.balance >= total;
   const go = $('#casesGo', root);
   const hint = $('#casesHint', root);
-  const what = view.quantity > 1 ? `Open ${view.quantity} for` : 'Open for';
+  const what = view.quantity > 1 ? `Open ${view.quantity} cases` : 'Open case';
 
   if (!selected) {
     go.textContent = 'Pick a case';
@@ -608,7 +604,7 @@ function paintPanel() {
     go.disabled = false;
     hint.textContent = '';
   } else {
-    go.textContent = opening ? 'Opening…' : `${what} ${money(total)}`;
+    go.textContent = opening ? 'Opening…' : `${what} · ${money(total)}`;
     go.disabled = opening || !affordable;
     /* The wallet figure, or why the button is off. */
     hint.textContent = affordable || opening

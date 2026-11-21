@@ -13,7 +13,6 @@ import { SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { $, $$, money, reduceMotion } from './util.js';
 import { bus, roundHistory, state } from './store.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
-import { isMuted, setMuted } from './audio-engine.js';
 
 const SIDE_KEY = 'lx:side';
 /* v2 (2026-11-14): the chat now opens by default on a wide screen, so everybody starts from open
@@ -576,28 +575,6 @@ function fairChip() {
   return chip;
 }
 
-/* The preview's sound key on the bar, beside the chip: the same switch as the top bar's. */
-const SOUND_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="M16 9a4.25 4.25 0 0 1 0 6"/><path d="M18.5 6.5a7.75 7.75 0 0 1 0 11"/></svg>';
-const SOUND_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.5v5h3.25L13 18V6L8.25 9.5H5z"/><path d="m16.5 9.5 5 5m0-5-5 5"/></svg>';
-const soundKeys = [];
-function paintSoundKeys() {
-  const off = isMuted();
-  for (const key of soundKeys) {
-    key.innerHTML = off ? SOUND_OFF : SOUND_ON;
-    key.setAttribute('aria-pressed', String(!off));
-    key.setAttribute('aria-label', off ? 'Unmute sound' : 'Mute sound');
-  }
-}
-function soundKey() {
-  const key = document.createElement('button');
-  key.type = 'button';
-  key.className = 'pvsound';
-  key.addEventListener('click', () => setMuted(!isMuted()));
-  soundKeys.push(key);
-  return key;
-}
-window.addEventListener('lx:mute', paintSoundKeys);
-
 function howCard(view, how) {
   const card = document.createElement('section');
   card.className = 'pvhow';
@@ -644,11 +621,10 @@ function howCard(view, how) {
 for (const view of $$('.view')) {
   const head = view.querySelector(':scope > .phead--game');
   if (!head || !view.querySelector(`:scope > :is(${TABLES})`)) continue;
-  head.append(soundKey(), fairChip());
+  head.appendChild(fairChip());
   const how = head.querySelector('.phead__how')?.dataset.tip;
   if (how) {
     view.appendChild(howCard(view, how));
     view.classList.add('has-pvhow');
   }
 }
-paintSoundKeys();
