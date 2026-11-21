@@ -1341,6 +1341,9 @@ body.lx .modal[data-wallet] .lxwd .auth__err { margin: 2px 0 0; }
 body.lx .modal[data-wallet] .lxwd .auth__note { margin: 0; color: var(--lx-mute); }
 body.lx .modal[data-wallet] .lxwd .auth__go { margin-top: 4px; }
 
+/* The Tip tab (2026-11-21): the name box has no "$", so its text starts at the box's own edge. */
+body.lx .modal[data-wallet] .lxwd .auth__field > .auth__input:first-child { padding-left: 12px; }
+
 /* what is withdrawn and what arrives; the confirmation reads the same way */
 .lxsum,
 body.lx .modal[data-wallet] .auth__confirm {

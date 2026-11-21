@@ -6,6 +6,7 @@ import {
   startLogin, loginStatus, completeLogin, logout, emailLoginOffered, emailLoginStart,
   cashDepositInfo, refreshActivity, refreshBalance, pollDeposits,
   cashWithdrawalInfo, requestCashWithdrawal, cashWithdrawalStatus, turnstileConfig,
+  tipInfo, sendWalletTip,
   refreshUpgradeConfig, refreshPromotions,
 } from './store.js';
 import {
@@ -759,24 +760,176 @@ function cashStateText(withdrawal) {
 }
 
 /* The Wallet window (2026-11-20, the redesign preview's): the bar's one Wallet button opens it on
- * Deposit, and Withdraw is its second tab. Each tab is the window it always was. */
+ * Deposit; Withdraw is its second tab, and Tip its third while tips are switched on (2026-11-21). */
 function walletTabs(current) {
+  paintWalletTabs(current);
+  // The preview's wallet sheet: its icon and title in the bar, the tabs under it (preview.css).
+  $('#modalTitle').innerHTML = `${WALLET_ICON}<span>Wallet</span>`;
+  $('#modal').dataset.wallet = current;
+  // A fresher answer about tips adds or takes away the Tip tab while the window is up.
+  void refreshTips().then(() => {
+    const dlg = $('#modal');
+    if (!dlg.open || dlg.dataset.wallet !== current) return;
+    if (Boolean(dlg.querySelector('[data-wtab="tip"]')) !== showsTip(current)) paintWalletTabs(current);
+  });
+}
+
+const showsTip = (current) => current === 'tip' || Boolean(tips?.enabled);
+
+function paintWalletTabs(current) {
+  $('#modal').querySelector('.lxwtabs')?.remove();
   const tabs = document.createElement('div');
   tabs.className = 'lxwtabs';
   tabs.setAttribute('role', 'group');
   tabs.setAttribute('aria-label', 'Wallet');
-  for (const [code, label, open] of [['deposit', 'Deposit', openDepositModal], ['withdraw', 'Withdraw', openWithdrawModal]]) {
+  const list = [['deposit', 'Deposit', openDepositModal], ['withdraw', 'Withdraw', openWithdrawModal]];
+  if (showsTip(current)) list.push(['tip', 'Tip', openTipModal]);
+  for (const [code, label, open] of list) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
+    button.dataset.wtab = code;
     button.setAttribute('aria-pressed', String(code === current));
     if (code !== current) button.addEventListener('click', () => void open());
     tabs.append(button);
   }
   $('#modalBody').before(tabs);
-  // The preview's wallet sheet: its icon and title in the bar, the tabs under it (preview.css).
-  $('#modalTitle').innerHTML = `${WALLET_ICON}<span>Wallet</span>`;
-  $('#modal').dataset.wallet = current;
+}
+
+/* Whether tips are on, and their limits: GET /v1/social/tip/info, asked at most once a minute. A
+ * failed ask keeps the last answer (none at first, so no tab). */
+let tips = null;
+let tipsAt = 0;
+async function refreshTips() {
+  if (tips && Date.now() - tipsAt < 60_000) return tips;
+  try {
+    tips = await tipInfo();
+    tipsAt = Date.now();
+  } catch {
+    // Kept as it was; the next open asks again.
+  }
+  return tips;
+}
+
+/* A Minecraft name as the server takes it: Java, or Bedrock with DonutSMP's leading dot. */
+const TIP_NAME = /^\.?[A-Za-z0-9_]{1,16}$/;
+
+/**
+ * Tip a player, the preview's third Wallet tab. The same POST as chat's /tip, and the server checks
+ * it all again. A tip cannot be taken back, so the name and the amount are checked here first and
+ * the button says exactly what it will send, and to whom, before it is pressed.
+ */
+async function openTipModal() {
+  if (!state.authenticated) {
+    openLoginModal();
+    return;
+  }
+  let host;
+  openModal('Wallet', (body) => {
+    host = body;
+    body.innerHTML = '<p class="auth__lede">Checking tips…</p>';
+  }, { variant: 'auth' });
+  walletTabs('tip');
+
+  const info = await refreshTips();
+  if (!host?.isConnected || !$('#modal').open || $('#modal').dataset.wallet !== 'tip') return;
+  if (!info?.enabled) {
+    host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Tip</h3>
+      <p class="auth__lede">${info ? 'Tipping is switched off right now.' : 'Tips are not answering. Try again in a moment.'}</p>`;
+    return;
+  }
+  const min = Number(info.minMinor);
+  const max = Number(info.maxMinor);
+  host.innerHTML = `<h3 class="auth__title" aria-hidden="true">Tip</h3>
+    <form id="tipForm" class="lxwpane lxwd" novalidate>
+      <div class="lxwd__field">
+        <div class="lxwd__label"><label for="tipName">Player</label></div>
+        <div class="auth__field" id="tipNameField">
+          <input id="tipName" class="auth__input" type="text" maxlength="17" autocomplete="off" autocapitalize="off"
+                 autocorrect="off" spellcheck="false" placeholder="Minecraft name">
+        </div>
+      </div>
+      <div class="lxwd__field">
+        <div class="lxwd__label"><label for="tipAmount">Amount</label></div>
+        <div class="auth__field" id="tipAmountField">
+          <span class="auth__prefix">$</span>
+          <input id="tipAmount" class="auth__input" type="text" inputmode="text" autocapitalize="off" autocorrect="off"
+                 autocomplete="off" spellcheck="false" placeholder="1m">
+        </div>
+      </div>
+      <p class="auth__err" id="tipError" role="alert" hidden></p>
+      <p class="auth__note" id="tipHint">Tips move site balance between players. They can't be undone.
+        ${escapeText(money(min))} to ${escapeText(money(max))} a tip.</p>
+      <button class="btn btn--go auth__go" type="submit" id="tipGo" disabled>Send tip</button>
+    </form>`;
+
+  const form = $('#tipForm', host);
+  const nameInput = $('#tipName', host);
+  const amountInput = $('#tipAmount', host);
+  const go = $('#tipGo', host);
+  const inlineError = $('#tipError', host);
+  const nameOf = () => nameInput.value.trim();
+  const amountOf = () => parseAmount(amountInput.value);
+  const self = String(state.user?.minecraftUsername ?? '').replace(/^\./, '').toLowerCase();
+  const nameProblem = () => {
+    const name = nameOf();
+    if (!TIP_NAME.test(name)) return 'That isn\'t a Minecraft name: 1 to 16 letters, numbers or underscores.';
+    if (self && name.replace(/^\./, '').toLowerCase() === self) return 'You cannot tip yourself.';
+    return '';
+  };
+  const amountProblem = () => {
+    const amount = amountOf();
+    if (amount === null) return 'Enter an amount, for example 5m or 500k.';
+    if (amount < min) return `The smallest tip is ${money(min)}.`;
+    if (amount > max) return `The largest tip is ${money(max)}.`;
+    if (amount > state.balance) return `That is more than your ${money(state.balance)} balance.`;
+    return '';
+  };
+  const setError = (message, field) => {
+    inlineError.textContent = message;
+    inlineError.hidden = !message;
+    $('#tipNameField', host).classList.toggle('is-error', Boolean(message) && field === 'name');
+    $('#tipAmountField', host).classList.toggle('is-error', Boolean(message) && field === 'amount');
+  };
+  const sync = () => {
+    const ready = !nameProblem() && !amountProblem();
+    go.disabled = !ready;
+    go.textContent = ready ? `Send ${money(amountOf())} to ${nameOf()}` : 'Send tip';
+  };
+  for (const [input, problem, field] of [[nameInput, nameProblem, 'name'], [amountInput, amountProblem, 'amount']]) {
+    input.addEventListener('input', () => {
+      setError('');
+      sync();
+    });
+    input.addEventListener('blur', () => {
+      if (input.value.trim() === '') return;
+      const message = problem();
+      if (message) setError(message, field);
+    });
+  }
+  sync();
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (go.disabled) return;
+    const name = nameOf();
+    const amount = amountOf();
+    go.disabled = true;
+    go.dataset.state = 'loading';
+    go.textContent = 'Sending…';
+    try {
+      const result = await sendWalletTip(name, amount);
+      playSound('coin');
+      toast({ kind: 'gold', title: 'Tip sent', body: `${money(Number(result.amountMinor))} to ${result.toUsername}` });
+      await refreshBalance().catch(() => undefined);
+      closeModal();
+    } catch (failure) {
+      go.dataset.state = '';
+      setError(failure?.message || 'The tip was not sent.');
+      sync();
+    }
+  });
+  nameInput.focus();
 }
 
 const WALLET_ICON = '<svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V5a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-4a2 2 0 0 0 0 4h4v2a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6"/></svg>';

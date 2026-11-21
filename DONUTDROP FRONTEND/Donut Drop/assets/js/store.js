@@ -1082,6 +1082,17 @@ export async function cashWithdrawalStatus(id) {
   return api.get('/v1/cash-withdrawals/' + encodeURIComponent(id));
 }
 
+/* ─────────── tips, from the Wallet's Tip tab ───────────
+ * The same POST as chat's /tip. The server decides everything that matters (the switch, the limits,
+ * the balance, wagering still owed, a hold on the account) and says why when it refuses. */
+export async function tipInfo() {
+  return api.get('/v1/social/tip/info');
+}
+
+export async function sendWalletTip(toUsername, amountMinor) {
+  return api.post('/v1/social/tip', { toUsername, amountMinor: String(amountMinor) });
+}
+
 export async function withdrawInventoryItem(item, quantity = 1) {
   const result = await api.post(
     '/v1/withdrawals',

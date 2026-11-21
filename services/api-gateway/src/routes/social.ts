@@ -659,6 +659,15 @@ export async function registerSocialRoutes(app: FastifyInstance, db: Database, c
   );
 
   /* ═════════════════════════ tips ═════════════════════════ */
+  /* What the Wallet's Tip tab needs before it shows itself (2026-11-21): whether tips are switched
+   * on, and the limits a tip has to fit. Public, and nothing more than the POST below checks: the
+   * same runtime switch and limits, read at the time of asking, so turning tips off in the admin
+   * console takes the tab away on the next look. */
+  app.get('/v1/social/tip/info', async () => ({
+    enabled: Boolean(config.tipsEnabled),
+    minMinor: config.tipMinMinor.toString(),
+    maxMinor: config.tipMaxMinor.toString(),
+  }));
 
   app.post(
     '/v1/social/tip',

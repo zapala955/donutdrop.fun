@@ -39,7 +39,9 @@ describe('the roulette ball', () => {
   it('runs on the track and rests in the pocket ring the canvas draws', async () => {
     const page = await read('assets/js/roulette.js');
     const radius = (name: string) => Number(new RegExp(`const ${name} = (\\d+);`).exec(page)?.[1]);
-    const [track, numOuter, numInner, pocketInner, rest] = ['TRACK', 'NUM_O', 'NUM_I', 'POCK_I', 'REST'].map(radius);
+    const [track, numOuter, numInner, pocketInner, rest] = ['TRACK', 'NUM_O', 'NUM_I', 'POCK_I', 'REST'].map(radius) as [
+      number, number, number, number, number,
+    ];
     assert.ok(track > numOuter, 'the track is outside the numbers');
     assert.ok(rest > pocketInner && rest < numInner, 'a ball at rest sits in the pocket ring');
     assert.match(page, /if \(k < 0\.58\) return TRACK;/);

@@ -16,12 +16,12 @@ describe('the sound engine', () => {
     assert.match(engine, /const SAMPLE_BASE = '\/assets\/sound\/';/);
     const listed = engine.match(/const SAMPLES = \[([^\]]+)\];/);
     assert.ok(listed, 'SAMPLES');
-    const names = [...listed[1].matchAll(/'([a-z]+)'/g)].map((match) => match[1]);
+    const names = [...(listed[1] ?? '').matchAll(/'([a-z]+)'/g)].map((match) => match[1]);
     assert.deepEqual(names, ['orb', 'levelup', 'click', 'fizz', 'chestopen']);
     for (const name of names) {
       const bytes = await readFile(path.join(frontend, `assets/sound/${name}.mp3`));
       const id3 = bytes.subarray(0, 3).toString('latin1') === 'ID3';
-      const frame = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+      const frame = bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0;
       assert.ok(id3 || frame, `${name}.mp3 is an MP3`);
       assert.ok(bytes.length < 40_000, `${name}.mp3 stays small`);
     }
