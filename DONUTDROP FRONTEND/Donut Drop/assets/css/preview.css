@@ -1234,6 +1234,47 @@ body.lx .crates .cases__count { color: var(--lx-mute); font: 500 .75rem/1.2 var(
   body.lx .crates .cases__item--myst .cases__iodds { color: var(--lx-gold); }
 }
 
+/* ═════════ Case Battles, as the preview's ═════════
+   The host form is the preview's panel: flat, no frame; Mode, Rules and Lobby as pills in one
+   well each; the cases as a flat grid; the entry and the value in one well; the gold button and the
+   rule under it. The lobby beside it (open and recent battles) keeps its own layout. */
+body.lx .view .btl .btl__make {
+  gap: 14px; padding: 16px; border: 0; border-radius: var(--lx-r); background: var(--lx-2); box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+body.lx .view .btl .btl__make h2 { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); }
+body.lx .view .btl .btl__make .btl__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .view .btl .btl__make .btl__label b { color: var(--lx-text); }
+body.lx .view .btl .btl__make .btl__chips { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; padding: 4px; border-radius: 999px; background: var(--lx-0); }
+body.lx .view .btl .btl__make .btl__chip,
+body.lx .view .btl .btl__make .btl__chip:hover {
+  height: 34px; padding: 0 6px; border: 0; border-radius: 999px; box-shadow: none; background: transparent;
+  color: var(--lx-mute); font: 700 .8125rem/1 var(--lx-ui); overflow: hidden; text-overflow: ellipsis;
+}
+body.lx .view .btl .btl__make .btl__chip:hover { color: var(--lx-ink); }
+body.lx .view .btl .btl__make .btl__chip[aria-pressed="true"],
+body.lx .view .btl .btl__make .btl__chip[aria-pressed="true"]:hover { background: var(--lx-4); color: var(--lx-ink); box-shadow: none; }
+body.lx .view .btl .btl__make .btl__toggle { padding: 12px; border: 0; border-radius: 8px; background: var(--lx-0); color: var(--lx-text); font: 600 .8125rem/1.3 var(--lx-ui); }
+body.lx .view .btl .btl__make .btl__toggle[aria-checked="true"] { border: 0; color: var(--lx-ink); }
+body.lx .view .btl .btl__make .btl__sw { background: var(--lx-4); }
+body.lx .view .btl .btl__make .btl__sw::after { background: var(--lx-mute); }
+body.lx .view .btl .btl__make .btl__toggle[aria-checked="true"] .btl__sw { background: var(--lx-gold); }
+body.lx .view .btl .btl__make .btl__toggle[aria-checked="true"] .btl__sw::after { background: var(--lx-on-gold); }
+body.lx .view .btl .btl__make .btl__find :is(input, select) { height: 40px; border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-0); color: var(--lx-ink); font: 600 .8125rem/1 var(--lx-ui); }
+body.lx .view .btl .btl__make .btl__find :is(input, select):focus { border-color: var(--lx-gold); }
+body.lx .view .btl .btl__make .btl__pool { padding: 6px; border: 0; border-radius: 8px; background: var(--lx-0); }
+body.lx .view .btl .btl__make .btl__crate { padding: 6px; border: 0; border-radius: 8px; background: var(--lx-2); box-shadow: inset 0 -3px 0 rgba(8, 6, 5, .32); }
+body.lx .view .btl .btl__make .btl__crate:hover:not(:disabled) { background: var(--lx-3); }
+body.lx .view .btl .btl__make .btl__crate[data-picked='1'] { background: var(--lx-3); box-shadow: inset 0 0 0 2px var(--lx-gold); }
+body.lx .view .btl .btl__make .btl__cratecost { color: var(--lx-text); font: 700 .625rem/1.2 var(--lx-ui); }
+body.lx .view .btl .btl__make .btl__sum { gap: 0; padding: 10px 12px; border-radius: 8px; background: var(--lx-0); }
+body.lx .view .btl .btl__make .btl__sum span { flex-direction: row; justify-content: space-between; align-items: baseline; padding: 2px 0; border: 0; border-radius: 0; background: none; }
+body.lx .view .btl .btl__make .btl__sum { grid-template-columns: minmax(0, 1fr); }
+body.lx .view .btl .btl__make .btl__sum i { color: var(--lx-mute); font: 500 .75rem/1.4 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .view .btl .btl__make .btl__sum b { color: var(--lx-ink); font: 800 .75rem/1.4 var(--lx-ui); }
+body.lx .view .btl .btl__make .btl__go { height: 52px; font-size: 1rem; }
+body.lx .view .btl .btl__make .btl__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

@@ -734,7 +734,7 @@ function paintCreator() {
   panel.innerHTML = `
     <h2>Host a battle</h2>
     <div class="btl__field">
-      <span class="btl__label">Format</span>
+      <span class="btl__label">Mode</span>
       <div class="btl__chips" id="btlFormats"></div>
     </div>
     <div class="btl__field">
@@ -750,12 +750,12 @@ function paintCreator() {
       <i class="btl__sw" aria-hidden="true"></i>
     </label>
     <div class="btl__field">
-      <span class="btl__label btl__label--row">Crates <b id="btlPickCount"></b>
+      <span class="btl__label btl__label--row">Cases <b id="btlPickCount"></b>
         <button class="btl__clear" id="btlClear" type="button">Clear</button>
       </span>
       <div class="btl__picked" id="btlPicked"></div>
       <div class="btl__find">
-        <input id="btlSearch" type="search" placeholder="Search crates" autocomplete="off" maxlength="40" aria-label="Search crates" />
+        <input id="btlSearch" type="search" placeholder="Search cases" autocomplete="off" maxlength="40" aria-label="Search cases" />
         <select id="btlSort" aria-label="Sort crates">
           <option value="price">Price ↑</option>
           <option value="price-desc">Price ↓</option>
@@ -768,7 +768,8 @@ function paintCreator() {
       <span><i>Entry per seat</i><b class="mono" id="btlTotal"></b></span>
       <span><i id="btlValueLabel">Battle value</i><b class="mono" id="btlValue"></b></span>
     </div>
-    <button class="btn btn--go btl__go" id="btlCreate" type="button">Create battle</button>`;
+    <button class="btn btn--go btl__go" id="btlCreate" type="button">Create battle</button>
+    <p class="btl__note">Every seat pays the same, every drop joins one pot, and the winning side takes all of it.</p>`;
 
   const formatChips = $('#btlFormats', panel);
   for (const format of formats) {
@@ -897,7 +898,7 @@ function paintPicks(panel) {
   create.disabled = state.authenticated && picked.length < 1;
   create.textContent = !state.authenticated
     ? 'Log in to host'
-    : picked.length < 1 ? 'Pick at least one crate' : `Create · ${money(entry)}`;
+    : picked.length < 1 ? 'Pick at least one case' : `Create battle · ${money(entry)}`;
 
   paintPool(panel);
 }
