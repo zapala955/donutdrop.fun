@@ -994,6 +994,123 @@ body.lx .lxtop .acct .menu .menu__row:hover .menu__ico {
   body.lx .lxtop .acct .menu .menu__bar > i { transition: none; }
 }
 
+/* ═════════ Dice, as the preview's (2026-11-21) ═════════
+   The owner: "the dice is still the old one not the one from the preview", then "also add a max bet
+   button". The panel: Manual / Auto, "Bet amount" over a well with ½, 2× and Max joined to its right
+   edge, Bet under it, what a win pays under that. The stage: the rail in its tray with 0 to 100
+   inside it, and the three fields right under, together in the middle of the stage at the
+   preview's width. */
+body.lx .view .dice .dice__field:not(.dice__field--dial):not(.dice__field--read) { padding-right: 0; overflow: hidden; }
+body.lx .view .dice .dice__field > span:first-child { color: var(--lx-gold); font-weight: 900; }
+body.lx .view .dice .dice__adj,
+body.lx .view .dice .dice__adj:hover:not(:disabled) {
+  align-self: stretch; height: auto; min-width: 44px; margin: 0; padding: 0 8px;
+  border: 0; border-left: 1px solid var(--lx-0); border-radius: 0;
+  background: var(--lx-4); color: var(--lx-ink); font: 800 .875rem/1 var(--lx-ui);
+  box-shadow: none; transform: none;
+}
+body.lx .view .dice .dice__adj:hover:not(:disabled) { background: var(--lx-5); }
+body.lx .view .dice .dice__adj:active:not(:disabled) { transform: none; box-shadow: none; background: var(--lx-5); }
+body.lx .view .dice .dice__field--read { background: var(--lx-0); border-color: var(--lx-4); }
+body.lx .view .dice .dice__field--read output { color: var(--lx-ink); }
+body.lx .view .dice .dice__profitx { color: var(--lx-mute); }
+body.lx .view .dice .lxauto__seg { margin-bottom: var(--lx-s4); }
+body.lx .view .dice .lxauto__seg + .dice__label { margin-top: 0; }
+body.lx .view .dice .lxauto { margin-top: var(--lx-s3); }
+body.lx .view .dice #diceGo { margin: var(--lx-s4) 0; }
+
+/* the stage: the tray and the fields in the middle, together */
+body.lx .view .dice:not([data-render="3d"]):not([data-render="loading"]) .dice__stage {
+  grid-template-rows: auto minmax(0, 1fr) auto auto minmax(0, 1fr);
+  gap: 0;
+}
+body.lx .view .dice:not([data-render="3d"]):not([data-render="loading"]) .dice__top { grid-row: 1; }
+body.lx .view .dice:not([data-render="3d"]):not([data-render="loading"]) .dice__board { grid-row: 3; }
+body.lx .view .dice:not([data-render="3d"]):not([data-render="loading"]) .dice__dials { grid-row: 4; margin-top: var(--lx-s6); }
+body.lx .view .dice :is(.dice__board, .dice__dials) { width: min(100%, 42rem); max-width: none; margin-left: auto; margin-right: auto; }
+body.lx .view .dice .dice__tray { padding: 16px var(--dice-pad) 10px; box-shadow: inset 0 -4px 0 rgba(8, 6, 5, .45); }
+body.lx .view .dice .dice__tray .dice__scale { height: 1rem; margin: 8px calc(var(--dice-thumb) / 2) 0; font-weight: 800; }
+body.lx .view .dice .dice__tray .dice__scale span { top: 0; }
+body.lx .view .dice .dice__tray .dice__scale span::before { content: none; }
+body.lx .view .dice .dice__dials { gap: 8px; padding: 12px; }
+
+/* Dice: the preview's roll (dice.js land). The die travels neutral and lands in the result's
+   colour, green with dark ink for a win, red with light ink for a miss, its pointer the same colour;
+   a pin stays in the track where it landed. */
+body.lx .view .dice .dice__die { transition: background-color 160ms ease, box-shadow 160ms ease, color 160ms ease; }
+body.lx .view .dice .dice__marker[data-tone="won"] .dice__die { background: var(--dice-win); color: #07170d; box-shadow: 0 4px 0 color-mix(in oklab, var(--dice-win) 62%, #000); }
+body.lx .view .dice .dice__marker[data-tone="lost"] .dice__die { background: var(--dice-lose); color: #fff; box-shadow: 0 4px 0 color-mix(in oklab, var(--dice-lose) 62%, #000); }
+/* The pointer hangs from the holder, not the die, so it stays put while the die turns over. */
+body.lx .view .dice .dice__die::after { content: none; }
+body.lx .view .dice .dice__marker::after {
+  content: ""; position: absolute; top: calc(var(--dice-die-h) + 6px); left: 50%; margin-left: -7px;
+  border: 7px solid transparent; border-top-color: var(--dice-face-lip); border-bottom: 0;
+  transition: border-top-color 160ms ease;
+}
+body.lx .view .dice .dice__marker[data-tone="won"]::after { border-top-color: color-mix(in oklab, var(--dice-win) 62%, #000); }
+body.lx .view .dice .dice__marker[data-tone="lost"]::after { border-top-color: color-mix(in oklab, var(--dice-lose) 62%, #000); }
+body.lx .view .dice .dice__pin {
+  position: absolute; top: 50%; left: calc(var(--dice-thumb) / 2 + (100% - var(--dice-thumb)) * var(--x));
+  width: 4px; height: 22px; border-radius: 2px; transform: translate(-50%, -50%);
+  background: var(--dice-face); box-shadow: 0 0 0 2px var(--lx-0); pointer-events: none;
+  animation: dice-pin-in 300ms cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes dice-pin-in { from { transform: translate(-50%, -50%) scaleY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  body.lx .view .dice .dice__pin { animation: none; }
+  body.lx .view .dice .dice__die, body.lx .view .dice .dice__marker::after { transition: none; }
+}
+
+/* Manual and Auto (autobet.js), as in the preview */
+.lxauto__seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 4px;
+  border-radius: 999px; background: var(--lx-0);
+}
+.lxauto__seg button {
+  height: 36px; border: 0; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui); white-space: nowrap;
+}
+.lxauto__seg button:hover:not(:disabled) { color: var(--lx-ink); }
+.lxauto__seg button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxauto__seg button:disabled { cursor: not-allowed; }
+.lxauto__seg button:disabled:not([aria-pressed="true"]) { opacity: .45; }
+.lxauto { display: grid; gap: 12px; }
+.lxauto[hidden] { display: none; }
+.lxauto__field { display: grid; gap: 4px; min-width: 0; }
+.lxauto__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); white-space: nowrap; }
+.lxauto__inp {
+  display: flex; align-items: stretch; height: 44px; overflow: hidden;
+  border: 2px solid var(--lx-4); border-radius: 8px; background: var(--lx-0);
+  transition: border-color var(--lx-quick) var(--lx-ease);
+}
+.lxauto__inp:hover { border-color: var(--lx-5); }
+.lxauto__inp:focus-within { border-color: var(--lx-gold); }
+.lxauto__inp input {
+  flex: 1; min-width: 0; width: 100%; padding: 0 12px; border: 0; outline: 0; background: none;
+  color: var(--lx-ink); font: 700 .9375rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+.lxauto__inp input:disabled { color: var(--lx-mute); }
+.lxauto__pre { display: grid; place-items: center; padding-left: 12px; color: var(--lx-gold); font: 900 .9375rem/1 var(--lx-ui); }
+.lxauto__suf { display: grid; place-items: center; padding: 0 12px; color: var(--lx-mute); font: 700 .8125rem/1 var(--lx-ui); white-space: nowrap; }
+.lxauto__minis { display: flex; flex: none; gap: 2px; padding: 2px; }
+.lxauto__minis button {
+  padding: 0 8px; border: 0; border-radius: 6px; background: none; cursor: pointer;
+  color: var(--lx-mute); font: 700 .75rem/1 var(--lx-ui); white-space: nowrap;
+}
+.lxauto__minis button[aria-pressed="true"] { background: var(--lx-4); color: var(--lx-ink); }
+.lxauto__minis button:disabled { cursor: not-allowed; }
+.lxauto__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+
+/* The bar's sound key, beside "Provably fair", as in the preview (luxe.js, SOUND_KEY_GAMES). */
+.pvsound {
+  display: grid; place-items: center; flex: none; width: 36px; height: 36px; margin-left: auto;
+  border: 0; border-radius: 8px; background: var(--lx-3); color: var(--lx-text); cursor: pointer;
+}
+.pvsound:hover { background: var(--lx-4); color: var(--lx-ink); }
+.pvsound:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+.pvsound svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pvsound + .pvfair { margin-left: 8px; }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }

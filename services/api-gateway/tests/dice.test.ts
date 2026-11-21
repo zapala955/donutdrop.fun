@@ -127,7 +127,7 @@ describe('dice: the page', () => {
     assert.match(page, /betOnCommitment\(seedHash, \(serverSeedHash, key\) => api\.post\(\s*'\/v1\/dice\/bets'/);
     // The pill is held until the marker lands, so the header never gives the roll away.
     assert.match(page, /const release = holdLiveFigures\(\);/);
-    assert.match(page, /if \(reduceMotion\(\) \|\| !marker\.animate\) return Promise\.resolve\(\);/);
+    assert.match(page, /if \(reduceMotion\(\) \|\| !marker\.animate\) \{\n\s*paintMarker\(\);\n\s*placePin\(bet\.roll\);\n\s*landSound\(bet\);\n\s*return;\n\s*\}/);
     const css = await read('DONUTDROP FRONTEND/Donut Drop/assets/css/dice.css');
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
     assert.match(css, /\.dice__range::-webkit-slider-thumb \{ transition: none; \}/);

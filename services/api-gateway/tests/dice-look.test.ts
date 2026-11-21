@@ -17,7 +17,13 @@ describe('the dice table', () => {
     // Neutral on its way, the number on the slide's own curve, the tone painted on landing.
     assert.match(page, /marker\.dataset\.tone = 'rolling';/);
     assert.match(page, /number\.textContent = hundredths\(Math\.round\(fromRoll \+ \(bet\.roll - fromRoll\) \* eased\)\);/);
-    assert.match(page, /await slide\.finished\.catch\(\(\) => undefined\);\s*if \(last !== bet\) return;\s*paintMarker\(\);\s*landSound\(bet\);\s*flashSide\(bet\);/);
+    assert.match(page, /await slide\.finished\.catch\(\(\) => undefined\);\s*if \(last !== bet\) return;\s*paintMarker\(\);\s*placePin\(bet\.roll\);\s*landSound\(bet\);\s*flashSide\(bet\);/);
+    // The preview's roll (2026-11-21): 640ms by hand, 260ms in Auto; a hop and a full turn on the
+    // way, a squash on landing, and a pin left in the track.
+    assert.match(page, /const SLIDE_MS = 640;\nconst QUICK_SLIDE_MS = 260;/);
+    assert.match(page, /\{ transform: `translateY\(-18px\) rotate\(\$\{turn \* 190\}deg\)`, offset: 0\.42 \}/);
+    assert.match(page, /\[\{ transform: 'scale\(1\.2, \.8\)' \}, \{ transform: 'scale\(\.94, 1\.07\)', offset: 0\.5 \}, \{ transform: 'none' \}\]/);
+    assert.match(page, /pin\.className = 'dice__pin';/);
     // The die is placed from the rail's edge, the tray's padding included.
     assert.match(page, /const inset = track\.getBoundingClientRect\(\)\.left - rail\.getBoundingClientRect\(\)\.left;/);
   });
@@ -42,6 +48,7 @@ describe('the dice table', () => {
     assert.match(css, /\.dice__zone \{\n  position: absolute;\n  top: 50%;\n  height: 10px;/);
     assert.match(css, /body\.lx #diceGo\[aria-busy="true"\]::after \{ animation: none; opacity: 0; \}/);
     const page = await read('assets/js/dice.js');
-    assert.match(page, /function flashSide\(bet\) \{\n  if \(reduceMotion\(\)\) return;/);
+    // Only a win lights its side of the rail, as in the preview; nothing flashes for reduced motion.
+    assert.match(page, /function flashSide\(bet\) \{\n  if \(reduceMotion\(\) \|\| !bet\.win\) return;/);
   });
 });

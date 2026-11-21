@@ -28,6 +28,7 @@ import { $, adjustStake, formatAmountInput, money, parseAmount, reduceMotion } f
 import { toast } from './ui.js';
 import { playSound } from './audio-engine.js';
 import { fxColors, makeFx } from './pvfx.js';
+import { autoFields, autoSwitch, wireAuto } from './autobet.js';
 import { graphicsPref, setGraphicsPref } from './quality3d.js';
 import { onViewChange, onViewSwitch, paintViewSwitch, sceneLoaded, sceneLoading, setWants3d, viewSwitch, wants3d } from './view3d.js';
 
@@ -37,7 +38,9 @@ const EDGE_BPS = 1_000;
 const MIN_CHANCE = 100; // 1.00%
 const MAX_CHANCE = 8_900; // 89.00%
 const RECENT = 8;
-const SLIDE_MS = 520; // the die's run to the roll
+/* The die's run to the roll, as the preview times it: 640ms by hand, 260ms in Auto. */
+const SLIDE_MS = 640;
+const QUICK_SLIDE_MS = 260;
 const GRAPHICS = [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 let root = null;
@@ -54,6 +57,7 @@ let rangeTried = null;
 let tickPoint = null; // the whole point the line last ticked at
 let tickAt = 0;
 let fx = null; // the preview's effects over the flat range (pvfx.js)
+let auto = null; // Manual or Auto (autobet.js)
 
 /* ─────────── the maths, mirrored from lib/dice.ts ─────────── */
 
@@ -160,6 +164,7 @@ async function roll() {
     say(bet.win
       ? `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)}. A win: ${money(Number(bet.payoutMinor))}, ${money(Number(profit))} profit.`
       : `Rolled ${hundredths(bet.roll)}, ${bet.direction} ${hundredths(bet.target)} needed. Lost ${money(Number(bet.stakeMinor))}.`);
+    return bet;
   } catch (error) {
     release();
     if (error?.code === 'FAIRNESS_COMMITMENT_CHANGED') await refreshSeed();
@@ -194,25 +199,43 @@ function landSound(bet) {
 }
 
 /** The preview's landing: a win bursts from the die with its profit rising; a miss puffs red. */
-function landFx(bet, marker) {
+function landFx(bet, marker, quick = false) {
   if (!fx) return;
   const c = fxColors();
   const [x, y] = fx.at(marker);
   if (bet.win) {
-    fx.burst(x, y, { n: 20, colors: [c.win, c.ink], speed: 280, size: 5, g: 800, life: 0.7 });
+    fx.burst(x, y, { n: quick ? 10 : 20, colors: [c.win, c.ink], speed: 280, size: 5, g: 800, life: 0.7 });
     const profit = Number(BigInt(bet.payoutMinor) - BigInt(bet.stakeMinor));
-    fx.text(x, y - 44, `+${money(profit)}`, { color: c.win, size: 15 });
+    if (!quick) fx.text(x, y - 44, `+${money(profit)}`, { color: c.win, size: 15 });
     if (bet.multiplierBps >= 100_000) fx.coins(24);
   } else {
     fx.puff(x, y + 20, { n: 4, color: c.loss, size: 10 });
   }
 }
 
-/** The side of the line the roll landed on flashes once. */
+/** A win lights the winning side of the rail once, as the preview does; a miss does not. */
 function flashSide(bet) {
-  if (reduceMotion()) return;
+  if (reduceMotion() || !bet.win) return;
   const zone = $(bet.roll < bet.target ? '.dice__zone--lo' : '.dice__zone--hi', root);
-  zone?.animate?.([{ filter: 'brightness(1.55)' }, { filter: 'brightness(1)' }], { duration: 560, easing: 'ease-out' });
+  const lit = 'inset 0 0 0 20px rgba(255, 250, 240, .55)';
+  zone?.animate?.(
+    [{ boxShadow: lit }, { boxShadow: lit, offset: 0.25 }, { boxShadow: 'inset 0 0 0 20px rgba(255, 250, 240, 0)' }],
+    { duration: 700, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+  );
+}
+
+/** The pin the preview leaves in the track where the roll landed, until the next roll. */
+function placePin(roll) {
+  const track = $('.dice__track', root);
+  if (!track) return;
+  $('.dice__pin', track)?.remove();
+  if (roll === null) return;
+  const pin = document.createElement('i');
+  pin.className = 'dice__pin';
+  pin.setAttribute('aria-hidden', 'true');
+  pin.style.setProperty('--x', String(roll / SPAN));
+  // Under the handle, so the line can still be taken hold of where a roll landed.
+  track.insertBefore(pin, $('.dice__range', track));
 }
 
 /** A tick for each whole point the line moves, pitched by where it is; never faster than a drum roll. */
@@ -229,6 +252,8 @@ function tickLine() {
 async function land(bet) {
   const before = last;
   last = bet;
+  const quick = Boolean(auto?.running);
+  const slideMs = quick ? QUICK_SLIDE_MS : SLIDE_MS;
   if (range3d) {
     $('#diceMarker', root).hidden = false;
     paintMarker();
@@ -237,44 +262,60 @@ async function land(bet) {
     return;
   }
   const marker = $('#diceMarker', root);
+  const die = $('.dice__die', marker);
   const number = $('b', marker);
+  /* The preview's roll: the first one leaves from the middle of the rail, every later one from the
+   * last roll. The die travels neutral, hopping and turning over once on the way while its number
+   * runs to the roll, lands with a squash in the colour of the result, and leaves a pin in the
+   * track where it landed. */
   const fresh = marker.hidden || !before;
-  const from = fresh ? trackX(bet.roll) : Number(marker.dataset.x || 0);
-  const fromRoll = fresh ? bet.roll : before.roll;
+  const fromRoll = fresh ? SPAN / 2 : before.roll;
+  const from = fresh ? trackX(fromRoll) : Number(marker.dataset.x || trackX(fromRoll));
   const to = trackX(bet.roll);
   marker.hidden = false;
+  placePin(null);
   if (reduceMotion() || !marker.animate) {
     paintMarker();
+    placePin(bet.roll);
     landSound(bet);
+    return;
   }
-  if (reduceMotion() || !marker.animate) return Promise.resolve();
-  /* On its way the die is neutral, and its number runs from the last roll to this one on the same
-   * curve as the slide, so the two arrive together. The win or the miss is painted on landing. */
   marker.dataset.tone = 'rolling';
   marker.dataset.x = String(to);
   marker.style.transform = `translateX(${to}px)`;
   const slide = marker.animate(
     [{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }],
-    { duration: fresh ? 0 : SLIDE_MS, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+    { duration: slideMs, easing: 'cubic-bezier(.2, .8, .2, 1)' },
+  );
+  const turn = bet.roll >= fromRoll ? 1 : -1;
+  die.animate(
+    [
+      { transform: 'none' },
+      { transform: `translateY(-18px) rotate(${turn * 190}deg)`, offset: 0.42 },
+      { transform: `translateY(0) rotate(${turn * 330}deg)`, offset: 0.78 },
+      { transform: `rotate(${turn * 360}deg)` },
+    ],
+    { duration: slideMs, easing: 'cubic-bezier(.3, .7, .4, 1)' },
   );
   const started = performance.now();
   const run = (now) => {
     if (last !== bet) return;
-    const t = Math.min(1, (now - started) / SLIDE_MS);
-    const eased = 1 - (1 - t) ** 4;
+    const t = Math.min(1, (now - started) / slideMs);
+    const eased = 1 - (1 - t) ** 3;
     number.textContent = hundredths(Math.round(fromRoll + (bet.roll - fromRoll) * eased));
     if (t < 1) requestAnimationFrame(run);
   };
-  if (!fresh) requestAnimationFrame(run);
+  requestAnimationFrame(run);
   await slide.finished.catch(() => undefined);
   if (last !== bet) return;
   paintMarker();
+  placePin(bet.roll);
   landSound(bet);
   flashSide(bet);
-  landFx(bet, marker);
-  $('.dice__die', marker).animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: 0.35 }, { transform: 'scale(1)' }],
-    { duration: 280, easing: 'cubic-bezier(.2, .8, .3, 1)' },
+  landFx(bet, marker, quick);
+  die.animate(
+    [{ transform: 'scale(1.2, .8)' }, { transform: 'scale(.94, 1.07)', offset: 0.5 }, { transform: 'none' }],
+    { duration: 260, easing: 'ease-out' },
   );
 }
 
@@ -486,10 +527,12 @@ function paintControls() {
   let text;
   if (!state.authenticated) text = 'Log in to play';
   else if (busy) text = 'Rolling…';
-  else text = `Roll · ${money(Number(stake ?? 0n))}`;
+  else text = 'Bet';
+  if (auto && state.authenticated) text = auto.label(text);
   if (label.textContent !== text) label.textContent = text;
   const problem = state.authenticated ? rollProblem() : '';
-  go.disabled = busy || Boolean(problem);
+  // A run in Auto can always be stopped, mid-roll included.
+  go.disabled = auto?.running ? false : busy || Boolean(problem);
   go.setAttribute('aria-busy', String(busy));
   hint.textContent = problem;
 
@@ -497,8 +540,9 @@ function paintControls() {
   profit.value = stake && stake > 0n ? money(Number(payoutMinor(stake) - stake)) : '—';
   $('#diceProfitX', root).textContent = times(multiplierBps(chanceOf(direction, target)));
 
-  for (const node of root.querySelectorAll('.dice__panel input, .dice__panel .dice__adj, .dice__stage input, .dice__swap')) {
-    node.disabled = busy;
+  const locked = busy || Boolean(auto?.running);
+  for (const node of root.querySelectorAll('.dice__field input, .dice__panel .dice__adj, .dice__stage input, .dice__swap')) {
+    node.disabled = locked;
   }
 }
 
@@ -545,9 +589,9 @@ function build() {
               <input class="dice__range" id="diceLine" type="range" min="1" max="9999" step="1" value="5000"
                      aria-label="The line the roll is measured against" />
             </div>
+            <div class="dice__scale" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
           </div>
         </div>
-        <div class="dice__scale" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
       </div>
 
       <div class="dice__dials">
@@ -579,7 +623,8 @@ function build() {
 
     <aside class="dice__panel" aria-label="Your roll">
       <form class="dice__form" id="diceForm" novalidate>
-        <label class="dice__label" for="diceStake">Stake</label>
+        ${autoSwitch('dice')}
+        <label class="dice__label" for="diceStake">Bet amount</label>
         <div class="dice__field">
           <span aria-hidden="true">$</span>
           <input id="diceStake" inputmode="text" autocapitalize="off" autocorrect="off" enterkeyhint="go" autocomplete="off" spellcheck="false" />
@@ -587,13 +632,14 @@ function build() {
           <button type="button" class="dice__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="dice__adj" data-adj="max" aria-label="Bet the most you can">Max</button>
         </div>
+        ${autoFields('dice')}
+        <button class="btn dice__go" id="diceGo" type="submit" data-sfx="none">
+          <span id="diceGoLabel">Loading…</span>
+        </button>
         <label class="dice__label dice__label--row" for="diceProfit"><span>Profit on win</span><span class="dice__profitx" id="diceProfitX"></span></label>
         <div class="dice__field dice__field--read">
           <output id="diceProfit" for="diceStake diceLine">—</output>
         </div>
-        <button class="btn dice__go" id="diceGo" type="submit" data-sfx="none">
-          <span id="diceGoLabel">Loading…</span>
-        </button>
         <p class="dice__hint" id="diceHint" aria-live="polite"></p>
         ${viewSwitch('diceView')}
         <label class="dice__gfx" for="diceGfx">
@@ -646,9 +692,20 @@ function build() {
   }
   $('#diceSwap', root).addEventListener('click', swapSide);
 
+  auto = wireAuto(root, 'dice', {
+    betOnce: roll,
+    getStake: stakeMinor,
+    setStake: (minor) => {
+      stakeText = formatAmountInput(Number(minor));
+      stake.value = stakeText;
+      paintControls();
+    },
+    paint: paintControls,
+  });
   $('#diceForm', root).addEventListener('submit', (event) => {
     event.preventDefault();
-    void roll();
+    if (auto.mode === 'auto') auto.toggle();
+    else void roll();
   });
   $('#diceGfx', root).addEventListener('change', (event) => setGraphics(event.target.value));
   onViewSwitch($('#diceView', root), setView);
