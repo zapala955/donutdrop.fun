@@ -866,6 +866,90 @@ body.lx .chicken:not([data-render="3d"], [data-render="loading"]) .chicken__cart
 }
 .chicken:is([data-render="3d"], [data-render="loading"]) .chicken__pass { display: none; }
 
+/* ═════════ Blackjack, as the preview's ═════════
+   The felt is the stages' own: green wool under the dark wash, square to the panel. The dealer's
+   name over the cards and the total under them; one printed line and the table's words across the
+   middle; the player's cards, total and name. Totals are pills ("–" before a deal), the backs and
+   the shoe gold stripes, the faces flat ivory. The panel: the moves in one row, the rules under. */
+body.lx .bj { --pv-stage: url("../img/block/green_wool.png"); }
+body.lx .bj .bj__table {
+  border-radius: 0; box-shadow: none;
+  background-color: var(--lx-0);
+  background-image: radial-gradient(130% 100% at 50% 38%, rgba(8, 6, 5, .8) 0%, rgba(8, 6, 5, .95) 72%), var(--pv-stage);
+  background-size: 100% 100%, 64px; image-rendering: pixelated;
+}
+body.lx .bj .bj__table > * { image-rendering: auto; }
+body.lx .bj .bj__table:not([data-render="3d"]) { --bj-card-w: clamp(58px, 7vw, 74px); justify-content: space-between; padding: 48px 16px 32px; }
+body.lx .bj .bj__table:not([data-render="3d"]) :is(.bj__felt, .bj__rules, .bj__bet) { display: none; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__mid { display: grid; justify-items: center; gap: 8px; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__print { margin: 0; color: var(--lx-mute); font: 800 .6875rem/1.2 var(--lx-ui); letter-spacing: .14em; text-transform: uppercase; text-align: center; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__status { display: grid; place-items: center; min-height: 32px; margin: 0; padding: 0 16px; border-radius: 999px; color: var(--lx-text); font: 800 1rem/1 var(--lx-ui); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__status:empty { visibility: hidden; }
+body.lx .bj .bj__table:not([data-render="3d"])[data-result] .bj__mid { visibility: hidden; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat { gap: 8px; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__label { display: contents; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__label > span:first-child { color: var(--lx-mute); font: 700 .75rem/1.2 var(--lx-ui); letter-spacing: 0; text-transform: none; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--dealer .bj__label > span:first-child { order: 0; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--dealer .bj__cards { order: 1; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--dealer .bj__total { order: 2; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--player .bj__label > span:first-child { order: 3; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__total {
+  display: grid; place-items: center; height: 28px; min-width: 40px; padding: 0 12px; border-radius: 999px; box-shadow: none;
+  background: var(--lx-3); color: var(--lx-ink); font: 800 .75rem/1 var(--lx-ui); font-variant-numeric: tabular-nums;
+}
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__total[data-state="twentyone"] { background: var(--lx-gold); color: var(--lx-on-gold); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__total[data-state="bust"] { background: var(--lx-loss); color: var(--lx-ink); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--player[data-result="win"] .bj__total { background: var(--pv-win); color: #0b2419; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--player[data-result="lose"] .bj__total { background: var(--lx-loss); color: var(--lx-ink); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__cards { min-height: calc(var(--bj-card-w) * 1.4); padding: 0; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__cards:empty::before { content: none; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjslot + .bjslot { margin-left: -26px; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard__front {
+  background: var(--lx-ink); color: #2b2622; border-radius: 8px;
+  box-shadow: inset 0 -3px 0 rgba(8, 6, 5, .32), -3px 0 0 var(--pv-shade);
+}
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard:is([data-suit="heart"], [data-suit="diamond"]) .bjcard__front { color: #c8362f; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard[data-court] .bjcard__front::before { content: none; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard__corner b { font: 900 1.125rem/.95 var(--lx-display); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard__corner i { font-size: .95rem; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard__pip { font-size: 2rem; }
+body.lx .bj .bj__table:not([data-render="3d"]) .bjcard__back,
+body.lx .bj .bj__shoe span {
+  border-radius: 8px; image-rendering: auto;
+  background: repeating-linear-gradient(45deg, var(--lx-gold) 0 6px, #ffbe3d 6px 12px);
+  box-shadow: inset 0 0 0 3px var(--lx-ink), -3px 0 0 var(--pv-shade);
+}
+body.lx .bj .bj__shoe { top: 16px; right: 16px; width: 48px; height: auto; aspect-ratio: 5 / 7; }
+body.lx .bj .bj__shoe::before, body.lx .bj .bj__shoe::after { content: none; }
+body.lx .bj .bj__shoe span { box-shadow: inset 0 0 0 3px var(--lx-ink), 3px 3px 0 var(--lx-4), 6px 6px 0 var(--lx-3); }
+body.lx .bj .bj__table:not([data-render="3d"]) .bj__seat--player:is([data-result="win"], [data-result="lose"]) .bjcard__front::after { content: none; }
+/* The result: the preview's win card, flat; red for a loss, plain for a push. */
+body.lx .bj .bj__result {
+  gap: 4px; padding: 12px 32px; border: 3px solid var(--lx-4); border-radius: 12px;
+  background: var(--lx-1); box-shadow: 0 6px 0 var(--pv-shade);
+}
+body.lx .bj .bj__result[data-tone="win"] { border-color: var(--pv-win); box-shadow: 0 6px 0 var(--pv-shade); }
+body.lx .bj .bj__result[data-tone="lose"] { border-color: var(--lx-loss); }
+body.lx .bj .bj__result b,
+body.lx .bj .bj__result[data-tone="win"] b { color: var(--lx-ink); font: 900 1.75rem/1 var(--lx-display); letter-spacing: -.02em; background: none; -webkit-text-fill-color: currentColor; }
+body.lx .bj .bj__result[data-tone="win"] b { color: var(--pv-win); }
+body.lx .bj .bj__result[data-outcome="blackjack"] { border-color: var(--lx-gold); }
+body.lx .bj .bj__result[data-outcome="blackjack"] b { color: var(--lx-gold); }
+body.lx .bj .bj__result span,
+body.lx .bj .bj__result[data-tone="win"] span { color: var(--lx-ink); font: 800 1rem/1.2 var(--lx-ui); }
+/* The panel. */
+body.lx .bj .bj__deal[hidden] { display: none; }
+body.lx .bj .bj__deal { height: 52px; }
+body.lx .bj .bj__hint:empty { display: none; }
+body.lx .bj .bj__actions .btn kbd { display: none; }
+body.lx .bj .bj__note { margin: 12px 0 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+@media (min-width: 1024px) {
+  body.lx .bj .bj__actions { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+  body.lx .bj .bj__actions .btn { height: 44px; margin-top: 0; font-size: .9375rem; }
+  body.lx .bj .bj__actions .btn.btn--go { background: var(--lx-4); color: var(--lx-ink); --bj-lip: rgba(0, 0, 0, .5); }
+  body.lx .bj .bj__actions .btn.btn--go:hover:not(:disabled) { background: var(--lx-5); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
