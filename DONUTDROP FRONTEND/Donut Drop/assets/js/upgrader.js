@@ -101,10 +101,10 @@ function chancePpm() {
  * a filter that starts narrowed hides targets the player never asked to hide. */
 const BANDS = [
   ['All', 0, Infinity],
-  ['Under 3x', 0, 3],
-  ['3-10x', 3, 10],
-  ['10-30x', 10, 30],
-  ['Over 30x', 30, Infinity],
+  ['Under 3×', 0, 3],
+  ['3–10×', 3, 10],
+  ['10–30×', 10, 30],
+  ['Over 30×', 30, Infinity],
 ];
 
 /** The eligible targets inside one band. Index 0 is every eligible target, unfiltered. */
@@ -155,41 +155,6 @@ function build() {
   }).join('');
 
   root.innerHTML = `
-    <section class="ug__duel" aria-label="The upgrade">
-      <div class="ug__item ug__item--from" id="bayStake" data-loaded="0">
-        <span class="ug__art" id="artStake" data-empty="1"><img src="${IMG}gold_ingot.png" alt=""></span>
-        <span class="ug__cap">You stake</span>
-        <b class="ug__amt mono" id="stakeSub">—</b>
-      </div>
-
-      <div class="ug__dial" id="wheel">
-        <div class="ug__ring">
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <g class="ug__ticks" id="wheelTicks">${ticks}</g>
-            <circle class="ug__track" cx="60" cy="60" r="${R}"/>
-            <circle class="ug__arc" id="wheelArc" cx="60" cy="60" r="${R}"
-                    stroke-dasharray="0 ${C.toFixed(2)}" data-empty="1"/>
-          </svg>
-          <canvas class="ug__canvas" id="wheelGl" aria-hidden="true"></canvas>
-          <div class="ug__needle" id="needle"><i></i></div>
-          <div class="ug__mid" id="wheelMid" data-state="">
-            <span class="ug__pct" id="wheelPct">—</span>
-            <span class="ug__lbl" id="wheelLbl">Win chance</span>
-          </div>
-        </div>
-      </div>
-
-      <button class="ug__item ug__item--to" id="bayTarget" type="button" data-loaded="0"
-              aria-label="Choose the payout you are chasing">
-        <span class="ug__art" id="artTarget" data-empty="1">
-          <img src="${IMG}ender_chest_anim.gif" alt="">
-          <span class="ug__glyph" aria-hidden="true">${CHEV}</span>
-        </span>
-        <span class="ug__cap" id="metaSub">Pick a payout</span>
-        <span class="ug__meta" id="metaTarget"></span>
-      </button>
-    </section>
-
     <aside class="ug__panel" aria-label="Your upgrade">
       <div class="ug__form">
         <label class="ug__label ug__label--row" for="stakeIn"><span>Bet amount</span><span class="ug__bal mono" id="upgBalance"></span></label>
@@ -204,10 +169,11 @@ function build() {
         <!-- Empty unless something is actually wrong: a validation channel, not a syntax lesson. -->
         <span class="ug__hint" id="stakeHint"></span>
         <div class="ug__adds" id="stakeChips" role="group" aria-label="Add to the stake"></div>
-        <div class="ug__stats">
-          <div class="ug__stat"><span class="ug__label">Multiplier</span><b class="mono" id="upgMult">—</b></div>
-          <div class="ug__stat"><span class="ug__label">Win chance</span><b class="mono" id="upgChance">—</b></div>
-        </div>
+        <dl class="ug__kv">
+          <div><dt>Payout</dt><dd class="mono" id="upgPayout">—</dd></div>
+          <div><dt>Multiplier</dt><dd class="mono" id="upgMult">—</dd></div>
+          <div><dt>Win chance</dt><dd class="mono" id="upgChance">—</dd></div>
+        </dl>
         <button class="btn ug__go" id="pullBtn" type="button" data-sfx="none" disabled>
           <span id="pullLabel">Upgrade</span>
         </button>
@@ -218,17 +184,55 @@ function build() {
           </button>
           <button class="ihint" type="button" id="upgHint"></button>
         </div>
+        <p class="ug__note" id="upgNote"></p>
       </div>
     </aside>
 
-    <section class="ug__pick" aria-label="Every payout you can chase">
-      <h2 class="ug__h">Everything you can chase
-        <button class="ihint" type="button" aria-label="Each percentage is the real chance at that payout with the stake you have set."
-                data-tip="Each percentage is the real chance at that payout with the stake you have set."></button>
-      </h2>
-      <div class="ug__bands" id="upgBands" role="group" aria-label="Filter targets by payout"></div>
-      <div class="pickgrid ug__grid" id="upgCat"></div>
-    </section>`;
+    <div class="ug__stage">
+      <section class="ug__duel" aria-label="The upgrade">
+        <div class="ug__item ug__item--from" id="bayStake" data-loaded="0">
+          <span class="ug__art" id="artStake" data-empty="1"><img src="${IMG}gold_ingot.png" alt=""></span>
+          <span class="ug__cap">You stake</span>
+          <b class="ug__amt mono" id="stakeSub">—</b>
+        </div>
+
+        <div class="ug__dial" id="wheel">
+          <div class="ug__ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <g class="ug__ticks" id="wheelTicks">${ticks}</g>
+              <circle class="ug__track" cx="60" cy="60" r="${R}"/>
+              <circle class="ug__arc" id="wheelArc" cx="60" cy="60" r="${R}"
+                      stroke-dasharray="0 ${C.toFixed(2)}" data-empty="1"/>
+            </svg>
+            <canvas class="ug__canvas" id="wheelGl" aria-hidden="true"></canvas>
+            <div class="ug__needle" id="needle"><i></i></div>
+            <div class="ug__mid" id="wheelMid" data-state="">
+              <span class="ug__pct" id="wheelPct">—</span>
+              <span class="ug__lbl" id="wheelLbl">Win chance</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="ug__item ug__item--to" id="bayTarget" type="button" data-loaded="0"
+                aria-label="Choose the payout you are chasing">
+          <span class="ug__art" id="artTarget" data-empty="1">
+            <img src="${IMG}ender_chest_anim.gif" alt="">
+            <span class="ug__glyph" aria-hidden="true">${CHEV}</span>
+          </span>
+          <span class="ug__cap" id="metaSub">Pick a payout</span>
+          <span class="ug__meta" id="metaTarget"></span>
+        </button>
+      </section>
+
+      <section class="ug__pick" aria-label="Every payout you can chase">
+        <div class="ug__hrow">
+          <h2 class="ug__h">Everything you can chase</h2>
+          <span class="ug__hx">Each chance is the real one at your stake</span>
+        </div>
+        <div class="ug__bands" id="upgBands" role="group" aria-label="Filter targets by payout"></div>
+        <div class="pickgrid ug__grid" id="upgCat"></div>
+      </section>
+    </div>`;
 
   $('#bayTarget', root).addEventListener('click', pickTarget);
   $('#upgFairBtn', root).addEventListener('click', showFairness);
@@ -391,6 +395,9 @@ function sync({ keepInput = false } = {}) {
   }
   const multiple = hasStake() && target ? Number(targetValue()) / Number(stakeMinor()) : 0;
   $('#upgMult', root).textContent = multiple > 0 ? `${multiple.toFixed(2)}×` : '—';
+  $('#upgPayout', root).textContent = target ? money(target.value) : '—';
+  const note = noteText();
+  if ($('#upgNote', root).textContent !== note) $('#upgNote', root).textContent = note;
   $('#upgChance', root).textContent = ppm ? pct(chance, 2) : '—';
 
   const armed = hasStake() && !!target;
@@ -413,7 +420,7 @@ function sync({ keepInput = false } = {}) {
     : !hasStake() ? 'Set a stake'
     : !stakeAffordable() ? `Need ${money(Number(stakeMinor()))}`
     : !target ? 'Pick a payout'
-    : `Upgrade · ${money(Number(stakeMinor()))}`;
+    : 'Upgrade';
   for (const node of root.querySelectorAll('#stakeIn, .ug__adj, .ug__add')) node.disabled = spinning;
 
   paintCatalog();
@@ -503,6 +510,17 @@ function hintText() {
   return `The bigger the payout, the smaller your chance, up to ${cap}%.`;
 }
 
+/** The preview's line under the button, from the live config. */
+function noteText() {
+  const config = state.upgradeConfig;
+  if (!config) return '';
+  const figure = (value) => String(Number(value.toFixed(2)));
+  const low = figure(Number(config.minMultiplierBps) / 10_000);
+  const high = figure(Number(config.maxMultiplierBps) / 10_000);
+  const cap = figure(Number(config.maxWinChancePpm) / 10_000);
+  return `Chase any payout from ${low}× to ${high}× your stake. The bigger the payout, the smaller your chance, up to ${cap}%. A win pays the whole amount.`;
+}
+
 /**
  * Why nothing is in range, and what stake would fix it.
  *
@@ -550,7 +568,10 @@ function paintBands(counts) {
     chip.type = 'button';
     /* The count is part of the label, not a badge. An empty band that looks pressable is a dead
      * click, and one that is merely dimmed does not say why. */
-    chip.textContent = label + ' (' + count + ')';
+    chip.textContent = label + ' ';
+    const tally = el('span', 'bandchip__n');
+    tally.textContent = String(count);
+    chip.append(tally);
     chip.setAttribute('aria-pressed', String(index === band));
     chip.disabled = count === 0 && index !== band;
     chip.addEventListener('click', () => { band = index; paintCatalog(); });
@@ -599,10 +620,33 @@ function paintCatalog() {
     const button = el('button');
     button.type = 'button';
     if (target && target.catalogItemId === item.catalogItemId) button.dataset.on = '1';
-    button.appendChild(itemTile(item, { size: 'sm', sub: pct(quoteFor(item), 2) }));
+    button.appendChild(chaseTile(item));
     button.addEventListener('click', () => { target = item; clearResult(); sync(); });
     grid.appendChild(button);
   });
+}
+
+/** One payout on the stage's grid, as the preview draws it. */
+function chaseTile(item) {
+  const chance = pct(quoteFor(item), 2);
+  const multiple = `${(item.value / Number(stakeMinor())).toFixed(2)}×`;
+  const tile = el('span', 'ug__tile');
+  tile.style.setProperty('--rar', RARITY[item.rarity].color);
+  const art = el('img');
+  art.src = safeImage(item.img);
+  art.alt = '';
+  art.loading = 'lazy';
+  art.draggable = false;
+  const amount = el('b');
+  amount.textContent = money(item.value).slice(1);
+  const times = el('span');
+  times.textContent = multiple;
+  const odds = el('i');
+  odds.textContent = chance;
+  tile.append(art, amount, times, odds);
+  tile.title = item.name;
+  tile.setAttribute('aria-label', `${item.name}, ${money(item.value)}: ${multiple} your stake at ${chance}`);
+  return tile;
 }
 
 /* ─────────── the pull ─────────── */

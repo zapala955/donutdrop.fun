@@ -1123,6 +1123,79 @@ body.lx .cflip .cflip__mini[data-side="tails"] { background: #c3cbd3; }
 body.lx .cflip .cflip__hint:empty { display: none; }
 body.lx .cflip .cflip__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
 
+/* ═════════ Upgrader, as the preview's ═════════
+   One stage holds the duel and the payouts: the stake card, the dial and the payout card, small and
+   side by side, then "Everything you can chase" on a card of its own (the bands as one pill, the
+   payouts four across: the art, the amount, the multiple, the chance, the band's colour under it).
+   The panel: the stake, Payout / Multiplier / Win chance in one well, Upgrade, the rules under it. */
+body.lx .upg { --ug-dial: 176px; }
+body.lx .upg .ug__item { border-radius: 10px; box-shadow: 0 4px 0 var(--pv-shade); }
+body.lx .upg .ug__item--from .ug__amt { color: var(--lx-ink); }
+body.lx .upg .ug__cap { color: var(--lx-mute); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+@media (min-width: 641px) {
+  body.lx .upg .ug__item { min-height: 200px; width: 100%; max-width: 132px; justify-self: center; gap: 4px; padding: 16px 8px; border-radius: 10px; box-shadow: 0 4px 0 var(--pv-shade); }
+  body.lx .upg .ug__art { width: 64px; height: 64px; margin-bottom: 8px; }
+  body.lx .upg .ug__cap { color: var(--lx-mute); font: 800 .6875rem/1.2 var(--lx-ui); letter-spacing: .1em; text-transform: uppercase; }
+  body.lx .upg .ug__amt { color: var(--lx-ink); font: 900 1.375rem/1.1 var(--lx-display); }
+  body.lx .upg .ug__meta { display: grid; justify-items: center; gap: 4px; }
+  body.lx .upg .ug__pct { font: 900 1.5rem/1 var(--lx-display); }
+}
+body.lx .upg .ug__item--to[data-loaded="1"] { box-shadow: inset 0 -3px 0 var(--rar, var(--lx-4)), 0 4px 0 var(--pv-shade); }
+body.lx .upg .ug__dial.is-win ~ .ug__item--to { box-shadow: inset 0 0 0 2px var(--pv-win), 0 4px 0 var(--pv-shade); }
+body.lx .upg .ug__meta .ug__amt { order: 0; }
+body.lx .upg .ug__meta .ug__name { order: 1; color: var(--lx-text); font: 700 .75rem/1.2 var(--lx-ui); }
+body.lx .upg .ug__lbl { font: 800 .625rem/1.2 var(--lx-ui); letter-spacing: .12em; text-transform: uppercase; }
+body.lx .upg .ug__kv { display: grid; gap: 4px; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--lx-0); font: 500 .75rem/1.4 var(--lx-ui); }
+body.lx .upg .ug__kv div { display: flex; justify-content: space-between; gap: 12px; }
+body.lx .upg .ug__kv dt { color: var(--lx-mute); }
+body.lx .upg .ug__kv dd { margin: 0; color: var(--lx-ink); font: 800 .75rem/1.4 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .upg :is(.ug__adds, .ug__tools) { display: none; }
+body.lx .upg .ug__note { margin: 4px 0 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+body.lx .upg .ug__note:empty { display: none; }
+body.lx .upg .ug__label--row .ug__bal { color: var(--lx-faint); font-size: .75rem; }
+body.lx .upg .ug__hrow { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+body.lx .upg .ug__h { font: 800 .9375rem/1.2 var(--lx-ui); }
+body.lx .upg .ug__hx { color: var(--lx-mute); font: 500 .75rem/1.3 var(--lx-ui); }
+body.lx .upg .ug__bands { display: inline-flex; flex-wrap: wrap; justify-self: start; gap: 2px; padding: 3px; border-radius: 999px; background: var(--lx-0); }
+body.lx .view .upg .ug__bands .bandchip,
+body.lx .view .upg .ug__bands .bandchip:hover:not(:disabled) {
+  height: 30px; padding: 0 12px; border: 0; border-radius: 999px; box-shadow: none; transform: none;
+  background: transparent; color: var(--lx-text); font: 700 .75rem/1 var(--lx-ui);
+}
+body.lx .view .upg .ug__bands .bandchip[aria-pressed="true"],
+body.lx .view .upg .ug__bands .bandchip[aria-pressed="true"]:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-ink); box-shadow: none; }
+body.lx .upg .bandchip__n { margin-left: 4px; color: var(--lx-mute); font-weight: 600; }
+body.lx .upg .ug__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-height: 440px; }
+body.lx .upg .ug__tile {
+  display: grid; justify-items: center; gap: 2px; width: 100%; padding: 12px 6px 10px; border-radius: 8px;
+  background: var(--lx-2); box-shadow: inset 0 -3px 0 var(--rar, var(--lx-4));
+  transition: transform 140ms var(--ug-ease, ease), background-color 140ms var(--ug-ease, ease);
+}
+body.lx .upg .ug__tile img { width: 36px; height: 36px; margin-bottom: 6px; object-fit: contain; image-rendering: pixelated; }
+body.lx .upg .ug__tile b { color: var(--lx-ink); font: 800 .9375rem/1.1 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .upg .ug__tile span { color: var(--lx-text); font: 700 .6875rem/1.2 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .upg .ug__tile i { color: var(--lx-mute); font: 700 .6875rem/1.2 var(--lx-ui); font-style: normal; font-variant-numeric: tabular-nums; }
+body.lx .upg .ug__grid button:hover .ug__tile { transform: translateY(-2px); background: var(--lx-3); }
+body.lx .upg .ug__grid button:active .ug__tile { transform: translateY(1px); }
+body.lx .upg .ug__grid button[data-on="1"] .ug__tile { background: var(--lx-3); box-shadow: inset 0 0 0 2px var(--lx-gold); }
+body.lx .upg .ug__grid button[data-on="1"] .ug__tile i { color: var(--lx-gold); }
+@media (min-width: 1024px) {
+  body.lx .upg { grid-template-areas: "panel stage"; grid-template-rows: auto; }
+  body.lx .upg .ug__stage {
+    grid-area: stage; display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 64px 16px 16px;
+    border-radius: 0 var(--lx-r) 0 0; background-color: var(--lx-0);
+    background-image: radial-gradient(130% 100% at 50% 38%, rgba(8, 6, 5, .8) 0%, rgba(8, 6, 5, .95) 72%), var(--pv-stage, none);
+    background-size: 100% 100%, 64px; image-rendering: pixelated;
+  }
+  body.lx .upg .ug__stage > * { image-rendering: auto; }
+  body.lx .upg .ug__duel { grid-template-columns: minmax(0, 132px) var(--ug-dial) minmax(0, 132px); justify-content: center; gap: 24px; padding: 0; border-radius: 0; background: none; }
+  body.lx .upg .ug__pick { padding: 16px; border-radius: 10px; background: var(--lx-1); }
+}
+@media (max-width: 1023px) {
+  body.lx .upg .ug__stage { display: contents; }
+  body.lx .upg .ug__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
