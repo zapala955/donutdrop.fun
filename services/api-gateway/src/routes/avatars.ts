@@ -83,6 +83,25 @@ const querySchema = z
   .object({ s: z.coerce.number().int().optional() })
   .strict();
 
+/* A battle seat's head (2026-11-21, the owner: show the mc head beside the opponent's name). Battle
+ * names reach the page masked and the seat payload carries no user id, on purpose, so the page asks
+ * by battle code and seat instead and this server finds the player. `v` is the client's cache key —
+ * the seat's masked name — so a lobby seat that changes hands is not served the previous player's
+ * head from the browser cache; the server ignores it. */
+const seatParamsSchema = z
+  .object({ code: z.string().regex(/^[A-Z0-9]{6,12}$/), seat: z.coerce.number().int().min(0).max(15) })
+  .strict();
+const seatQuerySchema = z
+  .object({ s: z.coerce.number().int().optional(), v: z.string().max(64).optional() })
+  .strict();
+
+/** The routes whose answers may be cached by the browser. app.ts exempts exactly these from its
+ *  no-store default. */
+export const CACHEABLE_AVATAR_ROUTES: ReadonlySet<string> = new Set([
+  '/v1/avatars/:id',
+  '/v1/battles/:code/seats/:seat/avatar',
+]);
+
 export async function registerAvatarRoutes(app: FastifyInstance, db: Database) {
   const cache = new Map<string, CacheEntry>();
   /* Per gamertag, not per size: one lookup serves the 22px and the 40px head alike. */
@@ -168,69 +187,98 @@ export async function registerAvatarRoutes(app: FastifyInstance, db: Database) {
       const params = parseWith(paramsSchema, request.params);
       const query = parseWith(querySchema, request.query ?? {});
       const size = query.s !== undefined && SIZES.has(query.s) ? query.s : DEFAULT_SIZE;
-      const key = `${params.id}:${size}`;
-
-      const cached = cache.get(key);
-      if (cached && cached.expiresAt > Date.now()) {
-        return cached.body === null ? notFound(reply) : send(reply, cached.body, cached.contentType);
-      }
-
-      /* The one place the name is resolved, and it never leaves this function. */
-      const user = await db.query<{ minecraft_identity: string }>(
-        'SELECT minecraft_identity FROM users WHERE id = $1',
-        [params.id],
-      );
-      const identity = user.rows[0]?.minecraft_identity ?? '';
-      /* A Java account is fetched by its Mojang UUID; a Bedrock one by the skin texture GeyserMC
-       * knows for it (see BEDROCK HEADS above). Either way the upstream URL is built only from a
-       * value checked against a hex pattern, so nothing a caller supplies can reach it. A Bedrock
-       * player GeyserMC does not know still gets the initials the client falls back to. */
-      const uuid = /^mc:([a-f0-9]{32})$/.exec(identity)?.[1];
-      const gamertag = uuid ? undefined : BEDROCK_IDENTITY.exec(identity)?.[1];
-      const texture = gamertag ? await bedrockTexture(gamertag) : null;
-      if (texture === undefined) return notFound(reply);
-      const subject = uuid ?? texture;
-      if (!subject) {
-        remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
-        return notFound(reply);
-      }
-
-      let upstream: Response;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-      try {
-        upstream = await fetch(`${UPSTREAM}${subject}/${size}`, {
-          method: 'GET',
-          headers: { accept: 'image/png,image/*' },
-          signal: controller.signal,
-        });
-      } catch {
-        /* Not cached as a miss: a timeout is about the network right now, not about this player,
-         * and burning five minutes of negative cache on a blip would blank the chat for everyone
-         * who loaded during it. The client falls back to initials for this render. */
-        return notFound(reply);
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      const contentType = upstream.headers.get('content-type') ?? '';
-      if (!upstream.ok || !contentType.startsWith('image/')) {
-        remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
-        return notFound(reply);
-      }
-
-      const raw = Buffer.from(await upstream.arrayBuffer());
-      /* A head is a couple of kilobytes. Anything of this size is not one, and proxying it would
-       * make this endpoint a bandwidth amplifier for whatever upstream decided to return. */
-      if (raw.byteLength > MAX_IMAGE_BYTES) {
-        remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
-        return notFound(reply);
-      }
-
-      remember(key, { expiresAt: Date.now() + CACHE_TTL_MS, body: raw, contentType });
-      return send(reply, raw, contentType);
+      return serveHead(reply, params.id, size);
     },
   );
+
+  app.get(
+    '/v1/battles/:code/seats/:seat/avatar',
+    {
+      /* A battle shows at most six heads, cached after the first look; the ceiling is for abuse. */
+      config: { rateLimit: { max: 240, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      const params = parseWith(seatParamsSchema, request.params);
+      const query = parseWith(seatQuerySchema, request.query ?? {});
+      const size = query.s !== undefined && SIZES.has(query.s) ? query.s : DEFAULT_SIZE;
+      /* The player in that seat, looked up here and never named in the answer, which is an image
+       * or a 404. A bot and an empty seat have no head: the page draws its own tile for both. */
+      const seat = await db.query<{ user_id: string | null }>(
+        `SELECT p.user_id
+           FROM battle_players p JOIN battles b ON b.id = p.battle_id
+          WHERE b.code = $1 AND p.seat = $2 AND p.is_bot = false`,
+        [params.code, params.seat],
+      );
+      const userId = seat.rows[0]?.user_id;
+      if (!userId) return notFound(reply);
+      return serveHead(reply, userId, size);
+    },
+  );
+
+  /** One player's head at one size: from the cache, or resolved and fetched once and cached. */
+  async function serveHead(reply: FastifyReply, userId: string, size: number) {
+    const key = `${userId}:${size}`;
+
+    const cached = cache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.body === null ? notFound(reply) : send(reply, cached.body, cached.contentType);
+    }
+
+    /* The one place the name is resolved, and it never leaves this function. */
+    const user = await db.query<{ minecraft_identity: string }>(
+      'SELECT minecraft_identity FROM users WHERE id = $1',
+      [userId],
+    );
+    const identity = user.rows[0]?.minecraft_identity ?? '';
+    /* A Java account is fetched by its Mojang UUID; a Bedrock one by the skin texture GeyserMC
+     * knows for it (see BEDROCK HEADS above). Either way the upstream URL is built only from a
+     * value checked against a hex pattern, so nothing a caller supplies can reach it. A Bedrock
+     * player GeyserMC does not know still gets the initials the client falls back to. */
+    const uuid = /^mc:([a-f0-9]{32})$/.exec(identity)?.[1];
+    const gamertag = uuid ? undefined : BEDROCK_IDENTITY.exec(identity)?.[1];
+    const texture = gamertag ? await bedrockTexture(gamertag) : null;
+    if (texture === undefined) return notFound(reply);
+    const subject = uuid ?? texture;
+    if (!subject) {
+      remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
+      return notFound(reply);
+    }
+
+    let upstream: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    try {
+      upstream = await fetch(`${UPSTREAM}${subject}/${size}`, {
+        method: 'GET',
+        headers: { accept: 'image/png,image/*' },
+        signal: controller.signal,
+      });
+    } catch {
+      /* Not cached as a miss: a timeout is about the network right now, not about this player,
+       * and burning five minutes of negative cache on a blip would blank the chat for everyone
+       * who loaded during it. The client falls back to initials for this render. */
+      return notFound(reply);
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const contentType = upstream.headers.get('content-type') ?? '';
+    if (!upstream.ok || !contentType.startsWith('image/')) {
+      remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
+      return notFound(reply);
+    }
+
+    const raw = Buffer.from(await upstream.arrayBuffer());
+    /* A head is a couple of kilobytes. Anything of this size is not one, and proxying it would
+     * make this endpoint a bandwidth amplifier for whatever upstream decided to return. */
+    if (raw.byteLength > MAX_IMAGE_BYTES) {
+      remember(key, { expiresAt: Date.now() + NEGATIVE_TTL_MS, body: null, contentType: '' });
+      return notFound(reply);
+    }
+
+    remember(key, { expiresAt: Date.now() + CACHE_TTL_MS, body: raw, contentType });
+    return send(reply, raw, contentType);
+  }
 }
 
 /* `cache-control` is set here AND the global onSend hook is told to leave this route alone. The

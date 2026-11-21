@@ -25,7 +25,7 @@ import { registerAdminDiscordRoutes } from './routes/admin-discord.js';
 import { registerAdminFleetRoutes } from './routes/admin-fleet.js';
 import { registerAdminPayoutRoutes } from './routes/admin-payouts.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerAvatarRoutes } from './routes/avatars.js';
+import { CACHEABLE_AVATAR_ROUTES, registerAvatarRoutes } from './routes/avatars.js';
 import { registerPayLoginRoutes } from './routes/auth-pay.js';
 import { registerEmailRoutes } from './routes/email.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
@@ -234,11 +234,12 @@ export async function buildApp(config: AppConfig, suppliedDatabase?: Database) {
 
   app.addHook('onSend', async (request, reply) => {
     /* no-store is the right default for every JSON answer this API gives: they are all about one
-     * account at one moment, and a cached one is a wrong one. The avatar route is the single
-     * exception — an image keyed on a stable id, which sets its own long cache-control and would
-     * otherwise be re-fetched on every chat poll. It opts out by name rather than by sniffing the
-     * header the handler set, so the exemption is a list a reader can check. */
-    if (request.routeOptions.url !== '/v1/avatars/:id') {
+     * account at one moment, and a cached one is a wrong one. The avatar routes are the single
+     * exception — a head keyed on a stable id (or a battle seat), which sets its own long
+     * cache-control and would otherwise be re-fetched on every chat poll. They opt out by name
+     * rather than by sniffing the header the handler set, so the exemption is a list a reader can
+     * check (CACHEABLE_AVATAR_ROUTES in routes/avatars.ts). */
+    if (!CACHEABLE_AVATAR_ROUTES.has(request.routeOptions.url ?? '')) {
       reply.header('cache-control', 'no-store');
     }
     reply.header('content-language', 'en');

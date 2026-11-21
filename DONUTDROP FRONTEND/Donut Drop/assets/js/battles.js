@@ -961,9 +961,11 @@ function layoutSeats(board, teamCount, teamSize, seatAt, { won = null, total = n
   }
 }
 
-/** A seat's picture: the player's own head on their seat, a letter for anyone else (their name
- *  reaches this page masked, and there is nothing to look a head up by), and a mark for a bot. */
-function seatAvatar(seat) {
+/** A seat's picture: the player's Minecraft head, a mark for a bot, stripes for an open seat.
+ *  Your own head is asked for by your id, as chat does; anyone else's by battle code and seat,
+ *  because their name reaches this page masked and the seat carries no id to ask by. Until a head
+ *  loads, or if there is none, the seat shows the letter its masked name starts with. */
+function seatAvatar(seat, code = null) {
   const box = el('span', 'bavatar');
   if (!seat) {
     box.dataset.open = '1';
@@ -974,20 +976,25 @@ function seatAvatar(seat) {
     box.textContent = 'BOT';
     return box;
   }
-  if (seat.isYou && state.user?.id) {
-    const head = document.createElement('img');
-    head.alt = '';
-    head.width = 32;
-    head.height = 32;
-    head.src = `${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40`;
-    head.addEventListener('error', () => {
-      head.remove();
-      box.textContent = initials(seat.name);
-    });
-    box.appendChild(head);
+  const src = seat.isYou && state.user?.id
+    ? `${API_BASE_URL}/v1/avatars/${encodeURIComponent(state.user.id)}?s=40`
+    : code && Number.isInteger(seat.seat)
+      ? `${API_BASE_URL}/v1/battles/${encodeURIComponent(code)}/seats/${seat.seat}/avatar?s=40&v=${encodeURIComponent(seat.name ?? '')}`
+      : null;
+  if (!src) {
+    box.textContent = initials(seat.name);
     return box;
   }
-  box.textContent = initials(seat.name);
+  const head = document.createElement('img');
+  head.alt = '';
+  head.width = 32;
+  head.height = 32;
+  head.src = src;
+  head.addEventListener('error', () => {
+    head.remove();
+    box.textContent = initials(seat.name);
+  });
+  box.appendChild(head);
   return box;
 }
 
@@ -1212,7 +1219,7 @@ function buildSeat(battle, seat, revealed) {
     won.textContent = `+${money(Number(seat.payoutMinor))}`;
     sum.appendChild(won);
   }
-  head.append(seatAvatar(seat), who, sum);
+  head.append(seatAvatar(seat, battle.code), who, sum);
 
   const reel = el('div', 'bseat__reel');
   const track = el('div', 'bseat__strip');
