@@ -24,6 +24,9 @@ import { playSound } from './audio-engine.js';
 
 /* Nothing under 10x: the server refuses less (STOCKS_MIN_LEVERAGE). */
 const LEVERAGE_PICKS = [10, 50, 100, 500, 1000];
+/* The preview's direction marks: a line trending up, or down. */
+const TREND_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg>';
+const TREND_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/></svg>';
 /* `mark` every so many candles on the time axis; both divide an epoch's candles, so the marks stay
  * on the same seconds from one epoch to the next. */
 const FRAMES = [
@@ -92,6 +95,10 @@ const fmtPrice = (value) => {
 };
 const minLeverage = () => cfg?.minLeverage ?? 10;
 const maxLeverage = () => cfg?.maxLeverage ?? 1000;
+/* The leverage slider runs on a log scale, as the preview's: 10× to 100× takes its first half. */
+const levSpan = () => Math.log(maxLeverage() / minLeverage());
+const sliderToLev = (v) => Math.round(minLeverage() * Math.exp((levSpan() * v) / 1000));
+const levToSlider = (lev) => Math.round((1000 * Math.log(lev / minLeverage())) / levSpan());
 
 /** The grid level of liquidation nearest to where the loss reaches the stake (lib/stocks.ts). */
 function liquidationLevels(sideName, lev) {
@@ -370,7 +377,7 @@ function paintQuote() {
   const first = close[close.length - span];
   const change = (priceOf(nowLevel()) / priceOf(first) - 1) * 100;
   const delta = $('#stocksChange', root);
-  delta.textContent = `${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%`;
+  delta.textContent = `${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(2)}%`;
   delta.dataset.dir = change > 0 ? 'up' : change < 0 ? 'down' : '';
   delta.title = `Over the last ${visibleCandles() * frame.ticks / 10} seconds`;
 }
@@ -383,7 +390,7 @@ function paintLiquidation() {
   const liq = side === 'long' ? level - n : level + n;
   const move = (priceOf(liq) / priceOf(level) - 1) * 100;
   $('#stocksLiq', root).textContent = fmtPrice(priceOf(liq));
-  $('#stocksLiqMove', root).textContent = `${move >= 0 ? '+' : '−'}${Math.abs(move).toFixed(Math.abs(move) < 1 ? 3 : 2)}% away`;
+  $('#stocksLiqMove', root).textContent = `${move >= 0 ? '+' : '−'}${Math.abs(move).toFixed(Math.abs(move) < 1 ? 3 : 2)}%`;
 }
 
 function paintOrder() {
@@ -396,7 +403,8 @@ function paintOrder() {
     b.disabled = busy;
   }
   const levInput = $('#stocksLev', root);
-  if (document.activeElement !== levInput) levInput.value = String(leverage);
+  if (document.activeElement !== levInput) levInput.value = String(levToSlider(leverage));
+  levInput.setAttribute('aria-valuetext', `${leverage}×`);
   for (const pick of root.querySelectorAll('[data-lev]')) {
     const value = Number(pick.dataset.lev);
     pick.hidden = value > maxLeverage() || value < minLeverage();
@@ -420,8 +428,9 @@ function paintOrder() {
   } else {
     $('#stocksWin', root).textContent = '—';
   }
-  $('#stocksFee', root).textContent = stake ? `fee ${money(Number(stake) * cfg.edgeBps / 10_000)} (10%)` : 'fee 10%';
-  $('#stocksRuns', root).textContent = `runs at ${levText(runs)}`;
+  const levValue = $('#stocksLevV', root);
+  levValue.textContent = `${leverage}×`;
+  levValue.title = `Runs at ${levText(runs)}`;
   // The cap a position closes itself at (the server's maxPayoutMinor, a live setting).
   $('#stocksMaxWin', root).textContent = `max win ${money(Number(cfg.maxPayoutMinor))}`;
   paintLiquidation();
@@ -430,11 +439,12 @@ function paintOrder() {
   const problem = state.authenticated ? orderProblem() : '';
   go.disabled = busy || (state.authenticated && Boolean(problem));
   go.setAttribute('aria-busy', String(busy));
+  go.dataset.side = side;
   $('#stocksGoLabel', root).textContent = !state.authenticated
     ? 'Log in to trade'
     : busy
       ? 'Placing order…'
-      : `${side === 'long' ? 'Long' : 'Short'} ${leverage}× · ${money(Number(stake ?? 0n))}`;
+      : `Open ${side}`;
   $('#stocksHint', root).textContent = problem;
 }
 
@@ -585,8 +595,8 @@ function readPalette() {
     down,
     upRgb: rgbOf(up),
     downRgb: rgbOf(down),
-    gold: token('--lx-gold', '#f5b800'),
-    onGold: token('--lx-on-gold', '#1a1300'),
+    gold: token('--stocks-tag', token('--lx-gold', '#f5b800')),
+    onGold: token('--stocks-tag-ink', token('--lx-on-gold', '#1a1300')),
     ui: token('--lx-ui', 'sans-serif'),
   };
 }
@@ -914,7 +924,7 @@ function build() {
       </div>
       <div class="stocks__head">
         <div class="stocks__quote">
-          <span class="stocks__sym"><img src="assets/img/items/game-stocks.svg" alt="" width="16" height="16" />DONUT</span>
+          <span class="stocks__sym"><img src="assets/img/brand/donut.svg" alt="" width="24" height="24" />DONUT</span>
           <div class="stocks__line">
             <b class="stocks__price" id="stocksPrice">—</b>
             <span class="stocks__change" id="stocksChange"></span>
@@ -929,10 +939,6 @@ function build() {
 
     <aside class="stocks__panel" aria-label="Your order and positions">
       <form class="stocks__form" id="stocksForm" novalidate>
-        <div class="stocks__sides" role="radiogroup" aria-label="Direction" data-side="long">
-          <button type="button" class="stocks__side" role="radio" data-side-pick="long" aria-checked="true"><i aria-hidden="true">▲</i>Long</button>
-          <button type="button" class="stocks__side" role="radio" data-side-pick="short" aria-checked="false"><i aria-hidden="true">▼</i>Short</button>
-        </div>
         <label class="stocks__label stocks__label--row" for="stocksStake"><span>Bet amount</span><span class="stocks__labelx" id="stocksMaxWin"></span></label>
         <div class="stocks__field">
           <span aria-hidden="true">$</span>
@@ -941,20 +947,23 @@ function build() {
           <button type="button" class="stocks__adj" data-adj="double" aria-label="Double the stake">2×</button>
           <button type="button" class="stocks__adj" data-adj="max" aria-label="Stake the most you can">Max</button>
         </div>
-        <label class="stocks__label stocks__label--row" for="stocksLev"><span>Leverage</span><span class="stocks__labelx" id="stocksRuns"></span></label>
-        <div class="stocks__field stocks__field--lev">
-          <input id="stocksLev" inputmode="numeric" autocomplete="off" spellcheck="false" />
-          <span aria-hidden="true">×</span>
+        <span class="stocks__label" id="stocksSideH">Direction</span>
+        <div class="stocks__sides" role="radiogroup" aria-labelledby="stocksSideH" data-side="long">
+          <button type="button" class="stocks__side" role="radio" data-side-pick="long" aria-checked="true">${TREND_UP}Long</button>
+          <button type="button" class="stocks__side" role="radio" data-side-pick="short" aria-checked="false">${TREND_DOWN}Short</button>
         </div>
+        <label class="stocks__label stocks__label--row" for="stocksLev"><span>Leverage</span><b class="stocks__levv" id="stocksLevV"></b></label>
+        <input type="range" class="stocks__lev" id="stocksLev" min="0" max="1000" step="1" />
         <div class="stocks__picks" role="group" aria-label="Leverage picks">
           ${LEVERAGE_PICKS.map((v) => `<button type="button" class="stocks__pick" data-lev="${v}">${v}×</button>`).join('')}
         </div>
-        <label class="stocks__label stocks__label--row" for="stocksWin"><span>Win if it moves 1% your way</span><span class="stocks__labelx" id="stocksFee"></span></label>
-        <div class="stocks__field stocks__field--read"><output id="stocksWin" for="stocksStake stocksLev">—</output></div>
-        <label class="stocks__label stocks__label--row" for="stocksLiq"><span>Lose your stake at</span><span class="stocks__labelx" id="stocksLiqMove"></span></label>
-        <div class="stocks__field stocks__field--read"><output id="stocksLiq" for="stocksLev">—</output></div>
-        <button class="btn stocks__go" id="stocksGo" type="submit" data-sfx="none"><span id="stocksGoLabel">Loading…</span></button>
+        <dl class="stocks__kv">
+          <div><dt>Liquidation</dt><dd><output id="stocksLiq" for="stocksLev">—</output> <small id="stocksLiqMove"></small></dd></div>
+          <div><dt>Win if it moves 1% your way</dt><dd><output id="stocksWin" for="stocksStake stocksLev">—</output></dd></div>
+        </dl>
+        <button class="btn stocks__go" id="stocksGo" type="submit" data-sfx="none" data-side="long"><span id="stocksGoLabel">Loading…</span></button>
         <p class="stocks__hint" id="stocksHint" aria-live="polite"></p>
+        <p class="stocks__note">Touch the liquidation price and the whole stake is gone.</p>
       </form>
       <section class="stocks__book" aria-labelledby="stocksBookH">
         <header class="stocks__bookhead"><h2 id="stocksBookH">Your positions</h2><span id="stocksOpenN"></span></header>
@@ -996,14 +1005,7 @@ function build() {
     paintOrder();
   };
   const levInput = $('#stocksLev', root);
-  levInput.addEventListener('input', () => {
-    const value = Number(String(levInput.value).replace(/[^\d]/g, ''));
-    if (value >= minLeverage()) {
-      leverage = Math.min(maxLeverage(), value);
-      paintOrder();
-    }
-  });
-  levInput.addEventListener('blur', () => setLeverage(Number(String(levInput.value).replace(/[^\d]/g, '')) || leverage));
+  levInput.addEventListener('input', () => setLeverage(sliderToLev(Number(levInput.value))));
   root.querySelectorAll('[data-lev]').forEach((b) => b.addEventListener('click', () => setLeverage(Number(b.dataset.lev))));
 
   root.querySelectorAll('[data-frame]').forEach((b) => b.addEventListener('click', () => {

@@ -1028,6 +1028,73 @@ body.lx .roulette .roulette__yours[hidden] { display: none; }
   body.lx .roulette .roulette__felt { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 40px repeat(12, var(--rou-row)) 40px 40px 40px; }
 }
 
+/* ═════════ Stocks, as the preview's ═════════
+   The panel: the stake, the direction as one pill (green long, red short), the leverage on a
+   slider with the picks under it, the liquidation and the 1% win in one well, "Open long" in the
+   side's colour. The stage: plain dark, the ticker in one line (the donut, DONUT, the price, the
+   change, the candle size), the last trades top right, the live price in ink. */
+body.lx .stocks { --stocks-up: #40c786; --stocks-down: var(--lx-loss); --stocks-tag: var(--lx-ink); --stocks-tag-ink: var(--lx-0); }
+body.lx .view[data-view="stocks"] .stocks__stage { background-image: none; }
+body.lx .stocks .stocks__stage { position: relative; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 16px 16px 12px; }
+body.lx .stocks .stocks__top { position: absolute; top: 14px; right: 16px; z-index: 2; max-width: 45%; min-height: 0; justify-content: flex-end; }
+body.lx .stocks .stocks__quiet { display: none; }
+body.lx .stocks .stocks__chip { min-width: 0; padding: 6px 8px; border-radius: 999px; font-size: .75rem; }
+body.lx .stocks .stocks__head { align-items: center; justify-content: flex-start; gap: 12px; min-height: 30px; padding-right: 12rem; }
+body.lx .stocks .stocks__quote { flex: none; display: flex; align-items: center; gap: 8px; }
+body.lx .stocks .stocks__sym { display: inline-flex; align-items: center; gap: 8px; color: var(--lx-ink); font: 900 1.125rem/1 var(--lx-display); letter-spacing: 0; text-transform: none; }
+body.lx .stocks .stocks__sym img { width: 24px; height: 24px; image-rendering: auto; }
+body.lx .stocks .stocks__line { align-items: baseline; gap: 8px; }
+body.lx .stocks .stocks__price { overflow: visible; color: var(--lx-ink); font: 800 .9375rem/1 var(--lx-ui); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+body.lx .stocks .stocks__change { font: 800 .75rem/1 var(--lx-ui); }
+body.lx .stocks .stocks__frames { gap: 2px; padding: 2px; border-radius: 999px; background: var(--lx-2); }
+body.lx .stocks .stocks__frames .stocks__pick {
+  height: 24px; min-width: 0; padding: 0 10px; border: 0; border-radius: 999px; box-shadow: none;
+  background: transparent; color: var(--lx-mute); font: 900 .625rem/1 var(--lx-ui); letter-spacing: .08em; text-transform: uppercase;
+}
+body.lx .view .stocks .stocks__frames .stocks__pick[aria-pressed="true"],
+body.lx .view .stocks .stocks__frames .stocks__pick[aria-pressed="true"]:hover:not(:disabled) { background: var(--lx-3); color: var(--lx-text); box-shadow: none; }
+body.lx .stocks .stocks__chart { min-height: 420px; }
+/* The panel. */
+body.lx .stocks .stocks__form { gap: 8px; }
+body.lx .stocks .stocks__label { margin-top: 4px; color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .stocks .stocks__labelx { color: var(--lx-faint); font-weight: 600; }
+body.lx .stocks .stocks__levv { color: var(--lx-text); font: 800 .75rem/1.3 var(--lx-ui); font-variant-numeric: tabular-nums; }
+body.lx .stocks .stocks__sides { gap: 4px; padding: 4px; border-radius: 999px; background: var(--lx-0); box-shadow: none; }
+body.lx .stocks .stocks__sides::before { content: none; }
+body.lx .stocks .stocks__side { gap: 8px; height: 36px; border-radius: 999px; background: transparent; color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui); transition: background-color 120ms, color 120ms; }
+body.lx .stocks .stocks__side:hover:not(:disabled) { color: var(--lx-ink); }
+body.lx .stocks .stocks__side[data-side-pick="long"][aria-checked="true"] { background: var(--stocks-up); color: #0b2419; }
+body.lx .stocks .stocks__side[data-side-pick="short"][aria-checked="true"] { background: var(--lx-loss); color: var(--lx-ink); }
+body.lx .stocks .stocks__lev { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+body.lx .stocks .stocks__lev::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--stocks-up), var(--lx-gold), var(--lx-loss)); }
+body.lx .stocks .stocks__lev::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 4px; background: var(--lx-ink); box-shadow: 0 2px 0 var(--pv-shade); }
+body.lx .stocks .stocks__lev::-moz-range-track { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--stocks-up), var(--lx-gold), var(--lx-loss)); }
+body.lx .stocks .stocks__lev::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 4px; background: var(--lx-ink); }
+body.lx .stocks .stocks__lev:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
+body.lx .stocks .stocks__lev:disabled { opacity: .45; cursor: progress; }
+body.lx .stocks .stocks__picks { gap: 2px; padding: 3px; border-radius: 999px; background: var(--lx-0); }
+body.lx .stocks .stocks__picks .stocks__pick {
+  height: 30px; border: 0; border-radius: 999px; box-shadow: none; transform: none;
+  background: transparent; color: var(--lx-mute); font: 700 .75rem/1 var(--lx-ui);
+}
+body.lx .stocks .stocks__picks .stocks__pick:hover:not(:disabled) { color: var(--lx-ink); background: transparent; }
+body.lx .view .stocks .stocks__picks .stocks__pick[aria-pressed="true"],
+body.lx .view .stocks .stocks__picks .stocks__pick[aria-pressed="true"]:hover:not(:disabled) { background: var(--lx-4); color: var(--lx-ink); box-shadow: none; }
+body.lx .stocks .stocks__kv { display: grid; gap: 4px; margin: 4px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--lx-0); font: 500 .75rem/1.4 var(--lx-ui); }
+body.lx .stocks .stocks__kv div { display: flex; justify-content: space-between; gap: 12px; }
+body.lx .stocks .stocks__kv dt { color: var(--lx-mute); }
+body.lx .stocks .stocks__kv dd { margin: 0; color: var(--lx-ink); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.lx .stocks .stocks__kv output { font: inherit; color: inherit; }
+body.lx .stocks .stocks__kv small { color: var(--lx-mute); font-size: inherit; font-weight: 700; }
+body.lx .stocks #stocksGo { margin-top: 4px; border-radius: 8px; }
+body.lx .stocks #stocksGo[data-side="long"] { background: var(--stocks-up); color: #0b2419; --stocks-go-lip: #2a8a5c; }
+body.lx .stocks #stocksGo[data-side="short"] { background: var(--lx-loss); color: var(--lx-ink); --stocks-go-lip: #9c3430; }
+body.lx .stocks #stocksGo[data-side]:hover:not(:disabled) { filter: brightness(1.08); }
+body.lx .stocks #stocksGo[data-side="long"]:hover:not(:disabled) { background: var(--stocks-up); }
+body.lx .stocks #stocksGo[data-side="short"]:hover:not(:disabled) { background: var(--lx-loss); }
+body.lx .stocks .stocks__hint:empty { display: none; }
+body.lx .stocks .stocks__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
