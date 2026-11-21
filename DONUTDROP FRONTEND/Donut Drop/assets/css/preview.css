@@ -191,7 +191,7 @@ body.lx .view[data-view="chicken"]     { --pv-stage: url("../img/block/hay_block
 body.lx .view[data-view="plinko"]      { --pv-stage: url("../img/block/polished_deepslate.png"); }
 body.lx .view[data-view="dice"]        { --pv-stage: url("../img/block/dark_oak_planks.png"); }
 body.lx .view[data-view="limbo"]       { --pv-stage: url("../img/block/end_stone.png"); }
-body.lx .view[data-view="coinflip"]    { --pv-stage: url("../img/block/gold_block.png"); --pv-wash-in: .9; --pv-wash-out: .96; }
+body.lx .view[data-view="coinflip"]    { --pv-stage: url("../img/block/iron_block.png"); }
 /* A chart reads its candles by colour: the bright emerald sits further back. */
 body.lx .view[data-view="stocks"]      { --pv-stage: url("../img/block/emerald_block.png"); --pv-wash-in: .93; --pv-wash-out: .97; }
 body.lx .view[data-view="fishing"]     { --pv-stage: url("../img/block/tube_coral_block.png"); }
@@ -1094,6 +1094,34 @@ body.lx .stocks #stocksGo[data-side="long"]:hover:not(:disabled) { background: v
 body.lx .stocks #stocksGo[data-side="short"]:hover:not(:disabled) { background: var(--lx-loss); }
 body.lx .stocks .stocks__hint:empty { display: none; }
 body.lx .stocks .stocks__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
+
+/* ═════════ Coinflip, as the preview's ═════════
+   The coin: gold with the donut and an H, silver with a diamond and a T, each on a lip and a rim.
+   "Your side" one pill, a small coin on each half; the flip button; the payout under it. */
+body.lx .cflip { --cflip-heads: var(--lx-gold); --cflip-heads-rim: #f8c94f; --cflip-tails: #c3cbd3; --cflip-tails-rim: #dbe6f2; }
+body.lx .cflip .cflip__coin { width: clamp(6.5rem, 18vw, 9.5rem); }
+body.lx .cflip .cflip__face { box-shadow: inset 0 -7px 0 rgba(8, 6, 5, .32), inset 0 0 0 7px var(--cflip-heads-rim); }
+body.lx .cflip .cflip__face--tails { box-shadow: inset 0 -7px 0 rgba(8, 6, 5, .32), inset 0 0 0 7px var(--cflip-tails-rim); }
+body.lx .cflip .cflip__face img { filter: drop-shadow(0 3px 0 rgba(8, 6, 5, .32)); }
+body.lx .cflip .cflip__face span { position: absolute; bottom: 14%; color: #1f1a12; font: 900 .75rem/1 var(--lx-display); opacity: .7; }
+body.lx .cflip .cflip__label { color: var(--lx-mute); font: 700 .75rem/1.3 var(--lx-ui); }
+body.lx .cflip .cflip__sides { gap: 4px; padding: 4px; border-radius: 999px; background: var(--lx-0); }
+body.lx .cflip .cflip__side {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 8px;
+  border: 0; border-radius: 999px; box-shadow: none; background: transparent; color: var(--lx-mute); font: 700 .875rem/1 var(--lx-ui);
+}
+body.lx .cflip .cflip__side b { font: inherit; }
+body.lx .cflip .cflip__side:hover:not(:disabled) { color: var(--lx-ink); background: transparent; }
+body.lx .cflip .cflip__side[aria-checked="true"],
+body.lx .cflip .cflip__side[aria-checked="true"]:hover:not(:disabled) { border: 0; background: var(--lx-4); color: var(--lx-ink); box-shadow: none; }
+body.lx .cflip .cflip__mini {
+  display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--lx-gold); color: #1f1a12; font: 900 .625rem/1 var(--lx-display); font-style: normal;
+  box-shadow: inset 0 -2px 0 rgba(8, 6, 5, .32);
+}
+body.lx .cflip .cflip__mini[data-side="tails"] { background: #c3cbd3; }
+body.lx .cflip .cflip__hint:empty { display: none; }
+body.lx .cflip .cflip__note { margin: 0; color: var(--lx-mute); font: 500 .75rem/1.5 var(--lx-ui); }
 
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
