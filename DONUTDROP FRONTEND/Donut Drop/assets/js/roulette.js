@@ -75,9 +75,9 @@ const OUTSIDE = Object.freeze([
   ['black', 'Black'],
   ['odd', 'Odd'],
   ['high', '19–36'],
-  ['dozen:1', '1st 12'],
-  ['dozen:2', '2nd 12'],
-  ['dozen:3', '3rd 12'],
+  ['dozen:1', '1 to 12'],
+  ['dozen:2', '13 to 24'],
+  ['dozen:3', '25 to 36'],
 ]);
 
 let root;
@@ -245,14 +245,6 @@ function build() {
         <div class="roulette__hub" id="rouletteHub" data-color=""><b id="rouletteResult">—</b></div>
         <div class="roulette__win" id="rouletteWin" hidden><span>You won</span><b>$0</b></div>
       </div>
-      ${viewSwitch('rouletteView')}
-      <label class="roulette__gfx" for="rouletteGfx">
-        <span>Graphics</span>
-        <select id="rouletteGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
-      </label>
-    </section>
-
-    <section class="roulette__board">
       <div class="roulette__status">
         <strong id="roulettePhase" role="status" aria-live="polite">Connecting to the table…</strong>
         <span class="roulette__clock mono" id="rouletteClock">—</span>
@@ -262,16 +254,31 @@ function build() {
         <div class="roulette__numbers" id="rouletteNumbers"></div>
         <div class="roulette__outside" id="rouletteOutside"></div>
       </div>
-      <div class="roulette__slip">
-        <div class="roulette__choice">
-          <span>Chip</span><strong id="rouletteChipValue">$1M</strong>
-          <i class="mono" id="rouletteChoice">Red · 1.85× return</i>
-        </div>
-        <div class="roulette__chips" id="rouletteChips" aria-label="Choose a chip"></div>
+      ${viewSwitch('rouletteView')}
+      <label class="roulette__gfx" for="rouletteGfx">
+        <span>Graphics</span>
+        <select id="rouletteGfx">${GRAPHICS.map(([id, text]) => `<option value="${id}">${text}</option>`).join('')}</select>
+      </label>
+    </section>
+
+    <section class="roulette__board" aria-label="Your bets">
+      <span class="roulette__label" id="rouletteChipLabel">Bet amount</span>
+      <!-- The preview's stake box, holding the chip: a bet here is one of the table's chips, so
+           − and + step down and up the chips rather than taking a typed figure. -->
+      <div class="roulette__field" role="group" aria-labelledby="rouletteChipLabel">
+        <span aria-hidden="true">$</span>
+        <output id="rouletteChipValue">1M</output>
+        <button type="button" class="roulette__adj" data-step="-1" aria-label="A smaller chip">−</button>
+        <button type="button" class="roulette__adj" data-step="1" aria-label="A bigger chip">+</button>
       </div>
+      <div class="roulette__chips" id="rouletteChips" aria-label="Choose a chip"></div>
+      <div class="roulette__sum">
+        <div class="roulette__sumrow"><span>On the table</span><span id="rouletteMineTotal">$0</span></div>
+        <div class="roulette__sumrow"><b>Chips</b><b id="rouletteMineCount">0</b></div>
+      </div>
+      <p class="roulette__hint" id="rouletteChoice">Click the board to place a chip of your bet amount.</p>
       <p class="roulette__limits mono" id="rouletteLimits">Loading table limits…</p>
-      <div class="roulette__yours">
-        <div class="roulette__subhead"><strong>Your chips this round</strong><span id="rouletteMineTotal">$0</span></div>
+      <div class="roulette__yours" hidden>
         <div class="roulette__bets" id="rouletteBets"><span class="roulette__empty">No chips placed yet.</span></div>
       </div>
       <section class="roulette__livebets" aria-labelledby="rouletteLiveBetsTitle">
@@ -371,8 +378,8 @@ function buildWheel() {
   const stops = ORDER.map((number, index) => {
     const start = index * step;
     const end = (index + 1) * step;
-    const shade = number === 0 ? '#1f9d5c' : RED.has(number) ? '#c7343c' : '#171411';
-    return `${shade} ${start.toFixed(4)}deg ${(end - fret).toFixed(4)}deg, #8d8f97 ${(end - fret).toFixed(4)}deg ${end.toFixed(4)}deg`;
+    const shade = number === 0 ? '#1f8f52' : RED.has(number) ? '#c8362f' : '#2b2622';
+    return `${shade} ${start.toFixed(4)}deg ${(end - fret).toFixed(4)}deg, #ffa903 ${(end - fret).toFixed(4)}deg ${end.toFixed(4)}deg`;
   });
   wheel.style.background = `conic-gradient(from -${step / 2}deg, ${stops.join(',')})`;
   ORDER.forEach((number, index) => {
@@ -395,14 +402,24 @@ function onClick(event) {
   if (chip && root.contains(chip)) {
     amountMinor = BigInt(chip.dataset.chip);
     syncSelection();
+    return;
+  }
+  const step = event.target.closest('[data-step]');
+  if (step && root.contains(step)) {
+    const next = nextChip(Number(step.dataset.step));
+    if (next) amountMinor = BigInt(next.dataset.chip);
+    syncSelection();
   }
 }
 
-function payoutBps() {
-  if (!snapshot?.config?.payoutBps) return 0;
-  if (selected.startsWith('straight:')) return snapshot.config.payoutBps.straight;
-  if (selected.startsWith('dozen:')) return snapshot.config.payoutBps.dozen;
-  return snapshot.config.payoutBps.evenMoney;
+/** The chip one step down (-1) or up (+1) from the one in hand that is still offered, if any. */
+function nextChip(direction) {
+  const ladder = [...root.querySelectorAll('[data-chip]')];
+  const at = ladder.findIndex((button) => BigInt(button.dataset.chip) === amountMinor);
+  for (let index = at + direction; index >= 0 && index < ladder.length; index += direction) {
+    if (!ladder[index].disabled) return ladder[index];
+  }
+  return null;
 }
 
 function labelFor(selection) {
@@ -417,9 +434,13 @@ function syncSelection() {
   });
   const choice = $('#rouletteChoice', root);
   const chipValue = $('#rouletteChipValue', root);
-  const multiplier = (payoutBps() / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
-  if (choice) choice.textContent = `${labelFor(selected)} · ${multiplier}× return`;
-  if (chipValue) chipValue.textContent = money(Number(amountMinor));
+  const pays = snapshot?.config?.payoutBps;
+  const times = (bps) => `${(bps / 10_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}×`;
+  const hint = pays
+    ? `Click the board to place a chip of your bet amount. Straight pays ${times(pays.straight)}, dozens ${times(pays.dozen)}, red, black, odd, even, 1–18 and 19–36 pay ${times(pays.evenMoney)}.`
+    : 'Click the board to place a chip of your bet amount.';
+  if (choice && choice.textContent !== hint) choice.textContent = hint;
+  if (chipValue) chipValue.textContent = money(Number(amountMinor)).slice(1);
   paintControls();
 }
 
@@ -456,6 +477,9 @@ function paintControls() {
     button.disabled = placing || !snapshot || !inLimits;
     button.classList.toggle('is-selected', value === amountMinor);
     button.setAttribute('aria-pressed', value === amountMinor ? 'true' : 'false');
+  });
+  root.querySelectorAll('[data-step]').forEach((button) => {
+    button.disabled = placing || !snapshot || !nextChip(Number(button.dataset.step));
   });
 }
 
@@ -567,7 +591,7 @@ function paintPhase() {
   }
   phase.textContent = placing
     ? `Placing ${money(Number(amountMinor))}…`
-    : 'Place your bets';
+    : '';
 }
 
 function paintClock() {
@@ -585,7 +609,7 @@ function paintClock() {
         : spinning
           ? 'No more bets'
           : remaining > 0
-            ? `${(remaining / 1000).toFixed(1)}s`
+            ? `Bets lock in ${(remaining / 1000).toFixed(1)}s`
             : 'Settling';
     if (clock.textContent !== text) clock.textContent = text;
   }
@@ -781,6 +805,7 @@ function paintBets() {
      somebody looking at this line is actually asking. */
   const total = roundStakedMinor();
   const allowance = roundAllowanceMinor();
+  $('#rouletteMineCount', root).textContent = String(bets.length);
   $('#rouletteMineTotal', root).textContent =
     allowance === null
       ? money(Number(total))
