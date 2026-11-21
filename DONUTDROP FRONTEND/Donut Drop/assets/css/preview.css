@@ -109,25 +109,6 @@ body.lx .lxpromos :is(#pbanLeadGo, .lxpromo__go.btn--go) { background: var(--lx-
 body.lx .lxpromos :is(#pbanLeadGo, .lxpromo__go.btn--go):hover { background: var(--lx-gold-hi); color: var(--lx-on-gold); }
 body.lx .lxpromos .lxpromo__go:active { transform: translateY(2px); box-shadow: none; }
 
-/* ═════════ "Jump back in" ═════════ */
-.lxback { margin: 0 0 var(--lx-s8); }
-.lxback[hidden] { display: none; }
-.lxback__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lx-s3); }
-.lxback__g {
-  display: flex; align-items: center; gap: var(--lx-s3); min-width: 0;
-  padding: var(--lx-s3) var(--lx-s4);
-  border-radius: var(--lx-r); background: var(--lx-2); color: var(--lx-text);
-  transition: background var(--lx-quick) var(--lx-ease);
-}
-.lxback__g:hover { background: var(--lx-3); }
-.lxback__g:focus-visible { outline: 2px solid var(--lx-focus); outline-offset: 2px; }
-.lxback__g img { flex: none; width: 40px; height: 40px; image-rendering: pixelated; filter: drop-shadow(0 3px 0 var(--pv-shade)); }
-.lxback__copy { display: grid; gap: 2px; min-width: 0; }
-.lxback__copy b { overflow: hidden; color: var(--lx-ink); font: 700 .9375rem/1.2 var(--lx-ui); text-overflow: ellipsis; white-space: nowrap; }
-.lxback__copy small { color: var(--lx-mute); font: 500 .75rem/1.2 var(--lx-ui); }
-.lxback__res { flex: none; margin-left: auto; color: var(--lx-text); font: 800 .9375rem/1 var(--lx-display); font-variant-numeric: tabular-nums; }
-.lxback__res.is-up { color: var(--pv-win); }
-
 /* ═════════ the game cards, each on its own block ═════════
    The card is the game's Minecraft block, darkened towards the foot so the name reads on it; the
    sprite stands on it with its hard shadow. */
@@ -350,8 +331,6 @@ body.lx .prof__avatar { image-rendering: pixelated; }
   body.lx .lxpromo__copy { min-height: calc(180px - 2 * var(--lx-s4)); }
   body.lx .lxpromo__art { right: var(--lx-s4); }
   body.lx .lxpromo__art img { width: 72px; height: 72px; }
-  .lxback__list { grid-template-columns: repeat(3, minmax(220px, 1fr)); overflow-x: auto; scrollbar-width: none; }
-  .lxback__list::-webkit-scrollbar { display: none; }
 }
 @media (max-width: 639px) {
   .pvfair span { display: none; }
@@ -363,8 +342,7 @@ body.lx .prof__avatar { image-rendering: pixelated; }
   body.lx .lxpromo__h { font-size: 1.1875rem; }
   body.lx .lxpromo__art img { width: 64px; height: 64px; }
   .lxband__head { margin-bottom: var(--lx-s2); }
-  .lxback, body.lx .lxpromos { margin-bottom: var(--lx-s5); }
-  .lxback__list { grid-template-columns: repeat(3, 78%); gap: var(--lx-s2); margin-right: calc(-1 * var(--lx-gut)); padding-right: var(--lx-gut); }
+  body.lx .lxpromos { margin-bottom: var(--lx-s5); }
 }
 
 /* ═════════ the frame, 1:1 with the preview (2026-11-20) ═════════
@@ -387,7 +365,8 @@ body.lx .lxside__burger .lxi { width: 20px; height: 20px; fill: none; }
 .lxside__brand { display: none; align-items: center; gap: var(--lx-s2); min-width: 0; }
 body[data-side="open"] .lxside__brand { display: flex; }
 .lxside__brand img { display: block; flex: none; image-rendering: pixelated; }
-.lxside__word { width: 124px; height: 16px; }
+.lxside__mark { width: calc(16 * var(--lx-artpx, 2px)); height: calc(16 * var(--lx-artpx, 2px)); }
+.lxside__word { width: calc(62 * var(--lx-artpx, 2px)); height: calc(8 * var(--lx-artpx, 2px)); }
 
 body.lx .lxside__nav { display: grid; align-content: start; gap: var(--lx-s3); padding: var(--lx-s3) var(--lx-s2); }
 body.lx[data-side="open"] .lxside__nav { padding: var(--lx-s3); }
@@ -412,8 +391,8 @@ body.lx .lxside__label { margin: 0; padding: var(--lx-s2) var(--lx-s3) var(--lx-
 body.lx .lxtop { background: var(--lx-0); box-shadow: 0 1px 0 var(--pv-rule); }
 body.lx .lxtop__in { max-width: none; gap: var(--lx-s2); padding: 0 var(--lx-s4); }
 body.lx .lxbrand { gap: var(--lx-s2); }
-body.lx .lxbrand__mark { width: 28px; height: 28px; }
-body.lx .lxbrand__word { width: 124px; height: 16px; }
+body.lx .lxbrand__mark { width: calc(16 * var(--lx-artpx, 2px)); height: calc(16 * var(--lx-artpx, 2px)); }
+body.lx .lxbrand__word { width: calc(62 * var(--lx-artpx, 2px)); height: calc(8 * var(--lx-artpx, 2px)); }
 @media (min-width: 1024px) {
   /* The menu carries the name while it is open; the bar carries it while the menu is a rail. */
   body.lx[data-side="open"] .lxtop .lxbrand { display: none; }
@@ -493,7 +472,7 @@ body.lx #lobbyTrack > li { scroll-snap-align: start; }
 .lxgrp { display: grid; gap: var(--lx-s3); flex: none; max-width: 100%; }
 
 /* A kind of game on its own (/?c=…): the heading, its line and the chips, then every game in a grid. */
-body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) .view[data-view="home"] > :is(.lxband__head, .lxpromos, .lxback, .lxpulls) { display: none !important; }
+body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) .view[data-view="home"] > :is(.lxband__head, .lxpromos, .lxpulls) { display: none !important; }
 body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) #lobby .lxrow__head { display: none; }
 body.lx:is([data-kind="casino"], [data-kind="slots"], [data-kind="pvp"], [data-kind="cases"]) #lobby :is(#lobbyTrack, .lxgrp .lxrow) {
   grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(min(8.5rem, 100%), 1fr));
@@ -1372,5 +1351,5 @@ body.lx .modal[data-wallet] .auth__crow--total b { color: var(--lx-ink); font-si
 @media (prefers-reduced-motion: reduce) {
   body.lx .lxcard:hover { transform: none; }
   body.lx .lxpromos .lxpromo__go:active { transform: none; }
-  .lxfind, .lxback__g { transition: none; }
+  .lxfind { transition: none; }
 }

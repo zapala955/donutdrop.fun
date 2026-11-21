@@ -274,7 +274,7 @@
       <svg class="lxi" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <a class="lxside__brand" href="/" aria-label="DonutLuxe lobby">
-      <img src="assets/img/brand/donut.svg?v=1" alt="" width="28" height="28" />
+      <img class="lxside__mark" src="assets/img/brand/donut.svg?v=1" alt="" width="32" height="32" />
       <img class="lxside__word" src="assets/img/brand/wordmark.svg?v=1" alt="DonutLuxe" width="124" height="16" />
     </a>
   </div>
@@ -504,13 +504,6 @@
             <span class="lxpromo__acts"><span class="lxpromo__go">Join Discord</span></span>
           </span>
         </a>
-      </section>
-
-      <!-- "Jump back in": the last three games the player had a round in, with how it went
-           (GET /v1/history; luxe.js). Signed out, or before a first round, it is not there. -->
-      <section class="lxback" id="lxBack" aria-labelledby="lxBackH" hidden>
-        <div class="lxband__head"><h2 id="lxBackH">Jump back in</h2><a class="lxband__link" href="/history">History</a></div>
-        <div class="lxback__list" id="lxBackList"></div>
       </section>
 
       <section class="lxlobby" id="lobby" aria-labelledby="lobbyH" tabindex="-1">

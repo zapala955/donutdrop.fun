@@ -11,7 +11,7 @@
 import { api } from './api.js';
 import { SPOTLIGHT_GAMES, isNewGame } from './data.js';
 import { $, $$, money, reduceMotion } from './util.js';
-import { bus, roundHistory, state } from './store.js';
+import { bus, state } from './store.js';
 import { BASE, appPath, currentRouteName, fullPath, navigate, onNavigate } from './routing.js';
 import { isMuted, setMuted } from './audio-engine.js';
 
@@ -470,96 +470,23 @@ function onRoute() {
 onNavigate(onRoute);
 onRoute();
 
+/* The logo is pixel art: the donut on a 16-pixel grid, the name on a 62 by 8 one. It is only sharp
+ * when every one of its pixels covers a whole number of screen pixels. Two CSS pixels each is that
+ * at 100% and 200%, but at 125% (a common Windows setting) or 175% it is 2.5 or 3.5, and the pixels
+ * come out uneven, so the name looks low-res. So each art pixel is the most whole screen pixels that
+ * still fit the menu's head (2.05 CSS px: burger, donut and name in 240px), unless that would make it
+ * much smaller than usual, when it stays at 2. --lx-artpx in preview.css; asked again when the
+ * screen's scale changes (browser zoom, or the window moving to another monitor). */
+function snapLogoPixels() {
+  const dpr = window.devicePixelRatio || 1;
+  const fit = Math.floor(2.05 * dpr + 1e-6) / dpr;
+  document.documentElement.style.setProperty('--lx-artpx', `${fit >= 1.5 ? fit : 2}px`);
+  matchMedia(`(resolution: ${dpr}dppx)`).addEventListener('change', snapLogoPixels, { once: true });
+}
+snapLogoPixels();
+
 /* Slides only from here on: the remembered layout is already in place (see .lx-anim in luxe.css). */
 requestAnimationFrame(() => requestAnimationFrame(() => body.classList.add('lx-anim')));
-
-/* ═════════ "Jump back in" (2026-11-20, the redesign preview's) ═════════
- * The last three games the player had a round in, each linking back to it, with the last round's
- * result: the multiplier when it paid, what was lost when it did not. From GET /v1/history, asked
- * when the session is known and each time the lobby opens -- not on every settled round, which
- * would be a request per bet for a row the player is not looking at. */
-const back = $('#lxBack');
-const backList = $('#lxBackList');
-let backAsked = 0;
-
-function whenText(iso) {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return '';
-  const clock = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const day = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const days = Math.round((day(new Date()) - day(at)) / 86_400_000);
-  if (days === 0) return `Today ${clock}`;
-  if (days === 1) return `Yesterday ${clock}`;
-  return at.toLocaleDateString([], { day: 'numeric', month: 'short' });
-}
-
-function backCard(round, card) {
-  const link = document.createElement('a');
-  link.className = 'lxback__g';
-  link.href = card.getAttribute('href');
-  const art = document.createElement('img');
-  art.src = card.querySelector('.lxcard__art')?.getAttribute('src') || '';
-  art.alt = '';
-  art.width = 40;
-  art.height = 40;
-  const copy = document.createElement('span');
-  copy.className = 'lxback__copy';
-  const name = document.createElement('b');
-  name.textContent = card.querySelector('.gcard__name')?.textContent || round.name;
-  const when = document.createElement('small');
-  when.textContent = whenText(round.at);
-  copy.append(name, when);
-  const result = document.createElement('span');
-  const wager = Number(round.wagerMinor);
-  const payout = Number(round.payoutMinor);
-  if (payout >= wager && wager > 0) {
-    result.className = 'lxback__res is-up';
-    result.textContent = `${(round.multiplier ?? payout / wager).toFixed(2)}×`;
-  } else {
-    result.className = 'lxback__res';
-    result.textContent = `-${money(wager - payout)}`;
-  }
-  link.append(art, copy, result);
-  return link;
-}
-
-async function paintBack() {
-  if (!back || !backList) return;
-  const asked = ++backAsked;
-  if (!state.authenticated) {
-    back.hidden = true;
-    return;
-  }
-  let rounds;
-  try {
-    rounds = (await roundHistory({ limit: 40 })).rounds || [];
-  } catch {
-    return; // A lobby row is not worth an error: it keeps what it showed.
-  }
-  if (asked !== backAsked || !state.authenticated) return;
-  const seen = new Set();
-  const picks = [];
-  for (const round of rounds) {
-    // The history calls the case room "cases"; its lobby card is "crates".
-    const key = round.game === 'cases' ? 'crates' : round.game;
-    if (seen.has(key)) continue;
-    const card = $(`#lobby .gcard[data-game="${CSS.escape(key)}"]`);
-    if (!card) continue;
-    seen.add(key);
-    picks.push(backCard(round, card));
-    if (picks.length === 3) break;
-  }
-  backList.replaceChildren(...picks);
-  back.hidden = picks.length === 0;
-}
-
-bus.addEventListener('change', (event) => {
-  if (['ready', 'login', 'logout', 'private'].includes(event.detail)) void paintBack();
-});
-onNavigate(() => {
-  if (currentRouteName() === 'home') void paintBack();
-});
-if (state.ready) void paintBack();
 
 /* ═════════ the game pages (2026-11-20, the redesign preview's) ═════════
  * Under each single table: a "Provably fair" chip on the bar, and a card with two tabs, how the
